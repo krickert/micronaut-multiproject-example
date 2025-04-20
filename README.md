@@ -74,10 +74,10 @@ First, create the directory structure for your monorepo and initialize the Gradl
     # Create the root directory
     mkdir micronaut-multiproject-example
     cd micronaut-multiproject-example
-    
+
     # Create subproject directories
     mkdir bom protobuf-models pipeline-service-core pipeline-service-test-utils pipeline-instance-A util
-    
+
     # Create the gradle directory for the version catalog
     mkdir gradle
     ```
@@ -111,7 +111,7 @@ First, create the directory structure for your monorepo and initialize the Gradl
 
 This file defines which subprojects are included in the build and configures plugin/dependency resolution.
 
-1.  **Edit `settings.gradle.kts`:** Open the `settings.gradle.kts` file created in the previous step and add the following content: 
+1.  **Edit `settings.gradle.kts`:** Open the `settings.gradle.kts` file created in the previous step and add the following content:
     ```kotlin
     // settings.gradle.kts
     pluginManagement {
@@ -122,10 +122,10 @@ This file defines which subprojects are included in the build and configures plu
         // Apply Micronaut Platform Catalog plugin here for centralized Micronaut dependency management
         // This plugin makes Micronaut's managed dependencies available via the 'mn' accessor
         plugins {
-            id("io.micronaut.platform.catalog") version "4.8.1" // Use latest compatible version [1]
+            id("io.micronaut.platform.catalog") version "4.8.2" // Use latest compatible version [1]
         }
     }
-    
+
     dependencyResolutionManagement {
         repositories {
             mavenCentral() // Repositories for project dependencies
@@ -136,9 +136,9 @@ This file defines which subprojects are included in the build and configures plu
             // The Micronaut catalog plugin provides the 'mn' catalog [3]
         }
     }
-    
+
     rootProject.name = "my-pipeline-system"
-    
+
     // Include all the subprojects
     include(
         "bom",
@@ -170,12 +170,12 @@ The root build file is often minimal.
         // Apply base plugin for common tasks like 'clean' available in all projects
         base
     }
-    
+
     // Define project-wide properties if needed, e.g., group or version
     // Often, version is managed in gradle.properties or by a release plugin
     group = "com.yourcompany.pipeline"
     version = "1.0.0-SNAPSHOT"
-    
+
     // Common configurations can be placed here, but often better handled
     // via convention plugins or within specific subprojects.
     ```
@@ -187,46 +187,46 @@ This file centralizes dependency versions and aliases.
 1.  **Create `gradle/libs.versions.toml`:** Inside the `gradle` directory, create `libs.versions.toml`:
     ```toml
     # gradle/libs.versions.toml
-    
+
     [versions]
     # Micronaut Platform - Drives Micronaut plugin versions and the 'mn' catalog version
-    micronautPlatform = "4.8.2"
-    
+    micronautPlatform = "4.8.2" # Released Apr 15, 2025 [1, 3]
+
     # Build Plugins
     kotlin = "1.9.25" # Check Micronaut release notes for recommended Kotlin version [9, 16]
     gradleProtobufPlugin = "0.9.5" # Released Mar 31, 2025
     gradleReleasePlugin = "3.1.0" # Released Dec 23, 2024
-    
+
     # Core Dependencies (Check gRPC/Protobuf compatibility)
     # Using Protobuf 3.25.x as gRPC Java 1.72.x might not fully support Protobuf 4.x features yet. Always verify.
-    protobuf = "3.25.3" # Protobuf Java Runtime (Considered compatible with gRPC 1.6x/1.7x)
+    protobuf = "4.30.2" # Protobuf Java Runtime (Considered compatible with gRPC 1.6x/1.7x)
     grpc = "1.72.0" # Released Apr 15, 2025 (gRPC Java)
-    
+
     # Testing
     junit = "5.12.2" # Released Apr 11, 2025
-    
+
     # Utilities & Logging
     slf4j = "2.0.13" # Released Apr 1, 2025
     jackson = "2.18.3" # Released Mar 1, 2025 (Non-Micronaut Jackson)
     guava = "33.4.8-jre" # Released Apr 14, 2025
     commons-lang3 = "3.17.0"
-    
+
     [libraries]
     # Kotlin (Only needed if using Kotlin in some modules)
     # kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib-jdk8", version.ref = "kotlin" }
     # kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
-    
+
     # Protobuf / gRPC (Versions managed by [versions] block)
     protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
     # protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin", version.ref = "protobuf" } # If using Kotlin protos
     grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
     grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
     grpc-protocGen = { module = "io.grpc:protoc-gen-grpc-java", version.ref = "grpc" } # The protoc plugin artifact
-    
+
     # Testing
     junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit" }
     junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit" }
-    
+
     # Utilities
     slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
     slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" } # Example implementation
@@ -235,19 +235,19 @@ This file centralizes dependency versions and aliases.
     commons-lang3 = { module = "org.apache.commons:commons-lang3", version.ref = "commons-lang3"}
     # Explicit definition for Micronaut Platform BOM (for use within the bom project itself)
     micronaut-platform = { module = "io.micronaut.platform:micronaut-platform", version.ref = "micronautPlatform" } # [Added for bom project]
-    
+
     [bundles]
     testing-jvm = ["junit-jupiter-api", "junit-jupiter-engine"]
-    
+
     [plugins]
     # Kotlin Plugins (Only needed if using Kotlin)
     # kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
     # kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
-    
+
     # Micronaut Plugins (Version driven by micronautPlatform)
     micronaut-application = { id = "io.micronaut.application", version.ref = "micronautPlatform" }
     micronaut-library = { id = "io.micronaut.library", version.ref = "micronautPlatform" }
-    
+
     # Other Plugins
     protobuf = { id = "com.google.protobuf", version.ref = "gradleProtobufPlugin" }
     release = { id = "net.researchgate.release", version.ref = "gradleReleasePlugin" }
@@ -261,29 +261,29 @@ This file centralizes dependency versions and aliases.
 This project defines and publishes your custom Bill of Materials.
 
 1.  **Create `bom/build.gradle.kts`:**
-    ```kotlin 
+    ```kotlin
     // bom/build.gradle.kts
     plugins {
         `java-platform` // Core plugin for creating the BOM [21, 22]
         `maven-publish` // Needed to publish the BOM
         // alias(libs.plugins.release) // Optional: If versioning/releasing the BOM itself [24]
     }
-    
+
     // Inherit group and version from root project (or manage independently)
     group = rootProject.group
     version = rootProject.version
-    
+
     javaPlatform {
-    // allowDependencies() // Enable if direct dependencies needed (rare for BOM) [21, 23]
+        // allowDependencies() // Enable if direct dependencies needed (rare for BOM) [21, 23]
     }
-    
+
     dependencies {
-    constraints {
-    // --- Micronaut Dependencies ---
-    // Import the Micronaut Platform BOM using the 'libs' accessor here,
-    // as 'mn' might not be reliably available in this specific subproject context.
-    api(platform(libs.micronaut.platform)) // Use libs accessor [Updated]
-    
+        constraints {
+            // --- Micronaut Dependencies ---
+            // Import the Micronaut Platform BOM using the 'libs' accessor here,
+            // as 'mn' might not be reliably available in this specific subproject context.
+            api(platform(libs.micronaut.platform)) // Use libs accessor [Updated]
+
             // --- Non-Micronaut Project Dependencies (using aliases from libs.versions.toml) ---
             api(libs.protobuf.java)
             // api(libs.protobuf.kotlin) // If used
@@ -292,13 +292,13 @@ This project defines and publishes your custom Bill of Materials.
             api(libs.guava)
             api(libs.jackson.databind) // Non-Micronaut Jackson
             api(libs.commons.lang3)
-    
+
             // --- Testing Dependencies ---
             api(libs.bundles.testing.jvm) // Constrain JUnit versions via bundle
-    
+
             // --- Other Third-Party Dependencies ---
             api(libs.slf4j.api)
-    
+
             // --- Constraints for your own modules (if published separately) ---
             // Example for unified versioning (constraining to the BOM's version):
             api("${rootProject.group}:protobuf-models:${rootProject.version}")
@@ -306,17 +306,16 @@ This project defines and publishes your custom Bill of Materials.
             // Add constraints for other internal libraries like core, test-utils if they are published
         }
     }
-    
     // Configure Publishing
     publishing {
-    publications {
-    create<MavenPublication>("mavenJavaPlatform") {
-    from(components["javaPlatform"]) // Publish the platform component [23]
-    // Use group and version from the project
-    groupId = project.group.toString()
-    artifactId = project.name // Artifact ID will be 'bom'
-    version = project.version.toString()
-    
+        publications {
+            create<MavenPublication>("mavenJavaPlatform") {
+                from(components["javaPlatform"]) // Publish the platform component [23]
+                // Use group and version from the project
+                groupId = project.group.toString()
+                artifactId = project.name // Artifact ID will be 'bom'
+                version = project.version.toString()
+
                 pom {
                     name.set("My Pipeline System BOM")
                     description.set("Bill of Materials for My Pipeline System components")
@@ -350,114 +349,122 @@ Now, configure each subproject to use the BOM. The `mn` accessor *should* work c
 
 1.  **Create `.proto` files:** Add your `.proto` definition files in `protobuf-models/src/main/proto/`. For example, `pipeline_model.proto`.
     ```bash
-        mkdir -p protobuf-models/src/main/proto
-        # Use your editor to create protobuf-models/src/main/proto/pipeline_model.proto
+    mkdir -p protobuf-models/src/main/proto
+    # Use your editor to create protobuf-models/src/main/proto/pipeline_model.proto
     ```
     Example `pipeline_model.proto`:
     ```protobuf
-        syntax = "proto3";
-        package com.yourcompany.pipeline.model; // Match your company/project structure
-        option java_package = "com.yourcompany.pipeline.model.protobuf"; // Specific Java package
-        option java_multiple_files = true;
+    syntax = "proto3";
+    package com.yourcompany.pipeline.model; // Match your company/project structure
+    option java_package = "com.yourcompany.pipeline.model.protobuf"; // Specific Java package
+    option java_multiple_files = true;
 
-        import "google/protobuf/timestamp.proto";
-        import "google/protobuf/struct.proto";
+    import "google/protobuf/timestamp.proto";
+    import "google/protobuf/struct.proto";
 
-        message PipeDoc {
-            string id = 1;
-            string title = 2;
-            string body = 3;
-            repeated string keywords = 4;
-            string document_type = 5;
-            string revision_id = 6;
-            google.protobuf.Timestamp creation_date = 7;
-            google.protobuf.Timestamp last_modified = 8;
-            google.protobuf.Struct custom_data = 9;
-            SemanticDoc chunk_embeddings = 10;
-            map<string, Embedding> embeddings = 11;
-        }
+    message PipeDoc {
+        string id = 1;
+        string title = 2;
+        string body = 3;
+        repeated string keywords = 4;
+        string document_type = 5;
+        string revision_id = 6;
+        google.protobuf.Timestamp creation_date = 7;
+        google.protobuf.Timestamp last_modified = 8;
+        google.protobuf.Struct custom_data = 9;
+        SemanticDoc chunk_embeddings = 10;
+        map<string, Embedding> embeddings = 11;
+    }
 
-        message Embedding {
-            repeated float embedding = 1;
-        }
+    message Embedding {
+        repeated float embedding = 1;
+    }
 
-        message SemanticDoc {
-            string parent_field = 1;
-            string chunk_config_id = 2;
-            string semantic_config_id = 3;
-            repeated SemanticChunk chunks = 4;
-        }
+    message SemanticDoc {
+        string parent_field = 1;
+        string chunk_config_id = 2;
+        string semantic_config_id = 3;
+        repeated SemanticChunk chunks = 4;
+    }
 
-        message SemanticChunk {
-            string chunk_id = 1;
-            int64 chunk_number = 2;
-            ChunkEmbedding embedding = 3;
-        }
+    message SemanticChunk {
+        string chunk_id = 1;
+        int64 chunk_number = 2;
+        ChunkEmbedding embedding = 3;
+    }
 
-        message ChunkEmbedding {
-            string embedding_text = 1;
-            repeated float embedding = 2;
-        }
+    message ChunkEmbedding {
+        string embedding_text = 1;
+        repeated float embedding = 2;
+    }
     ```
 2.  **Create `protobuf-models/build.gradle.kts`:**
 
     ```kotlin
     // protobuf-models/build.gradle.kts
     import com.google.protobuf.gradle.*
-    
+
     plugins {
-    `java-library` // Using Java for helper code
-    alias(libs.plugins.protobuf) // Apply protobuf plugin
+        `java-library` // Using Java for helper code
+        alias(libs.plugins.protobuf) // Apply protobuf plugin
     }
-    
+
     group = rootProject.group
     version = rootProject.version
-    
+
     repositories {
-    mavenCentral()
+        mavenCentral()
     }
-    
+
     java {
-    toolchain {
-    languageVersion.set(JavaLanguageVersion.of(21))
+        toolchain {
+            languageVersion.set(JavaLanguageVersion.of(21))
+        }
     }
-    }
-    
+
     dependencies {
-    implementation(platform(project(":bom"))) // Import custom BOM
-    testImplementation(platform(project(":bom")))
-    
+        implementation(platform(project(":bom"))) // Import custom BOM
+        testImplementation(platform(project(":bom")))
+
         implementation(libs.protobuf.java) // Protobuf runtime
         // implementation(libs.grpc.stub) // If using gRPC
         implementation(libs.guava) // Example utility
         implementation(libs.commons.lang3)
         testImplementation(libs.bundles.testing.jvm)
     }
-    
+
     protobuf {
-    protoc { artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}" }
-    generateProtoTasks {
-    all().forEach { task ->
-    // Java generation is usually enabled by default for Java projects.
-    // This block is only needed if passing specific options to the java generator
-    // task.builtins { create("java") { option("lite") } }
-    
+        protoc { artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}" }
+        generateProtoTasks {
+            all().forEach { task ->
+                // Java generation is usually enabled by default for Java projects.
+                // This block is only needed if passing specific options to the java generator
+                // task.builtins { create("java") { option("lite") } }
+
                 // Configure gRPC Java generation if needed
                 // task.plugins { create("grpc") { artifact = libs.grpc.protocGen.get().toString() } }
-    
+
                 // Configure Kotlin generation if needed
                 // task.builtins { create("kotlin") {} }
-    
+
                 task.outputs.upToDateWhen { false } // Ensure regeneration on proto changes
             }
         }
     }
-    
+
     sourceSets.main {
-    java { srcDirs(layout.buildDirectory.dir("generated/source/proto/main/java")) }
-    // Add grpc dir if needed: srcDirs(layout.buildDirectory.dir("generated/source/proto/main/grpc"))
+        java { srcDirs(layout.buildDirectory.dir("generated/source/proto/main/java")) }
+        // Add grpc dir if needed: srcDirs(layout.buildDirectory.dir("generated/source/proto/main/grpc"))
     }
-    
+
+    // Add this block to configure the test task
+    tasks.test {
+        useJUnitPlatform() // Explicitly tell Gradle to use JUnit 5
+        testLogging { // Optional: Improve test logging
+            events("passed", "skipped", "failed")
+        }
+    }
+
     // Publishing configuration (if this library is published)
     // publishing { ... }
     ```
@@ -476,7 +483,7 @@ Now, configure each subproject to use the BOM. The `mn` accessor *should* work c
     import com.google.protobuf.Message;
     import com.google.protobuf.Timestamp;
     import com.google.protobuf.Value;
-    import com.krickert.search.model.pipe.PipeDoc;
+    import com.krickert.search.model.protobuf.PipeDoc; // Corrected import
 
     import java.io.FileOutputStream;
     import java.io.IOException;
@@ -593,27 +600,27 @@ Now, configure each subproject to use the BOM. The `mn` accessor *should* work c
         }
     }
     ```
-    
+
     This is just a set of some sample utility methods that are useful for testing protocol buffers.
 4. **Create a Unit test for `ProtobufUtils.java`**
     ```bash
    mkdir -p protobuf-models/src/test/java/com/krickert/search/model
     ```
    Now create the class `ProtobufUtilsTest.java`
-   ```java 
+   ```java
     //protobuf-models/src/test/java/com/krickert/search/model/ProtobufUtilsTest.java
     package com.krickert.search.model;
-    
+
     import com.google.protobuf.Timestamp;
     import org.junit.jupiter.api.Assertions;
     import org.junit.jupiter.api.Test;
-    
+
     import java.time.Instant;
-    
+
     import static org.junit.jupiter.api.Assertions.*;
-    
+
     class ProtobufUtilsTest {
-    
+
         /**
          * Tests the {@link ProtobufUtils#now} method.
          * The method should return a {@link Timestamp} object representing the current time
@@ -623,7 +630,7 @@ Now, configure each subproject to use the BOM. The `mn` accessor *should* work c
         void testNowReturnsCurrentTimestamp() {
             // Act
             Timestamp timestamp = ProtobufUtils.now();
-    
+
             // Assert
             Instant currentInstant = Instant.now();
             assertNotNull(timestamp);
@@ -631,7 +638,7 @@ Now, configure each subproject to use the BOM. The `mn` accessor *should* work c
             assertTrue(timestamp.getNanos() < 1_000_000_000);
             assertTrue(timestamp.getSeconds() >= (currentInstant.getEpochSecond() - 1)); // buffer for slight delays
         }
-    
+
         @Test
         void nowIsNowNotThen() throws InterruptedException {
             Timestamp now = ProtobufUtils.now();
@@ -639,7 +646,7 @@ Now, configure each subproject to use the BOM. The `mn` accessor *should* work c
             Thread.sleep(1000);//sleep 1 second so next now() is a second later.
             Assertions.assertTrue(ProtobufUtils.now().getSeconds() > now.getSeconds());
         }
-    
+
         @Test
         void stamp() {
             long time = System.currentTimeMillis() / 1000;
@@ -647,7 +654,7 @@ Now, configure each subproject to use the BOM. The `mn` accessor *should* work c
             assertEquals(time, stamp.getSeconds());
             assertEquals(0, stamp.getNanos());
         }
-    
+
     }
    ```
    Now test that the build runs
@@ -663,272 +670,269 @@ Now, configure each subproject to use the BOM. The `mn` accessor *should* work c
 
 1.  **Add Java code:** Place your utility Java classes in `util/src/main/java/`.
     ```bash
-        mkdir -p util/src/main/java/com/yourcompany/pipeline/util # Adjust package
-        # Add your Java files, e.g., util/src/main/java/com/yourcompany/pipeline/util/StringUtils.java
+    mkdir -p util/src/main/java/com/yourcompany/pipeline/util # Adjust package
+    # Add your Java files, e.g., util/src/main/java/com/yourcompany/pipeline/util/StringUtils.java
     ```
 2.  **Create `util/build.gradle.kts`:**
 
     ```kotlin
-        // util/build.gradle.kts
-        plugins {
-            `java-library` // Standard Java library
+    // util/build.gradle.kts
+    plugins {
+        `java-library` // Standard Java library
+    }
+
+    group = rootProject.group
+    version = rootProject.version
+
+    repositories {
+        mavenCentral()
+    }
+
+    java {
+        toolchain {
+            languageVersion.set(JavaLanguageVersion.of(21))
         }
+    }
 
-        group = rootProject.group
-        version = rootProject.version
+    dependencies {
+        implementation(platform(project(":bom"))) // Import custom BOM
+        testImplementation(platform(project(":bom")))
 
-        repositories {
-            mavenCentral()
-        }
+        api(libs.guava) // Expose Guava via API (example)
 
-        java {
-            toolchain {
-                languageVersion.set(JavaLanguageVersion.of(21))
-            }
-        }
+        testImplementation(libs.bundles.testing.jvm)
+    }
 
-        dependencies {
-            implementation(platform(project(":bom"))) // Import custom BOM
-            testImplementation(platform(project(":bom")))
-
-            api(libs.guava) // Expose Guava via API (example)
-
-            testImplementation(libs.bundles.testing.jvm)
-        }
-
-        // Publishing configuration (if this library is published)
-        // publishing { ... }
+    // Publishing configuration (if this library is published)
+    // publishing { ... }
     ```
 3.  **Build (CLI):**
     ```bash
-        ./gradlew :util:build
+    ./gradlew :util:build
     ```
 
 ### 6c. Core Library (`pipeline-service-core`)
 
 1.  **Add Java code:** Place core service logic in `pipeline-service-core/src/main/java/`.
     ```bash
-        mkdir -p pipeline-service-core/src/main/java/com/yourcompany/pipeline/core # Adjust package
-        # Add your Java files
+    mkdir -p pipeline-service-core/src/main/java/com/yourcompany/pipeline/core # Adjust package
+    # Add your Java files
     ```
 2.  **Create `pipeline-service-core/build.gradle.kts`:**
 
     ```kotlin
-        // pipeline-service-core/build.gradle.kts
-        plugins {
-            `java-library` // It's a Java library
-            alias(libs.plugins.micronaut.library) // Apply Micronaut library plugin
+    // pipeline-service-core/build.gradle.kts
+    plugins {
+        `java-library` // It's a Java library
+        alias(libs.plugins.micronaut.library) // Apply Micronaut library plugin
+    }
+
+    group = rootProject.group
+    version = rootProject.version
+
+    repositories {
+        mavenCentral()
+    }
+
+    java {
+        toolchain {
+            languageVersion.set(JavaLanguageVersion.of(21))
         }
+    }
 
-        group = rootProject.group
-        version = rootProject.version
-
-        repositories {
-            mavenCentral()
+    micronaut { // Configure Micronaut specifics if needed
+        processing {
+            incremental(true)
+            annotations("com.yourcompany.pipeline.core.*") // Adjust package
         }
+    }
 
-        java {
-            toolchain {
-                languageVersion.set(JavaLanguageVersion.of(21))
-            }
-        }
+    dependencies {
+        implementation(platform(project(":bom"))) // Import BOM
+        annotationProcessor(platform(project(":bom"))) // For annotation processing
+        testImplementation(platform(project(":bom")))
+        testAnnotationProcessor(platform(project(":bom")))
 
-        micronaut { // Configure Micronaut specifics if needed
-            processing {
-                incremental(true)
-                annotations("com.yourcompany.pipeline.core.*") // Adjust package
-            }
-        }
+        // Micronaut dependencies (using 'mn' catalog)
+        annotationProcessor(mn.micronaut.inject.java)
+        implementation(mn.micronaut.inject)
+        implementation(mn.micronaut.runtime)
 
-        dependencies {
-            implementation(platform(project(":bom"))) // Import BOM
-            annotationProcessor(platform(project(":bom"))) // For annotation processing
-            testImplementation(platform(project(":bom")))
-            testAnnotationProcessor(platform(project(":bom")))
+        // Project dependencies
+        api(project(":protobuf-models")) // Expose protos
+        api(project(":util")) // Expose utils
 
-            // Micronaut dependencies (using 'mn' catalog)
-            annotationProcessor(mn.micronaut.inject.java)
-            implementation(mn.micronaut.inject)
-            implementation(mn.micronaut.runtime)
+        // Other dependencies
+        implementation(libs.slf4j.api)
 
-            // Project dependencies
-            api(project(":protobuf-models")) // Expose protos
-            api(project(":util")) // Expose utils
+        // Testing
+        testImplementation(libs.bundles.testing.jvm)
+        testImplementation(mn.micronaut.test.junit5)
+        testAnnotationProcessor(mn.micronaut.inject.java)
+    }
 
-            // Other dependencies
-            implementation(libs.slf4j.api)
-
-            // Testing
-            testImplementation(libs.bundles.testing.jvm)
-            testImplementation(mn.micronaut.test.junit5)
-            testAnnotationProcessor(mn.micronaut.inject.java)
-        }
-
-        // Publishing configuration (if this library is published)
-        // publishing { ... }
+    // Publishing configuration (if this library is published)
+    // publishing { ... }
     ```
 
 3.  **Build (CLI):**
     ```bash
-        ./gradlew :pipeline-service-core:build
+    ./gradlew :pipeline-service-core:build
     ```
 
 ### 6d. Test Utilities (`pipeline-service-test-utils`)
 
 1.  **Add Java code:** Place test helper classes in `pipeline-service-test-utils/src/main/java/`.
     ```bash
-        mkdir -p pipeline-service-test-utils/src/main/java/com/yourcompany/pipeline/test # Adjust package
-        # Add your Java files
+    mkdir -p pipeline-service-test-utils/src/main/java/com/yourcompany/pipeline/test # Adjust package
+    # Add your Java files
     ```
 2.  **Create `p ipeline-service-test-utils/build.gradle.kts`:**
-    
+
     ```kotlin
     // pipeline-service-test-utils/build.gradle.kts
     plugins {
         `java-library`
     }
-    
+
     group = rootProject.group
     version = rootProject.version
-    
+
     repositories {
         mavenCentral()
     }
-    
+
     java {
         toolchain {
             languageVersion.set(JavaLanguageVersion.of(21))
         }
     }
-    
+
     dependencies {
         implementation(platform(project(":bom")))
         // This module likely won't have tests itself, but depends on testing libs
         // and the core module to provide utilities FOR testing the core module.
-    
+
         // Depend on core library
         api(project(":pipeline-service-core"))
-    
+
         // Include testing libraries needed by the utilities
         api(libs.bundles.testing.jvm)
         api(mn.micronaut.test.junit5) // Expose Micronaut test support
-    
+
         // May depend on other utils
         api(project(":util"))
     }
-    
+
     // Publishing configuration (if this library is published)
     // publishing { ... }
     ```
 3.  **Build (CLI):**
     ```bash
-        ./gradlew :pipeline-service-test-utils:build
+    ./gradlew :pipeline-service-test-utils:build
     ```
 
 ### 6e. Micronaut Application (`pipeline-instance-A`)
 
 1.  **Add Java code:** Place the Micronaut application code (controllers, services, `Application.java`) in `pipeline-instance-A/src/main/java/`. Create a simple `Application.java` like:
-```bash
+    ```bash
     mkdir -p pipeline-instance-A/src/main/java/com/yourcompany/pipeline/instanceA # Adjust package
-    
-````
-Now create the application as Application.java
+    ```
+    Now create the application as Application.java
+    ```java
+    // pipeline-instance-A/src/main/java/com/yourcompany/pipeline/instanceA/Application.java
+    package com.yourcompany.pipeline.instanceA;
 
-```java
-// pipeline-instance-A/src/main/java/com/yourcompany/pipeline/instanceA/Application.java
-package com.yourcompany.pipeline.instanceA;
+    import io.micronaut.runtime.Micronaut;
 
-import io.micronaut.runtime.Micronaut;
-
-public class Application {
-    public static void main(String[] args) {
-        Micronaut.run(Application.class, args);
+    public class Application {
+        public static void main(String[] args) {
+            Micronaut.run(Application.class, args);
+        }
     }
-}
-```
+    ```
     *(Add controllers, etc. as needed)*
 
 
 2.  **Create `pipeline-instance-A/build.gradle.kts`:**
-
     ```kotlin
-        // pipeline-instance-A/build.gradle.kts
-        plugins {
-            id("java") // Standard Java application plugin
-            alias(libs.plugins.micronaut.application) // Apply Micronaut application plugin
-            // id("com.google.cloud.tools.jib") version "..." // Example: If using Jib
+    // pipeline-instance-A/build.gradle.kts
+    plugins {
+        id("java") // Standard Java application plugin
+        alias(libs.plugins.micronaut.application) // Apply Micronaut application plugin
+        // id("com.google.cloud.tools.jib") version "..." // Example: If using Jib
+    }
+
+    group = rootProject.group
+    version = rootProject.version
+
+    repositories {
+        mavenCentral()
+    }
+
+    java {
+        toolchain {
+            languageVersion.set(JavaLanguageVersion.of(21))
         }
+    }
 
-        group = rootProject.group
-        version = rootProject.version
-
-        repositories {
-            mavenCentral()
+    micronaut {
+        runtime("netty")
+        testRuntime("junit5")
+        processing {
+            incremental(true)
+            annotations("com.yourcompany.pipeline.instanceA.*") // Adjust package
         }
+        mainClass("com.yourcompany.pipeline.instanceA.Application") // Set main class
+    }
 
-        java {
-            toolchain {
-                languageVersion.set(JavaLanguageVersion.of(21))
-            }
-        }
+    dependencies {
+        implementation(platform(project(":bom"))) // Import BOM
+        annotationProcessor(platform(project(":bom")))
+        testImplementation(platform(project(":bom")))
+        testAnnotationProcessor(platform(project(":bom")))
 
-        micronaut {
-            runtime("netty")
-            testRuntime("junit5")
-            processing {
-                incremental(true)
-                annotations("com.yourcompany.pipeline.instanceA.*") // Adjust package
-            }
-            mainClass("com.yourcompany.pipeline.instanceA.Application") // Set main class
-        }
+        // Micronaut dependencies (using 'mn' accessor)
+        annotationProcessor(mn.micronaut.inject.java)
+        implementation(mn.micronaut.inject)
+        implementation(mn.micronaut.runtime)
+        implementation(mn.micronaut.http.server.netty)
+        implementation(mn.micronaut.http.client) // Example
+        implementation(mn.micronaut.jackson.databind) // Example
 
-        dependencies {
-            implementation(platform(project(":bom"))) // Import BOM
-            annotationProcessor(platform(project(":bom")))
-            testImplementation(platform(project(":bom")))
-            testAnnotationProcessor(platform(project(":bom")))
+        // Project dependencies
+        implementation(project(":pipeline-service-core")) // Depend on the core library
 
-            // Micronaut dependencies (using 'mn' accessor)
-            annotationProcessor(mn.micronaut.inject.java)
-            implementation(mn.micronaut.inject)
-            implementation(mn.micronaut.runtime)
-            implementation(mn.micronaut.http.server.netty)
-            implementation(mn.micronaut.http.client) // Example
-            implementation(mn.micronaut.jackson.databind) // Example
+        // Logging implementation
+        runtimeOnly(libs.slf4j.simple)
 
-            // Project dependencies
-            implementation(project(":pipeline-service-core")) // Depend on the core library
+        // Testing
+        testImplementation(libs.bundles.testing.jvm)
+        testImplementation(mn.micronaut.test.junit5)
+        testImplementation(project(":pipeline-service-test-utils")) // Use test utilities
+        testAnnotationProcessor(mn.micronaut.inject.java)
+    }
 
-            // Logging implementation
-            runtimeOnly(libs.slf4j.simple)
+    application {
+        mainClass.set(micronaut.mainClass.get()) // Use main class from Micronaut config
+    }
 
-            // Testing
-            testImplementation(libs.bundles.testing.jvm)
-            testImplementation(mn.micronaut.test.junit5)
-            testImplementation(project(":pipeline-service-test-utils")) // Use test utilities
-            testAnnotationProcessor(mn.micronaut.inject.java)
-        }
-
-        application {
-            mainClass.set(micronaut.mainClass.get()) // Use main class from Micronaut config
-        }
-
-        // Optional Docker config (tasks provided by micronaut.application plugin)
-        // tasks.named("dockerBuild") { ... }
+    // Optional Docker config (tasks provided by micronaut.application plugin)
+    // tasks.named("dockerBuild") { ... }
     ```
 3.  **Build (CLI):**
     ```bash
-        ./gradlew :pipeline-instance-A:build
+    ./gradlew :pipeline-instance-A:build
     ```
 4.  **Run (CLI):**
     ```bash
-        ./gradlew :pipeline-instance-A:run
+    ./gradlew :pipeline-instance-A:run
     ```
     *(You should see Micronaut startup logs. Press `Ctrl+C` to stop.)*
 
 5.  **Build Docker Image (Optional - CLI):** (Requires Docker running)
     ```bash
-        ./gradlew :pipeline-instance-A:dockerBuild
+    ./gradlew :pipeline-instance-A:dockerBuild
     ```
 
 ## Step 7: Common Build Commands (CLI)
@@ -937,27 +941,27 @@ Here are commands run from the root directory (`your-monorepo`) that affect the 
 
 * **Clean All Build Outputs:**
     ```bash
-        ./gradlew clean
+    ./gradlew clean
     ```
 * **Build Everything (Compile, Test, Assemble):**
     ```bash
-        ./gradlew build
+    ./gradlew build
     ```
 * **Run All Tests:**
     ```bash
-        ./gradlew test
+    ./gradlew test
     ```
 * **Build without Running Tests:**
     ```bash
-        ./gradlew assemble
+    ./gradlew assemble
     ```
 * **Publish All Publishable Artifacts to Maven Local:**
     ```bash
-        ./gradlew publishToMavenLocal
+    ./gradlew publishToMavenLocal
     ```
 * **List Project Dependencies:** (Useful for debugging)
     ```bash
-        ./gradlew :pipeline-instance-A:dependencies
+    ./gradlew :pipeline-instance-A:dependencies
     ```
 
 ## Step 8: Conditional CI/CD (Conceptual)
@@ -979,9 +983,9 @@ Choose a versioning strategy (Unified or Independent). Use a release plugin for 
 
 * **If using `gradle-release` (Unified Versioning Example - CLI):**
     ```bash
-        # Ensure gradle.properties has the version, e.g., version=1.0.0-SNAPSHOT
-        # Run the release task (interactive)
-        ./gradlew release
+    # Ensure gradle.properties has the version, e.g., version=1.0.0-SNAPSHOT
+    # Run the release task (interactive)
+    ./gradlew release
     ```
   This will guide you through setting the release version (e.g., `1.0.0`) and the next snapshot version (e.g., `1.0.1-SNAPSHOT`), commit changes, tag the release, run build tasks (like `publish`), and commit the next snapshot version.
 
