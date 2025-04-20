@@ -40,3 +40,4 @@ message ChunkEmbedding {
   string embedding_text = 1;
   repeated float embedding = 2;
 }
+

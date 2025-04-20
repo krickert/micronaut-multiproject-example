@@ -1,13 +1,41 @@
 // build.gradle.kts (Root project)
 plugins {
-    // Apply base plugin for common tasks like 'clean' available in all projects
     base
 }
 
-// Define project-wide properties if needed, e.g., group or version
-// Often, version is managed in gradle.properties or by a release plugin
 group = "com.yourcompany.pipeline"
 version = "1.0.0-SNAPSHOT"
 
-// Common configurations can be placed here, but often better handled
-// via convention plugins or within specific subprojects.
+subprojects {
+    repositories {
+        mavenCentral()
+    }
+
+    // Apply Java toolchain configuration to all subprojects with Java plugin
+    plugins.withId("java-base") {
+        configure<JavaPluginExtension> {
+            toolchain {
+                languageVersion.set(JavaLanguageVersion.of(21))
+            }
+        }
+
+        // Configure JUnit 5 for all subprojects with Java capabilities
+        afterEvaluate {
+            tasks.withType<Test>().configureEach {
+                useJUnitPlatform()
+                testLogging {
+                    events("passed", "skipped", "failed")
+                }
+            }
+        }
+    }
+
+    // Apply publishing configuration defaults
+    plugins.withId("maven-publish") {
+        configure<PublishingExtension> {
+            repositories {
+                mavenLocal()
+            }
+        }
+    }
+}

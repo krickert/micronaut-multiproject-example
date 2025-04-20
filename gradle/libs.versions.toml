@@ -1,66 +1,44 @@
 # gradle/libs.versions.toml
 
 [versions]
-# Micronaut Platform - Drives Micronaut plugin versions and the 'mn' catalog version
-micronautPlatform = "4.8.2"
-
-# Build Plugins
-kotlin = "1.9.25" # Check Micronaut release notes for recommended Kotlin version [9, 16]
-gradleProtobufPlugin = "0.9.5" # Released Mar 31, 2025
-gradleReleasePlugin = "3.1.0" # Released Dec 23, 2024
-
-# Core Dependencies (Check gRPC/Protobuf compatibility)
-# Using Protobuf 3.25.x as gRPC Java 1.72.x might not fully support Protobuf 4.x features yet. Always verify.
-protobuf = "4.30.2" # Protobuf Java Runtime (Considered compatible with gRPC 1.6x/1.7x)
-grpc = "1.72.0" # Released Apr 15, 2025 (gRPC Java)
-
-# Testing
-junit = "5.12.2" # Released Apr 11, 2025
-
-# Utilities & Logging
-slf4j = "2.0.13" # Released Apr 1, 2025
-jackson = "2.18.3" # Released Mar 1, 2025 (Non-Micronaut Jackson)
-guava = "33.4.8-jre" # Released Apr 14, 2025
-commons-lang3 = "3.17.0"
+micronautPlatform = "4.8.2"  # For the platform BOM
+micronautPlugins = "4.5.1"   # For the Micronaut Gradle plugins
+kotlin = "1.9.25"
+gradleProtobufPlugin = "0.9.5"
+gradleReleasePlugin = "3.1.0"
+protobuf = "3.25.3"
+grpc = "1.72.0"
+junit = "5.10.0"
+slf4j = "2.0.13"
+jackson = "2.18.3"
+guava = "33.4.8-jre"
+commonsLang3 = "3.14.0"
 
 [libraries]
-# Kotlin (Only needed if using Kotlin in some modules)
-# kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib-jdk8", version.ref = "kotlin" }
-# kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
-
-# Protobuf / gRPC (Versions managed by [versions] block)
+# Protobuf / gRPC
 protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
-# protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin", version.ref = "protobuf" } # If using Kotlin protos
 grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
 grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
-grpc-protocGen = { module = "io.grpc:protoc-gen-grpc-java", version.ref = "grpc" } # The protoc plugin artifact
+grpc-protocGen = { module = "io.grpc:protoc-gen-grpc-java", version.ref = "grpc" }
 
-# Testing
+# Testing with explicit versions
 junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit" }
 
-# Utilities
+# Other libraries
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
-slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" } # Example implementation
-jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" } # Non-Micronaut Jackson
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
-commons-lang3 = { module = "org.apache.commons:commons-lang3", version.ref = "commons-lang3"}
-# Explicit definition for Micronaut Platform BOM (for use within the bom project itself)
-micronaut-platform = { module = "io.micronaut.platform:micronaut-platform", version.ref = "micronautPlatform" } # [Added for bom project]
+commons-lang3 = { module = "org.apache.commons:commons-lang3", version.ref = "commonsLang3" }
+micronaut-platform = { module = "io.micronaut.platform:micronaut-platform", version.ref = "micronautPlatform" }
 
 [bundles]
 testing-jvm = ["junit-jupiter-api", "junit-jupiter-engine"]
 
 [plugins]
-# Kotlin Plugins (Only needed if using Kotlin)
-# kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
-# kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
-
-# Micronaut Plugins (Version driven by micronautPlatform)
-micronaut-application = { id = "io.micronaut.application", version.ref = "micronautPlatform" }
-micronaut-library = { id = "io.micronaut.library", version.ref = "micronautPlatform" }
-
-# Other Plugins
+# Update these to use micronautPlugins version
+micronaut-application = { id = "io.micronaut.application", version.ref = "micronautPlugins" }
+micronaut-library = { id = "io.micronaut.library", version.ref = "micronautPlugins" }
 protobuf = { id = "com.google.protobuf", version.ref = "gradleProtobufPlugin" }
 release = { id = "net.researchgate.release", version.ref = "gradleReleasePlugin" }
-# java-platform defined in bom/build.gradle.kts directly

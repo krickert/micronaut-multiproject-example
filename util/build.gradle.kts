@@ -1,0 +1,18 @@
+// File: util/build.gradle.kts
+plugins {
+    `java-library`
+}
+
+group = rootProject.group
+version = rootProject.version
+
+dependencies {
+    implementation(platform(project(":bom")))
+    testImplementation(platform(project(":bom")))
+
+    api(libs.guava) // Expose Guava via API
+
+    // Testing dependencies
+    testImplementation(libs.junit.jupiter.api)
+    testRuntimeOnly(libs.junit.jupiter.engine)
+}
