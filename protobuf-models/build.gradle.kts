@@ -29,7 +29,13 @@ dependencies {
     implementation(libs.commons.lang3)
     testImplementation(libs.bundles.testing.jvm)
 }
-
+// Add this block to protobuf-models/build.gradle.kts
+tasks.test {
+    useJUnitPlatform() // Explicitly tell Gradle to use JUnit 5
+    testLogging { // Optional: Improve test logging
+        events("passed", "skipped", "failed")
+    }
+}
 protobuf {
     protoc { artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}" }
     generateProtoTasks {

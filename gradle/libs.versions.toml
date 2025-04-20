@@ -11,7 +11,7 @@ gradleReleasePlugin = "3.1.0" # Released Dec 23, 2024
 
 # Core Dependencies (Check gRPC/Protobuf compatibility)
 # Using Protobuf 3.25.x as gRPC Java 1.72.x might not fully support Protobuf 4.x features yet. Always verify.
-protobuf = "3.25.3" # Protobuf Java Runtime (Considered compatible with gRPC 1.6x/1.7x)
+protobuf = "4.30.2" # Protobuf Java Runtime (Considered compatible with gRPC 1.6x/1.7x)
 grpc = "1.72.0" # Released Apr 15, 2025 (gRPC Java)
 
 # Testing
