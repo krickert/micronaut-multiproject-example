@@ -227,7 +227,20 @@ include::protobuf-models/src/main/proto/pipeline_models.proto[]
 include::protobuf-models/build.gradle.kts[]
 ----
 
-. *Verify sample code & test exist:* (e.g., `ProtobufUtilsTest.java` in `src/test/java/...`)
+. *Verify sample code & test exist:*
++
+Create `ProtobufUtils.java` in `src/main/java/com/krickert/search/model/ProtobufUtils.java`)
++
+[source,java,title="ProtobufUtils.java"]
+----
+include::protobuf-models/src/main/java/com/krickert/search/model/ProtobufUtils.java[]
+----
++
+Don't worry about what these tests do yet, they are some sample protocol buffer utility classes that we'll reuse for other projects.
+Now let's see what we are doing by writing some tests...
++
+Create `ProtobufUtilsTest.java` in `src/test/java/com/krickert/search/model/ProtobufUtilsTest.java`)
+
 +
 [source,java,title="ProtobufUtilsTest.java"]
 ----
@@ -272,9 +285,8 @@ include::util/build.gradle.kts[]
 +
 [source,kotlin,title="pipeline-service-core/build.gradle.kts"]
 ----
+include::pipeline-service-core/build.gradle.kts[]
 ----
-+
-NOTE: Removed `testImplementation(libs.bundles.testing.jvm)`. Kept `mn.micronaut.test.junit5`.
 . *Build (CLI):*
 +
 [source,bash]
@@ -332,61 +344,7 @@ NOTE: Removed `api(libs.bundles.testing.jvm)`. Kept `api(mn.micronaut.test.junit
 +
 [source,kotlin,title="pipeline-instance-A/build.gradle.kts"]
 ----
-// pipeline-instance-A/build.gradle.kts
-plugins {
-    id("java")
-    alias(libs.plugins.micronaut.application)
-    // id("com.google.cloud.tools.jib") version "..."
-}
 
-group = rootProject.group
-version = rootProject.version
-
-// Repositories inherited from root project
-// Java toolchain inherited from root project
-
-micronaut {
-    runtime("netty")
-    testRuntime("junit5")
-    processing {
-        incremental(true)
-        annotations("com.yourcompany.pipeline.instanceA.*")
-    }
-    mainClass("com.yourcompany.pipeline.instanceA.Application")
-}
-
-dependencies {
-    implementation(platform(project(":bom")))
-    annotationProcessor(platform(project(":bom")))
-    testImplementation(platform(project(":bom")))
-    testAnnotationProcessor(platform(project(":bom")))
-
-    // Micronaut dependencies
-    annotationProcessor(mn.micronaut.inject.java)
-    implementation(mn.micronaut.inject)
-    implementation(mn.micronaut.runtime)
-    implementation(mn.micronaut.http.server.netty)
-    implementation(mn.micronaut.http.client)
-    implementation(mn.micronaut.jackson.databind)
-
-    // Project dependencies
-    implementation(project(":pipeline-service-core"))
-
-    // Logging implementation
-    runtimeOnly(libs.slf4j.simple)
-
-    // Testing
-    testImplementation(mn.micronaut.test.junit5) // Micronaut test pulls in JUnit
-    // testImplementation(libs.bundles.testing.jvm) // Removed bundle
-    testImplementation(project(":pipeline-service-test-utils"))
-    testAnnotationProcessor(mn.micronaut.inject.java)
-}
-
-application {
-    mainClass.set(micronaut.mainClass.get())
-}
-
-// Test task configuration inherited from root project
 ----
 +
 NOTE: Removed `testImplementation(libs.bundles.testing.jvm)`. Kept `mn.micronaut.test.junit5`.
