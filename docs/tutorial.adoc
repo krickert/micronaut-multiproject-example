@@ -1,0 +1,420 @@
+= Taming Dependencies: Micronaut BOM with Gradle Kotlin DSL
+:doctype: book
+:toc: left
+:source-highlighter: highlight.js
+:icons: font
+:linkattrs: true
+:mermaid-format: svg
+:mermaid: ./node_modules/.bin/mmdc -i $1 -o $2
+
+++++
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&family=Source+Code+Pro&display=swap');
+
+body {
+  font-family: 'Nunito', sans-serif;
+  line-height: 1.6;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+}
+
+pre, code {
+  font-family: 'Source Code Pro', monospace;
+}
+
+#toc.toc2 {
+  font-family: 'Nunito', sans-serif;
+}
+</style>
+++++
+
+
+// Document metadata (optional)
+// :author: Kristian Rickert
+// :revnumber: 1.0
+// :revdate: 2025-04-20
+
+This repository contains the output of the end of this tutorial. It's open and used to demonstrate how one can build a multi-module build for containers in a single repository using the Micronaut framework.
+
+Managing dependencies and ensuring build consistency across multiple projects can be a significant challenge, especially as systems grow in complexity. This tutorial provides a step-by-step guide to establishing a robust multi-project build structure using *Gradle with the Kotlin DSL* (even if your projects use *Java*), targeting *JDK 21*.
+
+== What We're Building
+
+Imagine a system designed for processing data pipelines. This system consists of several parts:
+
+* *Shared Libraries:* A core library containing the main pipeline logic (`pipeline-service-core`), data models defined using Protocol Buffers (`protobuf-models`), and common helper functions (`util`).
+* *Testing Utilities:* A dedicated library (`pipeline-service-test-utils`) to assist in testing the pipeline components.
+* *Microservices:* Specific implementations of pipelines as runnable Micronaut applications (e.g., `pipeline-instance-A`).
+
+== The Goal
+
+Our goal is to manage this system effectively within a single repository (monorepo) using Gradle. We'll focus on:
+
+. *Centralized Dependency Management:* Creating a custom Bill of Materials (BOM) and using Gradle's version catalog (`libs.versions.toml`) to ensure all modules use consistent library versions.
+. *Consistent Build Environment:* Using Gradle Kotlin DSL and configuring for JDK 21.
+. *Modular Structure:* Defining clear dependencies between the different project modules.
+. *Efficient CI/CD:* Discussing strategies to build and deploy only the parts of the system that have changed.
+
+== Project Dependency Overview
+
+The following diagrams illustrate the relationships between the different project modules we'll be configuring.
+
+.High-Level Module Dependencies:
+[mermaid,target=diagram-dependencies]
+----
+graph TD;
+    A[pipeline-instance-A] --> B(pipeline-service-core);
+    C[pipeline-service-test-utils] --> B;
+    B --> D(protobuf-models);
+    B --> E(util);
+----
+
+.Dependency on the Custom BOM:
+[mermaid,target=diagram-bom]
+----
+graph TD;
+    subgraph "Project Modules"
+        A[pipeline-instance-A]
+        B(pipeline-service-core)
+        C[pipeline-service-test-utils]
+        D(protobuf-models)
+        E(util)
+    end
+    F(Custom BOM);
+    A --> F;
+    B --> F;
+    C --> F;
+    D --> F;
+    E --> F;
+----
+
+This tutorial will guide you through setting up this structure step-by-step, providing CLI commands and code examples along the way.
+
+== Prerequisites
+
+* Linux or macOS environment with a Bash-compatible shell.
+* JDK 21 installed and configured (e.g., `JAVA_HOME` environment variable set).
+* Git installed.
+* Docker installed (optional, for containerization steps).
+
+Let's begin!
+
+== Step 1: Verify Project Setup and Initialize Gradle Wrapper (CLI)
+
+This step assumes your project's directory structure is already in place. We will verify the structure and ensure the Gradle wrapper is initialized for consistent builds.
+
+. *Verify Project Structure:* Ensure your project root (e.g., `micronaut-multiproject-example`) contains the necessary subproject directories and configuration files:
++
+----
+micronaut-multiproject-example/
+├── bom/
+├── gradle/
+│   └── libs.versions.toml  # Created in Step 4
+├── pipeline-instance-A/
+├── pipeline-service-core/
+├── pipeline-service-test-utils/
+├── protobuf-models/
+├── util/
+├── build.gradle.kts        # Created in Step 3
+├── settings.gradle.kts     # Created in Step 2
+└── ... (other project files)
+----
++
+Navigate into your project's root directory:
++
+[source,bash]
+----
+cd path/to/your/micronaut-multiproject-example
+----
+
+. *Initialize or Verify Gradle Wrapper:* Run this command in the root directory to ensure the correct Gradle version is configured via the wrapper. If the wrapper files (`gradlew`, `gradlew.bat`, `gradle/wrapper`) already exist, this command can update them if needed. We'll use Gradle 8.13 (or your preferred compatible version). Check the link:https://docs.gradle.org/current/userguide/compatibility.html[Gradle Compatibility Matrix] for the latest recommendations.
++
+[source,bash]
+----
+# Ensure you have a system Gradle installed OR download manually if wrapper doesn't exist yet
+gradle wrapper --gradle-version 8.13
+----
++
+This ensures `gradlew`, `gradlew.bat`, and the `gradle/wrapper` directory are present and configured. From now on, use `./gradlew` to run Gradle tasks for consistency.
+
+. *Initialize Git Repository (if not already done):* If your project isn't already a Git repository, initialize it and create a `.gitignore` file.
++
+[source,bash]
+----
+# Only run if not already a git repository
+git init
+----
+. *Copy this to be your .gitignore file:*
++
+[source, title=".gitignore file in root directory"]
+----
+include::../.gitignore[]
+----
+
+== Step 2: Configure Project Settings (`settings.gradle.kts`)
+
+This file defines which subprojects are included in the build and configures plugin/dependency resolution. (Content remains the same as previous version - ensure your file matches).
+
+. *Edit `settings.gradle.kts`:* Open the `settings.gradle.kts` file and ensure it has the following content:
++
+[source,kotlin,title="settings.gradle.kts"]
+----
+include::../settings.gradle.kts[]
+----
+
+== Step 3: Configure Root Build File (`build.gradle.kts`)
+
+Configure global settings and apply common test configurations. (Content remains the same as previous version - ensure your file matches).
+
+. *Create/Edit `build.gradle.kts`:* In the root directory, ensure `build.gradle.kts` contains:
++
+[source,kotlin,title="build.gradle.kts (Root project)"]
+----
+include::../build.gradle.kts[]
+----
++
+NOTE: The `subprojects {}` block configures `useJUnitPlatform()` globally, so you won't need it in individual subproject files.
+
+== Step 4: Configure Version Catalog (`gradle/libs.versions.toml`)
+
+Centralize dependency versions and aliases. (Content remains the same as previous version - ensure your file exists and matches).
+
+. *Create/Verify `gradle/libs.versions.toml`:*
++
+[source,toml,title="gradle/libs.versions.toml"]
+----
+include::../gradle/libs.versions.toml[]
+----
+
+== Step 5: Create the Custom BOM Project (`bom`)
+
+Define and publish your custom Bill of Materials. (Content remains the same - ensure your `bom/build.gradle.kts` matches).
+
+. *Create/Verify `bom/build.gradle.kts`:*
++
+[source,kotlin,title="bom/build.gradle.kts"]
+----
+include::../bom/build.gradle.kts[]
+----
++
+
+. *Build & Publish BOM Locally (CLI):*
++
+[source,bash]
+----
+./gradlew :bom:publishToMavenLocal
+----
+
+== Step 6: Configure Subprojects
+
+Configure subprojects to use the BOM. (Ensure your subproject build files and source code exist and match the following configurations).
+
+=== 6a. Protobuf Models (`protobuf-models`)
+
+. *Verify `.proto` files exist:* (Ensure files like `pipeline_model.proto` are in `protobuf-models/src/main/proto/`)
++
+.Example `pipeline_model.proto`:
+[source,protobuf,title="pipeline_model.proto"]
+----
+include::../protobuf-models/src/main/proto/pipeline_models.proto[]
+----
+
+. *Verify/Create `protobuf-models/build.gradle.kts`:*
++
+[source,kotlin,title="protobuf-models/build.gradle.kts"]
+----
+include::../protobuf-models/build.gradle.kts[]
+----
+
+. *Verify sample code & test exist:*
++
+Create `ProtobufUtils.java` in `src/main/java/com/krickert/search/model/ProtobufUtils.java`)
++
+[source,java,title="ProtobufUtils.java"]
+----
+include::../protobuf-models/src/main/java/com/krickert/search/model/ProtobufUtils.java[]
+----
++
+Don't worry about what these tests do yet, they are some sample protocol buffer utility classes that we'll reuse for other projects.
+Now let's see what we are doing by writing some tests...
++
+Create `ProtobufUtilsTest.java` in `src/test/java/com/krickert/search/model/ProtobufUtilsTest.java`)
+
++
+[source,java,title="ProtobufUtilsTest.java"]
+----
+include::../protobuf-models/src/test/java/com/krickert/search/model/ProtobufUtilsTest.java[]
+----
++
+Test that the build runs:
++
+[source,bash]
+----
+./gradlew :protobuf-models:test
+----
+
+. *Test & Build (CLI):*
++
+[source,bash]
+----
+./gradlew :protobuf-models:test
+./gradlew :protobuf-models:build
+----
+
+=== 6b. Utility Library (`util`)
+
+. *Verify Java code exists:* (Ensure files exist in `util/src/main/java/`)
+. *Verify/Create `util/build.gradle.kts`:*
++
+[source,kotlin,title="util/build.gradle.kts"]
+----
+include::../util/build.gradle.kts[]
+----
+. *Build (CLI):*
++
+[source,bash]
+----
+./gradlew :util:build
+----
+
+=== 6c. Core Library (`pipeline-service-core`)
+
+. *Verify Java code exists:* (Ensure files exist in `pipeline-service-core/src/main/java/`)
+. *Verify/Create `pipeline-service-core/build.gradle.kts`:*
++
+[source,kotlin,title="pipeline-service-core/build.gradle.kts"]
+----
+include::../pipeline-service-core/build.gradle.kts[]
+----
+. *Build (CLI):*
++
+[source,bash]
+----
+./gradlew :pipeline-service-core:build
+----
+
+=== 6d. Test Utilities (`pipeline-service-test-utils`)
+
+. *Verify Java code exists:* (Ensure files exist in `pipeline-service-test-utils/src/main/java/`)
+. *Verify/Create `pipeline-service-test-utils/build.gradle.kts`:*
++
+[source,kotlin,title="pipeline-service-test-utils/build.gradle.kts"]
+----
+include::../pipeline-service-test-utils/build.gradle.kts[]
+----
++
+NOTE: Removed `api(libs.bundles.testing.jvm)`. Kept `api(mn.micronaut.test.junit5)`.
+. *Build (CLI):*
++
+[source,bash]
+----
+./gradlew :pipeline-service-test-utils:build
+----
+
+=== 6e. Micronaut Application (`pipeline-instance-A`)
+
+. *Verify Java code exists:* (Ensure `Application.java` and other files exist in `pipeline-instance-A/src/main/java/...`)
+. *Verify/Create `pipeline-instance-A/build.gradle.kts`:*
++
+[source,kotlin,title="pipeline-instance-A/build.gradle.kts"]
+----
+include::../pipeline-instance-A/build.gradle.kts.soon[]
+----
++
+NOTE: Removed `testImplementation(libs.bundles.testing.jvm)`. Kept `mn.micronaut.test.junit5`.
+. *Build (CLI):*
++
+[source,bash]
+----
+./gradlew :pipeline-instance-A:build
+----
+. *Run (CLI):*
++
+[source,bash]
+----
+./gradlew :pipeline-instance-A:run
+----
+. *Build Docker Image (Optional - CLI):*
++
+[source,bash]
+----
+./gradlew :pipeline-instance-A:dockerBuild
+----
+
+== Step 7: Common Build Commands (CLI)
+
+Here are commands run from the root directory (`your-monorepo`) that affect the whole project:
+
+* *Clean All Build Outputs:*
++
+[source,bash]
+----
+./gradlew clean
+----
+* *Build Everything (Compile, Test, Assemble):*
++
+[source,bash]
+----
+./gradlew build
+----
+* *Run All Tests:*
++
+[source,bash]
+----
+./gradlew test
+----
+* *Build without Running Tests:*
++
+[source,bash]
+----
+./gradlew assemble
+----
+* *Publish All Publishable Artifacts to Maven Local:*
++
+[source,bash]
+----
+./gradlew publishToMavenLocal
+----
+* *List Project Dependencies:* (Useful for debugging)
++
+[source,bash]
+----
+./gradlew :pipeline-instance-A:dependencies
+----
+
+== Step 8: Conditional CI/CD (Conceptual)
+
+As discussed previously, the goal for CI/CD is to build/test/deploy only what changed. This typically involves:
+
+. Detecting Changes: Using `git diff`, Nx, or a Gradle plugin.
+. Identifying Affected Projects: Including downstream dependents.
+. Running Tasks Selectively:
+** Using specific project paths: `./gradlew :pipeline-service-core:build :pipeline-instance-A:build`
+** Using built-in tasks: `./gradlew :pipeline-service-core:buildDependents` (builds core and instance-A)
+** Using tools: `nx affected -t build`
+
+Implementing this requires additional scripting or tooling setup in your CI environment (e.g., GitHub Actions, GitLab CI).
+
+== Step 9: Versioning and Releasing (Conceptual)
+
+Choose a versioning strategy (Unified or Independent). Use a release plugin for automation.
+
+* *If using `gradle-release` (Unified Versioning Example - CLI):*
++
+[source,bash]
+----
+# Ensure gradle.properties has the version, e.g., version=1.0.0-SNAPSHOT
+# Run the release task (interactive)
+./gradlew release
+----
++
+This will guide you through setting the release version (e.g., `1.0.0`) and the next snapshot version (e.g., `1.0.1-SNAPSHOT`), commit changes, tag the release, run build tasks (like `publish`), and commit the next snapshot version.
+
+* *Independent Versioning:* Requires more sophisticated tooling or scripting integrated with your change detection mechanism to version and release only affected modules.
+
+== Conclusion: Building for the Future
+
+This step-by-step guide provides a practical path to setting up a well-structured, maintainable multi-project build using Gradle Kotlin DSL, a custom BOM, and modern dependency management techniques. Remember to adapt the specific configurations and commands to your exact project needs.
