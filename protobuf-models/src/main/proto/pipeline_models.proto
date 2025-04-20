@@ -1,0 +1,42 @@
+syntax = "proto3";
+package com.krickert.search.model.pipe;
+option java_multiple_files = true;
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+message PipeDoc {
+  string id = 1;
+  string title = 2;
+  string body = 3;
+  repeated string keywords = 4;
+  string document_type = 5;
+  string revision_id = 6;
+  google.protobuf.Timestamp creation_date = 7;
+  google.protobuf.Timestamp last_modified = 8;
+  google.protobuf.Struct custom_data = 9;
+  SemanticDoc chunk_embeddings = 10;
+  map<string, Embedding> embeddings = 11;
+}
+
+message Embedding {
+  repeated float embedding = 1;
+}
+
+message SemanticDoc {
+  string parent_id = 1;
+  string parent_field = 2;
+  string chunk_config_id = 3;
+  string semantic_config_id = 4;
+  repeated SemanticChunk chunks = 5;
+}
+
+message SemanticChunk {
+  string chunk_id = 1;
+  int64 chunk_number = 2;
+  ChunkEmbedding embedding = 3;
+}
+
+message ChunkEmbedding {
+  string embedding_text = 1;
+  repeated float embedding = 2;
+}
