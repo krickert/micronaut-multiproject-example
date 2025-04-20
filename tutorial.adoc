@@ -4,6 +4,8 @@
 :source-highlighter: highlight.js
 :icons: font
 :linkattrs: true
+:mermaid-format: svg
+:mermaid: ./node_modules/.bin/mmdc -i $1 -o $2
 
 ++++
 <style>
@@ -61,7 +63,7 @@ Our goal is to manage this system effectively within a single repository (monore
 The following diagrams illustrate the relationships between the different project modules we'll be configuring.
 
 .High-Level Module Dependencies:
-[mermaid]
+[mermaid,target=diagram-dependencies]
 ----
 graph TD;
     A[pipeline-instance-A] --> B(pipeline-service-core);
@@ -71,7 +73,7 @@ graph TD;
 ----
 
 .Dependency on the Custom BOM:
-[mermaid]
+[mermaid,target=diagram-bom]
 ----
 graph TD;
     subgraph "Project Modules"
@@ -301,32 +303,7 @@ include::pipeline-service-core/build.gradle.kts[]
 +
 [source,kotlin,title="pipeline-service-test-utils/build.gradle.kts"]
 ----
-// pipeline-service-test-utils/build.gradle.kts
-plugins {
-    `java-library`
-}
-
-group = rootProject.group
-version = rootProject.version
-
-// Repositories inherited from root project
-// Java toolchain inherited from root project
-
-dependencies {
-    implementation(platform(project(":bom")))
-
-    // Depend on core library
-    api(project(":pipeline-service-core"))
-
-    // Include testing libraries needed by the utilities
-    api(mn.micronaut.test.junit5) // Expose Micronaut test support (includes JUnit API)
-    // api(libs.bundles.testing.jvm) // Removed bundle
-
-    // May depend on other utils
-    api(project(":util"))
-}
-
-// Test task configuration inherited from root project (if tests were added here)
+include::pipeline-service-test-utils/build.gradle.kts[]
 ----
 +
 NOTE: Removed `api(libs.bundles.testing.jvm)`. Kept `api(mn.micronaut.test.junit5)`.
