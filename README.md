@@ -1,8 +1,9 @@
 # Taming Dependencies: A Step-by-Step Guide to Building a Custom Micronaut BOM with Gradle Kotlin DSL
 
-This repository contains the output of the end of this tutorial. It's open and used to demonstrate how one can build a multi-module build for containers in a single repository using the Micronaut framework.
+This repository generates the documentation to create this project.  The link below is a step-by-step guild to setting up a 
+multi-project build for micronaut applications.
 
-Managing dependencies and ensuring build consistency across multiple projects can be a significant challenge, especially as systems grow in complexity. This tutorial provides a step-by-step guide to establishing a robust multi-project build structure using **Gradle with the Kotlin DSL** (even if your projects use **Java**), targeting **JDK 21**.
+To make it more hands-on, this will be an actual open source application we're building: a search engine indexer powered by kafka.
 
 **What We're Building:**
 
@@ -21,50 +22,6 @@ Our goal is to manage this system effectively within a single repository (monore
 3.  **Modular Structure:** Defining clear dependencies between the different project modules.
 4.  **Efficient CI/CD:** Discussing strategies to build and deploy only the parts of the system that have changed.
 
-**Project Dependency Overview:**
-
-The following diagrams illustrate the relationships between the different project modules we'll be configuring.
-
-*High-Level Module Dependencies:*
-
-```mermaid
-graph TD;
-    A[pipeline-instance-A] --> B(pipeline-service-core);
-    C[pipeline-service-test-utils] --> B;
-    B --> D(protobuf-models);
-    B --> E(util);
-```
-
-*Dependency on the Custom BOM:*
-
-```mermaid
-graph TD;
-    subgraph "Project Modules"
-        A[pipeline-instance-A]
-        B(pipeline-service-core)
-        C[pipeline-service-test-utils]
-        D(protobuf-models)
-        E(util)
-    end
-    F(Custom BOM);
-    A --> F;
-    B --> F;
-    C --> F;
-    D --> F;
-    E --> F;
-```
-
-This tutorial will guide you through setting up this structure step-by-step, providing CLI commands and code examples along the way.
-
-**Prerequisites:**
-
-* Linux or macOS environment with a Bash-compatible shell.
-* JDK 21 installed and configured (e.g., `JAVA_HOME` environment variable set).
-* Git installed.
-* Docker installed (optional, for containerization steps).
-
 Let's begin!
 
-Please check out the [tutorial](https://www.taming-dependencies.com/) for more details.
-
-The tutorial can me found [here](tutorial.adoc)
+The tutorial can me found [here](docs/tutorial.html)

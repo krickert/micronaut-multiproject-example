@@ -63,33 +63,48 @@ Our goal is to manage this system effectively within a single repository (monore
 The following diagrams illustrate the relationships between the different project modules we'll be configuring.
 
 .High-Level Module Dependencies:
-[mermaid,target=diagram-dependencies]
+[plantuml, target="diagram‑dependencies.svg"]
 ----
-graph TD;
-    A[pipeline-instance-A] --> B(pipeline-service-core);
-    C[pipeline-service-test-utils] --> B;
-    B --> D(protobuf-models);
-    B --> E(util);
+@startuml diagram-dependencies
+skinparam linetype ortho
+
+rectangle "pipeline-instance-A" as A
+rectangle "pipeline-service-core" as B
+rectangle "pipeline-service-test-utils" as C
+rectangle "protobuf-models" as D
+rectangle "util" as E
+
+A --> B
+C --> B
+B --> D
+B --> E
+@enduml
 ----
 
 .Dependency on the Custom BOM:
-[mermaid,target=diagram-bom]
+[plantuml, target="diagram-bom", format="png"]
 ----
-graph TD;
-    subgraph "Project Modules"
-        A[pipeline-instance-A]
-        B(pipeline-service-core)
-        C[pipeline-service-test-utils]
-        D(protobuf-models)
-        E(util)
-    end
-    F(Custom BOM);
-    A --> F;
-    B --> F;
-    C --> F;
-    D --> F;
-    E --> F;
+@startuml diagram-bom
+skinparam linetype ortho
+
+package "Project Modules" {
+    rectangle "pipeline-instance-A" as A
+    rectangle "pipeline-service-core" as B
+    rectangle "pipeline-service-test-utils" as C
+    rectangle "protobuf-models" as D
+    rectangle "util" as E
+}
+
+rectangle "Custom BOM" as F
+
+A --> F
+B --> F
+C --> F
+D --> F
+E --> F
+@enduml
 ----
+
 
 This tutorial will guide you through setting up this structure step-by-step, providing CLI commands and code examples along the way.
 
@@ -151,7 +166,7 @@ git init
 +
 [source, title=".gitignore file in root directory"]
 ----
-include::../.gitignore[]
+include::.gitignore[]
 ----
 
 == Step 2: Configure Project Settings (`settings.gradle.kts`)
@@ -162,7 +177,7 @@ This file defines which subprojects are included in the build and configures plu
 +
 [source,kotlin,title="settings.gradle.kts"]
 ----
-include::../settings.gradle.kts[]
+include::settings.gradle.kts[]
 ----
 
 == Step 3: Configure Root Build File (`build.gradle.kts`)
@@ -173,7 +188,7 @@ Configure global settings and apply common test configurations. (Content remains
 +
 [source,kotlin,title="build.gradle.kts (Root project)"]
 ----
-include::../build.gradle.kts[]
+include::build.gradle.kts[]
 ----
 +
 NOTE: The `subprojects {}` block configures `useJUnitPlatform()` globally, so you won't need it in individual subproject files.
@@ -186,7 +201,7 @@ Centralize dependency versions and aliases. (Content remains the same as previou
 +
 [source,toml,title="gradle/libs.versions.toml"]
 ----
-include::../gradle/libs.versions.toml[]
+include::gradle/libs.versions.toml[]
 ----
 
 == Step 5: Create the Custom BOM Project (`bom`)
@@ -197,7 +212,7 @@ Define and publish your custom Bill of Materials. (Content remains the same - en
 +
 [source,kotlin,title="bom/build.gradle.kts"]
 ----
-include::../bom/build.gradle.kts[]
+include::bom/build.gradle.kts[]
 ----
 +
 
@@ -219,14 +234,14 @@ Configure subprojects to use the BOM. (Ensure your subproject build files and so
 .Example `pipeline_model.proto`:
 [source,protobuf,title="pipeline_model.proto"]
 ----
-include::../protobuf-models/src/main/proto/pipeline_models.proto[]
+include::protobuf-models/src/main/proto/pipeline_models.proto[]
 ----
 
 . *Verify/Create `protobuf-models/build.gradle.kts`:*
 +
 [source,kotlin,title="protobuf-models/build.gradle.kts"]
 ----
-include::../protobuf-models/build.gradle.kts[]
+include::protobuf-models/build.gradle.kts[]
 ----
 
 . *Verify sample code & test exist:*
@@ -235,7 +250,7 @@ Create `ProtobufUtils.java` in `src/main/java/com/krickert/search/model/Protobuf
 +
 [source,java,title="ProtobufUtils.java"]
 ----
-include::../protobuf-models/src/main/java/com/krickert/search/model/ProtobufUtils.java[]
+include::protobuf-models/src/main/java/com/krickert/search/model/ProtobufUtils.java[]
 ----
 +
 Don't worry about what these tests do yet, they are some sample protocol buffer utility classes that we'll reuse for other projects.
@@ -246,7 +261,7 @@ Create `ProtobufUtilsTest.java` in `src/test/java/com/krickert/search/model/Prot
 +
 [source,java,title="ProtobufUtilsTest.java"]
 ----
-include::../protobuf-models/src/test/java/com/krickert/search/model/ProtobufUtilsTest.java[]
+include::protobuf-models/src/test/java/com/krickert/search/model/ProtobufUtilsTest.java[]
 ----
 +
 Test that the build runs:
@@ -271,7 +286,7 @@ Test that the build runs:
 +
 [source,kotlin,title="util/build.gradle.kts"]
 ----
-include::../util/build.gradle.kts[]
+include::util/build.gradle.kts[]
 ----
 . *Build (CLI):*
 +
@@ -287,7 +302,7 @@ include::../util/build.gradle.kts[]
 +
 [source,kotlin,title="pipeline-service-core/build.gradle.kts"]
 ----
-include::../pipeline-service-core/build.gradle.kts[]
+include::pipeline-service-core/build.gradle.kts[]
 ----
 . *Build (CLI):*
 +
@@ -303,7 +318,7 @@ include::../pipeline-service-core/build.gradle.kts[]
 +
 [source,kotlin,title="pipeline-service-test-utils/build.gradle.kts"]
 ----
-include::../pipeline-service-test-utils/build.gradle.kts[]
+include::pipeline-service-test-utils/build.gradle.kts[]
 ----
 +
 NOTE: Removed `api(libs.bundles.testing.jvm)`. Kept `api(mn.micronaut.test.junit5)`.
@@ -321,7 +336,7 @@ NOTE: Removed `api(libs.bundles.testing.jvm)`. Kept `api(mn.micronaut.test.junit
 +
 [source,kotlin,title="pipeline-instance-A/build.gradle.kts"]
 ----
-include::../pipeline-instance-A/build.gradle.kts.soon[]
+include::pipeline-instance-A/build.gradle.kts.soon[]
 ----
 +
 NOTE: Removed `testImplementation(libs.bundles.testing.jvm)`. Kept `mn.micronaut.test.junit5`.

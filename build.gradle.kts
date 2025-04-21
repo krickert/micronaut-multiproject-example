@@ -1,30 +1,35 @@
-// build.gradle.kts (Root project)
+import org.asciidoctor.gradle.jvm.AsciidoctorTask
+
 plugins {
     id("org.asciidoctor.jvm.convert") version "4.0.4"
-    base
-}
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath("org.asciidoctor:asciidoctor-gradle-jvm:4.0.4")
-    }
 }
 
-tasks.named<org.asciidoctor.gradle.jvm.AsciidoctorTask>("asciidoctor") {
-    setSourceDir(file("docs"))
-    setOutputDir(file("./build/docs"))
-    baseDirFollowsSourceFile()
-    // Any attributes needed by your documentation
+repositories {
+    mavenCentral()
+}
+
+asciidoctorj {
+    modules {
+        diagram.use()
+        // optional: pin version
+        diagram.version("2.3.2")
+    }
+}
+tasks.named<AsciidoctorTask>("asciidoctor") {
+    setSourceDir(file("docsSrc"))
+    setOutputDir(file("docs"))
+
     attributes(
         mapOf(
-            "source-highlighter" to "highlight.js",
-            "toc" to "left",
-            "toclevels" to "3"
+            // tell HTML where images “live”
+            "imagesdir"      to "images",
+            // tell Diagram to also dump images here
+            "imagesoutdir"   to "docs/images",
+            "plantuml-format" to "svg"
         )
     )
 }
+
 
 group = "com.yourcompany.pipeline"
 version = "1.0.0-SNAPSHOT"
@@ -62,3 +67,4 @@ subprojects {
         }
     }
 }
+
