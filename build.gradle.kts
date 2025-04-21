@@ -16,7 +16,7 @@ asciidoctorj {
     }
 }
 tasks.named<AsciidoctorTask>("asciidoctor") {
-    setSourceDir(file("docsSrc"))
+    setSourceDir(file("./"))
     setOutputDir(file("docs"))
 
     attributes(

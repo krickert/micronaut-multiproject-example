@@ -63,33 +63,48 @@ Our goal is to manage this system effectively within a single repository (monore
 The following diagrams illustrate the relationships between the different project modules we'll be configuring.
 
 .High-Level Module Dependencies:
-[mermaid,target=diagram-dependencies]
+[plantuml, target="diagram‑dependencies.svg"]
 ----
-graph TD;
-    A[pipeline-instance-A] --> B(pipeline-service-core);
-    C[pipeline-service-test-utils] --> B;
-    B --> D(protobuf-models);
-    B --> E(util);
+@startuml diagram-dependencies
+skinparam linetype ortho
+
+rectangle "pipeline-instance-A" as A
+rectangle "pipeline-service-core" as B
+rectangle "pipeline-service-test-utils" as C
+rectangle "protobuf-models" as D
+rectangle "util" as E
+
+A --> B
+C --> B
+B --> D
+B --> E
+@enduml
 ----
 
 .Dependency on the Custom BOM:
-[mermaid,target=diagram-bom]
+[plantuml, target="diagram-bom", format="png"]
 ----
-graph TD;
-    subgraph "Project Modules"
-        A[pipeline-instance-A]
-        B(pipeline-service-core)
-        C[pipeline-service-test-utils]
-        D(protobuf-models)
-        E(util)
-    end
-    F(Custom BOM);
-    A --> F;
-    B --> F;
-    C --> F;
-    D --> F;
-    E --> F;
+@startuml diagram-bom
+skinparam linetype ortho
+
+package "Project Modules" {
+    rectangle "pipeline-instance-A" as A
+    rectangle "pipeline-service-core" as B
+    rectangle "pipeline-service-test-utils" as C
+    rectangle "protobuf-models" as D
+    rectangle "util" as E
+}
+
+rectangle "Custom BOM" as F
+
+A --> F
+B --> F
+C --> F
+D --> F
+E --> F
+@enduml
 ----
+
 
 This tutorial will guide you through setting up this structure step-by-step, providing CLI commands and code examples along the way.
 
@@ -197,7 +212,7 @@ Define and publish your custom Bill of Materials. (Content remains the same - en
 +
 [source,kotlin,title="bom/build.gradle.kts"]
 ----
-include::bom/build.gradle.kts
+include::bom/build.gradle.kts[]
 ----
 +
 
@@ -305,8 +320,6 @@ include::pipeline-service-core/build.gradle.kts[]
 ----
 include::pipeline-service-test-utils/build.gradle.kts[]
 ----
-+
-NOTE: Removed `api(libs.bundles.testing.jvm)`. Kept `api(mn.micronaut.test.junit5)`.
 . *Build (CLI):*
 +
 [source,bash]
@@ -321,7 +334,7 @@ NOTE: Removed `api(libs.bundles.testing.jvm)`. Kept `api(mn.micronaut.test.junit
 +
 [source,kotlin,title="pipeline-instance-A/build.gradle.kts"]
 ----
-
+include::pipeline-instance-A/build.gradle.kts.soon[]
 ----
 +
 NOTE: Removed `testImplementation(libs.bundles.testing.jvm)`. Kept `mn.micronaut.test.junit5`.
