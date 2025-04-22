@@ -614,7 +614,169 @@ pre, code {
 }
 </style>
 <div class="paragraph">
-<p>This repository contains the output of the end of this tutorial. It&#8217;s open and used to demonstrate how one can build a multi-module build for containers in a single repository using the Micronaut framework.</p>
+<p>Abstract</p>
+</div>
+<div class="paragraph">
+<p>This document is Part I of four parts in an immersive tutorial which builds an enterprise fully-open-source search indexing pipeline and
+search engine that scales with both indexing and searching your document corpus.</p>
+</div>
+<div class="paragraph">
+<p>The project builds upon itself.  We will start from a clean slate and build the product up.</p>
+</div>
+<div class="paragraph">
+<p>The sections are planned as follows:</p>
+</div>
+<div class="paragraph">
+<p>Part I (this document)</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Deep-dive into the micronaut framework</p>
+</li>
+<li>
+<p>How to setup a multi-module enterprise project using</p>
+<div class="olist loweralpha">
+<ol class="loweralpha">
+<li>
+<p>Gradle</p>
+</li>
+<li>
+<p>JDK21</p>
+</li>
+</ol>
+</div>
+</li>
+<li>
+<p>Creating google protocol buffers</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>Part II: creating a search pipeline</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Creating a kafka pipeline with pure open source projects</p>
+</li>
+<li>
+<p>Expanding a kafka pipeline for a Search Engine</p>
+</li>
+<li>
+<p>Search microservices</p>
+<div class="olist loweralpha">
+<ol class="loweralpha">
+<li>
+<p>Chunker</p>
+</li>
+<li>
+<p>Embeddings</p>
+</li>
+<li>
+<p>NLP - NER, Keyword Extraction</p>
+</li>
+<li>
+<p>Mapping protocol buffers</p>
+</li>
+</ol>
+</div>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>Part III: Designing a search API</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Creating a search API</p>
+</li>
+<li>
+<p>Simple or complex?</p>
+</li>
+<li>
+<p>Handling vector search in OpenSearch or Solr</p>
+</li>
+<li>
+<p>Handling BM25 search in OpenSearch or Solr</p>
+</li>
+<li>
+<p>Tuning relevancy</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>Part IV: Analytics</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>How to measure analytics</p>
+</li>
+<li>
+<p>Choosing a search analytics package</p>
+</li>
+<li>
+<p>Creating a front end</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>Part V: Deploying Microservices</p>
+</div>
+<div class="paragraph">
+<p>To create this HTML file, you n</p>
+</div>
+<div class="paragraph">
+<p>this tutorial. It&#8217;s open and used to demonstrate how one can build a multi-module build
+ for containers in a single repository using the Micronaut framework.  At the same time, this tutorial will build a kafka/grpc-based text
+ processing pipeline.</p>
+</div>
+<div class="paragraph">
+<p>We build the entire project using the following components:</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Base components</p>
+<div class="olist loweralpha">
+<ol class="loweralpha">
+<li>
+<p>Micronaut framework</p>
+</li>
+<li>
+<p>JDK21</p>
+</li>
+<li>
+<p>Gradle build system (Kotlin syntax)</p>
+</li>
+</ol>
+</div>
+</li>
+<li>
+<p>External servers</p>
+<div class="olist loweralpha">
+<ol class="loweralpha">
+<li>
+<p>Kafka (latest vanilla version)</p>
+</li>
+<li>
+<p>Apicurio (Schema registry)</p>
+</li>
+<li>
+<p>Consul (Service discovery)</p>
+</li>
+<li>
+<p>Open Search (Search Engine)</p>
+</li>
+<li>
+<p>MongoDB (Document Store)</p>
+</li>
+</ol>
+</div>
+</li>
+</ol>
 </div>
 <div class="paragraph">
 <p>Managing dependencies and ensuring build consistency across multiple projects can be a significant challenge, especially as systems grow in complexity. This tutorial provides a step-by-step guide to establishing a robust multi-project build structure using <strong>Gradle with the Kotlin DSL</strong> (even if your projects use <strong>Java</strong>), targeting <strong>JDK 21</strong>.</p>
@@ -941,7 +1103,7 @@ tasks.named<AsciidoctorTask>("asciidoctor") {
 }
 
 
-group = "com.yourcompany.pipeline"
+group = "com.krickert.search"
 version = "1.0.0-SNAPSHOT"
 
 subprojects {
@@ -1547,7 +1709,7 @@ version = rootProject.version
 dependencies {
     implementation(platform(project(":bom")))
     testImplementation(platform(project(":bom")))
-
+    implementation(mn.protobuf.java.util)
     api(libs.guava) // Expose Guava via API
 
     // Testing dependencies
@@ -1598,10 +1760,10 @@ group = rootProject.group
 version = rootProject.version
 
 micronaut {
-    version("4.8.2") // Must match the micronautPlatform version
+    version("4.8.2")
     processing {
         incremental(true)
-        annotations("com.yourcompany.pipeline.core.*")
+        annotations("com.krickert.search.pipeline.core.*")
     }
 }
 
@@ -1733,9 +1895,9 @@ micronaut {
     testRuntime("junit5")
     processing {
         incremental(true)
-        annotations("com.yourcompany.pipeline.instanceA.*")
+        annotations("com.krickert.search.pipeline.instanceA.*")
     }
-    mainClass("com.yourcompany.pipeline.instanceA.Application")
+    mainClass("com.krickert.search.pipeline.instanceA.Application")
 }
 
 dependencies {
@@ -1940,7 +2102,7 @@ application {
 <div id="footer">
 <div id="footer-text">
 Version 1.0.0-SNAPSHOT<br>
-Last updated 2025-04-21 22:27:33 -0400
+Last updated 2025-04-22 07:22:47 -0400
 </div>
 </div>
 </body>

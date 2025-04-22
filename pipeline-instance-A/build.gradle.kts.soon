@@ -16,9 +16,9 @@ micronaut {
     testRuntime("junit5")
     processing {
         incremental(true)
-        annotations("com.yourcompany.pipeline.instanceA.*")
+        annotations("com.krickert.search.pipeline.instanceA.*")
     }
-    mainClass("com.yourcompany.pipeline.instanceA.Application")
+    mainClass("com.krickert.search.pipeline.instanceA.Application")
 }
 
 dependencies {

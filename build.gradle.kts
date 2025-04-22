@@ -36,7 +36,7 @@ tasks.named<AsciidoctorTask>("asciidoctor") {
 }
 
 
-group = "com.yourcompany.pipeline"
+group = "com.krickert.search"
 version = "1.0.0-SNAPSHOT"
 
 subprojects {

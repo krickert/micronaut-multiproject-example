@@ -8,10 +8,10 @@ group = rootProject.group
 version = rootProject.version
 
 micronaut {
-    version("4.8.2") // Must match the micronautPlatform version
+    version("4.8.2")
     processing {
         incremental(true)
-        annotations("com.yourcompany.pipeline.core.*")
+        annotations("com.krickert.search.pipeline.core.*")
     }
 }
 

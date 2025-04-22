@@ -37,7 +37,71 @@ pre, code {
 // :revnumber: 1.0
 // :revdate: 2025-04-20
 
-This repository contains the output of the end of this tutorial. It's open and used to demonstrate how one can build a multi-module build for containers in a single repository using the Micronaut framework.
+Abstract
+
+This document is Part I of four parts in an immersive tutorial which builds an enterprise fully-open-source search indexing pipeline and
+search engine that scales with both indexing and searching your document corpus.
+
+The project builds upon itself.  We will start from a clean slate and build the product up.
+
+The sections are planned as follows:
+
+Part I (this document)
+
+1. Deep-dive into the micronaut framework
+2. How to setup a multi-module enterprise project using
+  a. Gradle
+  b. JDK21
+3. Creating google protocol buffers
+
+Part II: creating a search pipeline
+
+1. Creating a kafka pipeline with pure open source projects
+2. Expanding a kafka pipeline for a Search Engine
+3. Search microservices
+   a. Chunker
+   b. Embeddings
+   c. NLP - NER, Keyword Extraction
+   d. Mapping protocol buffers
+
+Part III: Designing a search API
+
+1. Creating a search API
+2. Simple or complex?
+3. Handling vector search in OpenSearch or Solr
+4. Handling BM25 search in OpenSearch or Solr
+5. Tuning relevancy
+
+Part IV: Analytics
+
+1. How to measure analytics
+2. Choosing a search analytics package
+3. Creating a front end
+
+Part V: Deploying Microservices
+
+
+To create this HTML file, you n
+
+this tutorial. It's open and used to demonstrate how one can build a multi-module build
+ for containers in a single repository using the Micronaut framework.  At the same time, this tutorial will build a kafka/grpc-based text
+ processing pipeline.
+
+We build the entire project using the following components:
+
+. Base components
+  a. Micronaut framework
+  b. JDK21
+  c. Gradle build system (Kotlin syntax)
+. External servers
+ a. Kafka (latest vanilla version)
+ b. Apicurio (Schema registry)
+ c. Consul (Service discovery)
+ d. Open Search (Search Engine)
+ e. MongoDB (Document Store)
+
+
+
 
 Managing dependencies and ensuring build consistency across multiple projects can be a significant challenge, especially as systems grow in complexity. This tutorial provides a step-by-step guide to establishing a robust multi-project build structure using *Gradle with the Kotlin DSL* (even if your projects use *Java*), targeting *JDK 21*.
 

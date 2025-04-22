@@ -9,7 +9,7 @@ version = rootProject.version
 dependencies {
     implementation(platform(project(":bom")))
     testImplementation(platform(project(":bom")))
-
+    implementation(mn.protobuf.java.util)
     api(libs.guava) // Expose Guava via API
 
     // Testing dependencies

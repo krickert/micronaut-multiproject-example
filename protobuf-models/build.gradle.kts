@@ -22,6 +22,7 @@ dependencies {
     testImplementation(platform(project(":bom")))
 
     implementation(libs.protobuf.java)
+    implementation(libs.slf4j.api)
     implementation(libs.guava)
     implementation(libs.commons.lang3)
 
