@@ -14,18 +14,23 @@ asciidoctorj {
         // optional: pin version
         diagram.version("2.3.2")
     }
+    attributes (
+        mapOf("source-highlighter" to "coderay",
+                   "docinfo1"           to "shared"))
 }
 tasks.named<AsciidoctorTask>("asciidoctor") {
-    setSourceDir(file("./"))
+    setSourceDir(file("src/docs"))
     setOutputDir(file("docs"))
+    logDocuments = true
 
     attributes(
         mapOf(
             // tell HTML where images “live”
-            "imagesdir"      to "images",
+            "imagesdir"       to "images",
             // tell Diagram to also dump images here
-            "imagesoutdir"   to "docs/images",
-            "plantuml-format" to "svg"
+            "imagesoutdir"    to "docs/images",
+            "plantuml-format" to "svg",
+            "docinfodir"      to "src/docs"
         )
     )
 }

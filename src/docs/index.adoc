@@ -162,12 +162,24 @@ This ensures `gradlew`, `gradlew.bat`, and the `gradle/wrapper` directory are pr
 # Only run if not already a git repository
 git init
 ----
-. *Copy this to be your .gitignore file:*
+. *Create the .gitignore file:*
 +
-[source, title=".gitignore file in root directory"]
+[source,bash]
 ----
+nano .gitignore
+----
++
+++++
+<details>
+  <summary style="cursor: pointer; display: inline-block; margin-bottom: 0.5em; font-weight: bold;">Click to view the full .gitignore listing</summary>
+  <div class="code-container" style="position: relative;">
+    <button class="copy-code-button" style="position: absolute; top: 5px; right: 5px; z-index: 10; cursor: pointer; padding: 2px 6px; font-size: 0.8em;">Copy</button>
+    <pre class="highlightjs highlight"><code class="language-git hljs">
 include::.gitignore[]
-----
+    </code></pre>
+  </div>
+</details>
+++++
 
 == Step 2: Configure Project Settings (`settings.gradle.kts`)
 
@@ -175,10 +187,23 @@ This file defines which subprojects are included in the build and configures plu
 
 . *Edit `settings.gradle.kts`:* Open the `settings.gradle.kts` file and ensure it has the following content:
 +
-[source,kotlin,title="settings.gradle.kts"]
+[source,bash]
 ----
+nano settings.gradle.kts
+----
++
+++++
+<details>
+  <summary style="cursor: pointer; display: inline-block; margin-bottom: 0.5em; font-weight: bold;">Click to view the full
+  settings.gradle.kts listing</summary>
+  <div class="code-container" style="position: relative;">
+    <button class="copy-code-button" style="position: absolute; top: 5px; right: 5px; z-index: 10; cursor: pointer; padding: 2px 6px; font-size: 0.8em;">Copy</button>
+    <pre class="highlightjs highlight"><code class="language-kotlin hljs">
 include::settings.gradle.kts[]
-----
+    </code></pre>
+  </div>
+</details>
+++++
 
 == Step 3: Configure Root Build File (`build.gradle.kts`)
 
@@ -186,11 +211,23 @@ Configure global settings and apply common test configurations. (Content remains
 
 . *Create/Edit `build.gradle.kts`:* In the root directory, ensure `build.gradle.kts` contains:
 +
-[source,kotlin,title="build.gradle.kts (Root project)"]
+[source,bash,title="build.gradle.kts (Root project)"]
 ----
-include::build.gradle.kts[]
+nano build.gradle.kts
 ----
 +
+++++
+<details>
+  <summary style="cursor: pointer; display: inline-block; margin-bottom: 0.5em; font-weight: bold;">Click to view the full build.gradle.kts listing</summary>
+  <div class="code-container" style="position: relative;">
+    <button class="copy-code-button" style="position: absolute; top: 5px; right: 5px; z-index: 10; cursor: pointer; padding: 2px 6px; font-size: 0.8em;">Copy</button>
+    <pre class="highlightjs highlight"><code class="language-kotlin hljs">
+include::build.gradle.kts[]
+    </code></pre>
+  </div>
+</details>
+++++
+
 NOTE: The `subprojects {}` block configures `useJUnitPlatform()` globally, so you won't need it in individual subproject files.
 
 == Step 4: Configure Version Catalog (`gradle/libs.versions.toml`)
@@ -199,22 +236,47 @@ Centralize dependency versions and aliases. (Content remains the same as previou
 
 . *Create/Verify `gradle/libs.versions.toml`:*
 +
-[source,toml,title="gradle/libs.versions.toml"]
+[source,bash]
 ----
+nano gradle/libs.versions.toml
+----
++
+++++
+<details>
+  <summary style="cursor: pointer; display: inline-block; margin-bottom: 0.5em; font-weight: bold;">Click to view the full gradle/libs.versions.toml listing</summary>
+  <div class="code-container" style="position: relative;">
+    <button class="copy-code-button" style="position: absolute; top: 5px; right: 5px; z-index: 10; cursor: pointer; padding: 2px 6px; font-size: 0.8em;">Copy</button>
+    <pre class="highlightjs highlight"><code class="language-toml hljs">
 include::gradle/libs.versions.toml[]
-----
+    </code></pre>
+  </div>
+</details>
+++++
+
 
 == Step 5: Create the Custom BOM Project (`bom`)
 
 Define and publish your custom Bill of Materials. (Content remains the same - ensure your `bom/build.gradle.kts` matches).
 
-. *Create/Verify `bom/build.gradle.kts`:*
+. *Create/Verify build of materials `bom/build.gradle.kts`:*
 +
-[source,kotlin,title="bom/build.gradle.kts"]
+[source,bash,title="bom/build.gradle.kts (bom project)"]
 ----
+nano bom/build.gradle.kts
+----
++
+++++
+<details>
+  <summary style="cursor: pointer; display: inline-block; margin-bottom: 0.5em; font-weight: bold;">Click to view the full bom/build.gradle.kts listing</summary>
+  <div class="code-container" style="position: relative;">
+    <button class="copy-code-button" style="position: absolute; top: 5px; right: 5px; z-index: 10; cursor: pointer; padding: 2px 6px; font-size: 0.8em;">Copy</button>
+    <pre class="highlightjs highlight"><code class="language-kotlin hljs">
 include::bom/build.gradle.kts[]
-----
-+
+    </code></pre>
+  </div>
+</details>
+++++
+
 
 . *Build & Publish BOM Locally (CLI):*
 +
@@ -229,40 +291,92 @@ Configure subprojects to use the BOM. (Ensure your subproject build files and so
 
 === 6a. Protobuf Models (`protobuf-models`)
 
-. *Verify `.proto` files exist:* (Ensure files like `pipeline_model.proto` are in `protobuf-models/src/main/proto/`)
+. *Verify `.proto` files exist:* (Ensure files like `pipeline_models.proto` are in `protobuf-models/src/main/proto/`)
 +
-.Example `pipeline_model.proto`:
-[source,protobuf,title="pipeline_model.proto"]
+[source,bash]
 ----
+mkdir -p protobuf-models/src/main/proto/
+nano protobuf-models/src/main/proto/pipeline_models.proto
+----
++
+++++
+<details>
+  <summary style="cursor: pointer; display: inline-block; margin-bottom: 0.5em; font-weight: bold;">Click to view the full
+  protobuf-models/src/main/proto/pipeline_models.proto listing</summary>
+  <div class="code-container" style="position: relative;">
+    <button class="copy-code-button" style="position: absolute; top: 5px; right: 5px; z-index: 10; cursor: pointer; padding: 2px 6px; font-size: 0.8em;">Copy</button>
+    <pre class="highlightjs highlight"><code class="language-proto hljs">
 include::protobuf-models/src/main/proto/pipeline_models.proto[]
-----
+    </code></pre>
+  </div>
+</details>
+++++
 
 . *Verify/Create `protobuf-models/build.gradle.kts`:*
 +
-[source,kotlin,title="protobuf-models/build.gradle.kts"]
+[source,bash]
 ----
+nano protobuf-models/build.gradle.kts
+----
++
+++++
+<details>
+  <summary style="cursor: pointer; display: inline-block; margin-bottom: 0.5em; font-weight: bold;">Click to view the full protobuf-models/build.gradle.kts listing</summary>
+  <div class="code-container" style="position: relative;">
+    <button class="copy-code-button" style="position: absolute; top: 5px; right: 5px; z-index: 10; cursor: pointer; padding: 2px 6px; font-size: 0.8em;">Copy</button>
+    <pre class="highlightjs highlight"><code class="language-kotlin hljs">
 include::protobuf-models/build.gradle.kts[]
-----
+    </code></pre>
+  </div>
+</details>
+++++
 
 . *Verify sample code & test exist:*
 +
-Create `ProtobufUtils.java` in `src/main/java/com/krickert/search/model/ProtobufUtils.java`)
+Create `ProtobufUtils.java` in `src/main/java/com/krickert/search/model/`
 +
-[source,java,title="ProtobufUtils.java"]
+[source,bash]
 ----
+mkdir -p protobuf-models/src/main/java/com/krickert/search/model
+nano protobuf-models/src/main/java/com/krickert/search/model/ProtobufUtils.java
+----
++
+++++
+<details>
+  <summary style="cursor: pointer; display: inline-block; margin-bottom: 0.5em; font-weight: bold;">Click to view the full
+  protobuf-models/src/main/java/com/krickert/search/model/ProtobufUtils.java listing</summary>
+  <div class="code-container" style="position: relative;">
+    <button class="copy-code-button" style="position: absolute; top: 5px; right: 5px; z-index: 10; cursor: pointer; padding: 2px 6px; font-size: 0.8em;">Copy</button>
+    <pre class="highlightjs highlight"><code class="language-java hljs">
 include::protobuf-models/src/main/java/com/krickert/search/model/ProtobufUtils.java[]
-----
+    </code></pre>
+  </div>
+</details>
+++++
 +
 Don't worry about what these tests do yet, they are some sample protocol buffer utility classes that we'll reuse for other projects.
 Now let's see what we are doing by writing some tests...
 +
-Create `ProtobufUtilsTest.java` in `src/test/java/com/krickert/search/model/ProtobufUtilsTest.java`)
-
+Create `ProtobufUtilsTest.java` in `protobuf-models/src/test/java/com/krickert/search/model/ProtobufUtilsTest.java`
 +
-[source,java,title="ProtobufUtilsTest.java"]
+[source,bash]
 ----
+mkdir -p protobuf-models/src/test/java/com/krickert/search/model
+nano protobuf-models/src/test/java/com/krickert/search/model/ProtobufUtilsTest.java
+----
++
+++++
+<details>
+  <summary style="cursor: pointer; display: inline-block; margin-bottom: 0.5em; font-weight: bold;">Click to view the full
+  protobuf-models/src/test/java/com/krickert/search/model/ProtobufUtilsTest.java listing</summary>
+  <div class="code-container" style="position: relative;">
+    <button class="copy-code-button" style="position: absolute; top: 5px; right: 5px; z-index: 10; cursor: pointer; padding: 2px 6px; font-size: 0.8em;">Copy</button>
+    <pre class="highlightjs highlight"><code class="language-java hljs">
 include::protobuf-models/src/test/java/com/krickert/search/model/ProtobufUtilsTest.java[]
-----
+    </code></pre>
+  </div>
+</details>
+++++
 +
 Test that the build runs:
 +
@@ -284,10 +398,22 @@ Test that the build runs:
 . *Verify Java code exists:* (Ensure files exist in `util/src/main/java/`)
 . *Verify/Create `util/build.gradle.kts`:*
 +
-[source,kotlin,title="util/build.gradle.kts"]
+[source,bash]
 ----
+nano util/build.gradle.kts
+----
++
+++++
+<details>
+  <summary style="cursor: pointer; display: inline-block; margin-bottom: 0.5em; font-weight: bold;">Click to view the full util/build.gradle.kts listing</summary>
+  <div class="code-container" style="position: relative;">
+    <button class="copy-code-button" style="position: absolute; top: 5px; right: 5px; z-index: 10; cursor: pointer; padding: 2px 6px; font-size: 0.8em;">Copy</button>
+    <pre class="highlightjs highlight"><code class="language-kotlin hljs">
 include::util/build.gradle.kts[]
-----
+    </code></pre>
+  </div>
+</details>
+++++
 . *Build (CLI):*
 +
 [source,bash]
@@ -300,10 +426,22 @@ include::util/build.gradle.kts[]
 . *Verify Java code exists:* (Ensure files exist in `pipeline-service-core/src/main/java/`)
 . *Verify/Create `pipeline-service-core/build.gradle.kts`:*
 +
-[source,kotlin,title="pipeline-service-core/build.gradle.kts"]
+[source,bash]
 ----
+nano pipeline-service-core/build.gradle.kts
+----
++
+++++
+<details>
+  <summary style="cursor: pointer; display: inline-block; margin-bottom: 0.5em; font-weight: bold;">Click to view the full pipeline-service-core/build.gradle.kts listing</summary>
+  <div class="code-container" style="position: relative;">
+    <button class="copy-code-button" style="position: absolute; top: 5px; right: 5px; z-index: 10; cursor: pointer; padding: 2px 6px; font-size: 0.8em;">Copy</button>
+    <pre class="highlightjs highlight"><code class="language-kotlin hljs">
 include::pipeline-service-core/build.gradle.kts[]
-----
+    </code></pre>
+  </div>
+</details>
+++++
 . *Build (CLI):*
 +
 [source,bash]
@@ -316,10 +454,22 @@ include::pipeline-service-core/build.gradle.kts[]
 . *Verify Java code exists:* (Ensure files exist in `pipeline-service-test-utils/src/main/java/`)
 . *Verify/Create `pipeline-service-test-utils/build.gradle.kts`:*
 +
-[source,kotlin,title="pipeline-service-test-utils/build.gradle.kts"]
+[source,bash]
 ----
+nano pipeline-service-test-utils/build.gradle.kts
+----
++
+++++
+<details>
+  <summary style="cursor: pointer; display: inline-block; margin-bottom: 0.5em; font-weight: bold;">Click to view the full pipeline-service-test-utils/build.gradle.kts listing</summary>
+  <div class="code-container" style="position: relative;">
+    <button class="copy-code-button" style="position: absolute; top: 5px; right: 5px; z-index: 10; cursor: pointer; padding: 2px 6px; font-size: 0.8em;">Copy</button>
+    <pre class="highlightjs highlight"><code class="language-kotlin hljs">
 include::pipeline-service-test-utils/build.gradle.kts[]
-----
+    </code></pre>
+  </div>
+</details>
+++++
 . *Build (CLI):*
 +
 [source,bash]
@@ -332,12 +482,22 @@ include::pipeline-service-test-utils/build.gradle.kts[]
 . *Verify Java code exists:* (Ensure `Application.java` and other files exist in `pipeline-instance-A/src/main/java/...`)
 . *Verify/Create `pipeline-instance-A/build.gradle.kts`:*
 +
-[source,kotlin,title="pipeline-instance-A/build.gradle.kts"]
+[source,bash]
 ----
-include::pipeline-instance-A/build.gradle.kts.soon[]
+nano pipeline-instance-A/build.gradle.kts
 ----
 +
-NOTE: Removed `testImplementation(libs.bundles.testing.jvm)`. Kept `mn.micronaut.test.junit5`.
+++++
+<details>
+  <summary style="cursor: pointer; display: inline-block; margin-bottom: 0.5em; font-weight: bold;">Click to view the full pipeline-instance-A/build.gradle.kts listing</summary>
+  <div class="code-container" style="position: relative;">
+    <button class="copy-code-button" style="position: absolute; top: 5px; right: 5px; z-index: 10; cursor: pointer; padding: 2px 6px; font-size: 0.8em;">Copy</button>
+    <pre class="highlightjs highlight"><code class="language-kotlin hljs">
+include::pipeline-instance-A/build.gradle.kts.soon[]
+    </code></pre>
+  </div>
+</details>
+++++
 . *Build (CLI):*
 +
 [source,bash]
