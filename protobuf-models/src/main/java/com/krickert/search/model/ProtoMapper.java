@@ -27,7 +27,7 @@ public class ProtoMapper {
     private static final Pattern DELETE_PATTERN = Pattern.compile("^-(.+)"); // Matches "-target.path"
     // Updated ASSIGN_PATTERN to prevent matching '=' at the start of the source part
     private static final Pattern ASSIGN_PATTERN = Pattern.compile("^([^=\\s]+)\\s*=\\s*([^=\\s].*)$"); // Matches "target.path = source.path" (source cannot start with =)
-    private static final Pattern APPEND_PATTERN = Pattern.compile("^([^+\\s]+)\\s*\\+=\\s*(.+)"); // Matches "target.list += source.item" or "target.map += source.map"
+    private static final Pattern APPEND_PATTERN = Pattern.compile("^([^+\\s]+)\\s*\\+=\s*(.+)"); // Matches "target.list += source.item" or "target.map += source.map"
     private static final Pattern MAP_PUT_PATTERN = Pattern.compile("^([^\\[\\s]+)\\[\"?([^\"]+)\"?\\]\\s*=\\s*(.+)"); // Matches "target.map[\"key\"] = source.path"
 
     // Separator for nested paths
@@ -85,9 +85,24 @@ public class ProtoMapper {
 
     /**
      * Internal helper to apply rules to a given builder.
+     * FIX: Process assignments before deletions to handle cases like copy-then-delete.
      */
     private void applyRulesToBuilder(Message sourceMessage, Message.Builder targetBuilder, List<String> mappingRules) throws MappingException {
-        // Process Deletions First
+        // Process Assignments/Appends FIRST
+        for (String rule : mappingRules) {
+            rule = rule.trim();
+            if (rule.isEmpty() || rule.startsWith("#") || rule.startsWith("-")) continue; // Skip comments, empty, deletions
+
+            try {
+                executeAssignment(sourceMessage, targetBuilder, rule);
+            } catch (MappingException e) {
+                throw e; // Re-throw specific mapping exceptions
+            } catch (Exception e) {
+                throw new MappingException("Error executing assignment rule: " + rule, e, rule);
+            }
+        }
+
+        // Process Deletions SECOND
         for (String rule : mappingRules) {
             rule = rule.trim();
             if (rule.isEmpty() || rule.startsWith("#")) continue; // Skip comments and empty lines
@@ -110,20 +125,6 @@ public class ProtoMapper {
                 }
             }
         }
-
-        // Process Assignments/Appends Second
-        for (String rule : mappingRules) {
-            rule = rule.trim();
-            if (rule.isEmpty() || rule.startsWith("#") || rule.startsWith("-")) continue; // Skip comments, empty, deletions
-
-            try {
-                executeAssignment(sourceMessage, targetBuilder, rule);
-            } catch (MappingException e) {
-                throw e; // Re-throw specific mapping exceptions
-            } catch (Exception e) {
-                throw new MappingException("Error executing assignment rule: " + rule, e, rule);
-            }
-        }
     }
 
 
@@ -137,7 +138,6 @@ public class ProtoMapper {
 
         if (targetRes.isStructKey()) {
             // Delete key from Struct
-            // FIX: Use the grandparent builder (the one containing the struct field)
             Object grandParentBuilderObj = targetRes.getGrandparentBuilder();
             Message.Builder structParentBuilder; // The builder containing the struct field
 
@@ -150,15 +150,35 @@ public class ProtoMapper {
                 throw new MappingException("Could not find valid parent builder for Struct field: " + targetPath, null, "-"+targetPath);
             }
 
-            // Use the parentField descriptor obtained from resolvePath (this IS the struct field descriptor)
             FieldDescriptor actualStructField = targetRes.getParentField();
             if (actualStructField == null || !actualStructField.getMessageType().getFullName().equals(Struct.getDescriptor().getFullName())) {
                 throw new MappingException("Resolved parent field is not a Struct for deletion: " + targetPath, null, "-"+targetPath);
             }
 
-            // Pass the correct parent builder and struct field descriptor
-            Struct.Builder structBuilder = getStructBuilder(structParentBuilder, actualStructField, targetPath);
+            // FIX: Avoid getFieldBuilder for struct deletion. Get current value, build, modify, set back.
+            Object currentStructObj = structParentBuilder.getField(actualStructField);
+            Struct currentStruct;
+            if (currentStructObj instanceof Struct) {
+                currentStruct = (Struct) currentStructObj;
+            } else if (currentStructObj instanceof Message && ((Message)currentStructObj).getDescriptorForType().equals(Struct.getDescriptor())) {
+                // Handle DynamicMessage representing Struct
+                try {
+                    currentStruct = Struct.parseFrom(((Message) currentStructObj).toByteString());
+                } catch (InvalidProtocolBufferException e) {
+                    throw new MappingException("Failed to parse intermediate Struct value during deletion", e, "-"+targetPath);
+                }
+            } else if (currentStructObj == null || currentStructObj.equals(Struct.getDefaultInstance())) {
+                // Struct doesn't exist or is empty, key is already effectively deleted.
+                LOG.warn("Struct field '{}' is empty or not set; cannot delete key '{}'", actualStructField.getName(), targetRes.getFinalPathPart());
+                return; // Nothing to delete
+            } else {
+                throw new MappingException("Unexpected type for Struct field during deletion: " + currentStructObj.getClass().getName(), null, "-"+targetPath);
+            }
+
+            // Modify a builder created from the current value
+            Struct.Builder structBuilder = currentStruct.toBuilder();
             structBuilder.removeFields(targetRes.getFinalPathPart());
+
             // Set the modified struct back onto the correct parent builder
             structParentBuilder.setField(actualStructField, structBuilder.build());
 
@@ -347,8 +367,6 @@ public class ProtoMapper {
                         if (!(structParent instanceof Message.Builder)) {
                             throw new MappingException("Cannot resolve path for setting: intermediate object is not a Builder at Struct field '" + part + "'", null, path);
                         }
-                        // Get the builder for the Struct field. This might be DynamicMessage.Builder
-                        //Message.Builder structBuilder = ((Message.Builder) structParent).getFieldBuilder(structFieldDesc);
                         // Return the PARENT builder and the STRUCT field descriptor
                         return new PathResolverResult(structParent, parentObj, structFieldDesc, null, structKey, true, false);
                     } else {
@@ -734,10 +752,10 @@ public class ProtoMapper {
         // and use getFieldBuilder directly.
         Message.Builder genericBuilder;
         try {
+            // Trust that structField is the correct descriptor for the parentBuilder context
             genericBuilder = parentBuilder.getFieldBuilder(structField);
         } catch (IllegalArgumentException e) {
-            // This might still happen if the parentBuilder is somehow not what we expect,
-            // or if the structField instance is subtly wrong despite having the right name/type.
+            // Catch potential "FieldDescriptor does not match message type"
             throw new MappingException("Error getting Struct builder for field '" + structField.getName() + "': " + e.getMessage()
                     + " (Parent Builder Type: " + parentBuilder.getDescriptorForType().getFullName()
                     + ", Field Containing Type: " + structField.getContainingType().getFullName() + ")", e, pathForError);
