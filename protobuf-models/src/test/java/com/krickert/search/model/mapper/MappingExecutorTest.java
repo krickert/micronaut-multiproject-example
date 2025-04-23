@@ -208,9 +208,7 @@ class MappingExecutorTest {
              .thenThrow(notFoundException);
 
          // Execution should NOT throw an exception
-         assertDoesNotThrow(() -> {
-             mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings);
-         });
+         assertDoesNotThrow(() -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings));
 
          // Verify PathResolver was called
          verify(mockPathResolver).resolvePath(same(targetBuilder), eq("non_existent_field"), eq(true), eq(ruleStr));
@@ -226,9 +224,7 @@ class MappingExecutorTest {
         MappingException parseException = new MappingException("Invalid syntax", "invalid rule syntax = =");
         when(mockRuleParser.parseRules(ruleStrings)).thenThrow(parseException);
 
-        MappingException e = assertThrows(MappingException.class, () -> {
-            mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings));
 
         assertSame(parseException, e); // Should propagate the parser exception
         verify(mockRuleParser).parseRules(ruleStrings);
@@ -245,9 +241,7 @@ class MappingExecutorTest {
         MappingException valueException = new MappingException("Cannot get value", ruleStr);
         when(mockValueHandler.getValue(any(), eq("source_error"), eq(ruleStr))).thenThrow(valueException);
 
-        MappingException e = assertThrows(MappingException.class, () -> {
-            mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings));
 
         assertSame(valueException, e); // Should propagate the getValue exception
         verify(mockRuleParser).parseRules(ruleStrings);
@@ -267,9 +261,7 @@ class MappingExecutorTest {
         MappingException valueException = new MappingException("Cannot set value", ruleStr);
         doThrow(valueException).when(mockValueHandler).setValue(any(), eq("error_target"), any(), eq("="), eq(ruleStr));
 
-        MappingException e = assertThrows(MappingException.class, () -> {
-            mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings));
 
         assertSame(valueException, e); // Should propagate the setValue exception
         verify(mockRuleParser).parseRules(ruleStrings);
@@ -290,9 +282,7 @@ class MappingExecutorTest {
          when(mockPathResolver.resolvePath(same(targetBuilder), eq("error_path"), eq(true), eq(ruleStr)))
              .thenThrow(pathException);
 
-        MappingException e = assertThrows(MappingException.class, () -> {
-            mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings));
 
         assertSame(pathException, e); // Should propagate the path exception
         verify(mockRuleParser).parseRules(ruleStrings);
@@ -312,9 +302,7 @@ class MappingExecutorTest {
         RuntimeException unexpectedEx = new RuntimeException("Something went wrong");
         when(mockValueHandler.getValue(any(), eq("b"), eq(ruleStr))).thenThrow(unexpectedEx);
 
-        MappingException e = assertThrows(MappingException.class, () -> {
-            mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings));
 
         assertTrue(e.getMessage().contains("Unexpected error executing rule"));
         assertSame(unexpectedEx, e.getCause()); // Check underlying cause
@@ -333,9 +321,7 @@ class MappingExecutorTest {
         doThrow(unexpectedEx).when(mockValueHandler).setValue(any(), eq("a"), any(), eq("="), eq(ruleStr));
 
 
-        MappingException e = assertThrows(MappingException.class, () -> {
-            mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings));
 
         assertTrue(e.getMessage().contains("Unexpected error executing rule"));
         assertSame(unexpectedEx, e.getCause());
@@ -352,9 +338,7 @@ class MappingExecutorTest {
         RuntimeException unexpectedEx = new RuntimeException("Something went wrong");
         when(mockPathResolver.resolvePath(any(), eq("a"), eq(true), eq(ruleStr))).thenThrow(unexpectedEx);
 
-        MappingException e = assertThrows(MappingException.class, () -> {
-            mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings));
 
         assertTrue(e.getMessage().contains("Unexpected error executing rule") || e.getMessage().contains("Error executing deletion rule")); // Message might differ slightly
         assertSame(unexpectedEx, e.getCause());

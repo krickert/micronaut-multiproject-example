@@ -4,7 +4,6 @@ import com.google.protobuf.ListValue;
 import com.google.protobuf.Timestamp;
 import com.krickert.search.model.pipe.PipeDoc; // Example message
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

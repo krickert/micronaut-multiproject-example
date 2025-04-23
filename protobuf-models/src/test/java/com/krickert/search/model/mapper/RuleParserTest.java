@@ -203,9 +203,7 @@ class RuleParserTest {
     @Test
     void parseSingleRule_InvalidSyntax_DoubleEqualsAssign() {
         String ruleString = "target.field = = source.field";
-        MappingException e = assertThrows(MappingException.class, () -> {
-            ruleParser.parseSingleRule(ruleString);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> ruleParser.parseSingleRule(ruleString));
         // **FIXED Assertion**
         assertTrue(e.getMessage().contains("Invalid assign rule syntax: source path starts with '='"));
         assertEquals(ruleString, e.getFailedRule());
@@ -214,9 +212,7 @@ class RuleParserTest {
      @Test
     void parseSingleRule_InvalidSyntax_DoubleEqualsAppend() {
         String ruleString = "target.field += = source.field";
-         MappingException e = assertThrows(MappingException.class, () -> {
-            ruleParser.parseSingleRule(ruleString);
-        });
+         MappingException e = assertThrows(MappingException.class, () -> ruleParser.parseSingleRule(ruleString));
         // **FIXED Assertion**
         assertTrue(e.getMessage().contains("Invalid append rule syntax: source path starts with '='"));
         assertEquals(ruleString, e.getFailedRule());
@@ -225,9 +221,7 @@ class RuleParserTest {
       @Test
     void parseSingleRule_InvalidSyntax_DoubleEqualsMapPut() {
         String ruleString = "target.map[\"k\"] = = source.field";
-         MappingException e = assertThrows(MappingException.class, () -> {
-            ruleParser.parseSingleRule(ruleString);
-        });
+         MappingException e = assertThrows(MappingException.class, () -> ruleParser.parseSingleRule(ruleString));
         // **FIXED Assertion**
         assertTrue(e.getMessage().contains("Invalid map put rule syntax: source path starts with '='"));
         assertEquals(ruleString, e.getFailedRule());
@@ -236,9 +230,7 @@ class RuleParserTest {
     @Test
     void parseSingleRule_InvalidSyntax_MissingSourceAssign() {
         String ruleString = "target.field = ";
-        MappingException e = assertThrows(MappingException.class, () -> {
-            ruleParser.parseSingleRule(ruleString);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> ruleParser.parseSingleRule(ruleString));
         // This should be caught by the final 'else' in the parser
         assertTrue(e.getMessage().contains("Invalid assignment rule syntax: " + ruleString));
         assertEquals(ruleString, e.getFailedRule());
@@ -247,9 +239,7 @@ class RuleParserTest {
     @Test
     void parseSingleRule_InvalidSyntax_MissingSourceAppend() {
         String ruleString = "target.field += ";
-        MappingException e = assertThrows(MappingException.class, () -> {
-            ruleParser.parseSingleRule(ruleString);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> ruleParser.parseSingleRule(ruleString));
          // This should be caught by the final 'else' in the parser
         assertTrue(e.getMessage().contains("Invalid assignment rule syntax: " + ruleString));
         assertEquals(ruleString, e.getFailedRule());
@@ -258,9 +248,7 @@ class RuleParserTest {
      @Test
     void parseSingleRule_InvalidSyntax_MissingSourceMapPut() {
         String ruleString = "target.map[\"k\"] ="; // Missing source
-        MappingException e = assertThrows(MappingException.class, () -> {
-            ruleParser.parseSingleRule(ruleString);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> ruleParser.parseSingleRule(ruleString));
          // This should be caught by the final 'else' in the parser
         assertTrue(e.getMessage().contains("Invalid assignment rule syntax: " + ruleString));
         assertEquals(ruleString, e.getFailedRule());
@@ -270,9 +258,7 @@ class RuleParserTest {
     @Test
     void parseSingleRule_InvalidSyntax_NoOperator() {
         String ruleString = "target.field source.field";
-        MappingException e = assertThrows(MappingException.class, () -> {
-            ruleParser.parseSingleRule(ruleString);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> ruleParser.parseSingleRule(ruleString));
         assertTrue(e.getMessage().contains("Invalid assignment rule syntax"));
         assertEquals(ruleString, e.getFailedRule());
     }
@@ -280,9 +266,7 @@ class RuleParserTest {
      @Test
     void parseSingleRule_InvalidSyntax_JustTarget() {
         String ruleString = "target.field";
-        MappingException e = assertThrows(MappingException.class, () -> {
-            ruleParser.parseSingleRule(ruleString);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> ruleParser.parseSingleRule(ruleString));
         assertTrue(e.getMessage().contains("Invalid assignment rule syntax"));
         assertEquals(ruleString, e.getFailedRule());
     }
@@ -290,9 +274,7 @@ class RuleParserTest {
     @Test
     void parseSingleRule_InvalidSyntax_MalformedMapPut() {
         String ruleString = "target.map[key = source.value"; // Missing closing bracket
-        MappingException e = assertThrows(MappingException.class, () -> {
-            ruleParser.parseSingleRule(ruleString);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> ruleParser.parseSingleRule(ruleString));
         // This should be caught by the final 'else' as no pattern matches
         assertTrue(e.getMessage().contains("Invalid assignment rule syntax: " + ruleString));
         assertEquals(ruleString, e.getFailedRule());
@@ -301,9 +283,7 @@ class RuleParserTest {
      @Test
     void parseSingleRule_InvalidSyntax_DeleteWithEquals() {
         String ruleString = "-target.field = source"; // Delete rule shouldn't have assignment
-        MappingException e = assertThrows(MappingException.class, () -> {
-            ruleParser.parseSingleRule(ruleString);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> ruleParser.parseSingleRule(ruleString));
         // **FIXED Assertion**
         assertTrue(e.getMessage().contains("Invalid delete rule syntax: target path cannot contain '+' or '='"));
         assertEquals(ruleString, e.getFailedRule());

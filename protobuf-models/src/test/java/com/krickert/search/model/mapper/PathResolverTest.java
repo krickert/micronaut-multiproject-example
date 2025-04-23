@@ -125,9 +125,7 @@ class PathResolverTest {
 
      @Test
      void resolvePath_Get_RepeatedFieldTraversalError() {
-         MappingException e = assertThrows(MappingException.class, () -> {
-             pathResolver.resolvePath(sourceMessage, "keywords.someProperty", false, "test");
-         });
+         MappingException e = assertThrows(MappingException.class, () -> pathResolver.resolvePath(sourceMessage, "keywords.someProperty", false, "test"));
          assertTrue(e.getMessage().contains("Cannot traverse into repeated field 'keywords' using dot notation"));
      }
 
@@ -179,7 +177,7 @@ class PathResolverTest {
      }
 
     @Test
-    void resolvePath_Set_NestedStructValue_CreatesBuilders() throws MappingException {
+    void resolvePath_Set_NestedStructValue_CreatesBuilders() {
          assertTrue(true, "Skipping test for nested struct set - No nested struct field in schema.");
     }
 
@@ -197,9 +195,7 @@ class PathResolverTest {
      @Test
      void resolvePath_Set_RepeatedFieldTraversalError() {
          targetBuilder.addKeywords("existing");
-         MappingException e = assertThrows(MappingException.class, () -> {
-             pathResolver.resolvePath(targetBuilder, "keywords.someProperty", true, "test");
-         });
+         MappingException e = assertThrows(MappingException.class, () -> pathResolver.resolvePath(targetBuilder, "keywords.someProperty", true, "test"));
          assertTrue(e.getMessage().contains("Cannot traverse into repeated field 'keywords' using dot notation"));
      }
 
@@ -207,27 +203,21 @@ class PathResolverTest {
 
     @Test
     void resolvePath_Error_FieldNotFound_Simple() {
-        MappingException e = assertThrows(MappingException.class, () -> {
-            pathResolver.resolvePath(sourceMessage, "non_existent", false, "test");
-        });
+        MappingException e = assertThrows(MappingException.class, () -> pathResolver.resolvePath(sourceMessage, "non_existent", false, "test"));
         assertTrue(e.getMessage().contains("Field not found: 'non_existent'"));
         assertEquals("test", e.getFailedRule());
     }
 
     @Test
     void resolvePath_Error_FieldNotFound_Nested() {
-         MappingException e = assertThrows(MappingException.class, () -> {
-            pathResolver.resolvePath(sourceMessage, "chunk_embeddings.non_existent", false, "test");
-        });
+         MappingException e = assertThrows(MappingException.class, () -> pathResolver.resolvePath(sourceMessage, "chunk_embeddings.non_existent", false, "test"));
         assertTrue(e.getMessage().contains("Field not found: 'non_existent'"));
         assertEquals("test", e.getFailedRule());
     }
 
      @Test
     void resolvePath_Error_FieldNotFound_InStruct() {
-         MappingException e = assertThrows(MappingException.class, () -> {
-            pathResolver.resolvePath(sourceMessage, "custom_data.non_existent.deeper", false, "test");
-         });
+         MappingException e = assertThrows(MappingException.class, () -> pathResolver.resolvePath(sourceMessage, "custom_data.non_existent.deeper", false, "test"));
          assertTrue(e.getMessage().contains("Path cannot continue after non-struct Struct key 'non_existent'"), "Expected struct key traversal error");
          assertEquals("test", e.getFailedRule());
 
@@ -240,9 +230,7 @@ class PathResolverTest {
     @Test
     void resolvePath_Error_IntermediateNotSet_Get() {
          PipeDoc emptySource = PipeDoc.newBuilder().build();
-         MappingException e = assertThrows(MappingException.class, () -> {
-            pathResolver.resolvePath(emptySource, "chunk_embeddings.parent_id", false, "test");
-        });
+         MappingException e = assertThrows(MappingException.class, () -> pathResolver.resolvePath(emptySource, "chunk_embeddings.parent_id", false, "test"));
         assertTrue(e.getMessage().contains("Cannot resolve path") && e.getMessage().contains("is not set"));
         assertTrue(e.getMessage().contains("chunk_embeddings"));
         assertEquals("test", e.getFailedRule());
@@ -250,9 +238,7 @@ class PathResolverTest {
 
     @Test
     void resolvePath_Error_IntermediateNotBuilder_Set() {
-        MappingException e = assertThrows(MappingException.class, () -> {
-            pathResolver.resolvePath(sourceMessage, "chunk_embeddings.parent_id", true, "test");
-        });
+        MappingException e = assertThrows(MappingException.class, () -> pathResolver.resolvePath(sourceMessage, "chunk_embeddings.parent_id", true, "test"));
         assertTrue(e.getMessage().contains("intermediate object is not a Builder"));
         assertEquals("test", e.getFailedRule());
     }
@@ -260,27 +246,21 @@ class PathResolverTest {
 
     @Test
     void resolvePath_Error_TraverseIntoNonMessage() {
-        MappingException e = assertThrows(MappingException.class, () -> {
-            pathResolver.resolvePath(sourceMessage, "title.something", false, "test");
-        });
+        MappingException e = assertThrows(MappingException.class, () -> pathResolver.resolvePath(sourceMessage, "title.something", false, "test"));
         assertTrue(e.getMessage().contains("Cannot traverse into non-message field 'title'"));
         assertEquals("test", e.getFailedRule());
     }
 
      @Test
     void resolvePath_Error_MapAccessOnNonMapField() {
-        MappingException e = assertThrows(MappingException.class, () -> {
-            pathResolver.resolvePath(sourceMessage, "title[\"key\"]", false, "test");
-        });
+        MappingException e = assertThrows(MappingException.class, () -> pathResolver.resolvePath(sourceMessage, "title[\"key\"]", false, "test"));
         assertTrue(e.getMessage().contains("Field 'title' is not a map field"));
         assertEquals("test", e.getFailedRule());
     }
 
      @Test
     void resolvePath_Error_DotAccessOnMapField() {
-        MappingException e = assertThrows(MappingException.class, () -> {
-            pathResolver.resolvePath(sourceMessage, "embeddings.keyA", false, "test");
-        });
+        MappingException e = assertThrows(MappingException.class, () -> pathResolver.resolvePath(sourceMessage, "embeddings.keyA", false, "test"));
         assertTrue(e.getMessage().contains("Cannot traverse into map field 'embeddings' using dot notation"));
          assertEquals("test", e.getFailedRule());
     }
@@ -288,18 +268,14 @@ class PathResolverTest {
 
      @Test
     void resolvePath_Error_MapKeyNotLastPart() {
-        MappingException e = assertThrows(MappingException.class, () -> {
-            pathResolver.resolvePath(sourceMessage, "embeddings[\"keyA\"].some_property", false, "test");
-        });
+        MappingException e = assertThrows(MappingException.class, () -> pathResolver.resolvePath(sourceMessage, "embeddings[\"keyA\"].some_property", false, "test"));
         assertTrue(e.getMessage().contains("Map key access must be the last part"));
         assertEquals("test", e.getFailedRule());
     }
 
     @Test
     void resolvePath_Error_StructKeyNotLastPartOrPenultimate_IfNonStructValue() {
-         MappingException e = assertThrows(MappingException.class, () -> {
-            pathResolver.resolvePath(sourceMessage, "custom_data.structKey1.extra", false, "test");
-        });
+         MappingException e = assertThrows(MappingException.class, () -> pathResolver.resolvePath(sourceMessage, "custom_data.structKey1.extra", false, "test"));
          assertTrue(e.getMessage().contains("Path cannot continue after non-struct Struct key 'structKey1'"));
          assertEquals("test", e.getFailedRule());
     }
