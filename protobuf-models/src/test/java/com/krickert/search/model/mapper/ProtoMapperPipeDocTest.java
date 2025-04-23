@@ -1,8 +1,7 @@
-package com.krickert.search.model;
+package com.krickert.search.model.mapper;
 
-import com.google.protobuf.*;
 import com.google.protobuf.Descriptors.Descriptor;
-import com.krickert.search.model.*; // Import your generated PipeDoc classes
+import com.google.protobuf.*;
 import com.krickert.search.model.pipe.*;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -40,7 +39,7 @@ public class ProtoMapperPipeDocTest {
     }
 
     @Test
-    void testSimpleAssignment() throws ProtoMapper.MappingException, InvalidProtocolBufferException {
+    void testSimpleAssignment() throws InvalidProtocolBufferException, MappingException {
         PipeDoc source = PipeDoc.newBuilder()
                 .setId("source-123")
                 .setTitle("Source Title")
@@ -60,7 +59,7 @@ public class ProtoMapperPipeDocTest {
     }
 
     @Test
-    void testTimestampAssignment() throws ProtoMapper.MappingException, InvalidProtocolBufferException {
+    void testTimestampAssignment() throws MappingException, InvalidProtocolBufferException {
         Timestamp ts = createTimestamp(1678886400, 5000); // Example timestamp
         PipeDoc source = PipeDoc.newBuilder()
                 .setCreationDate(ts)
@@ -76,7 +75,7 @@ public class ProtoMapperPipeDocTest {
     }
 
     @Test
-    void testNestedAssignment() throws ProtoMapper.MappingException, InvalidProtocolBufferException {
+    void testNestedAssignment() throws MappingException, InvalidProtocolBufferException {
         PipeDoc source = PipeDoc.newBuilder()
                 .setId("parent-doc-id")
                 .setChunkEmbeddings(SemanticDoc.newBuilder()
@@ -98,7 +97,7 @@ public class ProtoMapperPipeDocTest {
     }
 
     @Test
-    void testRepeatedAssignAndAppend() throws ProtoMapper.MappingException, InvalidProtocolBufferException {
+    void testRepeatedAssignAndAppend() throws MappingException, InvalidProtocolBufferException {
         PipeDoc source = PipeDoc.newBuilder()
                 .addKeywords("source_tag1")
                 .addKeywords("source_tag2")
@@ -116,7 +115,7 @@ public class ProtoMapperPipeDocTest {
     }
 
      @Test
-     void testRepeatedAppendList() throws ProtoMapper.MappingException, InvalidProtocolBufferException {
+     void testRepeatedAppendList() throws MappingException, InvalidProtocolBufferException {
          PipeDoc source = PipeDoc.newBuilder()
                  .addKeywords("srcA")
                  .addKeywords("srcB")
@@ -136,7 +135,7 @@ public class ProtoMapperPipeDocTest {
 
 
     @Test
-    void testStructAssignmentInto() throws ProtoMapper.MappingException, InvalidProtocolBufferException {
+    void testStructAssignmentInto() throws MappingException, InvalidProtocolBufferException {
         PipeDoc source = PipeDoc.newBuilder()
                 .setTitle("Title for Struct")
                 .setId("doc-id-struct")
@@ -163,7 +162,7 @@ public class ProtoMapperPipeDocTest {
     }
 
     @Test
-    void testStructAssignmentOutOf() throws ProtoMapper.MappingException, InvalidProtocolBufferException {
+    void testStructAssignmentOutOf() throws MappingException, InvalidProtocolBufferException {
         PipeDoc source = PipeDoc.newBuilder()
                 .setCustomData(Struct.newBuilder()
                         .putFields("new_title", Value.newBuilder().setStringValue("Title From Custom Data").build())
@@ -185,7 +184,7 @@ public class ProtoMapperPipeDocTest {
 
 
     @Test
-    void testMapAssignmentReplaceAndPut() throws ProtoMapper.MappingException, InvalidProtocolBufferException {
+    void testMapAssignmentReplaceAndPut() throws MappingException, InvalidProtocolBufferException {
         Embedding emb1 = createEmbedding(Arrays.asList(0.1f, 0.2f));
         Embedding emb2 = createEmbedding(Arrays.asList(0.3f, 0.4f));
         Embedding emb3 = createEmbedding(Arrays.asList(0.5f, 0.6f));
@@ -225,7 +224,7 @@ public class ProtoMapperPipeDocTest {
 
 
     @Test
-    void testMapMerge() throws ProtoMapper.MappingException, InvalidProtocolBufferException {
+    void testMapMerge() throws MappingException, InvalidProtocolBufferException {
         Embedding emb1 = createEmbedding(Arrays.asList(0.1f, 0.2f));
         Embedding emb2 = createEmbedding(Arrays.asList(0.3f, 0.4f));
         Embedding emb3 = createEmbedding(Arrays.asList(1.1f, 1.2f)); // For target initial
@@ -270,7 +269,7 @@ public class ProtoMapperPipeDocTest {
 
 
     @Test
-    void testFieldDeletion() throws ProtoMapper.MappingException, InvalidProtocolBufferException {
+    void testFieldDeletion() throws MappingException, InvalidProtocolBufferException {
         PipeDoc source = PipeDoc.newBuilder()
                 .setId("doc-to-clear")
                 .setRevisionId("rev-1")
@@ -292,7 +291,7 @@ public class ProtoMapperPipeDocTest {
     }
 
     @Test
-    void testStructKeyDeletion() throws ProtoMapper.MappingException, InvalidProtocolBufferException {
+    void testStructKeyDeletion() throws MappingException, InvalidProtocolBufferException {
         PipeDoc source = PipeDoc.newBuilder()
                 .setCustomData(Struct.newBuilder()
                         .putFields("keep_me", Value.newBuilder().setStringValue("Keep").build())
@@ -316,7 +315,7 @@ public class ProtoMapperPipeDocTest {
         PipeDoc source = PipeDoc.newBuilder().build();
         List<String> rules = Collections.singletonList("title = non_existent_source_field");
 
-        ProtoMapper.MappingException e = assertThrows(ProtoMapper.MappingException.class, () -> {
+        MappingException e = assertThrows(MappingException.class, () -> {
             mapper.map(source, pipeDocDesc, rules);
         });
         assertTrue(e.getMessage().contains("Field not found: 'non_existent_source_field'"));
@@ -328,7 +327,7 @@ public class ProtoMapperPipeDocTest {
          PipeDoc source = PipeDoc.newBuilder().setTitle("hello").build();
          List<String> rules = Collections.singletonList("non_existent_target = title");
 
-         ProtoMapper.MappingException e = assertThrows(ProtoMapper.MappingException.class, () -> {
+         MappingException e = assertThrows(MappingException.class, () -> {
              mapper.map(source, pipeDocDesc, rules);
          });
          assertTrue(e.getMessage().contains("Field not found: 'non_existent_target'"));
@@ -340,7 +339,7 @@ public class ProtoMapperPipeDocTest {
          PipeDoc source = PipeDoc.newBuilder().setId("id").build();
          List<String> rules = Collections.singletonList("chunk_embeddings.non_existent = id");
 
-         ProtoMapper.MappingException e = assertThrows(ProtoMapper.MappingException.class, () -> {
+         MappingException e = assertThrows(MappingException.class, () -> {
              mapper.map(source, pipeDocDesc, rules);
          });
          // Error message might vary depending on where exactly path resolution fails
@@ -355,7 +354,7 @@ public class ProtoMapperPipeDocTest {
         // Rule tries to assign string to Timestamp field
         List<String> rules = Collections.singletonList("creation_date = title");
 
-        ProtoMapper.MappingException e = assertThrows(ProtoMapper.MappingException.class, () -> {
+        MappingException e = assertThrows(MappingException.class, () -> {
             mapper.map(source, pipeDocDesc, rules);
         });
         assertTrue(e.getMessage().contains("Type mismatch"));
@@ -368,7 +367,7 @@ public class ProtoMapperPipeDocTest {
         PipeDoc source = PipeDoc.newBuilder().build();
         List<String> rules = Collections.singletonList("title = = body"); // Extra '='
 
-        ProtoMapper.MappingException e = assertThrows(ProtoMapper.MappingException.class, () -> {
+        MappingException e = assertThrows(MappingException.class, () -> {
             mapper.map(source, pipeDocDesc, rules);
         });
         assertTrue(e.getMessage().contains("Invalid assignment rule syntax"));
@@ -377,7 +376,7 @@ public class ProtoMapperPipeDocTest {
 
 
     @Test
-    void testMapAssignmentReplaceAndPut1() throws ProtoMapper.MappingException, InvalidProtocolBufferException {
+    void testMapAssignmentReplaceAndPut1() throws InvalidProtocolBufferException, MappingException {
         Embedding emb1 = createEmbedding(Arrays.asList(0.1f, 0.2f));
         Embedding emb2 = createEmbedding(Arrays.asList(0.3f, 0.4f));
         Embedding emb3 = createEmbedding(Arrays.asList(0.5f, 0.6f));
