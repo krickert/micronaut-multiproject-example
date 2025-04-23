@@ -421,8 +421,20 @@ public class ValueHandler {
                     if (sourceJavaType == JavaType.ENUM && sourceValue instanceof EnumValueDescriptor) return ((EnumValueDescriptor)sourceValue).getNumber();
                     break;
                 case STRING:
-                    if (sourceJavaType == JavaType.INT || sourceJavaType == JavaType.LONG || sourceJavaType == JavaType.FLOAT ||
-                        sourceJavaType == JavaType.DOUBLE || sourceJavaType == JavaType.BOOLEAN) return String.valueOf(sourceValue);
+                    if (sourceValue instanceof Number num) {
+                        // *** FIX: Format whole numbers without .0 ***
+                        if (num instanceof Double || num instanceof Float) {
+                            double doubleVal = num.doubleValue();
+                            if (doubleVal == Math.floor(doubleVal) && !Double.isInfinite(doubleVal)) {
+                                // It's a whole number, format as long
+                                return String.valueOf((long) doubleVal);
+                            }
+                        }
+                        // Otherwise, use default string representation
+                        return String.valueOf(num);
+                        // *** END FIX ***
+                    }
+                    if (sourceJavaType == JavaType.BOOLEAN) return String.valueOf(sourceValue);
                     if (sourceJavaType == JavaType.ENUM && sourceValue instanceof EnumValueDescriptor) return ((EnumValueDescriptor) sourceValue).getName();
                     if (sourceJavaType == JavaType.BYTE_STRING) return ((ByteString) sourceValue).toStringUtf8();
                     break;

@@ -123,10 +123,7 @@ class MappingRuleTest {
         // Test inequality
         assertNotEquals(rule1, rule3); // Different original string
         assertNotEquals(rule1, rule4); // Different operation based on original string parsing
-        assertNotEquals(rule1, null);  // Inequality with null
-        assertNotEquals(rule1, new Object()); // Inequality with different type
-
-        // Removed the problematic assertion: assertNotEquals(rule1.hashCode(), rule3.hashCode());
-        // Hashcodes *might* collide even if objects are not equal.
+        assertNotEquals(null, rule1);  // Inequality with null
+        assertNotEquals(new Object(), rule1); // Inequality with different type
     }
 }
