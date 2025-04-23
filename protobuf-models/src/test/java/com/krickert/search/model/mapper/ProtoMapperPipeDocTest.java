@@ -5,7 +5,6 @@ import com.google.protobuf.*;
 import com.krickert.search.model.pipe.*;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-// import com.krickert.search.model.pipe.DocStatus; // Assuming an enum existed
 
 import java.util.Arrays;
 import java.util.Collections;
