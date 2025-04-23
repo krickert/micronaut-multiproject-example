@@ -13,8 +13,6 @@ import java.util.*;
  * Acts as an entry point, delegating logic to helper classes.
  */
 public class ProtoMapper {
-    private static final Logger LOG = LoggerFactory.getLogger(ProtoMapper.class);
-
     private final RuleParser ruleParser;
     private final PathResolver pathResolver;
     private final ValueHandler valueHandler;
@@ -31,6 +29,7 @@ public class ProtoMapper {
     }
 
     // Constructor for injecting dependencies (useful for testing components if needed later)
+    @SuppressWarnings("unused")
     public ProtoMapper(RuleParser ruleParser, PathResolver pathResolver, ValueHandler valueHandler, MappingExecutor mappingExecutor) {
         this.ruleParser = Objects.requireNonNull(ruleParser);
         this.pathResolver = Objects.requireNonNull(pathResolver);
@@ -66,7 +65,6 @@ public class ProtoMapper {
              // Original error handling
             throw new MappingException("Error building final target message: Required fields missing. " + e.getMessage(), e, null);
         } catch (Exception e) {
-             if (e instanceof MappingException) throw (MappingException)e;
             throw new MappingException("Error building final target message", e, null);
         }
     }
@@ -80,6 +78,7 @@ public class ProtoMapper {
      * @return The same targetBuilder instance, modified according to the rules.
      * @throws MappingException If any error occurs during parsing or mapping.
      */
+    @SuppressWarnings("UnusedReturnValue")
     public Message.Builder mapOnto(Message sourceMessage,
                                    Message.Builder targetBuilder,
                                    List<String> mappingRuleStrings) throws MappingException {

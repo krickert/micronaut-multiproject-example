@@ -2,9 +2,7 @@
 // Extracts execution logic from ProtoMapper.java
 package com.krickert.search.model.mapper;
 
-import com.google.protobuf.Descriptors;
 import com.google.protobuf.Message;
-import com.google.protobuf.MessageOrBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.google.protobuf.Descriptors.FieldDescriptor;
@@ -62,7 +60,7 @@ public class MappingExecutor {
                  }
              } catch (MappingException e) {
                   // Log detailed error before re-throwing
-                  LOG.error("Mapping failed for rule '{}': {}", ruleString, e.getMessage(), e.getCause() != null ? e.getCause() : "");
+                  LOG.error("Mapping failed for rule '{}': {}", ruleString, e.getMessage(), e);
                  // Ensure the failed rule is attached if not already
                   if (e.getFailedRule() == null || e.getFailedRule().isEmpty()) {
                       throw new MappingException(e.getMessage(), e.getCause(), ruleString);
@@ -70,8 +68,7 @@ public class MappingExecutor {
                       throw e; // Re-throw if rule is already attached
                   }
              } catch (Exception e) {
-                  if (e instanceof MappingException) throw (MappingException)e; // Avoid re-wrapping
-                  LOG.error("Unexpected error executing rule '{}': {}", ruleString, e.getMessage(), e);
+                 LOG.error("Unexpected error executing rule '{}': {}", ruleString, e.getMessage(), e);
                  throw new MappingException("Unexpected error executing rule", e, ruleString);
              }
          }
@@ -87,7 +84,7 @@ public class MappingExecutor {
          String ruleString = rule.getOriginalRuleString();
           try {
              // Resolve path for setting (deletion modifies)
-             PathResolver.PathResolverResult targetRes = pathResolver.resolvePath(targetBuilder, targetPath, true, ruleString);
+             PathResolverResult targetRes = pathResolver.resolvePath(targetBuilder, targetPath, true, ruleString);
 
              if (targetRes.isStructKey()) {
                   // Delete key from Struct
@@ -138,7 +135,6 @@ public class MappingExecutor {
                   else throw e; // Re-throw other specific mapping exceptions
              }
          } catch (Exception e) {
-              if (e instanceof MappingException) throw (MappingException)e;
               LOG.error("Error executing deletion rule: {}", ruleString, e);
              throw new MappingException("Error executing deletion rule: " + ruleString, e, ruleString);
          }

@@ -5,9 +5,6 @@ import com.google.protobuf.*;
 import com.google.protobuf.Descriptors.*;
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType;
 
-import java.util.List;
-import java.util.Collections; // Import Collections
-
 /**
  * Resolves paths within Protobuf messages or builders.
  * Handles simple fields, nested messages, map keys, struct keys.
@@ -18,60 +15,6 @@ public class PathResolver {
     private static final String PATH_SEPARATOR_REGEX = "\\.";
 
     /**
-     * Internal class to hold the result of path resolution.
-     */
-     static class PathResolverResult {
-        private final Object parent;
-        private final Object grandparent;
-        private final FieldDescriptor parentField;
-        private final FieldDescriptor targetField;
-        private final String finalPathPart; // The key if target is a Struct or Map key
-        private final boolean isStructKey;
-        private final boolean isMapKey;
-
-        PathResolverResult(Object parent, Object grandparent, FieldDescriptor parentField, FieldDescriptor targetField, String finalPathPart, boolean isStructKey, boolean isMapKey) {
-            this.parent = parent;
-            this.grandparent = grandparent;
-            this.parentField = parentField;
-            this.targetField = targetField;
-            this.finalPathPart = finalPathPart;
-            this.isStructKey = isStructKey;
-            this.isMapKey = isMapKey;
-        }
-
-        Object getParentBuilder() {
-            if (!(parent instanceof Message.Builder || parent instanceof Struct.Builder)) {
-                if (parent instanceof MessageOrBuilder) return parent;
-                throw new IllegalStateException("Parent is not a builder or message type: " + (parent != null ? parent.getClass().getName() : "null"));
-            }
-            return parent;
-        }
-        Object getParentMessageOrBuilder() {
-            if (parent instanceof MessageOrBuilder) {
-                return (MessageOrBuilder) parent;
-            }
-             throw new IllegalStateException("Parent cannot be read as MessageOrBuilder: " + (parent != null ? parent.getClass().getName() : "null"));
-        }
-        Object getGrandparentBuilder() {
-            if (grandparent != null && !(grandparent instanceof Message.Builder)) {
-                 throw new IllegalStateException("Grandparent is not a Message.Builder: " + (grandparent != null ? grandparent.getClass().getName() : "null"));
-            }
-            return grandparent;
-        }
-         Object getGrandparentMessageOrBuilder() {
-              if (grandparent != null && !(grandparent instanceof MessageOrBuilder)) {
-                   throw new IllegalStateException("Grandparent is not readable: " + (grandparent != null ? grandparent.getClass().getName() : "null"));
-              }
-              return grandparent;
-         }
-        FieldDescriptor getParentField() { return parentField; }
-        FieldDescriptor getTargetField() { return targetField; }
-        String getFinalPathPart() { return finalPathPart; }
-        boolean isStructKey() { return isStructKey; }
-        boolean isMapKey() { return isMapKey; }
-    }
-
-    /**
      * Resolves a path within a message or builder.
      */
     public PathResolverResult resolvePath(Object root, String path, boolean resolveForSet, String ruleForError) throws MappingException {
@@ -79,7 +22,7 @@ public class PathResolver {
         Object currentObj = root;
         Object parentObj = null;
         FieldDescriptor parentFd = null;
-        Descriptor currentDesc = null; // Will be set if currentObj is MessageOrBuilder
+        Descriptor currentDesc; // Will be set if currentObj is MessageOrBuilder
 
         for (int i = 0; i < parts.length; i++) {
             String part = parts[i];
@@ -87,29 +30,28 @@ public class PathResolver {
             boolean isLastPart = (i == parts.length - 1);
 
             // --- Handle case where current object is already a Struct ---
-             if (currentObj instanceof Struct) {
-                  Struct currentStruct = (Struct) currentObj;
-                  String structKey = part; // Current part is the key
-                  // parentFd should be the FD that led to this struct, set in previous iteration
+             if (currentObj instanceof Struct currentStruct) {
+                 // Current part is the key
+                 // parentFd should be the FD that led to this struct, set in previous iteration
 
-                  Value valueProto = currentStruct.getFieldsOrDefault(structKey, null);
+                  Value valueProto = currentStruct.getFieldsOrDefault(part, null);
 
                   if (isLastPart) {
                        // Reached the end, return info about the key within the struct
                        // Parent is the struct, grandparent is what held the struct field (parentObj)
-                       return new PathResolverResult(currentStruct, parentObj, parentFd, null, structKey, true, false);
+                       return new PathResolverResult(currentStruct, parentObj, parentFd, null, part, true, false);
                   } else {
                        // Path continues, value must be a struct to traverse further
-                       if (valueProto == null || !valueProto.hasStructValue()) {
-                            throw new MappingException("Path cannot continue after non-struct Struct key '" + structKey + "' in path: '" + path + "'", null, ruleForError);
-                       }
-                       // Update current object to the nested struct and continue loop
-                       parentObj = currentStruct; // Parent becomes the struct we were just in
-                       currentObj = valueProto.getStructValue(); // currentObj is the nested struct
-                       currentDesc = null;        // Clear descriptor, next iteration starts here again
-                       // parentFd remains the same (field that led to the outer struct) - is this right? Or reset? Let's reset.
-                       parentFd = null;
-                       continue; // Continue to next part
+                      //noinspection ConstantValue
+                      if (valueProto == null || !valueProto.hasStructValue()) {
+                            throw new MappingException("Path cannot continue after non-struct Struct key '" + part + "' in path: '" + path + "'", null, ruleForError);
+                      }
+                      // Update current object to the nested struct and continue loop
+                      parentObj = currentStruct; // Parent becomes the struct we were just in
+                      currentObj = valueProto.getStructValue(); // currentObj is the nested struct
+                      // parentFd remains the same (field that led to the outer struct) - is this right? Or reset? Let's reset.
+                      parentFd = null;
+                      continue; // Continue to next part
                   }
              } // --- End Struct Handling ---
 
@@ -168,7 +110,6 @@ public class PathResolver {
                      // String structKey = parts[i + 1]; // Next part is the key
 
                      Object structParent = currentObj;
-                     FieldDescriptor structFieldDesc = fd;
 
                      if (resolveForSet) {
                          // Setting: Delegate to ValueHandler later, just return needed info
@@ -176,16 +117,13 @@ public class PathResolver {
                          if (i + 1 != parts.length - 1) { // Check if key is the actual last part for set operation
                               throw new MappingException("Path cannot continue after Struct key when setting value: '" + path + "'", null, ruleForError);
                          }
-                         return new PathResolverResult(structParent, parentObj, structFieldDesc, null, structKey, true, false);
+                         return new PathResolverResult(structParent, parentObj, fd, null, structKey, true, false);
                      } else {
                          // Getting: Need to get the struct message to continue traversal in the next loop iteration
-                         if (!(structParent instanceof MessageOrBuilder)) { // Should already be true
-                             throw new MappingException("Cannot resolve path for getting: intermediate object is not a MessageOrBuilder at Struct field '" + part + "'", null, ruleForError);
-                         }
-                         if (!((MessageOrBuilder) structParent).hasField(structFieldDesc)) {
+                         if (!((MessageOrBuilder) structParent).hasField(fd)) {
                              throw new MappingException("Cannot resolve path '" + path + "': intermediate struct field '" + part + "' is not set.", null, ruleForError);
                          }
-                         Object structMsgObj = ((MessageOrBuilder) structParent).getField(structFieldDesc);
+                         Object structMsgObj = ((MessageOrBuilder) structParent).getField(fd);
                           if (!(structMsgObj instanceof Struct)) {
                              throw new MappingException("Field '" + part + "' did not return a Struct object (got " + (structMsgObj != null ? structMsgObj.getClass().getName() : "null") + ").", null, ruleForError);
                          }
@@ -193,7 +131,7 @@ public class PathResolver {
                          // Update state to continue resolving *within* the struct in the next iteration
                          parentObj = currentObj;      // The object containing the struct field becomes the grandparent for the key access
                          currentObj = structMsgObj;   // Current object becomes the struct itself
-                         currentDesc = null;         // Clear descriptor, next iteration starts with struct handling block
+                         // Clear descriptor, next iteration starts with struct handling block
                          parentFd = fd;             // Remember the field that led to this struct
                          continue; // Continue to next part (which should be the key)
                      }
@@ -222,17 +160,11 @@ public class PathResolver {
                     }
                     currentObj = ((Message.Builder) currentObj).getFieldBuilder(fd);
                 } else {
-                    if (!(currentObj instanceof MessageOrBuilder)) { // Should always be true here
-                        throw new MappingException("Cannot resolve path for getting: intermediate object is not a MessageOrBuilder at field '" + part + "'", null, ruleForError);
-                    }
-                     if (!((MessageOrBuilder) currentObj).hasField(fd)) {
+                    if (!((MessageOrBuilder) currentObj).hasField(fd)) {
                           throw new MappingException("Cannot resolve path '" + path + "': intermediate message field '" + part + "' is not set.", null, ruleForError);
-                     }
+                    }
                     currentObj = ((MessageOrBuilder) currentObj).getField(fd);
                 }
-                // Update descriptor for the nested message/builder (will be used in next iteration)
-                currentDesc = ((MessageOrBuilder) currentObj).getDescriptorForType();
-
             } else { // Singular primitive/enum/bytes
                 throw new MappingException("Cannot traverse into non-message field '" + part + "' in path '" + path + "'", null, ruleForError);
             }

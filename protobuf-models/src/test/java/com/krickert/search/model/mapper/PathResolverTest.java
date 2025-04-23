@@ -1,15 +1,11 @@
 package com.krickert.search.model.mapper;
 
 import com.google.protobuf.*;
-import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.krickert.search.model.pipe.PipeDoc; // Using PipeDoc for concrete examples
 import com.krickert.search.model.pipe.SemanticDoc;
 import com.krickert.search.model.pipe.Embedding;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.Arrays;
-import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -17,7 +13,6 @@ class PathResolverTest {
 
     private PathResolver pathResolver;
     private PipeDoc sourceMessage;
-    private PipeDoc.Builder sourceBuilder;
     private PipeDoc.Builder targetBuilder;
 
     @BeforeEach
@@ -42,7 +37,6 @@ class PathResolverTest {
                         ).build()))
                 .build();
 
-        sourceBuilder = sourceMessage.toBuilder();
         targetBuilder = PipeDoc.newBuilder();
     }
 
@@ -50,7 +44,7 @@ class PathResolverTest {
 
     @Test
     void resolvePath_Get_SimpleField() throws MappingException {
-        PathResolver.PathResolverResult result = pathResolver.resolvePath(sourceMessage, "title", false, "test");
+        PathResolverResult result = pathResolver.resolvePath(sourceMessage, "title", false, "test");
         assertSame(sourceMessage, result.getParentMessageOrBuilder());
         assertEquals("title", result.getTargetField().getName());
         assertNull(result.getFinalPathPart());
@@ -60,8 +54,8 @@ class PathResolverTest {
 
     @Test
     void resolvePath_Get_NestedField() throws MappingException {
-        PathResolver.PathResolverResult result = pathResolver.resolvePath(sourceMessage, "chunk_embeddings.semantic_config_id", false, "test");
-        assertTrue(result.getParentMessageOrBuilder() instanceof SemanticDoc);
+        PathResolverResult result = pathResolver.resolvePath(sourceMessage, "chunk_embeddings.semantic_config_id", false, "test");
+        assertInstanceOf(SemanticDoc.class, result.getParentMessageOrBuilder());
         assertEquals(sourceMessage.getChunkEmbeddings(), result.getParentMessageOrBuilder());
         assertEquals("semantic_config_id", result.getTargetField().getName());
         assertNull(result.getFinalPathPart());
@@ -71,7 +65,7 @@ class PathResolverTest {
 
     @Test
     void resolvePath_Get_MapValue() throws MappingException {
-        PathResolver.PathResolverResult result = pathResolver.resolvePath(sourceMessage, "embeddings[\"keyA\"]", false, "test");
+        PathResolverResult result = pathResolver.resolvePath(sourceMessage, "embeddings[\"keyA\"]", false, "test");
         assertSame(sourceMessage, result.getParentMessageOrBuilder());
         assertEquals("embeddings", result.getTargetField().getName());
         assertEquals("keyA", result.getFinalPathPart());
@@ -81,7 +75,7 @@ class PathResolverTest {
 
      @Test
     void resolvePath_Get_MapValue_UnquotedKey() throws MappingException {
-        PathResolver.PathResolverResult result = pathResolver.resolvePath(sourceMessage, "embeddings[keyA]", false, "test");
+        PathResolverResult result = pathResolver.resolvePath(sourceMessage, "embeddings[keyA]", false, "test");
         assertSame(sourceMessage, result.getParentMessageOrBuilder());
         assertEquals("embeddings", result.getTargetField().getName());
         assertEquals("keyA", result.getFinalPathPart());
@@ -91,36 +85,36 @@ class PathResolverTest {
 
     @Test
     void resolvePath_Get_StructValue() throws MappingException {
-        PathResolver.PathResolverResult result = pathResolver.resolvePath(sourceMessage, "custom_data.structKey1", false, "test");
-        assertTrue(result.getParentMessageOrBuilder() instanceof Struct);
+        PathResolverResult result = pathResolver.resolvePath(sourceMessage, "custom_data.structKey1", false, "test");
+        assertInstanceOf(Struct.class, result.getParentMessageOrBuilder());
         assertEquals(sourceMessage.getCustomData(), result.getParentMessageOrBuilder());
         assertNull(result.getTargetField());
         assertEquals("structKey1", result.getFinalPathPart());
         assertTrue(result.isStructKey());
         assertFalse(result.isMapKey());
         assertNotNull(result.getGrandparentMessageOrBuilder());
-        assertTrue(result.getGrandparentMessageOrBuilder() instanceof PipeDoc);
+        assertInstanceOf(PipeDoc.class, result.getGrandparentMessageOrBuilder());
         assertSame(sourceMessage, result.getGrandparentMessageOrBuilder());
         assertEquals("custom_data", result.getParentField().getName());
     }
 
      @Test
     void resolvePath_Get_NestedStructValue() throws MappingException {
-        PathResolver.PathResolverResult result = pathResolver.resolvePath(sourceMessage, "custom_data.nestedStruct.innerKey", false, "test");
-        assertTrue(result.getParentMessageOrBuilder() instanceof Struct, "Parent should be the inner struct");
+        PathResolverResult result = pathResolver.resolvePath(sourceMessage, "custom_data.nestedStruct.innerKey", false, "test");
+         assertInstanceOf(Struct.class, result.getParentMessageOrBuilder(), "Parent should be the inner struct");
         assertEquals(sourceMessage.getCustomData().getFieldsOrThrow("nestedStruct").getStructValue(), result.getParentMessageOrBuilder());
         assertNull(result.getTargetField());
         assertEquals("innerKey", result.getFinalPathPart());
         assertTrue(result.isStructKey());
         assertFalse(result.isMapKey());
         assertNotNull(result.getGrandparentMessageOrBuilder());
-        assertTrue(result.getGrandparentMessageOrBuilder() instanceof Struct, "Grandparent should be the outer struct");
+         assertInstanceOf(Struct.class, result.getGrandparentMessageOrBuilder(), "Grandparent should be the outer struct");
         assertSame(sourceMessage.getCustomData(), result.getGrandparentMessageOrBuilder());
     }
 
     @Test
     void resolvePath_Get_RepeatedField_NotTraversed() throws MappingException {
-         PathResolver.PathResolverResult result = pathResolver.resolvePath(sourceMessage, "keywords", false, "test");
+         PathResolverResult result = pathResolver.resolvePath(sourceMessage, "keywords", false, "test");
          assertSame(sourceMessage, result.getParentMessageOrBuilder());
          assertEquals("keywords", result.getTargetField().getName());
          assertTrue(result.getTargetField().isRepeated());
@@ -142,7 +136,7 @@ class PathResolverTest {
 
     @Test
     void resolvePath_Set_SimpleField() throws MappingException {
-        PathResolver.PathResolverResult result = pathResolver.resolvePath(targetBuilder, "title", true, "test");
+        PathResolverResult result = pathResolver.resolvePath(targetBuilder, "title", true, "test");
         assertSame(targetBuilder, result.getParentBuilder());
         assertEquals("title", result.getTargetField().getName());
         assertNull(result.getFinalPathPart());
@@ -152,8 +146,8 @@ class PathResolverTest {
 
     @Test
     void resolvePath_Set_NestedField_CreatesBuilders() throws MappingException {
-        PathResolver.PathResolverResult result = pathResolver.resolvePath(targetBuilder, "chunk_embeddings.semantic_config_id", true, "test");
-        assertTrue(result.getParentBuilder() instanceof SemanticDoc.Builder);
+        PathResolverResult result = pathResolver.resolvePath(targetBuilder, "chunk_embeddings.semantic_config_id", true, "test");
+        assertInstanceOf(SemanticDoc.Builder.class, result.getParentBuilder());
         assertEquals("semantic_config_id", result.getTargetField().getName());
         assertNull(result.getFinalPathPart());
         assertFalse(result.isStructKey());
@@ -164,7 +158,7 @@ class PathResolverTest {
 
     @Test
     void resolvePath_Set_MapValue() throws MappingException {
-         PathResolver.PathResolverResult result = pathResolver.resolvePath(targetBuilder, "embeddings[\"newKey\"]", true, "test");
+         PathResolverResult result = pathResolver.resolvePath(targetBuilder, "embeddings[\"newKey\"]", true, "test");
          assertSame(targetBuilder, result.getParentBuilder());
          assertEquals("embeddings", result.getTargetField().getName());
          assertEquals("newKey", result.getFinalPathPart());
@@ -174,7 +168,7 @@ class PathResolverTest {
 
      @Test
     void resolvePath_Set_StructValue_CreatesBuilders() throws MappingException {
-         PathResolver.PathResolverResult result = pathResolver.resolvePath(targetBuilder, "custom_data.newStructKey", true, "test");
+         PathResolverResult result = pathResolver.resolvePath(targetBuilder, "custom_data.newStructKey", true, "test");
          assertSame(targetBuilder, result.getParentBuilder());
          assertNull(result.getTargetField());
          assertEquals("newStructKey", result.getFinalPathPart());
@@ -191,7 +185,7 @@ class PathResolverTest {
 
      @Test
      void resolvePath_Set_RepeatedField_NotTraversed() throws MappingException {
-         PathResolver.PathResolverResult result = pathResolver.resolvePath(targetBuilder, "keywords", true, "test");
+         PathResolverResult result = pathResolver.resolvePath(targetBuilder, "keywords", true, "test");
          assertSame(targetBuilder, result.getParentBuilder());
          assertEquals("keywords", result.getTargetField().getName());
          assertTrue(result.getTargetField().isRepeated());

@@ -8,7 +8,7 @@ import java.util.Objects;
  */
 public class MappingRule {
 
-    enum Operation {
+    public enum Operation {
         ASSIGN, // target = source
         APPEND, // target += source
         MAP_PUT, // target["key"] = source

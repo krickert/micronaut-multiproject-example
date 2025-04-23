@@ -15,7 +15,7 @@ public class RuleParser {
     // Use non-capturing groups (?:...) where possible if groups aren't needed, though not strictly necessary here.
     // Make source groups explicitly capture non-whitespace start for assign/map_put/append if possible.
     private static final Pattern DELETE_PATTERN = Pattern.compile("^-\\s*(\\S.+?)\\s*$"); // Target must have non-whitespace chars
-    private static final Pattern MAP_PUT_PATTERN = Pattern.compile("^([^\\[\\s]+)\\s*\\[\\s*\"?([^\"]+)\"?\\s*\\]\\s*=\\s*(\\S.*)$"); // Source must have non-whitespace chars
+    private static final Pattern MAP_PUT_PATTERN = Pattern.compile("^([^\\[\\s]+)\\s*\\[\\s*\"?([^\"]+)\"?\\s*]\\s*=\\s*(\\S.*)$"); // Source must have non-whitespace chars
     private static final Pattern APPEND_PATTERN = Pattern.compile("^([^+\\s\\[]+)\\s*\\+=\\s*(\\S.*)$"); // Source must have non-whitespace chars
     private static final Pattern ASSIGN_PATTERN = Pattern.compile("^([^=\\s\\[+]+)\\s*=\\s*(\\S.*)$"); // Source must have non-whitespace chars
 
@@ -36,9 +36,8 @@ public class RuleParser {
             if (trimmedRule.isEmpty() || trimmedRule.startsWith("#")) {
                 continue;
             }
-            String originalTrimmedRule = trimmedRule;
             try {
-                MappingRule rule = parseSingleRule(originalTrimmedRule);
+                MappingRule rule = parseSingleRule(trimmedRule);
                 if (rule.getOperation() == MappingRule.Operation.DELETE) {
                     deleteRules.add(rule);
                 } else {
@@ -46,12 +45,12 @@ public class RuleParser {
                 }
             } catch (MappingException e) {
                  if (e.getFailedRule() == null || e.getFailedRule().isEmpty()) {
-                     throw new MappingException(e.getMessage(), e.getCause(), originalTrimmedRule);
+                     throw new MappingException(e.getMessage(), e.getCause(), trimmedRule);
                  } else {
                       throw e;
                  }
             } catch (Exception e) {
-                 throw new MappingException("Unexpected parsing error for rule: " + originalTrimmedRule, e, originalTrimmedRule);
+                 throw new MappingException("Unexpected parsing error for rule: " + trimmedRule, e, trimmedRule);
             }
         }
         parsedRules.addAll(deleteRules);

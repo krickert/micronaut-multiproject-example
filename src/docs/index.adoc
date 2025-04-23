@@ -426,7 +426,7 @@ Create `ProtobufUtilsTest.java` in `protobuf-models/src/test/java/com/krickert/s
 [source,bash]
 ----
 mkdir -p protobuf-models/src/test/java/com/krickert/search/model
-nano protobuf-models/src/test/java/com/krickert/search/model/ProtobufUtilsTest.java
+nano protobuf-models/src/test/java/com/krickert/search/model/ProtobufUtilityTest.java
 ----
 +
 ++++

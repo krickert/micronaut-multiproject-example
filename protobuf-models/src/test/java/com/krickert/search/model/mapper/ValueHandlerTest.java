@@ -11,7 +11,6 @@ import org.mockito.MockitoAnnotations;
 
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+@SuppressWarnings("FieldCanBeLocal")
 class ValueHandlerTest {
 
     @Mock
@@ -89,7 +89,7 @@ class ValueHandlerTest {
 
     // --- getValue Tests ---
 
-    private void mockResolvePathForGet(String path, PathResolver.PathResolverResult result) throws MappingException {
+    private void mockResolvePathForGet(String path, PathResolverResult result) throws MappingException {
         when(mockPathResolver.resolvePath(any(MessageOrBuilder.class), eq(path), eq(false), anyString()))
                 .thenReturn(result);
          // Mock specifically for sourceMessage if needed, but MessageOrBuilder should cover it
@@ -102,7 +102,7 @@ class ValueHandlerTest {
     @Test
     void getValue_SimpleField() throws MappingException {
         String path = "title";
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 sourceMessage, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
         mockResolvePathForGet(path, mockResult);
 
@@ -113,20 +113,20 @@ class ValueHandlerTest {
      @Test
     void getValue_DoubleFromStruct() throws MappingException {
         String path = "custom_data.numKey";
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 sourceMessage.getCustomData(), sourceMessage, PipeDoc.getDescriptor().findFieldByName("custom_data"),
                 null, "numKey", true, false);
         mockResolvePathForGet(path, mockResult);
 
         Object value = valueHandler.getValue(sourceMessage, path, "ruleGetDouble");
         assertEquals(987.65, value); // Should be Double
-        assertTrue(value instanceof Double);
+         assertInstanceOf(Double.class, value);
     }
 
       @Test
     void getValue_TimestampField() throws MappingException {
         String path = "creation_date";
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 sourceMessage, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
         mockResolvePathForGet(path, mockResult);
 
@@ -137,7 +137,7 @@ class ValueHandlerTest {
     @Test
     void getValue_NestedField() throws MappingException {
         String path = "chunk_embeddings.parent_id"; // Use existing field
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 sourceMessage.getChunkEmbeddings(), // Parent is the SemanticDoc message
                 sourceMessage, // Grandparent
                 PipeDoc.getDescriptor().findFieldByName("chunk_embeddings"), // Field leading to parent
@@ -152,7 +152,7 @@ class ValueHandlerTest {
     @Test
     void getValue_MapValue() throws MappingException {
         String path = "embeddings[\"keyA\"]";
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 sourceMessage, null, null, PipeDoc.getDescriptor().findFieldByName("embeddings"), "keyA", false, true);
         mockResolvePathForGet(path, mockResult);
 
@@ -163,7 +163,7 @@ class ValueHandlerTest {
      @Test
     void getValue_MapValue_NotFound() throws MappingException {
         String path = "embeddings[\"nonExistentKey\"]";
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 sourceMessage, null, null, PipeDoc.getDescriptor().findFieldByName("embeddings"), "nonExistentKey", false, true);
         mockResolvePathForGet(path, mockResult);
 
@@ -175,7 +175,7 @@ class ValueHandlerTest {
     @Test
     void getValue_StructValue_String() throws MappingException {
         String path = "custom_data.strKey";
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 sourceMessage.getCustomData(), // Parent is Struct
                 sourceMessage, // Grandparent is PipeDoc
                 PipeDoc.getDescriptor().findFieldByName("custom_data"), // Field for Struct
@@ -191,7 +191,7 @@ class ValueHandlerTest {
      @Test
     void getValue_StructValue_Number() throws MappingException {
         String path = "custom_data.numKey";
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 sourceMessage.getCustomData(), sourceMessage, PipeDoc.getDescriptor().findFieldByName("custom_data"),
                 null, "numKey", true, false);
         mockResolvePathForGet(path, mockResult);
@@ -203,7 +203,7 @@ class ValueHandlerTest {
      @Test
     void getValue_StructValue_Boolean() throws MappingException {
         String path = "custom_data.boolKey";
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 sourceMessage.getCustomData(), sourceMessage, PipeDoc.getDescriptor().findFieldByName("custom_data"),
                 null, "boolKey", true, false);
         mockResolvePathForGet(path, mockResult);
@@ -215,7 +215,7 @@ class ValueHandlerTest {
      @Test
     void getValue_StructValue_Null() throws MappingException {
         String path = "custom_data.nullKey";
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 sourceMessage.getCustomData(), sourceMessage, PipeDoc.getDescriptor().findFieldByName("custom_data"),
                 null, "nullKey", true, false);
         mockResolvePathForGet(path, mockResult);
@@ -227,14 +227,14 @@ class ValueHandlerTest {
       @Test
     void getValue_StructValue_List() throws MappingException {
         String path = "custom_data.listKey";
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 sourceMessage.getCustomData(), sourceMessage, PipeDoc.getDescriptor().findFieldByName("custom_data"),
                 null, "listKey", true, false);
         mockResolvePathForGet(path, mockResult);
 
         Object value = valueHandler.getValue(sourceMessage, path, "rule4");
         // Should be unwrapped Java List containing unwrapped Java values
-        assertTrue(value instanceof List);
+          assertInstanceOf(List.class, value);
         List<?> list = (List<?>) value;
         assertEquals(2, list.size());
         assertEquals("struct string", list.get(0));
@@ -244,7 +244,7 @@ class ValueHandlerTest {
      @Test
     void getValue_StructValue_NotFound() throws MappingException {
         String path = "custom_data.nonExistentKey";
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 sourceMessage.getCustomData(), sourceMessage, PipeDoc.getDescriptor().findFieldByName("custom_data"),
                 null, "nonExistentKey", true, false);
         mockResolvePathForGet(path, mockResult);
@@ -256,19 +256,19 @@ class ValueHandlerTest {
     @Test
     void getValue_RepeatedField() throws MappingException {
         String path = "keywords";
-         PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+         PathResolverResult mockResult = new PathResolverResult(
                 sourceMessage, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
         mockResolvePathForGet(path, mockResult);
 
         Object value = valueHandler.getValue(sourceMessage, path, "rule5");
-        assertTrue(value instanceof List);
+        assertInstanceOf(List.class, value);
         assertEquals(Arrays.asList("tag1", "tag2"), value);
     }
 
     @Test
     void getValue_FieldNotSet() throws MappingException {
         String path = "body"; // Body is not set in sourceMessage
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 sourceMessage, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
         mockResolvePathForGet(path, mockResult);
 
@@ -280,14 +280,14 @@ class ValueHandlerTest {
     void getValue_MapFieldNotSet() throws MappingException {
          PipeDoc emptySource = PipeDoc.newBuilder().build();
          String path = "embeddings";
-         PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+         PathResolverResult mockResult = new PathResolverResult(
                  emptySource, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
           when(mockPathResolver.resolvePath(same(emptySource), eq(path), eq(false), anyString()))
                  .thenReturn(mockResult);
 
          Object value = valueHandler.getValue(emptySource, path, "ruleMapEmpty");
           assertNotNull(value);
-          assertTrue(value instanceof Map);
+         assertInstanceOf(Map.class, value);
           assertTrue(((Map<?,?>)value).isEmpty());
      }
 
@@ -295,14 +295,14 @@ class ValueHandlerTest {
     void getValue_RepeatedFieldNotSet() throws MappingException {
          PipeDoc emptySource = PipeDoc.newBuilder().build();
          String path = "keywords";
-         PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+         PathResolverResult mockResult = new PathResolverResult(
                  emptySource, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
           when(mockPathResolver.resolvePath(same(emptySource), eq(path), eq(false), anyString()))
                  .thenReturn(mockResult);
 
          Object value = valueHandler.getValue(emptySource, path, "ruleListEmpty");
           assertNotNull(value);
-          assertTrue(value instanceof List);
+        assertInstanceOf(List.class, value);
           assertTrue(((List<?>)value).isEmpty());
      }
 
@@ -323,7 +323,7 @@ class ValueHandlerTest {
 
     // --- setValue Tests ---
 
-    private void mockResolvePathForSet(String path, PathResolver.PathResolverResult result) throws MappingException {
+    private void mockResolvePathForSet(String path, PathResolverResult result) throws MappingException {
          when(mockPathResolver.resolvePath(any(Message.Builder.class), eq(path), eq(true), anyString()))
                 .thenReturn(result);
          when(mockPathResolver.resolvePath(same(targetBuilder), eq(path), eq(true), anyString()))
@@ -334,7 +334,7 @@ class ValueHandlerTest {
     void setValue_SimpleField_Assign() throws MappingException {
         String path = "title";
         Object sourceValue = "New Title";
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 targetBuilder, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
         mockResolvePathForSet(path, mockResult);
 
@@ -346,7 +346,7 @@ class ValueHandlerTest {
     void setValue_SimpleField_Assign_TypeConversion_DoubleToString() throws MappingException {
         String path = "title";
         Object sourceValue = 123.45; // Double
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 targetBuilder, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
         mockResolvePathForSet(path, mockResult);
 
@@ -358,7 +358,7 @@ class ValueHandlerTest {
     void setValue_SimpleField_Assign_TypeConversion_StringToTimestampError() throws MappingException {
         String path = "creation_date"; // Timestamp field
         Object sourceValue = "not a timestamp"; // String
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 targetBuilder, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
         mockResolvePathForSet(path, mockResult);
 
@@ -375,7 +375,7 @@ class ValueHandlerTest {
         String path = "chunk_embeddings.parent_id"; // Use existing field
         Object sourceValue = "new-pid";
         SemanticDoc.Builder semanticBuilder = targetBuilder.getChunkEmbeddingsBuilder();
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 semanticBuilder, // Parent builder
                 targetBuilder, // Grandparent builder
                  PipeDoc.getDescriptor().findFieldByName("chunk_embeddings"), // Field for parent
@@ -392,7 +392,7 @@ class ValueHandlerTest {
     void setValue_RepeatedField_AssignList() throws MappingException {
         String path = "keywords";
         Object sourceValue = Arrays.asList("newTag1", "newTag2");
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 targetBuilder, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
         mockResolvePathForSet(path, mockResult);
 
@@ -406,7 +406,7 @@ class ValueHandlerTest {
     void setValue_RepeatedField_AppendItem() throws MappingException {
         String path = "keywords";
         Object sourceValue = "appendTag";
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 targetBuilder, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
         mockResolvePathForSet(path, mockResult);
 
@@ -420,7 +420,7 @@ class ValueHandlerTest {
     void setValue_RepeatedField_AppendList() throws MappingException {
         String path = "keywords";
         Object sourceValue = Arrays.asList("appendTag1", "appendTag2");
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 targetBuilder, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
         mockResolvePathForSet(path, mockResult);
 
@@ -434,7 +434,7 @@ class ValueHandlerTest {
     void setValue_RepeatedField_AppendItem_TypeConversion() throws MappingException {
         String path = "keywords"; // List<String>
         Object sourceValue = 987; // int
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 targetBuilder, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
         mockResolvePathForSet(path, mockResult);
 
@@ -448,7 +448,7 @@ class ValueHandlerTest {
     void setValue_RepeatedField_Assign_WrongSourceType() throws MappingException {
          String path = "keywords"; // List<String>
          Object sourceValue = 123; // int (not a List)
-         PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+         PathResolverResult mockResult = new PathResolverResult(
                  targetBuilder, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
          mockResolvePathForSet(path, mockResult);
 
@@ -468,7 +468,7 @@ class ValueHandlerTest {
         sourceValue.put("newK1", sampleEmbedding1);
         sourceValue.put("newK2", sampleEmbedding2);
 
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 targetBuilder, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
         mockResolvePathForSet(path, mockResult);
 
@@ -487,7 +487,7 @@ class ValueHandlerTest {
          sourceValue.put("keyB", sampleEmbedding1); // Overwrite existing keyB
          sourceValue.put("keyC", sampleEmbedding2); // Add new keyC
 
-         PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+         PathResolverResult mockResult = new PathResolverResult(
                  targetBuilder, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
          mockResolvePathForSet(path, mockResult);
 
@@ -508,7 +508,7 @@ class ValueHandlerTest {
         String mapFieldName = "embeddings";
         String mapKey = "putKey";
 
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 targetBuilder, null, null, PipeDoc.getDescriptor().findFieldByName(mapFieldName), mapKey, false, true);
          when(mockPathResolver.resolvePath(same(targetBuilder), eq(path), eq(true), anyString()))
                 .thenReturn(mockResult);
@@ -530,7 +530,7 @@ class ValueHandlerTest {
         String mapFieldName = "embeddings";
         String mapKey = "putKey";
 
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 targetBuilder, null, null, PipeDoc.getDescriptor().findFieldByName(mapFieldName), mapKey, false, true);
          when(mockPathResolver.resolvePath(same(targetBuilder), eq(path), eq(true), anyString()))
                 .thenReturn(mockResult);
@@ -548,7 +548,7 @@ class ValueHandlerTest {
         Object sourceValue = "new struct string";
         Value expectedValueProto = Value.newBuilder().setStringValue("new struct string").build();
 
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 targetBuilder, // Parent builder containing struct field
                 null, // Grandparent (null for top-level)
                 PipeDoc.getDescriptor().findFieldByName("custom_data"), // Parent field descriptor (the struct field)
@@ -574,7 +574,7 @@ class ValueHandlerTest {
         Object sourceValue = 111.22;
         Value expectedValueProto = Value.newBuilder().setNumberValue(111.22).build();
 
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 targetBuilder, null, PipeDoc.getDescriptor().findFieldByName("custom_data"),
                 null, "numKey", true, false);
         when(mockPathResolver.resolvePath(same(targetBuilder), eq(path), eq(true), anyString()))
@@ -592,7 +592,7 @@ class ValueHandlerTest {
         Object sourceValue = false;
         Value expectedValueProto = Value.newBuilder().setBoolValue(false).build();
 
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 targetBuilder, null, PipeDoc.getDescriptor().findFieldByName("custom_data"),
                 null, "boolKey", true, false);
         when(mockPathResolver.resolvePath(same(targetBuilder), eq(path), eq(true), anyString()))
@@ -610,7 +610,7 @@ class ValueHandlerTest {
         Object sourceValue = null;
         Value expectedValueProto = Value.newBuilder().setNullValue(NullValue.NULL_VALUE).build();
 
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 targetBuilder, null, PipeDoc.getDescriptor().findFieldByName("custom_data"),
                 null, "nullKey", true, false);
         when(mockPathResolver.resolvePath(same(targetBuilder), eq(path), eq(true), anyString()))
@@ -634,7 +634,7 @@ class ValueHandlerTest {
                 .addValues(Value.newBuilder().setNumberValue(123.0))
                 ).build();
 
-        PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResult = new PathResolverResult(
                 targetBuilder, null, PipeDoc.getDescriptor().findFieldByName("custom_data"),
                 null, "listKey", true, false);
         when(mockPathResolver.resolvePath(same(targetBuilder), eq(path), eq(true), anyString()))
@@ -657,7 +657,7 @@ class ValueHandlerTest {
                  .putFields("innerNum", Value.newBuilder().setNumberValue(42.0).build())
                  ).build();
 
-         PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+         PathResolverResult mockResult = new PathResolverResult(
                  targetBuilder, null, PipeDoc.getDescriptor().findFieldByName("custom_data"),
                  null, "mapKey", true, false);
          when(mockPathResolver.resolvePath(same(targetBuilder), eq(path), eq(true), anyString()))
@@ -688,7 +688,7 @@ class ValueHandlerTest {
      void setValue_SingularField_AppendError() throws MappingException {
          String path = "title";
          Object sourceValue = "append title";
-          PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+          PathResolverResult mockResult = new PathResolverResult(
                  targetBuilder, null, null, PipeDoc.getDescriptor().findFieldByName(path), null, false, false);
          mockResolvePathForSet(path, mockResult);
 
@@ -702,7 +702,7 @@ class ValueHandlerTest {
       void setValue_MapKeyAccess_WrongOperator() throws MappingException {
          String path = "embeddings[\"putKey\"]"; // Map key path
          Object sourceValue = sampleEmbedding1;
-         PathResolver.PathResolverResult mockResult = new PathResolver.PathResolverResult(
+         PathResolverResult mockResult = new PathResolverResult(
                  targetBuilder, null, null, PipeDoc.getDescriptor().findFieldByName("embeddings"), "putKey", false, true);
           when(mockPathResolver.resolvePath(same(targetBuilder), eq(path), eq(true), anyString()))
                  .thenReturn(mockResult);

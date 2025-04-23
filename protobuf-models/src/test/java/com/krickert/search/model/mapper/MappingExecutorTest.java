@@ -1,7 +1,5 @@
 package com.krickert.search.model.mapper;
 
-import com.google.protobuf.Descriptors;
-import com.google.protobuf.Message;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.krickert.search.model.pipe.Embedding;
@@ -111,7 +109,7 @@ class MappingExecutorTest {
         when(mockRuleParser.parseRules(ruleStrings)).thenReturn(parsedRules);
 
         // Mock PathResolver directly for deletion path (as ValueHandler doesn't handle delete)
-        PathResolver.PathResolverResult mockResolveResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResolveResult = new PathResolverResult(
             targetBuilder, null, null, PipeDoc.getDescriptor().findFieldByName("title"), null, false, false);
         when(mockPathResolver.resolvePath(same(targetBuilder), eq("title"), eq(true), eq(ruleStr)))
             .thenReturn(mockResolveResult);
@@ -145,7 +143,7 @@ class MappingExecutorTest {
         when(mockRuleParser.parseRules(ruleStrings)).thenReturn(parsedRules);
 
         // Mock PathResolver for struct key deletion
-        PathResolver.PathResolverResult mockResolveResult = new PathResolver.PathResolverResult(
+        PathResolverResult mockResolveResult = new PathResolverResult(
             targetBuilder, // Parent builder holding the struct field
             null,
             PipeDoc.getDescriptor().findFieldByName(structFieldName), // The struct field itself

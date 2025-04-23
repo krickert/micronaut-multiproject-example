@@ -2,7 +2,6 @@ package com.krickert.search.model;
 
 import com.google.protobuf.ListValue;
 import com.google.protobuf.Timestamp;
-import com.google.protobuf.Value;
 import com.krickert.search.model.pipe.PipeDoc; // Example message
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Disabled;
@@ -20,7 +19,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -108,6 +106,7 @@ class ProtobufUtilsTest {
 
         // Test null string - should throw NullPointerException
         assertThrows(NullPointerException.class, () -> {
+            //noinspection DataFlowIssue
             ProtobufUtils.createKey((String) null);
         });
     }
@@ -135,6 +134,7 @@ class ProtobufUtilsTest {
 
         // Test null document - should throw NullPointerException
         assertThrows(NullPointerException.class, () -> {
+            //noinspection DataFlowIssue
             ProtobufUtils.createKey((PipeDoc) null);
         });
 
@@ -167,13 +167,12 @@ class ProtobufUtilsTest {
          // Test with collection containing null - Protobuf Value doesn't allow null strings directly, check behavior
          // The current implementation would likely throw NPE on addValues(Value.newBuilder().setStringValue(null)...)
          Collection<String> listWithNull = Arrays.asList("a", null, "c");
-         assertThrows(NullPointerException.class, ()-> {
-              ProtobufUtils.createListValueFromCollection(listWithNull);
-         }, "setStringValue(null) should throw NPE");
+         assertThrows(NullPointerException.class, ()-> ProtobufUtils.createListValueFromCollection(listWithNull), "setStringValue(null) should throw NPE");
 
 
         // Test with null collection - should throw NullPointerException
         assertThrows(NullPointerException.class, () -> {
+            //noinspection DataFlowIssue
             ProtobufUtils.createListValueFromCollection(null);
         });
     }
@@ -212,9 +211,7 @@ class ProtobufUtilsTest {
         String invalidPath = tempDir.resolve("non_existent_dir/file.bin").toString(); // Invalid directory
 
         // Expect IOException or RuntimeException wrapping it
-        assertThrows(IOException.class, () -> {
-             ProtobufUtils.saveProtobufToDisk(invalidPath, doc);
-        });
+        assertThrows(IOException.class, () -> ProtobufUtils.saveProtobufToDisk(invalidPath, doc));
     }
 
 
@@ -270,31 +267,11 @@ class ProtobufUtilsTest {
         ProtobufUtils.saveProtocoBufsToDisk(prefix, docs);
 
         // Verify no files with the prefix were created
+        @SuppressWarnings("resource")
         List<Path> files = Files.list(tempDir)
                                 .filter(p -> p.getFileName().toString().startsWith("multi_empty_"))
-                                .collect(Collectors.toList());
+                                .toList();
         assertTrue(files.isEmpty());
     }
 
-     // Test exception handling within the lambda - should wrap in RuntimeException
-     @Test
-     @Disabled("Mocking file IO within lambda is complex, manually verify or skip")
-     void saveProtocoBufsToDisk_ErrorDuringWrite() {
-        // This test is hard to implement reliably without mocking FileOutputStream
-        // or using PowerMock/Mockito extensions.
-        // The goal is to verify that an IOException during item.writeTo is caught
-        // and wrapped in a RuntimeException.
-         PipeDoc doc1 = PipeDoc.newBuilder().setId("ok").build();
-         PipeDoc doc2 = PipeDoc.newBuilder().setId("fail").build(); // Simulate failure on this one
-         List<PipeDoc> docs = Arrays.asList(doc1, doc2);
-         String prefix = tempDir.resolve("multi_fail_").toString();
-
-         // How to make doc2.writeTo fail? Requires mocking or specific file system setup.
-         // If it did fail, we expect RuntimeException
-         // assertThrows(RuntimeException.class, () -> {
-         //      ProtobufUtils.saveProtocoBufsToDisk(prefix, docs);
-         // });
-         assertTrue(true, "Skipping test for write error in saveProtocoBufsToDisk due to complexity.");
-
-     }
 }

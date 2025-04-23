@@ -44,7 +44,7 @@ public class ValueHandler {
              }
          }
          try {
-             PathResolver.PathResolverResult sourceRes = pathResolver.resolvePath(sourceMessage, sourcePath, false, ruleForError);
+             PathResolverResult sourceRes = pathResolver.resolvePath(sourceMessage, sourcePath, false, ruleForError);
 
              if (sourceRes.isStructKey()) {
                  Object parent = sourceRes.getParentMessageOrBuilder();
@@ -143,7 +143,7 @@ public class ValueHandler {
       // --- setValue ---
      public void setValue(Message.Builder targetBuilder, String targetPath, Object sourceValue, String operator, String ruleForError) throws MappingException {
          try {
-             PathResolver.PathResolverResult targetRes = pathResolver.resolvePath(targetBuilder, targetPath, true, ruleForError);
+             PathResolverResult targetRes = pathResolver.resolvePath(targetBuilder, targetPath, true, ruleForError);
 
              if (targetRes.isStructKey()) {
                  Object grandParentBuilderObj = targetRes.getGrandparentBuilder();
@@ -281,7 +281,6 @@ public class ValueHandler {
               }
              throw e;
          } catch (Exception e) {
-              if (e instanceof MappingException) throw (MappingException) e;
              throw new MappingException("Error setting value for target path '" + targetPath + "' in rule '" + ruleForError + "'", e, ruleForError);
          }
      }
@@ -289,7 +288,8 @@ public class ValueHandler {
 
      // --- Conversion and Helper Methods ---
 
-     private Object convertValue(Object sourceValue, FieldDescriptor targetField, String ruleForError, boolean allowListOrMapSource) throws MappingException {
+     private Object convertValue(Object sourceValue, FieldDescriptor targetField, String ruleForError,
+                                 @SuppressWarnings("SameParameterValue") boolean allowListOrMapSource) throws MappingException {
          if (sourceValue == null) {
             return getDefaultForNullSource(targetField);
         }
@@ -308,7 +308,8 @@ public class ValueHandler {
                       (valueDesc.getJavaType() == JavaType.MESSAGE ? valueDesc.getMessageType() : null),
                       (valueDesc.getJavaType() == JavaType.ENUM ? valueDesc.getEnumType() : null),
                       targetField.getName()+"[value]", ruleForError);
-            } else if (allowListOrMapSource && !sourceIsMap) {
+            } else //noinspection ConstantValue
+                if (allowListOrMapSource && !sourceIsMap) {
                  throw new MappingException(String.format("Type mismatch for map field '%s': Cannot assign non-map value %s to Map using '=' or '+='",
                          targetField.getName(), sourceValue.getClass().getSimpleName()), null, ruleForError);
             } else {
@@ -319,7 +320,8 @@ public class ValueHandler {
         if (targetIsList) {
             if (allowListOrMapSource && sourceIsList) return sourceValue;
             else if (!allowListOrMapSource && !sourceIsList) return sourceValue;
-            else if (allowListOrMapSource && !sourceIsList) {
+            else //noinspection ConstantValue
+                if (allowListOrMapSource && !sourceIsList) {
                  throw new MappingException(String.format("Type mismatch for repeated field '%s': Cannot assign single value %s to List using '='. Use '+=' to append.",
                         targetField.getName(), sourceValue.getClass().getSimpleName()), null, ruleForError);
             } else return sourceValue;
@@ -475,17 +477,19 @@ public class ValueHandler {
      }
 
      private JavaType getJavaTypeFromValue(Object value) {
-         if (value == null) return null;
-         if (value instanceof Integer) return JavaType.INT;
-         if (value instanceof Long) return JavaType.LONG;
-         if (value instanceof Float) return JavaType.FLOAT;
-         if (value instanceof Double) return JavaType.DOUBLE;
-         if (value instanceof Boolean) return JavaType.BOOLEAN;
-         if (value instanceof String) return JavaType.STRING;
-         if (value instanceof ByteString) return JavaType.BYTE_STRING;
-         if (value instanceof EnumValueDescriptor) return JavaType.ENUM;
-         if (value instanceof MessageOrBuilder) return JavaType.MESSAGE;
-         return null;
+         return switch (value) {
+             case null -> null;
+             case Integer i -> JavaType.INT;
+             case Long l -> JavaType.LONG;
+             case Float v -> JavaType.FLOAT;
+             case Double v -> JavaType.DOUBLE;
+             case Boolean b -> JavaType.BOOLEAN;
+             case String s -> JavaType.STRING;
+             case ByteString bytes -> JavaType.BYTE_STRING;
+             case EnumValueDescriptor enumValueDescriptor -> JavaType.ENUM;
+             case MessageOrBuilder messageOrBuilder -> JavaType.MESSAGE;
+             default -> null;
+         };
      }
 
      private Value wrapValue(Object value) throws MappingException {
