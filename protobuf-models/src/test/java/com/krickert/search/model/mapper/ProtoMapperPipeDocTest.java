@@ -31,6 +31,7 @@ public class ProtoMapperPipeDocTest {
     }
 
     // Helper to create a Timestamp
+    @SuppressWarnings("SameParameterValue")
     private Timestamp createTimestamp(long seconds, int nanos) {
         return Timestamp.newBuilder().setSeconds(seconds).setNanos(nanos).build();
     }
@@ -222,7 +223,6 @@ public class ProtoMapperPipeDocTest {
     void testMapAssignmentReplaceAndPut() throws MappingException, InvalidProtocolBufferException {
         Embedding emb1 = createEmbedding(Arrays.asList(0.1f, 0.2f));
         Embedding emb2 = createEmbedding(Arrays.asList(0.3f, 0.4f));
-        Embedding emb3 = createEmbedding(Arrays.asList(0.5f, 0.6f)); // For putting
 
         PipeDoc source = PipeDoc.newBuilder()
                 .putEmbeddings("source_key1", emb1)
@@ -257,9 +257,7 @@ public class ProtoMapperPipeDocTest {
 
          // Test type mismatch for map value
         List<String> invalidValueRule = Collections.singletonList("embeddings[\"bad_type\"] = title"); // title (string) -> Embedding (Message)
-        MappingException eValue = assertThrows(MappingException.class, () -> {
-             mapper.map(source, pipeDocDesc, invalidValueRule);
-         });
+        MappingException eValue = assertThrows(MappingException.class, () -> mapper.map(source, pipeDocDesc, invalidValueRule));
          assertTrue(eValue.getMessage().contains("Type mismatch"));
          assertTrue(eValue.getMessage().contains("Cannot convert STRING to MESSAGE"));
 
@@ -357,9 +355,7 @@ public class ProtoMapperPipeDocTest {
         PipeDoc source = PipeDoc.newBuilder().build();
         List<String> rules = Collections.singletonList("title = non_existent_source_field");
 
-        MappingException e = assertThrows(MappingException.class, () -> {
-            mapper.map(source, pipeDocDesc, rules);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> mapper.map(source, pipeDocDesc, rules));
         // Error message depends on PathResolver implementation
         assertTrue(e.getMessage().contains("Field not found") || e.getMessage().contains("Cannot resolve path"), "Expected path resolution error message");
         assertTrue(e.getMessage().contains("non_existent_source_field"), "Error message should contain the missing field");
@@ -371,9 +367,7 @@ public class ProtoMapperPipeDocTest {
          PipeDoc source = PipeDoc.newBuilder().setTitle("hello").build();
          List<String> rules = Collections.singletonList("non_existent_target = title");
 
-         MappingException e = assertThrows(MappingException.class, () -> {
-             mapper.map(source, pipeDocDesc, rules);
-         });
+         MappingException e = assertThrows(MappingException.class, () -> mapper.map(source, pipeDocDesc, rules));
          assertTrue(e.getMessage().contains("Field not found") || e.getMessage().contains("Cannot resolve path"), "Expected path resolution error message");
          assertTrue(e.getMessage().contains("non_existent_target"), "Error message should contain the missing field");
          assertEquals("non_existent_target = title", e.getFailedRule());
@@ -386,9 +380,7 @@ public class ProtoMapperPipeDocTest {
          // Rule tries to access a field within the unset chunk_embeddings
          List<String> rules = Collections.singletonList("id = chunk_embeddings.parent_id");
 
-         MappingException e = assertThrows(MappingException.class, () -> {
-             mapper.map(source, pipeDocDesc, rules);
-         });
+         MappingException e = assertThrows(MappingException.class, () -> mapper.map(source, pipeDocDesc, rules));
          assertTrue(e.getMessage().contains("Cannot resolve path") || e.getMessage().contains("is not set"), "Expected path resolution error for unset intermediate");
          assertTrue(e.getMessage().contains("chunk_embeddings"), "Error message should contain the intermediate field");
          assertEquals("id = chunk_embeddings.parent_id", e.getFailedRule());
@@ -402,9 +394,7 @@ public class ProtoMapperPipeDocTest {
                  .build();
          List<String> rules = Collections.singletonList("title = chunk_embeddings.non_existent_field");
 
-         MappingException e = assertThrows(MappingException.class, () -> {
-             mapper.map(source, pipeDocDesc, rules);
-         });
+         MappingException e = assertThrows(MappingException.class, () -> mapper.map(source, pipeDocDesc, rules));
          assertTrue(e.getMessage().contains("Field not found") || e.getMessage().contains("Cannot resolve path"), "Expected path resolution error for final field");
          assertTrue(e.getMessage().contains("non_existent_field"), "Error message should contain the missing field");
          assertEquals("title = chunk_embeddings.non_existent_field", e.getFailedRule());
@@ -417,9 +407,7 @@ public class ProtoMapperPipeDocTest {
         // Rule tries to assign string to Timestamp field
         List<String> rules = Collections.singletonList("creation_date = title");
 
-        MappingException e = assertThrows(MappingException.class, () -> {
-            mapper.map(source, pipeDocDesc, rules);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> mapper.map(source, pipeDocDesc, rules));
         assertTrue(e.getMessage().contains("Type mismatch") || e.getMessage().contains("Cannot convert"), "Expected type conversion error message");
         assertTrue(e.getMessage().contains("STRING") && e.getMessage().contains("MESSAGE"), "Error message should mention source and target types");
         assertEquals("creation_date = title", e.getFailedRule());
@@ -432,9 +420,7 @@ public class ProtoMapperPipeDocTest {
          List<String> rules = Collections.singletonList("embeddings += title"); // embeddings is map<string, Embedding>
 
          // This should fail because the map value type (Embedding) is incompatible with the source (string)
-         MappingException e = assertThrows(MappingException.class, () -> {
-             mapper.map(source, pipeDocDesc, rules);
-         });
+         MappingException e = assertThrows(MappingException.class, () -> mapper.map(source, pipeDocDesc, rules));
          // The error might occur during conversion before append/put or during the operation itself
          assertTrue(e.getMessage().contains("Type mismatch") || e.getMessage().contains("Unsupported operator") || e.getMessage().contains("Cannot convert"));
          assertEquals("Type mismatch for map field 'embeddings': Cannot assign non-map value String to Map using '=' or '+=' (Rule: " +
@@ -449,9 +435,7 @@ public class ProtoMapperPipeDocTest {
          // Rule tries to append a list (keywords) to a string field (title)
          List<String> rules = Collections.singletonList("title += keywords");
 
-         MappingException e = assertThrows(MappingException.class, () -> {
-             mapper.map(source, pipeDocDesc, rules);
-         });
+         MappingException e = assertThrows(MappingException.class, () -> mapper.map(source, pipeDocDesc, rules));
          assertTrue(e.getMessage().contains("Operator '+=' only supported for repeated or map fields"), "Error should mention invalid operator for singular");
          assertEquals("title += keywords", e.getFailedRule());
      }
@@ -461,9 +445,7 @@ public class ProtoMapperPipeDocTest {
         PipeDoc source = PipeDoc.newBuilder().build();
         List<String> rules = Collections.singletonList("title = = body"); // Extra '='
 
-        MappingException e = assertThrows(MappingException.class, () -> {
-            mapper.map(source, pipeDocDesc, rules);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> mapper.map(source, pipeDocDesc, rules));
         assertEquals("Invalid assign rule syntax: source path starts with '=' (Rule: 'title = = body')",e.getMessage(), "Expected syntax error message");
         assertEquals("title = = body", e.getFailedRule());
     }
@@ -473,9 +455,7 @@ public class ProtoMapperPipeDocTest {
         PipeDoc source = PipeDoc.newBuilder().build();
         List<String> rules = Collections.singletonList("title = "); // Missing source
 
-        MappingException e = assertThrows(MappingException.class, () -> {
-            mapper.map(source, pipeDocDesc, rules);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> mapper.map(source, pipeDocDesc, rules));
         assertTrue(e.getMessage().contains("Invalid assignment rule syntax"), "Expected syntax error message");
         assertEquals("title =", e.getFailedRule());
     }
@@ -485,9 +465,7 @@ public class ProtoMapperPipeDocTest {
         PipeDoc source = PipeDoc.newBuilder().build();
         List<String> rules = Collections.singletonList("title + = body"); // Space before =
 
-        MappingException e = assertThrows(MappingException.class, () -> {
-            mapper.map(source, pipeDocDesc, rules);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> mapper.map(source, pipeDocDesc, rules));
         assertTrue(e.getMessage().contains("Invalid assignment rule syntax"), "Expected syntax error message");
         assertEquals("title + = body", e.getFailedRule());
     }
@@ -497,9 +475,7 @@ public class ProtoMapperPipeDocTest {
         PipeDoc source = PipeDoc.newBuilder().build();
         List<String> rules = Collections.singletonList("map[key] = = value"); // Extra =
 
-        MappingException e = assertThrows(MappingException.class, () -> {
-            mapper.map(source, pipeDocDesc, rules);
-        });
+        MappingException e = assertThrows(MappingException.class, () -> mapper.map(source, pipeDocDesc, rules));
         assertEquals("Invalid map put rule syntax: source path starts with '=' (Rule: 'map[key] = = value')", e.getMessage(), "Expected " +
                 "syntax error message");
         assertEquals("map[key] = = value", e.getFailedRule());
@@ -553,13 +529,13 @@ public class ProtoMapperPipeDocTest {
      }
 
      @Test
-     void testTypeConversion_StringToEnumNotImplemented() throws MappingException, InvalidProtocolBufferException {
+     void testTypeConversion_StringToEnumNotImplemented() {
          // PipeDoc doesn't have a top-level enum field suitable for this test.
          assertTrue(true, "Skipping String->Enum conversion test: No suitable target enum field in PipeDoc");
      }
 
      @Test
-     void testTypeConversion_EnumToString() throws MappingException, InvalidProtocolBufferException {
+     void testTypeConversion_EnumToString() {
          // PipeDoc doesn't have a top-level enum field suitable for this test.
           assertTrue(true, "Skipping Enum->String conversion test: No suitable source enum field in PipeDoc");
      }
@@ -608,7 +584,7 @@ public class ProtoMapperPipeDocTest {
      }
 
      @Test
-     void testLiteralAssignmentToMap() throws MappingException, InvalidProtocolBufferException {
+     void testLiteralAssignmentToMap() {
           // Map values must be of type Embedding in PipeDoc
           // We can only assign compatible types, which currently isn't supported via literals easily.
           assertTrue(true, "Skipping literal assignment to map: requires map with primitive/string value type or message literal support");
@@ -634,9 +610,7 @@ public class ProtoMapperPipeDocTest {
       @Test
       void testMapWithNullSourceThrowsError() {
           List<String> rules = Collections.singletonList("title = title");
-          NullPointerException npe = assertThrows(NullPointerException.class, () -> {
-               mapper.map(null, pipeDocDesc, rules);
-           });
+          NullPointerException npe = assertThrows(NullPointerException.class, () -> mapper.map(null, pipeDocDesc, rules));
            // Expecting null check within map or applyRulesToBuilder
            assertTrue(npe.getMessage() == null || npe.getMessage().toLowerCase().contains("source"));
       }
@@ -645,9 +619,7 @@ public class ProtoMapperPipeDocTest {
       void testMapOntoWithNullSourceThrowsError() {
           PipeDoc.Builder targetBuilder = PipeDoc.newBuilder();
           List<String> rules = Collections.singletonList("title = title");
-          NullPointerException npe = assertThrows(NullPointerException.class, () -> {
-               mapper.mapOnto(null, targetBuilder, rules);
-           });
+          NullPointerException npe = assertThrows(NullPointerException.class, () -> mapper.mapOnto(null, targetBuilder, rules));
           // Expecting null check within mapOnto or applyRulesToBuilder
            assertTrue(npe.getMessage() == null || npe.getMessage().toLowerCase().contains("source"));
       }
@@ -656,9 +628,7 @@ public class ProtoMapperPipeDocTest {
       void testMapOntoWithNullTargetBuilderThrowsError() {
           PipeDoc source = PipeDoc.newBuilder().build();
           List<String> rules = Collections.singletonList("title = title");
-          NullPointerException npe = assertThrows(NullPointerException.class, () -> {
-               mapper.mapOnto(source, null, rules);
-           });
+          NullPointerException npe = assertThrows(NullPointerException.class, () -> mapper.mapOnto(source, null, rules));
           // Expecting null check within mapOnto or applyRulesToBuilder
            assertTrue(npe.getMessage() == null || npe.getMessage().toLowerCase().contains("target"));
       }
@@ -667,7 +637,7 @@ public class ProtoMapperPipeDocTest {
      @Test
      void testMapAccessWithNonExistentKey_Read() {
          PipeDoc source = PipeDoc.newBuilder()
-                 .putEmbeddings("existing_key", createEmbedding(Arrays.asList(1f)))
+                 .putEmbeddings("existing_key", createEmbedding(List.of(1f)))
                  .build();
          List<String> rules = Collections.singletonList("title = embeddings[\"non_existent_key\"]");
 
@@ -684,7 +654,7 @@ public class ProtoMapperPipeDocTest {
       @Test
       void testMapAccessWithNonExistentKey_Write() throws MappingException, InvalidProtocolBufferException {
           PipeDoc source = PipeDoc.newBuilder()
-                  .putEmbeddings("value_source", createEmbedding(Arrays.asList(1f)))
+                  .putEmbeddings("value_source", createEmbedding(List.of(1f)))
                   .build();
           List<String> rules = Collections.singletonList("embeddings[\"new_key\"] = embeddings[\"value_source\"]");
 
