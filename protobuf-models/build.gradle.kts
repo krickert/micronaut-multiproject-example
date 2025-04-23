@@ -20,6 +20,7 @@ java {
 dependencies {
     implementation(platform(project(":bom")))
     testImplementation(platform(project(":bom")))
+    testImplementation(mn.mockito.core)
 
     implementation(libs.protobuf.java)
     implementation(libs.slf4j.api)

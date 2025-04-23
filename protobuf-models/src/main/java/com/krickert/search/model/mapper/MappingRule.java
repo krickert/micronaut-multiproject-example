@@ -1,5 +1,4 @@
-// src/main/java/com/krickert/search/model/MappingRule.java
-// No changes from the previous correct version. Represents parsed rules.
+// src/main/java/com/krickert/search/model/mapper/MappingRule.java
 package com.krickert.search.model.mapper;
 
 import java.util.Objects;
@@ -23,7 +22,7 @@ public class MappingRule {
     private final String originalRuleString; // Store original for errors
 
     // Private constructor, use static factory methods
-    private MappingRule(Operation operation, String targetPath, String sourcePath, String mapKey, String originalRuleString) {
+     MappingRule(Operation operation, String targetPath, String sourcePath, String mapKey, String originalRuleString) {
         this.operation = Objects.requireNonNull(operation, "Operation cannot be null");
         this.targetPath = Objects.requireNonNull(targetPath, "Target path cannot be null");
         this.originalRuleString = Objects.requireNonNull(originalRuleString, "Original rule string cannot be null");
@@ -98,16 +97,21 @@ public class MappingRule {
     }
 
      @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        MappingRule that = (MappingRule) o;
-        // Compare based on original string for simplicity, assuming parser is deterministic
-        return Objects.equals(originalRuleString, that.originalRuleString);
-    }
+     public boolean equals(Object o) {
+         if (this == o) return true;
+         if (o == null || getClass() != o.getClass()) return false;
+         MappingRule that = (MappingRule) o;
+         // Compare based on all defining fields
+         return operation == that.operation &&
+                Objects.equals(targetPath, that.targetPath) &&
+                Objects.equals(sourcePath, that.sourcePath) &&
+                Objects.equals(mapKey, that.mapKey) &&
+                Objects.equals(originalRuleString, that.originalRuleString); // Keep original string check for completeness
+     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(originalRuleString);
-    }
+     @Override
+     public int hashCode() {
+         // Hash based on all defining fields used in equals
+         return Objects.hash(operation, targetPath, sourcePath, mapKey, originalRuleString);
+     }
 }
