@@ -50,7 +50,12 @@ public class ProtoMapper {
     public Message map(Message sourceMessage,
                        Descriptor targetDescriptor,
                        List<String> mappingRuleStrings) throws MappingException {
-
+        if (sourceMessage == null) {
+            throw new NullPointerException("Source message cannot be null");
+        }
+        if (targetDescriptor == null) {
+            throw new NullPointerException("Target descriptor cannot be null");
+        }
         DynamicMessage.Builder targetBuilder = DynamicMessage.newBuilder(targetDescriptor);
         // Delegate execution to MappingExecutor
         mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, mappingRuleStrings);
@@ -78,7 +83,13 @@ public class ProtoMapper {
     public Message.Builder mapOnto(Message sourceMessage,
                                    Message.Builder targetBuilder,
                                    List<String> mappingRuleStrings) throws MappingException {
-         // Delegate execution to MappingExecutor
+        if (sourceMessage == null) {
+            throw new NullPointerException("Source message cannot be null");
+        }
+        if (targetBuilder == null) {
+            throw new NullPointerException("Target builder cannot be null");
+        }
+        // Delegate execution to MappingExecutor
         mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, mappingRuleStrings);
         return targetBuilder;
     }

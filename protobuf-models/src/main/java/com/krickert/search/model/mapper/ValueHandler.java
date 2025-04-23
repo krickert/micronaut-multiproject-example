@@ -25,18 +25,41 @@ public class ValueHandler {
 
      // --- getValue ---
      public Object getValue(Message sourceMessage, String sourcePath, String ruleForError) throws MappingException {
+         // *** NEW: Check for literals FIRST ***
+         sourcePath = sourcePath.trim(); // Ensure no leading/trailing spaces
+         if (sourcePath.equals("null")) {
+             return null;
+         } else if (sourcePath.equals("true")) {
+             return true;
+         } else if (sourcePath.equals("false")) {
+             return false;
+         } else if (sourcePath.startsWith("\"") && sourcePath.endsWith("\"") && sourcePath.length() >= 2) {
+             return sourcePath.substring(1, sourcePath.length() - 1); // Return string content without quotes
+         } else {
+             try {
+                 // Try parsing as a number (Double is a safe intermediate)
+                 return Double.parseDouble(sourcePath);
+             } catch (NumberFormatException nfe) {
+                 // Not a number, proceed to path resolution
+             }
+         }
          try {
              PathResolver.PathResolverResult sourceRes = pathResolver.resolvePath(sourceMessage, sourcePath, false, ruleForError);
 
              if (sourceRes.isStructKey()) {
                  Object parent = sourceRes.getParentMessageOrBuilder();
                  if (!(parent instanceof Struct sourceStruct)) {
-                      throw new MappingException("Parent object is not a Struct when reading Struct key for path: " + sourcePath, null, ruleForError);
+                     throw new MappingException("Parent object is not a Struct when reading Struct key for path: " + sourcePath, null, ruleForError);
                  }
                  Value valueProto = sourceStruct.getFieldsOrDefault(sourceRes.getFinalPathPart(), null);
+
+                 // *** FIX: Check if valueProto is null first ***
+                 //noinspection ConstantValue
                  if (valueProto == null || valueProto.getKindCase() == Value.KindCase.NULL_VALUE) {
-                     return null;
+                     return null; // Key not found or explicitly null
                  }
+                 // *** END FIX ***
+
                  return unwrapValue(valueProto);
 
              } else if (sourceRes.isMapKey()) {
@@ -107,9 +130,11 @@ public class ValueHandler {
                  throw new MappingException("Could not resolve source path to a readable value: " + sourcePath, null, ruleForError);
              }
          } catch (MappingException e) {
+             LOG.error("*** HANDLE path resolution errors if it's NOT a literal! Error getting value for source path '" + sourcePath + "'" +
+                             " in rule '" + ruleForError + "'", e,
+                     ruleForError);
              throw e;
          } catch (Exception e) {
-              if (e instanceof MappingException) throw (MappingException) e;
              throw new MappingException("Error getting value for source path '" + sourcePath + "' in rule '" + ruleForError + "'", e, ruleForError);
          }
      }
@@ -241,7 +266,11 @@ public class ValueHandler {
                          targetField.getName(),
                          ruleForError
                      );
-                     parentBuilder.setField(targetField, convertedValue);
+                     if (convertedValue == null) {
+                         parentBuilder.clearField(targetField); // Use clearField for null/default
+                     } else {
+                         parentBuilder.setField(targetField, convertedValue);
+                     }
                  }
              } else {
                  throw new MappingException("Could not resolve target path to a settable location: " + targetPath, null, ruleForError);

@@ -438,7 +438,9 @@ public class ProtoMapperPipeDocTest {
          });
          // The error might occur during conversion before append/put or during the operation itself
          assertTrue(e.getMessage().contains("Type mismatch") || e.getMessage().contains("Unsupported operator") || e.getMessage().contains("Cannot convert"));
-         assertTrue(e.getMessage().contains("STRING") && (e.getMessage().contains("MESSAGE") || e.getMessage().contains("Embedding")), "Error should mention incompatible types");
+         assertEquals("Type mismatch for map field 'embeddings': Cannot assign non-map value String to Map using '=' or '+=' (Rule: " +
+                 "'embeddings += title')",
+                 e.getMessage(), "Error should mention incompatible types");
          assertEquals("embeddings += title", e.getFailedRule());
      }
 
@@ -463,7 +465,7 @@ public class ProtoMapperPipeDocTest {
         MappingException e = assertThrows(MappingException.class, () -> {
             mapper.map(source, pipeDocDesc, rules);
         });
-        assertTrue(e.getMessage().contains("Invalid assignment rule syntax"), "Expected syntax error message");
+        assertEquals("Invalid assign rule syntax: source path starts with '=' (Rule: 'title = = body')",e.getMessage(), "Expected syntax error message");
         assertEquals("title = = body", e.getFailedRule());
     }
 
@@ -476,7 +478,7 @@ public class ProtoMapperPipeDocTest {
             mapper.map(source, pipeDocDesc, rules);
         });
         assertTrue(e.getMessage().contains("Invalid assignment rule syntax"), "Expected syntax error message");
-        assertEquals("title = ", e.getFailedRule());
+        assertEquals("title =", e.getFailedRule());
     }
 
      @Test
@@ -499,7 +501,8 @@ public class ProtoMapperPipeDocTest {
         MappingException e = assertThrows(MappingException.class, () -> {
             mapper.map(source, pipeDocDesc, rules);
         });
-        assertTrue(e.getMessage().contains("Invalid assignment rule syntax"), "Expected syntax error message");
+        assertEquals("Invalid map put rule syntax: source path starts with '=' (Rule: 'map[key] = = value')", e.getMessage(), "Expected " +
+                "syntax error message");
         assertEquals("map[key] = = value", e.getFailedRule());
     }
 
