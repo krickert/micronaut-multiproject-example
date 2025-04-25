@@ -17,6 +17,7 @@ import java.util.Map;
  */
 @MicronautTest(propertySources = "classpath:configuration-test.properties")
 public class ConsulConfigurationTest {
+    @SuppressWarnings("unused")
     private static final Logger log = LoggerFactory.getLogger(ConsulConfigurationTest.class);
 
     @Inject

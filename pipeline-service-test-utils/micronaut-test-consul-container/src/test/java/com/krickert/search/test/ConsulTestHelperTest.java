@@ -2,7 +2,6 @@ package com.krickert.search.test;
 
 import com.krickert.search.test.consul.ConsulContainer;
 import com.krickert.search.test.consul.ConsulTestHelper;
-import io.micronaut.context.ApplicationContext;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Assertions;
@@ -12,6 +11,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Map;
 
 /**
  * Test class for {@link ConsulTestHelper}.
@@ -26,9 +26,6 @@ public class ConsulTestHelperTest {
 
     @Inject
     private ConsulContainer consulContainer;
-
-    @Inject
-    private ApplicationContext applicationContext;
 
     /**
      * Test that the ConsulTestHelper can be injected.
@@ -91,11 +88,34 @@ public class ConsulTestHelperTest {
         boolean result = consulTestHelper.loadPipelineConfig("test-pipeline1.properties");
         Assertions.assertTrue(result, "Loading pipeline config should succeed");
 
-        // Since we're simulating the loading of configuration into Consul,
-        // we'll just verify that the loading operation succeeded
-        log.info("Successfully simulated loading pipeline configuration into Consul");
+        log.info("Successfully loaded pipeline configuration into Consul");
 
-        // In a real test, we would verify that the configuration was loaded correctly
-        // by retrieving it from Consul and checking the values
+        // Verify that the configuration was loaded correctly by retrieving it from Consul
+        Map<String, String> keyValues = consulTestHelper.getKeyValues("pipeline.configs.pipeline1");
+        Assertions.assertFalse(keyValues.isEmpty(), "Should find key-value pairs with prefix pipeline.configs.pipeline1");
+
+        // Verify specific values
+        String value = consulTestHelper.getKeyValue("pipeline.configs.pipeline1.service.importer.kafka-publish-topics");
+        Assertions.assertEquals("test-input-documents", value, "Should find correct value for importer kafka-publish-topics");
+
+        value = consulTestHelper.getKeyValue("pipeline.configs.pipeline1.service.chunker.kafka-listen-topics");
+        Assertions.assertEquals("test-input-documents", value, "Should find correct value for chunker kafka-listen-topics");
+    }
+
+    /**
+     * Test that the ConsulTestHelper can retrieve key-value pairs from Consul.
+     */
+    @Test
+    public void testGetKeyValues() {
+        // Load configuration into Consul
+        consulTestHelper.loadPropertiesFile("configuration-test.properties", "config/test");
+
+        // Retrieve key-value pairs with prefix
+        Map<String, String> keyValues = consulTestHelper.getKeyValues("logging.level");
+        Assertions.assertFalse(keyValues.isEmpty(), "Should find key-value pairs with prefix logging.level");
+
+        // Verify specific value
+        String value = consulTestHelper.getKeyValue("logging.level.com.krickert");
+        Assertions.assertEquals("DEBUG", value, "Should find correct value for logging.level.com.krickert");
     }
 }

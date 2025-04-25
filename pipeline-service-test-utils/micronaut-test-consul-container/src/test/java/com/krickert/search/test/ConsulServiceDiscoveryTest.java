@@ -1,13 +1,10 @@
 package com.krickert.search.test;
 
 import com.krickert.search.test.consul.ConsulContainer;
-import io.micronaut.context.ApplicationContext;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
@@ -17,13 +14,9 @@ import java.util.Map;
  */
 @MicronautTest(propertySources = "classpath:service-discovery-test.properties")
 public class ConsulServiceDiscoveryTest {
-    private static final Logger log = LoggerFactory.getLogger(ConsulServiceDiscoveryTest.class);
 
     @Inject
     private ConsulContainer consulContainer;
-
-    @Inject
-    private ApplicationContext applicationContext;
 
     /**
      * Test that the Consul container is running.

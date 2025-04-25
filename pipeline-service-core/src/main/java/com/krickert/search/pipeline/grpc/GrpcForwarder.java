@@ -9,10 +9,12 @@ import io.grpc.ManagedChannelBuilder;
 import io.micronaut.context.annotation.Value;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 @Singleton
 @Slf4j
+@Getter
 public class GrpcForwarder {
 
     // For demonstration we create a single stub.
@@ -41,6 +43,7 @@ public class GrpcForwarder {
         // In a real-world scenario, use route.getDestination() to choose the correct stub.
         // Here we simply call the forward method and ignore the response.
         log.debug("Forwarding to gRPC service: {}", route.getDestination());
+        //noinspection ResultOfMethodCallIgnored
         stub.forward(pipe);
     }
 }

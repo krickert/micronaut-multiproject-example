@@ -28,7 +28,7 @@ public class PipelineConfigController {
      * 
      * @return A map of pipeline configurations
      */
-    @Get("/")
+    @Get
     public HttpResponse<Map<String, Object>> getConfig() {
         log.info("Getting current pipeline configuration");
         Map<String, Object> response = new HashMap<>();

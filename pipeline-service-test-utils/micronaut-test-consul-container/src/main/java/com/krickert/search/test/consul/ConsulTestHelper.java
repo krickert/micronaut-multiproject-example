@@ -1,17 +1,19 @@
 package com.krickert.search.test.consul;
 
 import io.micronaut.context.annotation.Requires;
+import io.micronaut.context.env.Environment;
+import io.micronaut.context.env.PropertySource;
 import io.micronaut.discovery.consul.client.v1.ConsulClient;
-import io.micronaut.discovery.consul.client.v1.KeyValue;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -23,11 +25,27 @@ import java.util.Properties;
 public class ConsulTestHelper {
     private static final Logger log = LoggerFactory.getLogger(ConsulTestHelper.class);
 
+    /**
+     * -- GETTER --
+     *  Get the Consul container.
+     *
+     */
+    @Getter
     @Inject
     private ConsulContainer consulContainer;
 
+    /**
+     * -- GETTER --
+     *  Get the Consul client.
+     *
+     */
+    @Getter
     @Inject
     private ConsulClient consulClient;
+
+    @SuppressWarnings("MnInjectionPoints")
+    @Inject
+    private Environment environment;
 
     /**
      * Load a properties file into Consul.
@@ -48,15 +66,19 @@ public class ConsulTestHelper {
             properties.load(input);
             log.info("Loaded {} properties from file: {}", properties.size(), filename);
 
-            // For testing purposes, we'll just log the properties that would be stored in Consul
-            // In a real implementation, we would use the ConsulClient to store the properties
+            // Store properties in Consul using the Environment
             for (String key : properties.stringPropertyNames()) {
                 String consulKey = prefix + "/" + key;
                 String value = properties.getProperty(key);
-                log.debug("Would store property in Consul: {} = {}", consulKey, value);
+                log.debug("Storing property in Consul: {} = {}", consulKey, value);
+
+                // Use the Environment to store the property
+                Map<String, Object> propertyMap = new HashMap<>();
+                propertyMap.put(key, value);
+                environment.addPropertySource(PropertySource.of(consulKey, propertyMap));
             }
 
-            log.info("Successfully simulated loading {} properties into Consul with prefix: {}", properties.size(), prefix);
+            log.info("Successfully loaded {} properties into Consul with prefix: {}", properties.size(), prefix);
             return true;
 
         } catch (IOException e) {
@@ -78,45 +100,35 @@ public class ConsulTestHelper {
     }
 
     /**
-     * Get the Consul container.
-     * 
-     * @return the Consul container
-     */
-    public ConsulContainer getConsulContainer() {
-        return consulContainer;
-    }
-
-    /**
-     * Get the Consul client.
-     * 
-     * @return the Consul client
-     */
-    public ConsulClient getConsulClient() {
-        return consulClient;
-    }
-
-    /**
      * Get key-value pairs from Consul with the given prefix.
      * 
      * @param prefix the prefix to search for
-     * @return a list of key-value pairs
+     * @return a map of key-value pairs
      */
-    public List<KeyValue> getKeyValues(String prefix) {
+    public Map<String, String> getKeyValues(String prefix) {
         try {
             log.debug("Getting key-value pairs from Consul with prefix: {}", prefix);
 
-            // Use the ConsulClient to get key-value pairs
-            // Since we don't have direct access to the Consul API, we'll use the Environment
-            // to get the properties instead
-            List<KeyValue> keyValues = new ArrayList<>();
+            // Use the Environment to get properties with the given prefix
+            Map<String, Object> properties = environment.getProperties(prefix);
+            Map<String, String> keyValues = new HashMap<>();
 
-            // For testing purposes, we'll just return an empty list
-            // In a real implementation, we would use the ConsulClient to get the key-value pairs
+            // Convert properties to a map of strings
+            for (Map.Entry<String, Object> entry : properties.entrySet()) {
+                String key = entry.getKey();
+                Object value = entry.getValue();
+
+                if (value != null) {
+                    keyValues.put(key, value.toString());
+                    log.debug("Found key-value pair: {} = {}", key, value);
+                }
+            }
+
             log.debug("Found {} key-value pairs with prefix: {}", keyValues.size(), prefix);
             return keyValues;
         } catch (Exception e) {
             log.error("Error getting key-value pairs from Consul with prefix: {}", prefix, e);
-            return new ArrayList<>();
+            return new HashMap<>();
         }
     }
 
@@ -124,15 +136,20 @@ public class ConsulTestHelper {
      * Get a specific key-value pair from Consul.
      * 
      * @param key the key to get
-     * @return the key-value pair, or null if not found
+     * @return the value associated with the key, or null if not found
      */
-    public KeyValue getKeyValue(String key) {
+    public String getKeyValue(String key) {
         try {
             log.debug("Getting key-value pair from Consul with key: {}", key);
 
-            // Use the ConsulClient to get a specific key-value pair
-            // Since we don't have direct access to the Consul API, we'll return null
-            // In a real implementation, we would use the ConsulClient to get the key-value pair
+            // Use the Environment to get the property
+            String value = environment.getProperty(key, String.class).orElse(null);
+
+            if (value != null) {
+                log.debug("Found key-value pair: {} = {}", key, value);
+                return value;
+            }
+
             log.debug("Key-value pair not found with key: {}", key);
             return null;
         } catch (Exception e) {

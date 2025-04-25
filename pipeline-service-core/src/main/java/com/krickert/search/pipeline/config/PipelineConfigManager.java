@@ -26,13 +26,10 @@ public class PipelineConfigManager {
 
     /**
      * Map of pipeline configurations, keyed by pipeline name.
-     * -- SETTER --
-     *  Sets the pipelines map. Used primarily for testing.
-     *
-     * @param pipelines The map of pipeline configurations
      */
     private Map<String, PipelineConfig> pipelines = new HashMap<>();
 
+    @SuppressWarnings("MnInjectionPoints")
     @Inject
     private Environment environment;
 
@@ -171,7 +168,7 @@ public class PipelineConfigManager {
             if (values.size() == 1) {
                 // Store as a single property
                 String consulKey = consulConfigPath + "/" + baseKey;
-                String value = values.get(0);
+                String value = values.getFirst();
                 log.debug("Updating property in Consul: {} = {}", consulKey, value);
 
                 // Use the Environment to update the property
@@ -246,9 +243,7 @@ public class PipelineConfigManager {
         });
 
         log.info("Found pipeline names: {}", pipelineNames);
-        serviceNames.forEach((pipeline, services) -> {
-            log.info("Pipeline {} has services: {}", pipeline, services);
-        });
+        serviceNames.forEach((pipeline, services) -> log.info("Pipeline {} has services: {}", pipeline, services));
 
         // Create pipeline configurations
         pipelineNames.forEach(pipelineName -> {
@@ -276,7 +271,7 @@ public class PipelineConfigManager {
                 } else {
                     // Check for properties with array indices
                     List<String> listenTopics = new ArrayList<>();
-                    Pattern arrayPattern = Pattern.compile(Pattern.quote(listenTopicsKeyBase) + "\\[(\\d+)\\]");
+                    Pattern arrayPattern = Pattern.compile(Pattern.quote(listenTopicsKeyBase) + "\\[(\\d+)]");
 
                     properties.forEach((key, value) -> {
                         String keyStr = key.toString();
@@ -305,7 +300,7 @@ public class PipelineConfigManager {
                 } else {
                     // Check for properties with array indices
                     List<String> publishTopics = new ArrayList<>();
-                    Pattern arrayPattern = Pattern.compile(Pattern.quote(publishTopicsKeyBase) + "\\[(\\d+)\\]");
+                    Pattern arrayPattern = Pattern.compile(Pattern.quote(publishTopicsKeyBase) + "\\[(\\d+)]");
 
                     properties.forEach((key, value) -> {
                         String keyStr = key.toString();
@@ -331,7 +326,7 @@ public class PipelineConfigManager {
                 } else {
                     // Check for properties with array indices
                     List<String> grpcForwardTo = new ArrayList<>();
-                    Pattern arrayPattern = Pattern.compile(Pattern.quote(grpcForwardToKey) + "\\[(\\d+)\\]");
+                    Pattern arrayPattern = Pattern.compile(Pattern.quote(grpcForwardToKey) + "\\[(\\d+)]");
 
                     properties.forEach((key, value) -> {
                         String keyStr = key.toString();
