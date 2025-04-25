@@ -32,3 +32,4 @@ out/
 /out.txt
 
 docs/.asciidoctor
+.micronaut/
