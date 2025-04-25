@@ -88,6 +88,7 @@ public class ConsulPipelineConfigControllerTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void testGetConfig() {
         try {
             // Test
@@ -111,6 +112,7 @@ public class ConsulPipelineConfigControllerTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void testReloadFromConsul() {
         try {
             // Test
@@ -135,6 +137,7 @@ public class ConsulPipelineConfigControllerTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void testUpdateServiceConfig() {
         try {
             // Create a service configuration DTO to update
@@ -171,6 +174,7 @@ public class ConsulPipelineConfigControllerTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void testUpdateServiceConfigForNonExistentPipeline() {
         try {
             // Create a service configuration DTO to update

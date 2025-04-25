@@ -17,6 +17,11 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Default implementation of the pipeline configuration manager.
+ * This class is responsible for loading pipeline configurations from various sources
+ * (Consul KV store or properties files) and providing access to them.
+ */
 @Setter
 @Getter
 @Singleton
@@ -44,6 +49,20 @@ public class DefaultPipelineConfig {
     @Value("${consul.client.config.path:config/pipeline}")
     private String consulConfigPath;
 
+    /**
+     * Default constructor.
+     * Creates a new instance of DefaultPipelineConfig with an empty pipelines map.
+     */
+    public DefaultPipelineConfig() {
+        // Initialize with empty map
+        this.pipelines = new HashMap<>();
+    }
+
+    /**
+     * Initializes the pipeline configuration.
+     * This method is called automatically after the bean is constructed.
+     * It attempts to load configuration from Consul if enabled, otherwise falls back to file-based configuration.
+     */
     @PostConstruct
     public void init() {
         // First try to load from Consul if available
@@ -132,6 +151,13 @@ public class DefaultPipelineConfig {
         }
     }
 
+    /**
+     * Parses the properties into pipeline configurations.
+     * This method extracts pipeline and service configurations from the properties
+     * and populates the pipelines map.
+     *
+     * @param properties The properties to parse
+     */
     private void parsePipelineProperties(Properties properties) {
         // Store all unique pipeline and service names to ensure we capture everything
         Set<String> pipelineNames = new HashSet<>();
