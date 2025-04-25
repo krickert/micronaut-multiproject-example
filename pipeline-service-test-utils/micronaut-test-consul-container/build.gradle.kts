@@ -14,6 +14,7 @@ dependencies {
 
     // Micronaut
     implementation(mn.micronaut.discovery.core)
+    implementation(mn.micronaut.discovery.client)
     implementation(mn.micronaut.test.core)
     implementation(mn.micronaut.test.junit5)
     implementation(mn.micronaut.serde.jackson)

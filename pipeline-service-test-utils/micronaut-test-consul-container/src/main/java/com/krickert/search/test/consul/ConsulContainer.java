@@ -2,16 +2,25 @@ package com.krickert.search.test.consul;
 
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.core.annotation.NonNull;
+import io.micronaut.discovery.consul.client.v1.ConsulClient;
+import io.micronaut.discovery.consul.client.v1.KeyValue;
+import io.micronaut.http.client.exceptions.HttpClientResponseException;
 import io.micronaut.test.support.TestPropertyProvider;
+import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 /**
  * Implementation of a Consul container for testing.
@@ -25,6 +34,9 @@ public class ConsulContainer implements TestPropertyProvider {
     private static final String endpoint;
     private static boolean initialized = false;
     private static final int CONSUL_PORT = 8500;
+
+    @Inject
+    private ConsulClient consulClient;
 
     static {
         try {

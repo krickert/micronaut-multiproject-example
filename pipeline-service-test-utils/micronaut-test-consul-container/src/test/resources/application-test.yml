@@ -1,0 +1,17 @@
+# Test configuration for Consul
+micronaut:
+  application:
+    name: consul-test
+  config-client:
+    enabled: true
+
+consul:
+  client:
+    enabled: true
+    defaultZone: ${CONSUL_HOST:localhost}:${CONSUL_PORT:8500}
+    config:
+      enabled: true
+      format: YAML
+      path: /config
+    watch:
+      enabled: true

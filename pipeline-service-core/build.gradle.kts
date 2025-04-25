@@ -51,10 +51,14 @@ dependencies {
 
     // Implementation dependencies - these are not exposed to consumers
     implementation(libs.slf4j.api)
+    implementation("io.micronaut.discovery:micronaut-discovery-client")
     compileOnly(mn.lombok)
 
     // Testing dependencies
     testImplementation(mn.micronaut.test.junit5)
+    testImplementation(mn.micronaut.http.client)
+    testImplementation(mn.micronaut.http.server.netty)
+    testImplementation(project(":pipeline-service-test-utils:micronaut-test-consul-container"))
     testAnnotationProcessor(mn.micronaut.inject.java)
 }
 
