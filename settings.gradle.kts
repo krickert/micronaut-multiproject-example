@@ -28,6 +28,7 @@ include(
     "pipeline-service-test-utils:micronaut-kafka-registry-core",
     "pipeline-service-test-utils:micronaut-kafka-registry-moto",
     "pipeline-service-test-utils:micronaut-kafka-registry-apicurio",
+    "pipeline-service-test-utils:micronaut-test-consul-container",
     "pipeline-instance-A",
     "util"
 )
