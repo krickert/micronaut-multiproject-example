@@ -2,8 +2,8 @@ package com.krickert.search.model.mapper;
 
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
-import com.krickert.search.model.pipe.Embedding;
-import com.krickert.search.model.pipe.PipeDoc; // Using PipeDoc for concrete examples
+import com.krickert.search.model.Embedding;
+import com.krickert.search.model.PipeDoc; // Using PipeDoc for concrete examples
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;

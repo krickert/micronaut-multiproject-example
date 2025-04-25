@@ -1,4 +1,7 @@
-// File: protobuf-models/build.gradle.kts
+
+var grpcVersion = libs.versions.grpc.get()
+var protobufVersion = libs.versions.protobuf.get()
+
 plugins {
     `java-library`
     alias(libs.plugins.protobuf)
@@ -23,7 +26,10 @@ dependencies {
     testImplementation(mn.mockito.core)
 
     implementation(libs.protobuf.java)
+    implementation(libs.grpc.protobuf)
+    implementation(libs.grpc.stub)
     implementation(libs.slf4j.api)
+    implementation(mn.javax.annotation.api)
     implementation(libs.guava)
     implementation(libs.commons.lang3)
 
@@ -32,8 +38,30 @@ dependencies {
 }
 
 // Simplified protobuf configuration
+// Inform IDEs like IntelliJ IDEA, Eclipse or NetBeans about the generated code.
+sourceSets {
+    main {
+        java {
+            srcDirs("build/generated/source/proto/main/grpc")
+            srcDirs("build/generated/source/proto/main/java")
+        }
+    }
+}
+
 protobuf {
     protoc {
-        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}"
+        artifact = "com.google.protobuf:protoc:$protobufVersion"
+    }
+    plugins {
+        create("grpc") {
+            artifact = "io.grpc:protoc-gen-grpc-java:$grpcVersion"
+        }
+    }
+    generateProtoTasks {
+        all().forEach { task ->
+            task.plugins {
+                create("grpc")
+            }
+        }
     }
 }

@@ -1,8 +1,9 @@
 syntax = "proto3";
-package com.krickert.search.model.pipe;
+package com.krickert.search.model;
 option java_multiple_files = true;
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
+import "google/protobuf/empty.proto";
 
 message PipeDoc {
   string id = 1;
@@ -41,3 +42,51 @@ message ChunkEmbedding {
   repeated float embedding = 2;
 }
 
+message Route {
+  RouteType routeType = 1;
+  // For Kafka: the topic name; for gRPC: the endpoint tag or destination identifier.
+  string destination = 2;
+}
+
+enum RouteType {
+  UNKNOWN = 0;
+  NULL_TERMINATION = 1;
+  KAFKA = 2;
+  GRPC = 3;
+}
+
+message PipeRequest {
+  PipeDoc doc = 1;
+  map<string, string> config = 2;
+  repeated Route destinations = 3;
+}
+
+message OutputResponse {
+  bool success = 1;
+  oneof reply {
+    PipeDoc outputDoc = 2;
+    ErrorData errorData = 3;
+  }
+}
+
+message ErrorData {
+  string errorMessage = 2;
+  repeated Route failedRoutes = 3;
+  optional PipeRequest errorRequest = 4;
+}
+
+message PipeResponse {
+  bool success = 1;
+  optional ErrorData errorDate = 2;
+}
+
+message PipeStream {
+  PipeRequest request = 1;
+  repeated PipeResponse pipeReplies = 2;
+  repeated string streamLogs = 3;
+}
+
+service PipelineService {
+  rpc forward(PipeStream) returns (google.protobuf.Empty);
+  rpc getOutput(PipeRequest) returns (OutputResponse);
+}

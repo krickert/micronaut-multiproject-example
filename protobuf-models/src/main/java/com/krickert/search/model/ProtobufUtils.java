@@ -4,7 +4,6 @@ import com.google.protobuf.ListValue;
 import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
 import com.google.protobuf.Value;
-import com.krickert.search.model.pipe.PipeDoc;
 
 import java.io.FileOutputStream;
 import java.io.IOException;

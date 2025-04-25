@@ -35,6 +35,10 @@ dependencies {
         api("${rootProject.group}:util:${rootProject.version}")
         api("${rootProject.group}:pipeline-service-core:${rootProject.version}")
         api("${rootProject.group}:pipeline-service-test-utils:${rootProject.version}")
+        // Kafka registry modules
+        api("${rootProject.group}:pipeline-service-test-utils.micronaut-kafka-registry-core:${rootProject.version}")
+        api("${rootProject.group}:pipeline-service-test-utils.micronaut-kafka-registry-moto:${rootProject.version}")
+        api("${rootProject.group}:pipeline-service-test-utils.micronaut-kafka-registry-apicurio:${rootProject.version}")
     }
 }
 

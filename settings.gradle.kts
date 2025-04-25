@@ -25,6 +25,9 @@ include(
     "protobuf-models",
     "pipeline-service-core",
     "pipeline-service-test-utils",
+    "pipeline-service-test-utils:micronaut-kafka-registry-core",
+    "pipeline-service-test-utils:micronaut-kafka-registry-moto",
+    "pipeline-service-test-utils:micronaut-kafka-registry-apicurio",
     "pipeline-instance-A",
     "util"
 )

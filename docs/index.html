@@ -1033,6 +1033,9 @@ include(
     "protobuf-models",
     "pipeline-service-core",
     "pipeline-service-test-utils",
+    "pipeline-service-test-utils:micronaut-kafka-registry-core",
+    "pipeline-service-test-utils:micronaut-kafka-registry-moto",
+    "pipeline-service-test-utils:micronaut-kafka-registry-apicurio",
     "pipeline-instance-A",
     "util"
 )
@@ -1290,6 +1293,10 @@ dependencies {
         api("${rootProject.group}:util:${rootProject.version}")
         api("${rootProject.group}:pipeline-service-core:${rootProject.version}")
         api("${rootProject.group}:pipeline-service-test-utils:${rootProject.version}")
+        // Kafka registry modules
+        api("${rootProject.group}:pipeline-service-test-utils.micronaut-kafka-registry-core:${rootProject.version}")
+        api("${rootProject.group}:pipeline-service-test-utils.micronaut-kafka-registry-moto:${rootProject.version}")
+        api("${rootProject.group}:pipeline-service-test-utils.micronaut-kafka-registry-apicurio:${rootProject.version}")
     }
 }
 
@@ -1348,10 +1355,11 @@ nano protobuf-models/src/main/proto/pipeline_models.proto</code></pre>
     <button class="copy-code-button" style="position: absolute; top: 5px; right: 5px; z-index: 10; cursor: pointer; padding: 2px 6px; font-size: 0.8em;">Copy</button>
     <pre class="highlightjs highlight"><code class="language-proto hljs">
 syntax = "proto3";
-package com.krickert.search.model.pipe;
+package com.krickert.search.model;
 option java_multiple_files = true;
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
+import "google/protobuf/empty.proto";
 
 message PipeDoc {
   string id = 1;
@@ -1390,6 +1398,54 @@ message ChunkEmbedding {
   repeated float embedding = 2;
 }
 
+message Route {
+  RouteType routeType = 1;
+  // For Kafka: the topic name; for gRPC: the endpoint tag or destination identifier.
+  string destination = 2;
+}
+
+enum RouteType {
+  UNKNOWN = 0;
+  NULL_TERMINATION = 1;
+  KAFKA = 2;
+  GRPC = 3;
+}
+
+message PipeRequest {
+  PipeDoc doc = 1;
+  map<string, string> config = 2;
+  repeated Route destinations = 3;
+}
+
+message OutputResponse {
+  bool success = 1;
+  oneof reply {
+    PipeDoc outputDoc = 2;
+    ErrorData errorData = 3;
+  }
+}
+
+message ErrorData {
+  string errorMessage = 2;
+  repeated Route failedRoutes = 3;
+  optional PipeRequest errorRequest = 4;
+}
+
+message PipeResponse {
+  bool success = 1;
+  optional ErrorData errorDate = 2;
+}
+
+message PipeStream {
+  PipeRequest request = 1;
+  repeated PipeResponse pipeReplies = 2;
+  repeated string streamLogs = 3;
+}
+
+service PipelineService {
+  rpc forward(PipeStream) returns (google.protobuf.Empty);
+  rpc getOutput(PipeRequest) returns (OutputResponse);
+}
     </code></pre>
   </div>
 </details>
@@ -1406,7 +1462,10 @@ message ChunkEmbedding {
   <div class="code-container" style="position: relative;">
     <button class="copy-code-button" style="position: absolute; top: 5px; right: 5px; z-index: 10; cursor: pointer; padding: 2px 6px; font-size: 0.8em;">Copy</button>
     <pre class="highlightjs highlight"><code class="language-kotlin hljs">
-// File: protobuf-models/build.gradle.kts
+
+var grpcVersion = libs.versions.grpc.get()
+var protobufVersion = libs.versions.protobuf.get()
+
 plugins {
     `java-library`
     alias(libs.plugins.protobuf)
@@ -1428,8 +1487,13 @@ java {
 dependencies {
     implementation(platform(project(":bom")))
     testImplementation(platform(project(":bom")))
+    testImplementation(mn.mockito.core)
 
     implementation(libs.protobuf.java)
+    implementation(libs.grpc.protobuf)
+    implementation(libs.grpc.stub)
+    implementation(libs.slf4j.api)
+    implementation(mn.javax.annotation.api)
     implementation(libs.guava)
     implementation(libs.commons.lang3)
 
@@ -1438,9 +1502,31 @@ dependencies {
 }
 
 // Simplified protobuf configuration
+// Inform IDEs like IntelliJ IDEA, Eclipse or NetBeans about the generated code.
+sourceSets {
+    main {
+        java {
+            srcDirs("build/generated/source/proto/main/grpc")
+            srcDirs("build/generated/source/proto/main/java")
+        }
+    }
+}
+
 protobuf {
     protoc {
-        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}"
+        artifact = "com.google.protobuf:protoc:$protobufVersion"
+    }
+    plugins {
+        create("grpc") {
+            artifact = "io.grpc:protoc-gen-grpc-java:$grpcVersion"
+        }
+    }
+    generateProtoTasks {
+        all().forEach { task ->
+            task.plugins {
+                create("grpc")
+            }
+        }
     }
 }
     </code></pre>
@@ -1470,7 +1556,6 @@ import com.google.protobuf.ListValue;
 import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
 import com.google.protobuf.Value;
-import com.krickert.search.model.pipe.PipeDoc;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -1599,7 +1684,7 @@ Now let&#8217;s see what we are doing by writing some tests&#8230;&#8203;</p>
 <div class="listingblock">
 <div class="content">
 <pre class="CodeRay highlight"><code data-lang="bash">mkdir -p protobuf-models/src/test/java/com/krickert/search/model
-nano protobuf-models/src/test/java/com/krickert/search/model/ProtobufUtilsTest.java</code></pre>
+nano protobuf-models/src/test/java/com/krickert/search/model/ProtobufUtilityTest.java</code></pre>
 </div>
 </div>
 <details>
@@ -1610,15 +1695,30 @@ nano protobuf-models/src/test/java/com/krickert/search/model/ProtobufUtilsTest.j
     <pre class="highlightjs highlight"><code class="language-java hljs">
 package com.krickert.search.model;
 
+import com.google.protobuf.ListValue;
 import com.google.protobuf.Timestamp;
+import com.krickert.search.model.PipeDoc; // Example message
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProtobufUtilsTest {
+
+    // --- Timestamp Tests ---
 
     /**
      * Tests the {@link ProtobufUtils#now} method.
@@ -1634,24 +1734,238 @@ class ProtobufUtilsTest {
         Instant currentInstant = Instant.now();
         assertNotNull(timestamp);
         assertTrue(timestamp.getSeconds() <= currentInstant.getEpochSecond());
-        assertTrue(timestamp.getNanos() < 1_000_000_000);
-        assertTrue(timestamp.getSeconds() >= (currentInstant.getEpochSecond() - 1)); // buffer for slight delays
+        assertTrue(timestamp.getNanos() >= 0 && timestamp.getNanos() < 1_000_000_000);
+        // Allow for a small buffer due to execution time between now() calls
+        assertTrue(timestamp.getSeconds() >= (currentInstant.getEpochSecond() - 2), "Timestamp seconds should be very close to current time");
     }
 
     @Test
     void nowIsNowNotThen() throws InterruptedException {
-        Timestamp now = ProtobufUtils.now();
-        Assertions.assertInstanceOf(Timestamp.class, now);
-        Thread.sleep(1000);//sleep 1 second so next now() is a second later.
-        Assertions.assertTrue(ProtobufUtils.now().getSeconds() > now.getSeconds());
+        Timestamp now1 = ProtobufUtils.now();
+        Assertions.assertInstanceOf(Timestamp.class, now1);
+        Thread.sleep(10); // Sleep briefly
+        Timestamp now2 = ProtobufUtils.now();
+        Thread.sleep(1001); // Sleep for over a second
+        Timestamp now3 = ProtobufUtils.now();
+
+        assertTrue(now2.getSeconds() >= now1.getSeconds()); // Could be same second
+        // If same second, nanos should generally increase (though not guaranteed if clock resolution is low)
+        if (now2.getSeconds() == now1.getSeconds()) {
+             assertTrue(now2.getNanos() >= now1.getNanos());
+        }
+
+        assertTrue(now3.getSeconds() > now1.getSeconds(), "Timestamp after 1s sleep should have larger seconds value");
+        assertTrue(now3.getSeconds() > now2.getSeconds());
+
     }
 
     @Test
     void stamp() {
-        long time = System.currentTimeMillis() / 1000;
+        long time = System.currentTimeMillis() / 1000; // Current epoch seconds
         Timestamp stamp = ProtobufUtils.stamp(time);
         assertEquals(time, stamp.getSeconds());
         assertEquals(0, stamp.getNanos());
+
+        Timestamp stampZero = ProtobufUtils.stamp(0);
+        assertEquals(0, stampZero.getSeconds());
+        assertEquals(0, stampZero.getNanos());
+
+        Timestamp stampNegative = ProtobufUtils.stamp(-1234567890L);
+        assertEquals(-1234567890L, stampNegative.getSeconds());
+        assertEquals(0, stampNegative.getNanos());
+    }
+
+    // --- UUID Tests ---
+
+    @Test
+    void createKeyFromString() {
+        String id1 = "test-id-1";
+        String id2 = "test-id-2";
+        String id1Again = "test-id-1";
+
+        UUID key1 = ProtobufUtils.createKey(id1);
+        UUID key2 = ProtobufUtils.createKey(id2);
+        UUID key1Again = ProtobufUtils.createKey(id1Again);
+
+        assertNotNull(key1);
+        assertNotNull(key2);
+        assertNotNull(key1Again);
+
+        assertEquals(key1, key1Again); // Same input string -> same UUID
+        assertNotEquals(key1, key2);   // Different input string -> different UUID
+
+        // Test empty string
+        UUID keyEmpty = ProtobufUtils.createKey("");
+        assertNotNull(keyEmpty);
+
+        // Test null string - should throw NullPointerException
+        assertThrows(NullPointerException.class, () -> {
+            //noinspection DataFlowIssue
+            ProtobufUtils.createKey((String) null);
+        });
+    }
+
+    @Test
+    void createKeyFromPipeDoc() {
+        PipeDoc doc1 = PipeDoc.newBuilder().setId("doc-id-1").build();
+        PipeDoc doc2 = PipeDoc.newBuilder().setId("doc-id-2").build();
+        PipeDoc doc1Again = PipeDoc.newBuilder().setId("doc-id-1").setTitle("Different Title").build(); // ID is the same
+        PipeDoc docEmptyId = PipeDoc.newBuilder().setId("").build();
+
+        UUID key1 = ProtobufUtils.createKey(doc1);
+        UUID key2 = ProtobufUtils.createKey(doc2);
+        UUID key1Again = ProtobufUtils.createKey(doc1Again);
+        UUID keyEmpty = ProtobufUtils.createKey(docEmptyId);
+
+
+        assertNotNull(key1);
+        assertNotNull(key2);
+        assertNotNull(key1Again);
+        assertNotNull(keyEmpty);
+
+        assertEquals(key1, key1Again); // Same ID -> same UUID
+        assertNotEquals(key1, key2);   // Different ID -> different UUID
+
+        // Test null document - should throw NullPointerException
+        assertThrows(NullPointerException.class, () -> {
+            //noinspection DataFlowIssue
+            ProtobufUtils.createKey((PipeDoc) null);
+        });
+
+         // Test document with null ID - should throw NullPointerException when accessing id
+         PipeDoc docNullId = PipeDoc.newBuilder().build(); // ID defaults to "", not null technically
+         UUID keyFromDefaultEmptyId = ProtobufUtils.createKey(docNullId);
+         assertEquals(keyEmpty, keyFromDefaultEmptyId);
+
+
+    }
+
+    // --- ListValue Test ---
+    @Test
+    void createListValueFromCollection() {
+        Collection<String> strings = Arrays.asList("hello", "world", "", "another");
+        ListValue listValue = ProtobufUtils.createListValueFromCollection(strings);
+
+        assertNotNull(listValue);
+        assertEquals(4, listValue.getValuesCount());
+        assertEquals("hello", listValue.getValues(0).getStringValue());
+        assertEquals("world", listValue.getValues(1).getStringValue());
+        assertEquals("", listValue.getValues(2).getStringValue());
+        assertEquals("another", listValue.getValues(3).getStringValue());
+
+        // Test with empty collection
+        ListValue emptyListValue = ProtobufUtils.createListValueFromCollection(Collections.emptyList());
+        assertNotNull(emptyListValue);
+        assertEquals(0, emptyListValue.getValuesCount());
+
+         // Test with collection containing null - Protobuf Value doesn't allow null strings directly, check behavior
+         // The current implementation would likely throw NPE on addValues(Value.newBuilder().setStringValue(null)...)
+         Collection<String> listWithNull = Arrays.asList("a", null, "c");
+         assertThrows(NullPointerException.class, ()-> ProtobufUtils.createListValueFromCollection(listWithNull), "setStringValue(null) should throw NPE");
+
+
+        // Test with null collection - should throw NullPointerException
+        assertThrows(NullPointerException.class, () -> {
+            //noinspection DataFlowIssue
+            ProtobufUtils.createListValueFromCollection(null);
+        });
+    }
+
+
+    // --- Disk Saving Tests (Requires Temp Directory) ---
+
+    @TempDir
+    Path tempDir; // JUnit 5 Temp Directory injection
+
+    @Test
+    void saveProtobufToDisk_Single() throws IOException {
+        PipeDoc doc = PipeDoc.newBuilder()
+                .setId("save-test-1")
+                .setTitle("Save Me")
+                .build();
+        Path filePath = tempDir.resolve("single_doc.bin");
+        String dst = filePath.toString();
+
+        ProtobufUtils.saveProtobufToDisk(dst, doc);
+
+        // Verify file exists
+        assertTrue(Files.exists(filePath));
+        assertTrue(Files.size(filePath) > 0);
+
+        // Verify content can be parsed back
+        try (FileInputStream fis = new FileInputStream(dst)) {
+            PipeDoc readDoc = PipeDoc.parseFrom(fis);
+            assertEquals(doc, readDoc);
+        }
+    }
+
+    @Test
+    void saveProtobufToDisk_Error() {
+        PipeDoc doc = PipeDoc.newBuilder().setId("error-test").build();
+        String invalidPath = tempDir.resolve("non_existent_dir/file.bin").toString(); // Invalid directory
+
+        // Expect IOException or RuntimeException wrapping it
+        assertThrows(IOException.class, () -> ProtobufUtils.saveProtobufToDisk(invalidPath, doc));
+    }
+
+
+    @Test
+    void saveProtocoBufsToDisk_Multiple_DefaultPadding() throws IOException {
+        PipeDoc doc1 = PipeDoc.newBuilder().setId("multi-1").build();
+        PipeDoc doc2 = PipeDoc.newBuilder().setId("multi-2").build();
+        List<PipeDoc> docs = Arrays.asList(doc1, doc2);
+        String prefix = tempDir.resolve("multi_default_").toString();
+
+        ProtobufUtils.saveProtocoBufsToDisk(prefix, docs);
+
+        // Check files (padding based on size=2 -> 1 digit)
+        Path path1 = tempDir.resolve("multi_default_0.bin");
+        Path path2 = tempDir.resolve("multi_default_1.bin");
+
+        assertTrue(Files.exists(path1));
+        assertTrue(Files.exists(path2));
+        assertEquals(doc1, PipeDoc.parseFrom(Files.readAllBytes(path1)));
+        assertEquals(doc2, PipeDoc.parseFrom(Files.readAllBytes(path2)));
+    }
+
+    @Test
+    void saveProtocoBufsToDisk_Multiple_CustomPadding() throws IOException {
+        PipeDoc doc1 = PipeDoc.newBuilder().setId("multi-pad-1").build();
+        PipeDoc doc2 = PipeDoc.newBuilder().setId("multi-pad-2").build();
+        PipeDoc doc11 = PipeDoc.newBuilder().setId("multi-pad-11").build();
+        List<PipeDoc> docs = Arrays.asList(doc1, doc2, doc11); // Size 3
+        String prefix = tempDir.resolve("multi_pad_").toString();
+        int leftPad = 3; // Custom padding
+
+        ProtobufUtils.saveProtocoBufsToDisk(prefix, docs, leftPad);
+
+        // Check files with custom padding
+        Path path1 = tempDir.resolve("multi_pad_000.bin");
+        Path path2 = tempDir.resolve("multi_pad_001.bin");
+        Path path3 = tempDir.resolve("multi_pad_002.bin"); // Index 2 for 3rd item
+
+        assertTrue(Files.exists(path1));
+        assertTrue(Files.exists(path2));
+        assertTrue(Files.exists(path3));
+        assertEquals(doc1, PipeDoc.parseFrom(Files.readAllBytes(path1)));
+        assertEquals(doc2, PipeDoc.parseFrom(Files.readAllBytes(path2)));
+        assertEquals(doc11, PipeDoc.parseFrom(Files.readAllBytes(path3))); // Check 3rd item
+    }
+
+     @Test
+    void saveProtocoBufsToDisk_EmptyList() throws IOException {
+        List<PipeDoc> docs = Collections.emptyList();
+        String prefix = tempDir.resolve("multi_empty_").toString();
+
+        // Should not throw error and not create any files
+        ProtobufUtils.saveProtocoBufsToDisk(prefix, docs);
+
+        // Verify no files with the prefix were created
+        @SuppressWarnings("resource")
+        List<Path> files = Files.list(tempDir)
+                                .filter(p -> p.getFileName().toString().startsWith("multi_empty_"))
+                                .toList();
+        assertTrue(files.isEmpty());
     }
 
 }
@@ -1753,17 +2067,25 @@ dependencies {
 // File: pipeline-service-core/build.gradle.kts
 plugins {
     `java-library`
+    `maven-publish`
     alias(libs.plugins.micronaut.library)
 }
 
 group = rootProject.group
 version = rootProject.version
 
+java {
+    withJavadocJar()
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
 micronaut {
     version("4.8.2")
     processing {
         incremental(true)
-        annotations("com.krickert.search.pipeline.core.*")
+        annotations("com.krickert.search.pipeline.*")
     }
 }
 
@@ -1775,19 +2097,52 @@ dependencies {
 
     // Micronaut dependencies using mn catalog
     annotationProcessor(mn.micronaut.inject.java)
-    implementation(mn.micronaut.inject)
-    implementation(mn.micronaut.runtime)
+    annotationProcessor(mn.lombok)
+    annotationProcessor(mn.micronaut.validation)
+
+    // API dependencies - these are exposed to consumers of the library
+    api(mn.micronaut.inject)
+    api(mn.micronaut.serde.api)
+    api(mn.micronaut.serde.jackson)
+    api(mn.micronaut.runtime)
+    api(mn.micronaut.validation)
+    api(mn.micronaut.grpc.server.runtime)
+    api(mn.micronaut.grpc.annotation)
+    api(mn.micronaut.kafka)
+
 
     // Project dependencies
     api(project(":protobuf-models"))
     api(project(":util"))
 
-    // Other dependencies
+    // Implementation dependencies - these are not exposed to consumers
     implementation(libs.slf4j.api)
+    compileOnly(mn.lombok)
 
     // Testing dependencies
     testImplementation(mn.micronaut.test.junit5)
     testAnnotationProcessor(mn.micronaut.inject.java)
+}
+
+// Publishing configuration
+publishing {
+    publications {
+        create<MavenPublication>("mavenJava") {
+            from(components["java"])
+
+            pom {
+                name.set("Pipeline Service Core")
+                description.set("Core library for pipeline service implementation")
+
+                licenses {
+                    license {
+                        name.set("The Apache License, Version 2.0")
+                        url.set("http://www.apache.org/licenses/LICENSE-2.0.txt")
+                    }
+                }
+            }
+        }
+    }
 }
     </code></pre>
   </div>
@@ -2102,7 +2457,7 @@ application {
 <div id="footer">
 <div id="footer-text">
 Version 1.0.0-SNAPSHOT<br>
-Last updated 2025-04-22 07:22:47 -0400
+Last updated 2025-04-22 20:39:02 -0400
 </div>
 </div>
 </body>
