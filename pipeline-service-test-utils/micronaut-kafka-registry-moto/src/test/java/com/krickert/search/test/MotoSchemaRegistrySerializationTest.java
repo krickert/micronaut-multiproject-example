@@ -1,6 +1,6 @@
 package com.krickert.search.test;
 
-import com.krickert.search.model.pipe.PipeDoc;
+import com.krickert.search.model.PipeDoc;
 import com.krickert.search.test.registry.AbstractSchemaRegistrySerializationTest;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import org.junit.jupiter.api.Test;

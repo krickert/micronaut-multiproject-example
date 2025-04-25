@@ -1,6 +1,6 @@
 package com.krickert.search.test;
 
-import com.krickert.search.model.pipe.PipeDoc;
+import com.krickert.search.model.PipeDoc;
 import com.krickert.search.test.registry.AbstractSchemaRegistrySerializationTest;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import org.junit.jupiter.api.Test;
@@ -34,7 +34,7 @@ public class ApicurioSchemaRegistrySerializationTest extends AbstractSchemaRegis
 
         assertNotNull(serializerClass, "Serializer class should not be null");
         assertNotNull(deserializerClass, "Deserializer class should not be null");
-        
+
         // Verify that the serializer and deserializer are Apicurio Registry classes
         assertTrue(serializerClass.contains("apicurio") || serializerClass.contains("Protobuf"), 
                 "Serializer class should be an Apicurio Registry class");

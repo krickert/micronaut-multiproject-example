@@ -106,7 +106,7 @@ public class ApicurioSchemaRegistry implements SchemaRegistry {
         props.put(consumerPrefix + SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID, "default");
         props.put(consumerPrefix + ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         props.put(consumerPrefix + ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ProtobufKafkaDeserializer.class.getName());
-        props.put(consumerPrefix + SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS, "com.krickert.search.model.pipe.PipeDoc");
+        props.put(consumerPrefix + SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS, "com.krickert.search.model.PipeDoc");
 
         // Remove Avro-specific configuration as we're using Protobuf
 

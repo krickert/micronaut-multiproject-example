@@ -3,10 +3,11 @@ package com.krickert.search.test;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Timestamp;
 import com.google.protobuf.Value;
-import com.krickert.search.model.pipe.PipeDoc;
-import com.krickert.search.model.pipe.SemanticChunk;
-import com.krickert.search.model.pipe.SemanticData;
-import com.krickert.search.model.pipe.SemanticDocument;
+import com.krickert.search.model.ChunkEmbedding;
+import com.krickert.search.model.Embedding;
+import com.krickert.search.model.PipeDoc;
+import com.krickert.search.model.SemanticChunk;
+import com.krickert.search.model.SemanticDoc;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -33,49 +34,59 @@ public class PipeDocExample {
                 .putFields("field3", Value.newBuilder().setBoolValue(true).build())
                 .build();
 
-        // Create two SemanticChunks.
-        SemanticChunk chunk1 = SemanticChunk.newBuilder()
+        // Create ChunkEmbedding instances
+        ChunkEmbedding chunkEmbedding1 = ChunkEmbedding.newBuilder()
+                .setEmbeddingText("This is the first semantic chunk.")
+                .addAllEmbedding(Arrays.asList(0.1f, 0.2f, 0.3f))
+                .build();
+
+        ChunkEmbedding chunkEmbedding2 = ChunkEmbedding.newBuilder()
+                .setEmbeddingText("This is the second semantic chunk.")
+                .addAllEmbedding(Arrays.asList(0.4f, 0.5f, 0.6f))
+                .build();
+
+        // Create SemanticChunk instances
+        SemanticChunk semanticChunk1 = SemanticChunk.newBuilder()
                 .setChunkId("chunk1")
                 .setChunkNumber(1)
-                .setChunk("This is the first semantic chunk.")
-                .addAllEmbeddings(Arrays.asList(0.1f, 0.2f, 0.3f))
+                .setEmbedding(chunkEmbedding1)
                 .build();
 
-        SemanticChunk chunk2 = SemanticChunk.newBuilder()
+        SemanticChunk semanticChunk2 = SemanticChunk.newBuilder()
                 .setChunkId("chunk2")
                 .setChunkNumber(2)
-                .setChunk("This is the second semantic chunk.")
-                .addAllEmbeddings(Arrays.asList(0.4f, 0.5f, 0.6f))
+                .setEmbedding(chunkEmbedding2)
                 .build();
 
-        // Create a SemanticDocument with repeated chunks and metadata.
-        SemanticDocument semanticDocument1 = SemanticDocument.newBuilder()
-                .addChunks(chunk1)
-                .addChunks(chunk2)
+        // Create SemanticDoc instances
+        SemanticDoc semanticDoc1 = SemanticDoc.newBuilder()
                 .setParentId("parent1")
-                .putMetadata("meta1", "value1")
-                .putMetadata("meta2", "value2")
+                .setParentField("body")
+                .setChunkConfigId("config1")
+                .setSemanticConfigId("semantic1")
+                .addChunks(semanticChunk1)
+                .addChunks(semanticChunk2)
                 .build();
 
-        // Create another SemanticDocument.
-        SemanticDocument semanticDocument2 = SemanticDocument.newBuilder()
-                .addChunks(chunk2)
+        SemanticDoc semanticDoc2 = SemanticDoc.newBuilder()
                 .setParentId("parent2")
-                .putMetadata("metaA", "valueA")
-                .putMetadata("metaB", "valueB")
+                .setParentField("title")
+                .setChunkConfigId("config2")
+                .setSemanticConfigId("semantic2")
+                .addChunks(semanticChunk2)
                 .build();
 
-        // Create SemanticData with a map containing two entries.
-        Map<String, SemanticDocument> chunkData = new HashMap<>();
-        chunkData.put("doc1", semanticDocument1);
-        chunkData.put("doc2", semanticDocument2);
-        SemanticData semanticData = SemanticData.newBuilder()
-                .putAllChunkData(chunkData)
+        // Create Embedding instances
+        Embedding embedding1 = Embedding.newBuilder()
+                .addAllEmbedding(Arrays.asList(0.7f, 0.8f, 0.9f))
+                .build();
+
+        Embedding embedding2 = Embedding.newBuilder()
+                .addAllEmbedding(Arrays.asList(0.4f, 0.5f, 0.6f))
                 .build();
 
         // Build the PipeDoc with all fields populated.
-
-        return PipeDoc.newBuilder()
+        PipeDoc.Builder builder = PipeDoc.newBuilder()
                 .setId("pipeDoc123")
                 .setTitle("Example PipeDoc")
                 .setBody("This is an example document body.")
@@ -84,9 +95,16 @@ public class PipeDocExample {
                 .setRevisionId("rev-001")
                 .setCreationDate(creationDate)
                 .setLastModified(lastModified)
-                .setCustomData(customData)
-                .setSemanticData(semanticData)
-                .build();
+                .setCustomData(customData);
+
+        // Set chunk_embeddings as a single message
+        builder.setChunkEmbeddings(semanticDoc1);
+
+        // Add embeddings
+        builder.putEmbeddings("embedding1", embedding1);
+        builder.putEmbeddings("embedding2", embedding2);
+
+        return builder.build();
     }
 
     public static void main(String[] args) {

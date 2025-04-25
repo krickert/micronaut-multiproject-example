@@ -1,7 +1,7 @@
 package com.krickert.search.test;
 
 import com.amazonaws.services.schemaregistry.utils.AWSSchemaRegistryConstants;
-import com.krickert.search.model.pipe.PipeDoc;
+import com.krickert.search.model.PipeDoc;
 import com.krickert.search.test.kafka.AbstractKafkaTest;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import org.apache.kafka.clients.consumer.ConsumerConfig;

@@ -1,7 +1,6 @@
 plugins {
     alias(libs.plugins.micronaut.library)
     id("io.micronaut.test-resources") version libs.versions.micronautPlugins.get()
-    alias(libs.plugins.protobuf)
     `maven-publish`
 }
 
@@ -31,10 +30,8 @@ dependencies {
     implementation("software.amazon.msk:aws-msk-iam-auth:2.2.0")
     implementation("software.amazon.awssdk:url-connection-client:2.30.31")
 
-    // Protobuf and gRPC
-    implementation(libs.protobuf.java)
-    implementation(libs.grpc.protobuf)
-    implementation(libs.grpc.stub)
+    // Protobuf models from central project
+    testImplementation(project(":protobuf-models"))
 
     // Testing
     implementation("org.testcontainers:junit-jupiter")
@@ -66,32 +63,6 @@ micronaut {
     }
 }
 
-sourceSets {
-    test {
-        java {
-            srcDirs("build/generated/source/proto/main/grpc")
-            srcDirs("build/generated/source/proto/main/java")
-        }
-    }
-}
-
-protobuf {
-    protoc {
-        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}"
-    }
-    plugins {
-        create("grpc") {
-            artifact = libs.grpc.protocGen.get().toString()
-        }
-    }
-    generateProtoTasks {
-        all().forEach { task ->
-            task.plugins {
-                create("grpc")
-            }
-        }
-    }
-}
 
 publishing {
     publications {

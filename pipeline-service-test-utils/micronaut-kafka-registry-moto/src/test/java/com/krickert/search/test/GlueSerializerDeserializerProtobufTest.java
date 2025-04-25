@@ -4,7 +4,7 @@ import com.amazonaws.services.schemaregistry.deserializers.GlueSchemaRegistryKaf
 import com.krickert.search.test.registry.SchemaRegistry;
 import com.amazonaws.services.schemaregistry.serializers.GlueSchemaRegistryKafkaSerializer;
 import com.amazonaws.services.schemaregistry.utils.AWSSchemaRegistryConstants;
-import com.krickert.search.model.pipe.PipeDoc;
+import com.krickert.search.model.PipeDoc;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Assertions;
