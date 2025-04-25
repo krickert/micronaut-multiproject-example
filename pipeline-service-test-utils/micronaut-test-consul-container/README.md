@@ -53,6 +53,18 @@ The Consul container is automatically started when your application or tests sta
 
 The module uses Micronaut's auto-configuration mechanism to automatically detect and load the Consul container when the library is included in your project. This is done through the `ConsulContainerFactory` and `ConsulContainerAutoConfiguration` classes, which are annotated with `@Factory` and create a singleton `ConsulContainer` bean.
 
+The Consul container exposes port 8500 (the default Consul port) and maps it to a random port on the host. You can get the mapped port using the `getHostAndPort()` method of the `ConsulContainer` class.
+
+The container is configured with the following environment variables:
+- `CONSUL_BIND_INTERFACE=eth0`: Specifies the network interface that Consul will bind to
+- `CONSUL_CLIENT_INTERFACE=eth0`: Specifies the network interface that Consul clients will use
+
+The container has a startup timeout of 60 seconds, which should be sufficient for most environments. If the container fails to start within this time, an exception will be thrown.
+
+Container reuse is disabled, which means that a new container will be created for each test run. This ensures isolation between test runs but may increase test execution time.
+
+The container is configured with access to the host, which means it can access services running on the host machine. This is useful for integration testing with other services.
+
 ### In Tests
 
 ```java
