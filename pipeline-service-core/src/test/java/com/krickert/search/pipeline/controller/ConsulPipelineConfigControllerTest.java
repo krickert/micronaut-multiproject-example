@@ -46,11 +46,11 @@ public class ConsulPipelineConfigControllerTest {
 
     @BeforeEach
     void setUp() {
+        // Ensure Consul container is running
+        assertTrue(consulContainer.isRunning(), "Consul container must be running for this test");
+
         // Clear any existing pipeline configurations
         pipelineConfig.setPipelines(new HashMap<>());
-
-        // Enable Consul in the environment
-        System.setProperty("consul.client.enabled", "true");
 
         // Create a pipeline configuration and add it to the manager
         PipelineConfig pipeline1 = new PipelineConfig("pipeline1");
@@ -101,15 +101,15 @@ public class ConsulPipelineConfigControllerTest {
             assertTrue(body.get("pipelines").toString().contains("pipeline1"));
         } catch (HttpClientResponseException e) {
             fail("Should not throw exception: " + e.getMessage());
-        } finally {
-            // Reset the system property
-            System.clearProperty("consul.client.enabled");
         }
     }
 
     @Test
     @SuppressWarnings("unchecked")
     void testReloadFromConsul() {
+        // Ensure Consul container is running
+        assertTrue(consulContainer.isRunning(), "Consul container must be running for this test");
+
         try {
             // Test
             HttpRequest<?> request = HttpRequest.POST("/api/pipeline/config/reload/consul", "")
@@ -126,9 +126,6 @@ public class ConsulPipelineConfigControllerTest {
             assertNotNull(body.get("status"));
         } catch (HttpClientResponseException e) {
             fail("Should not throw exception: " + e.getMessage());
-        } finally {
-            // Reset the system property
-            System.clearProperty("consul.client.enabled");
         }
     }
 
@@ -163,14 +160,10 @@ public class ConsulPipelineConfigControllerTest {
             }
         } catch (HttpClientResponseException e) {
             fail("Should not throw exception: " + e.getMessage());
-        } finally {
-            // Reset the system property
-            System.clearProperty("consul.client.enabled");
         }
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void testUpdateServiceConfigForNonExistentPipeline() {
         try {
             // Create a service configuration DTO to update
@@ -191,9 +184,6 @@ public class ConsulPipelineConfigControllerTest {
             assertEquals(HttpStatus.NOT_FOUND, e.getStatus());
             String body = e.getResponse().getBody(String.class).orElse("");
             assertTrue(body.contains("Pipeline not found"), "Error message should indicate pipeline not found");
-        } finally {
-            // Reset the system property
-            System.clearProperty("consul.client.enabled");
         }
     }
 }

@@ -8,13 +8,17 @@ import com.krickert.search.pipeline.config.ServiceConfiguration;
 import com.krickert.search.pipeline.kafka.KafkaForwarder;
 import com.krickert.search.pipeline.service.PipelineServiceProcessor;
 import io.grpc.stub.StreamObserver;
+import io.micronaut.context.BeanContext;
 import io.micronaut.grpc.annotation.GrpcService;
+import jakarta.annotation.PostConstruct;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @GrpcService
 @Slf4j
@@ -30,7 +34,40 @@ public class PipelineServiceImpl extends PipelineServiceGrpc.PipelineServiceImpl
     PipelineConfigService pipelineConfigService;
 
     @Inject
-    PipelineServiceProcessor serviceProcessor;
+    private PipelineServiceProcessor serviceProcessor;
+
+    @Inject
+    private BeanContext beanContext;
+
+    /**
+     * Checks if a PipelineServiceProcessor is available.
+     * This method is called by Micronaut during bean initialization.
+     * 
+     * @throws IllegalStateException if no PipelineServiceProcessor implementation is found
+     */
+    @PostConstruct
+    public void init() {
+        if (serviceProcessor == null) {
+            throw new IllegalStateException(
+                "No PipelineServiceProcessor implementation found. " +
+                "You must provide an implementation of PipelineServiceProcessor in your application."
+            );
+        }
+
+        // Check that only one implementation of PipelineServiceProcessor is present
+        Collection<PipelineServiceProcessor> processors = beanContext.getBeansOfType(PipelineServiceProcessor.class);
+        if (processors.size() > 1) {
+            throw new IllegalStateException(
+                "Multiple PipelineServiceProcessor implementations found. " +
+                "Only one implementation can be active at a time. " +
+                "Found: " + processors.stream()
+                    .map(p -> p.getClass().getName())
+                    .collect(Collectors.joining(", "))
+            );
+        }
+
+        log.info("Using PipelineServiceProcessor implementation: {}", serviceProcessor.getClass().getName());
+    }
 
     @Override
     public void forward(PipeStream request, StreamObserver<Empty> responseObserver) {

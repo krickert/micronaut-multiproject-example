@@ -36,11 +36,12 @@ public class PipelineConfigManager {
     @Inject
     private ConfigurationClient configurationClient;
 
-    @Inject
-    private ConsulClient consulClient;
-
     @Value("${consul.client.enabled:false}")
     private boolean consulEnabled;
+
+    @Inject
+    @io.micronaut.context.annotation.Requires(property = "consul.client.enabled", value = "true")
+    private ConsulClient consulClient;
 
     @Value("${consul.client.config.path:config/pipeline}")
     private String consulConfigPath;
@@ -73,8 +74,8 @@ public class PipelineConfigManager {
             Properties properties = new Properties();
 
             // Check if Consul is enabled in the environment
-            if (!consulEnabled) {
-                log.warn("Consul is not enabled in the environment");
+            if (!consulEnabled || consulClient == null) {
+                log.warn("Consul is not enabled in the environment or ConsulClient is not available");
                 return false;
             }
 
@@ -122,9 +123,9 @@ public class PipelineConfigManager {
             log.info("Updating service configuration in Consul for pipeline: {}, service: {}", 
                     pipelineName, serviceConfig.getName());
 
-            // Check if Consul is enabled
-            if (!consulEnabled) {
-                log.warn("Consul is not enabled in the environment");
+            // Check if Consul is enabled and client is available
+            if (!consulEnabled || consulClient == null) {
+                log.warn("Consul is not enabled in the environment or ConsulClient is not available");
                 return false;
             }
 

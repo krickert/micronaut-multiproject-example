@@ -28,9 +28,6 @@ public class ConsulContainer implements TestPropertyProvider {
     private static boolean initialized = false;
     private static final int CONSUL_PORT = 8500;
 
-    @Inject
-    private ConsulClient consulClient;
-
     static {
         try {
             // Initialize the Consul container
@@ -61,6 +58,9 @@ public class ConsulContainer implements TestPropertyProvider {
      */
     public ConsulContainer() {
         start();
+        log.info("ConsulContainer initialized with endpoint: {}", endpoint);
+        log.info("ConsulContainer host and port: {}", getHostAndPort());
+        log.info("Service registration is disabled to prevent connection attempts to default port");
     }
 
     /**
@@ -110,6 +110,12 @@ public class ConsulContainer implements TestPropertyProvider {
         // Set the application name
         props.put("micronaut.application.name", "my-app");
 
+        // Enable Consul client
+        props.put("consul.client.enabled", "true");
+
+        // Disable service registration to prevent connection attempts to default port
+        props.put("consul.client.registration.enabled", "false");
+
         // Enable config client
         props.put("micronaut.config-client.enabled", "true");
 
@@ -122,6 +128,8 @@ public class ConsulContainer implements TestPropertyProvider {
 
         // Enable Consul watch
         props.put("consul.client.watch.enabled", "true");
+
+        log.info("Setting Consul properties: consul.client.defaultZone={}, registration.enabled=false", getHostAndPort());
 
         return props;
     }

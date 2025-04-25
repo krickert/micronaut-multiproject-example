@@ -7,11 +7,15 @@ import com.krickert.search.model.PipeStream;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @MicronautTest
 public class DefaultPipelineServiceProcessorTest {
+
+    private static final Logger log = LoggerFactory.getLogger(DefaultPipelineServiceProcessorTest.class);
 
     @Inject
     DefaultPipelineServiceProcessor processor;
@@ -57,6 +61,6 @@ public class DefaultPipelineServiceProcessorTest {
         assertTrue(response.getErrorDate().getErrorMessage().contains("Error processing PipeStream"), 
                 "Error message should contain the expected text");
 
-        System.out.println("[DEBUG_LOG] Error response: " + response);
+        log.debug("[DEBUG_LOG] Error response: [{}]", response);
     }
 }

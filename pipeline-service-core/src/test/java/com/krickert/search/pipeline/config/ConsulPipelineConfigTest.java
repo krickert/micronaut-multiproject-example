@@ -45,11 +45,11 @@ public class ConsulPipelineConfigTest {
 
     @Test
     void testLoadPropertiesFromConsul() {
+        // Ensure Consul container is running
+        assertTrue(consulContainer.isRunning(), "Consul container must be running for this test");
+
         // Load test properties directly into the environment
         loadTestPropertiesIntoEnvironment("test-pipeline1.properties");
-
-        // Enable Consul in the environment
-        System.setProperty("consul.client.enabled", "true");
 
         try {
             // Create a pipeline configuration and add it to the manager
@@ -96,18 +96,17 @@ public class ConsulPipelineConfigTest {
             assertEquals("test-input-documents", loadedImporter.getKafkaPublishTopics().get(0), 
                     "Kafka publish topic should be test-input-documents");
         } finally {
-            // Reset the system property
-            System.clearProperty("consul.client.enabled");
+            // No cleanup needed
         }
     }
 
     @Test
     void testUpdateServiceConfigInConsul() {
+        // Ensure Consul container is running
+        assertTrue(consulContainer.isRunning(), "Consul container must be running for this test");
+
         // Load test properties directly into the environment
         loadTestPropertiesIntoEnvironment("test-pipeline1.properties");
-
-        // Enable Consul in the environment
-        System.setProperty("consul.client.enabled", "true");
 
         try {
             // Create a pipeline configuration and add it to the manager
@@ -149,53 +148,20 @@ public class ConsulPipelineConfigTest {
             assertEquals(newKafkaListenTopics.get(1), loadedChunker.getKafkaListenTopics().get(1), 
                     "Second kafka listen topic should match");
         } finally {
-            // Reset the system property
-            System.clearProperty("consul.client.enabled");
+            // No cleanup needed
         }
     }
 
+    /**
+     * We're removing this test because according to the requirements:
+     * "A consul test NEEDS consul - unless the point of it is to ensure it's not on when disabled.
+     * So no need to code a backup 'if consul isn't running' for consul tests - because that is the
+     * point of consul - you need it running to test it."
+     */
     @Test
-    void testFallbackToFileWhenConsulNotAvailable() {
-        // Create a pipeline configuration and add it to the manager for the file-based test
-        PipelineConfig pipeline1 = new PipelineConfig("pipeline1");
-        Map<String, ServiceConfiguration> services = new HashMap<>();
-
-        // Create importer service
-        ServiceConfiguration importer = new ServiceConfiguration("importer");
-        importer.setKafkaPublishTopics(List.of("test-input-documents"));
-        services.put("importer", importer);
-
-        // Set services on pipeline
-        pipeline1.setService(services);
-
-        // Add pipeline to manager
-        Map<String, PipelineConfig> pipelines = new HashMap<>();
-        pipelines.put("pipeline1", pipeline1);
-
-        // Mock the loadPropertiesFromFile method to return the test pipeline
-        PipelineConfigManager mockManager = new PipelineConfigManager() {
-            @Override
-            public boolean loadPropertiesFromFile(String filename) {
-                setPipelines(pipelines);
-                return true;
-            }
-        };
-
-        // Disable Consul in the environment
-        System.setProperty("consul.client.enabled", "false");
-
-        try {
-            // Initialize the pipeline config manager
-            mockManager.init();
-
-            // Verify that the pipeline configuration was loaded from file
-            Map<String, PipelineConfig> loadedPipelines = mockManager.getPipelines();
-            assertFalse(loadedPipelines.isEmpty(), "Pipelines map should not be empty");
-            assertTrue(loadedPipelines.containsKey("pipeline1"), "Pipelines map should contain pipeline1");
-        } finally {
-            // Reset the system property
-            System.clearProperty("consul.client.enabled");
-        }
+    void testConsulIsRequired() {
+        // Ensure Consul container is running
+        assertTrue(consulContainer.isRunning(), "Consul container must be running for this test");
     }
 
     /**
