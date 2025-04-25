@@ -6,6 +6,7 @@ import io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer;
 import io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.core.annotation.NonNull;
+import io.micronaut.core.annotation.Nullable;
 import jakarta.inject.Singleton;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -33,6 +34,12 @@ public class ApicurioSchemaRegistry implements SchemaRegistry {
     private static final String endpoint;
     private static boolean initialized = false;
 
+    // Default return class for the deserializer
+    private static final String DEFAULT_RETURN_CLASS = "com.krickert.search.model.PipeDoc";
+
+    // Configurable return class for the deserializer
+    private String returnClass;
+
     static {
         // Initialize the Apicurio container
         apicurioContainer = new GenericContainer<>(DockerImageName.parse("apicurio/apicurio-registry:latest"))
@@ -57,9 +64,30 @@ public class ApicurioSchemaRegistry implements SchemaRegistry {
 
     /**
      * Constructor that initializes the registry.
+     * 
+     * @param returnClass Optional return class for the deserializer. If null, the default return class will be used.
+     */
+    public ApicurioSchemaRegistry(@Nullable String returnClass) {
+        this.returnClass = returnClass;
+        start();
+    }
+
+    /**
+     * Default constructor that initializes the registry with the default return class.
      */
     public ApicurioSchemaRegistry() {
-        start();
+        this(null);
+    }
+
+    /**
+     * Sets the return class for the deserializer.
+     * 
+     * @param returnClass The fully qualified class name to use as the return class for the deserializer.
+     * @return This instance for method chaining.
+     */
+    public ApicurioSchemaRegistry setReturnClass(@NonNull String returnClass) {
+        this.returnClass = returnClass;
+        return this;
     }
 
     @Override
@@ -106,7 +134,11 @@ public class ApicurioSchemaRegistry implements SchemaRegistry {
         props.put(consumerPrefix + SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID, "default");
         props.put(consumerPrefix + ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         props.put(consumerPrefix + ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ProtobufKafkaDeserializer.class.getName());
-        props.put(consumerPrefix + SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS, "com.krickert.search.model.PipeDoc");
+
+        // Use the configured return class if available, otherwise use the default
+        String effectiveReturnClass = (returnClass != null) ? returnClass : DEFAULT_RETURN_CLASS;
+        props.put(consumerPrefix + SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS, effectiveReturnClass);
+        log.debug("Using return class for deserializer: {}", effectiveReturnClass);
 
         // Remove Avro-specific configuration as we're using Protobuf
 

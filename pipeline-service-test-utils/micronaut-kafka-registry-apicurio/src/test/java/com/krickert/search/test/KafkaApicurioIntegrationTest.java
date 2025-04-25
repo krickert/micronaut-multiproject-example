@@ -1,12 +1,14 @@
 package com.krickert.search.test;
 
 import com.krickert.search.model.PipeDoc;
+import com.krickert.search.test.apicurio.ApicurioSchemaRegistry;
 import com.krickert.search.test.kafka.AbstractKafkaIntegrationTest;
 import io.micronaut.configuration.kafka.annotation.KafkaClient;
 import io.micronaut.configuration.kafka.annotation.KafkaListener;
 import io.micronaut.configuration.kafka.annotation.Topic;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.BeforeEach;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,6 +31,20 @@ public class KafkaApicurioIntegrationTest extends AbstractKafkaIntegrationTest<P
 
     @Inject
     TestPipeDocConsumer consumer;
+
+    @Inject
+    private ApicurioSchemaRegistry apicurioSchemaRegistry;
+
+    @BeforeEach
+    public void setupReturnClass() {
+        // Set the return class to PipeDoc for this test
+        if (apicurioSchemaRegistry != null) {
+            apicurioSchemaRegistry.setReturnClass(PipeDoc.class.getName());
+            LOG.info("Set return class to: {}", PipeDoc.class.getName());
+        } else {
+            LOG.warn("ApicurioSchemaRegistry not injected, cannot set return class");
+        }
+    }
 
     @Override
     protected PipeDoc createTestMessage() {

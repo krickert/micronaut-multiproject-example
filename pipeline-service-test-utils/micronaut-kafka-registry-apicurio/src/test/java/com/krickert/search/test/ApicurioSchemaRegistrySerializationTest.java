@@ -1,8 +1,11 @@
 package com.krickert.search.test;
 
 import com.krickert.search.model.PipeDoc;
+import com.krickert.search.test.apicurio.ApicurioSchemaRegistry;
 import com.krickert.search.test.registry.AbstractSchemaRegistrySerializationTest;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import jakarta.inject.Inject;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +20,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @MicronautTest(environments = "test")
 public class ApicurioSchemaRegistrySerializationTest extends AbstractSchemaRegistrySerializationTest<PipeDoc> {
     private static final Logger log = LoggerFactory.getLogger(ApicurioSchemaRegistrySerializationTest.class);
+
+    @Inject
+    private ApicurioSchemaRegistry apicurioSchemaRegistry;
+
+    @BeforeEach
+    public void setupReturnClass() {
+        // Set the return class to PipeDoc for this test
+        if (apicurioSchemaRegistry != null) {
+            apicurioSchemaRegistry.setReturnClass(PipeDoc.class.getName());
+            log.info("Set return class to: {}", PipeDoc.class.getName());
+        } else {
+            log.warn("ApicurioSchemaRegistry not injected, cannot set return class");
+        }
+    }
 
     @Override
     protected PipeDoc createTestMessage() {
