@@ -30,5 +30,7 @@ include(
     "pipeline-service-test-utils:micronaut-kafka-registry-apicurio",
     "pipeline-service-test-utils:micronaut-test-consul-container",
     "pipeline-instance-A",
+    "pipeline-examples",
+    "pipeline-examples:pipeline-echo-service",
     "util"
 )
