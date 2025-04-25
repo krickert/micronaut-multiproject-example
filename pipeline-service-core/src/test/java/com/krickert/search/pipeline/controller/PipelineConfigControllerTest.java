@@ -1,7 +1,7 @@
 package com.krickert.search.pipeline.controller;
 
-import com.krickert.search.pipeline.config.PipelineConfigManager;
 import com.krickert.search.pipeline.config.PipelineConfig;
+import com.krickert.search.pipeline.config.PipelineConfigManager;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;

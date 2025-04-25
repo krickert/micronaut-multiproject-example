@@ -7,8 +7,8 @@ import com.krickert.search.model.Route;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.micronaut.context.annotation.Value;
-import jakarta.inject.Singleton;
 import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
 
 @Singleton

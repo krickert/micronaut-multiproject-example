@@ -5,8 +5,8 @@ import com.amazonaws.services.schemaregistry.serializers.GlueSchemaRegistryKafka
 import com.amazonaws.services.schemaregistry.utils.AWSSchemaRegistryConstants;
 import com.krickert.search.test.registry.SchemaRegistry;
 import io.micronaut.context.annotation.Requires;
-import jakarta.inject.Singleton;
 import io.micronaut.core.annotation.NonNull;
+import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;

@@ -1,10 +1,13 @@
 // src/main/java/com/krickert/search/model/ProtoMapper.java (Refactored Entry Point)
 package com.krickert.search.model.mapper;
 
-import com.google.protobuf.*;
 import com.google.protobuf.Descriptors.Descriptor;
+import com.google.protobuf.DynamicMessage;
+import com.google.protobuf.Message;
+import com.google.protobuf.UninitializedMessageException;
 
-import java.util.*;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * Dynamically maps fields between Protocol Buffer messages based on string rules.

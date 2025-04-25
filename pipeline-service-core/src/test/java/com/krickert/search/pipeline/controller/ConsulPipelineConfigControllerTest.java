@@ -5,7 +5,6 @@ import com.krickert.search.pipeline.config.PipelineConfigManager;
 import com.krickert.search.pipeline.config.ServiceConfiguration;
 import com.krickert.search.pipeline.config.ServiceConfigurationDto;
 import com.krickert.search.test.consul.ConsulContainer;
-import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.env.Environment;
 import io.micronaut.context.env.PropertySource;
 import io.micronaut.http.HttpRequest;
@@ -21,13 +20,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -62,13 +58,13 @@ public class ConsulPipelineConfigControllerTest {
 
         // Create importer service
         ServiceConfiguration importer = new ServiceConfiguration("importer");
-        importer.setKafkaPublishTopics(Arrays.asList("test-input-documents"));
+        importer.setKafkaPublishTopics(List.of("test-input-documents"));
         services.put("importer", importer);
 
         // Create chunker service
         ServiceConfiguration chunker = new ServiceConfiguration("chunker");
-        chunker.setKafkaListenTopics(Arrays.asList("test-input-documents"));
-        chunker.setKafkaPublishTopics(Arrays.asList("test-chunker-results"));
+        chunker.setKafkaListenTopics(List.of("test-input-documents"));
+        chunker.setKafkaPublishTopics(List.of("test-chunker-results"));
         services.put("chunker", chunker);
 
         // Set services on pipeline
@@ -144,8 +140,8 @@ public class ConsulPipelineConfigControllerTest {
             ServiceConfigurationDto dto = new ServiceConfigurationDto();
             dto.setName("chunker");
             dto.setKafkaListenTopics(Arrays.asList("new-topic1", "new-topic2"));
-            dto.setKafkaPublishTopics(Arrays.asList("new-result-topic"));
-            dto.setGrpcForwardTo(Arrays.asList("new-service"));
+            dto.setKafkaPublishTopics(List.of("new-result-topic"));
+            dto.setGrpcForwardTo(List.of("new-service"));
 
             // Test
             HttpRequest<?> request = HttpRequest.PUT("/api/pipeline/config/pipeline1/service", dto)

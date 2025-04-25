@@ -3,11 +3,7 @@ package com.krickert.search.test;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Timestamp;
 import com.google.protobuf.Value;
-import com.krickert.search.model.ChunkEmbedding;
-import com.krickert.search.model.Embedding;
-import com.krickert.search.model.PipeDoc;
-import com.krickert.search.model.SemanticChunk;
-import com.krickert.search.model.SemanticDoc;
+import com.krickert.search.model.*;
 
 import java.util.Arrays;
 import java.util.HashMap;

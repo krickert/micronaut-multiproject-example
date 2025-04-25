@@ -4,6 +4,7 @@ import com.google.protobuf.ListValue;
 import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
 import com.google.protobuf.Value;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -11,8 +12,6 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import org.apache.commons.lang3.StringUtils;
 
 
 /**

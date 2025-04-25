@@ -1,10 +1,10 @@
 package com.krickert.search.test;
 
+import com.krickert.search.test.moto.MotoSchemaRegistry;
+import com.krickert.search.test.registry.SchemaRegistry;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
-import com.krickert.search.test.registry.SchemaRegistry;
-import com.krickert.search.test.moto.MotoSchemaRegistry;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,7 +12,8 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Test class to verify that the SchemaRegistry is properly loaded and configured.

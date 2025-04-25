@@ -1,9 +1,13 @@
 // src/main/java/com/krickert/search/model/mapper/PathResolver.java (Corrected Again 2)
 package com.krickert.search.model.mapper;
 
-import com.google.protobuf.*;
-import com.google.protobuf.Descriptors.*;
+import com.google.protobuf.Descriptors.Descriptor;
+import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType;
+import com.google.protobuf.Message;
+import com.google.protobuf.MessageOrBuilder;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
 
 /**
  * Resolves paths within Protobuf messages or builders.

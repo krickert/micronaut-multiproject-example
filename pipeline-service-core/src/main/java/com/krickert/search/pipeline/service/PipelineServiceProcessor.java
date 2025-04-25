@@ -1,7 +1,7 @@
 package com.krickert.search.pipeline.service;
 
-import com.krickert.search.model.PipeStream;
 import com.krickert.search.model.PipeResponse;
+import com.krickert.search.model.PipeStream;
 
 /**
  * Interface for processing pipeline streams.

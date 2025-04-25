@@ -2,9 +2,9 @@ package com.krickert.search.test;
 
 import com.krickert.search.test.consul.ConsulContainer;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Assertions;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 

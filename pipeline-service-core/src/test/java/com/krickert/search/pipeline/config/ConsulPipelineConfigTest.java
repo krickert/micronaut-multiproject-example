@@ -12,11 +12,7 @@ import org.junit.jupiter.api.TestInstance;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -62,13 +58,13 @@ public class ConsulPipelineConfigTest {
 
             // Create importer service
             ServiceConfiguration importer = new ServiceConfiguration("importer");
-            importer.setKafkaPublishTopics(Arrays.asList("test-input-documents"));
+            importer.setKafkaPublishTopics(List.of("test-input-documents"));
             services.put("importer", importer);
 
             // Create chunker service
             ServiceConfiguration chunker = new ServiceConfiguration("chunker");
-            chunker.setKafkaListenTopics(Arrays.asList("test-input-documents"));
-            chunker.setKafkaPublishTopics(Arrays.asList("test-chunker-results"));
+            chunker.setKafkaListenTopics(List.of("test-input-documents"));
+            chunker.setKafkaPublishTopics(List.of("test-chunker-results"));
             services.put("chunker", chunker);
 
             // Set services on pipeline
@@ -120,8 +116,8 @@ public class ConsulPipelineConfigTest {
 
             // Create chunker service
             ServiceConfiguration chunker = new ServiceConfiguration("chunker");
-            chunker.setKafkaListenTopics(Arrays.asList("test-input-documents"));
-            chunker.setKafkaPublishTopics(Arrays.asList("test-chunker-results"));
+            chunker.setKafkaListenTopics(List.of("test-input-documents"));
+            chunker.setKafkaPublishTopics(List.of("test-chunker-results"));
             services.put("chunker", chunker);
 
             // Set services on pipeline
@@ -166,7 +162,7 @@ public class ConsulPipelineConfigTest {
 
         // Create importer service
         ServiceConfiguration importer = new ServiceConfiguration("importer");
-        importer.setKafkaPublishTopics(Arrays.asList("test-input-documents"));
+        importer.setKafkaPublishTopics(List.of("test-input-documents"));
         services.put("importer", importer);
 
         // Set services on pipeline

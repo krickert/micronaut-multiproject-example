@@ -1,14 +1,13 @@
 package com.krickert.search.model.mapper;
 
 import com.google.protobuf.*;
-import com.krickert.search.model.PipeDoc; // Using PipeDoc for concrete examples
-import com.krickert.search.model.SemanticDoc;
 import com.krickert.search.model.Embedding;
+import com.krickert.search.model.PipeDoc;
+import com.krickert.search.model.SemanticDoc;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -17,7 +16,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.when;
 
 @SuppressWarnings("FieldCanBeLocal")
 class ValueHandlerTest {

@@ -3,9 +3,6 @@ package com.krickert.search.test;
 import com.krickert.search.test.consul.ConsulContainer;
 import com.krickert.search.test.consul.ConsulTestHelper;
 import io.micronaut.context.ApplicationContext;
-import io.micronaut.context.env.Environment;
-import io.micronaut.discovery.consul.client.v1.ConsulClient;
-import io.micronaut.discovery.consul.client.v1.KeyValue;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Assertions;
@@ -15,9 +12,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Base64;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Test class for {@link ConsulTestHelper}.

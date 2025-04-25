@@ -1,9 +1,10 @@
 package com.krickert.search.model.mapper;
 
-import com.google.protobuf.*;
-import com.krickert.search.model.PipeDoc; // Using PipeDoc for concrete examples
-import com.krickert.search.model.SemanticDoc;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
 import com.krickert.search.model.Embedding;
+import com.krickert.search.model.PipeDoc;
+import com.krickert.search.model.SemanticDoc;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

@@ -2,7 +2,10 @@
 package com.krickert.search.model.mapper;
 
 import com.google.protobuf.*;
-import com.google.protobuf.Descriptors.*;
+import com.google.protobuf.Descriptors.Descriptor;
+import com.google.protobuf.Descriptors.EnumDescriptor;
+import com.google.protobuf.Descriptors.EnumValueDescriptor;
+import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -14,9 +14,9 @@ public class ServiceConfigurationDtoTest {
         // Setup
         ServiceConfigurationDto dto = new ServiceConfigurationDto();
         String name = "embedder";
-        List<String> listenTopics = Arrays.asList("chunker-results");
-        List<String> publishTopics = Arrays.asList("enhanced-documents");
-        List<String> forwardTo = Arrays.asList("solr-indexer");
+        List<String> listenTopics = List.of("chunker-results");
+        List<String> publishTopics = List.of("enhanced-documents");
+        List<String> forwardTo = List.of("solr-indexer");
 
         // Test setters
         dto.setName(name);
@@ -61,7 +61,7 @@ public class ServiceConfigurationDtoTest {
         
         // Set some values
         dto.setName("test-service");
-        dto.setKafkaListenTopics(Arrays.asList("topic1"));
+        dto.setKafkaListenTopics(List.of("topic1"));
         
         // Set null values
         dto.setKafkaListenTopics(null);

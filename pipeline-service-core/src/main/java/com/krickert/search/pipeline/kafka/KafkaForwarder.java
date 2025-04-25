@@ -1,7 +1,6 @@
 // KafkaForwarder.java
 package com.krickert.search.pipeline.kafka;
 
-import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeStream;
 import com.krickert.search.model.Route;
 import jakarta.inject.Inject;

@@ -1,10 +1,8 @@
 package com.krickert.search.test.consul;
 
 import io.micronaut.context.annotation.Requires;
-import io.micronaut.core.annotation.NonNull;
 import io.micronaut.discovery.consul.client.v1.ConsulClient;
 import io.micronaut.discovery.consul.client.v1.KeyValue;
-import io.micronaut.http.client.exceptions.HttpClientResponseException;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
@@ -13,7 +11,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.Properties;
 

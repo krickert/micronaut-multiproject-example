@@ -1,6 +1,5 @@
 package com.krickert.search.test.registry;
 
-import com.krickert.search.test.registry.SchemaRegistry;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;

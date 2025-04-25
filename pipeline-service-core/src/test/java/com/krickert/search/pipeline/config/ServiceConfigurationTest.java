@@ -31,9 +31,9 @@ public class ServiceConfigurationTest {
     void testServiceConfigurationSettersAndGetters() {
         // Setup
         ServiceConfiguration config = new ServiceConfiguration("embedder");
-        List<String> listenTopics = Arrays.asList("chunker-results");
-        List<String> publishTopics = Arrays.asList("enhanced-documents");
-        List<String> forwardTo = Arrays.asList("solr-indexer");
+        List<String> listenTopics = List.of("chunker-results");
+        List<String> publishTopics = List.of("enhanced-documents");
+        List<String> forwardTo = List.of("solr-indexer");
 
         // Test setters
         config.setKafkaListenTopics(listenTopics);

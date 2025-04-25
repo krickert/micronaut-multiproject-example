@@ -2,11 +2,10 @@
 // Extracts execution logic from ProtoMapper.java
 package com.krickert.search.model.mapper;
 
+import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.google.protobuf.Descriptors.FieldDescriptor;
-
 
 import java.util.List;
 import java.util.Objects;

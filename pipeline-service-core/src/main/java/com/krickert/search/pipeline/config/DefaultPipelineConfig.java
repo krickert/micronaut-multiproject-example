@@ -2,7 +2,6 @@ package com.krickert.search.pipeline.config;
 
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.env.Environment;
-import io.micronaut.context.env.PropertySource;
 import io.micronaut.discovery.config.ConfigurationClient;
 import jakarta.annotation.PostConstruct;
 import jakarta.inject.Inject;

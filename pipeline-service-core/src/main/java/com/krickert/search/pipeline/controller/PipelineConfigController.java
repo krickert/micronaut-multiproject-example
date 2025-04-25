@@ -4,12 +4,7 @@ import com.krickert.search.pipeline.config.PipelineConfigManager;
 import com.krickert.search.pipeline.config.ServiceConfiguration;
 import com.krickert.search.pipeline.config.ServiceConfigurationDto;
 import io.micronaut.http.HttpResponse;
-import io.micronaut.http.annotation.Body;
-import io.micronaut.http.annotation.Controller;
-import io.micronaut.http.annotation.Get;
-import io.micronaut.http.annotation.PathVariable;
-import io.micronaut.http.annotation.Post;
-import io.micronaut.http.annotation.Put;
+import io.micronaut.http.annotation.*;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 
