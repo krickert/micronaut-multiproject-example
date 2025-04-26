@@ -13,38 +13,38 @@ dependencies {
     annotationProcessor("org.projectlombok:lombok")
 
     // Micronaut
-    implementation(mn.micronaut.discovery.core)
-    implementation(mn.micronaut.test.core)
-    implementation(mn.micronaut.test.junit5)
-    implementation(mn.micronaut.grpc.runtime)
-    implementation(mn.micronaut.serde.jackson)
-    implementation(mn.micronaut.kafka)
-    implementation(mn.micronaut.test.resources.kafka)
-    implementation(mn.micronaut.aws.sdk.v2)
+    api(mn.micronaut.discovery.core)
+    api(mn.micronaut.test.core)
+    api(mn.micronaut.test.junit5)
+    api(mn.micronaut.grpc.runtime)
+    api(mn.micronaut.serde.jackson)
+    api(mn.micronaut.kafka)
+    api(mn.micronaut.test.resources.kafka)
+    api(mn.micronaut.aws.sdk.v2)
 
     // AWS for Moto
-    implementation("software.amazon.glue:schema-registry-serde:1.1.23")
-    implementation("software.amazon.msk:aws-msk-iam-auth:2.2.0")
-    implementation("software.amazon.awssdk:url-connection-client:2.30.31")
+    api("software.amazon.glue:schema-registry-serde:1.1.23")
+    api("software.amazon.msk:aws-msk-iam-auth:2.2.0")
+    api("software.amazon.awssdk:url-connection-client:2.30.31")
 
     // Apicurio Registry
-    implementation("io.apicurio:apicurio-registry-protobuf-serde-kafka:3.0.6")
+    api("io.apicurio:apicurio-registry-protobuf-serde-kafka:3.0.6")
 
     // Protobuf models from central project
-    testImplementation(project(":protobuf-models"))
+    api(project(":protobuf-models"))
 
     // Testing
-    implementation("org.testcontainers:junit-jupiter")
-    implementation("org.testcontainers:testcontainers")
-    implementation("org.testcontainers:kafka")
+    api("org.testcontainers:junit-jupiter")
+    api("org.testcontainers:testcontainers")
+    api("org.testcontainers:kafka")
     testImplementation("org.assertj:assertj-core")
     testImplementation("org.awaitility:awaitility")
 
     // Other
-    implementation("javax.annotation:javax.annotation-api")
-    implementation("jakarta.annotation:jakarta.annotation-api")
+    api("javax.annotation:javax.annotation-api")
+    api("jakarta.annotation:jakarta.annotation-api")
     compileOnly("org.projectlombok:lombok")
-    runtimeOnly(mn.logback.classic)
+    implementation(libs.logback.classic)
 }
 
 java {

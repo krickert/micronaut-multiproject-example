@@ -6,10 +6,11 @@ import io.micronaut.context.ApplicationContext;
 import io.micronaut.core.annotation.NonNull;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
+import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.common.serialization.StringDeserializer;
-import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.kafka.common.serialization.UUIDDeserializer;
+import org.apache.kafka.common.serialization.UUIDSerializer;
 import org.junit.jupiter.api.BeforeAll;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +26,6 @@ import java.util.Map;
  * Abstract base class for Kafka tests that use a schema registry.
  * This class sets up a Kafka container and provides configuration for tests.
  */
-@Testcontainers(disabledWithoutDocker = true)
 public abstract class AbstractKafkaTest implements TestPropertyProvider {
     protected static final Logger log = LoggerFactory.getLogger(AbstractKafkaTest.class);
 
@@ -34,11 +34,9 @@ public abstract class AbstractKafkaTest implements TestPropertyProvider {
     private static final String SCHEMA_REGISTRY_TYPE_PROP = "schema.registry.type";
     private static final String DEFAULT_REGISTRY_TYPE = "apicurio"; // Default to apicurio
 
-    // Use the vanilla Apache Kafka image
-    @Container
     protected static final KafkaContainer kafka = new KafkaContainer(
             DockerImageName.parse("apache/kafka:latest")
-    );
+    ).withPrivilegedMode(true).withAccessToHost(true);
 
     @Inject
     protected SchemaRegistry schemaRegistry;
@@ -83,6 +81,9 @@ public abstract class AbstractKafkaTest implements TestPropertyProvider {
 
     @Override
     public @NonNull Map<String, String> getProperties() {
+        if (!kafka.isRunning()) {
+            kafka.start();
+        }
         // Create a local SchemaRegistry if injection hasn't happened yet
         SchemaRegistry registry = schemaRegistry;
         if (registry == null) {
@@ -103,7 +104,7 @@ public abstract class AbstractKafkaTest implements TestPropertyProvider {
 
         // Basic Kafka producer configuration
         props.put(producerPrefix + ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers());
-        props.put(producerPrefix + ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        props.put(producerPrefix + ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, UUIDSerializer.class.getName());
         props.put(producerPrefix + ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, registry.getSerializerClass());
 
         // Basic Kafka consumer configuration
@@ -111,12 +112,15 @@ public abstract class AbstractKafkaTest implements TestPropertyProvider {
         props.put(consumerPrefix + ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers());
         props.put(consumerPrefix + ConsumerConfig.GROUP_ID_CONFIG, "test-group");
         props.put(consumerPrefix + ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-        props.put(consumerPrefix + ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(consumerPrefix + ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, UUIDDeserializer.class.getName());
         props.put(consumerPrefix + ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, registry.getDeserializerClass());
 
         // Add AdminClient configuration
-        props.put("kafka.admin.bootstrap.servers", getBootstrapServers());
-
+        String adminPrefix = "kafka.admin.";
+        props.put("kafka.admin.client.id", "test-admin-client");
+        props.put("kafka.admin.request.timeout.ms", "5000");
+        props.put("kafka.admin.retries", "3");
+        props.put(adminPrefix + AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers());
         // Add schema registry properties
         props.putAll(registry.getProperties());
 

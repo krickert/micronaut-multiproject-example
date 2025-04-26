@@ -10,8 +10,8 @@ import io.micronaut.core.annotation.Nullable;
 import jakarta.inject.Singleton;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.common.serialization.StringDeserializer;
-import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.kafka.common.serialization.UUIDDeserializer;
+import org.apache.kafka.common.serialization.UUIDSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
@@ -35,7 +35,7 @@ public class ApicurioSchemaRegistry implements SchemaRegistry {
     private static boolean initialized = false;
 
     // Default return class for the deserializer
-    private static final String DEFAULT_RETURN_CLASS = "com.krickert.search.model.PipeDoc";
+    private static final String DEFAULT_RETURN_CLASS = "com.krickert.search.model.PipeStream";
 
     // Configurable return class for the deserializer
     private String returnClass;
@@ -123,7 +123,7 @@ public class ApicurioSchemaRegistry implements SchemaRegistry {
         props.put(producerPrefix + SerdeConfig.AUTO_REGISTER_ARTIFACT, "true");
         props.put(producerPrefix + SerdeConfig.ARTIFACT_RESOLVER_STRATEGY, "io.apicurio.registry.serde.strategy.TopicIdStrategy");
         props.put(producerPrefix + SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID, "default");
-        props.put(producerPrefix + ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        props.put(producerPrefix + ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, UUIDSerializer.class.getName());
         props.put(producerPrefix + ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ProtobufKafkaSerializer.class.getName());
 
         // Kafka consumer Apicurio Registry properties
@@ -132,7 +132,7 @@ public class ApicurioSchemaRegistry implements SchemaRegistry {
         props.put(consumerPrefix + SerdeConfig.AUTO_REGISTER_ARTIFACT, "true");
         props.put(consumerPrefix + SerdeConfig.ARTIFACT_RESOLVER_STRATEGY, "io.apicurio.registry.serde.strategy.TopicIdStrategy");
         props.put(consumerPrefix + SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID, "default");
-        props.put(consumerPrefix + ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(consumerPrefix + ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, UUIDDeserializer.class.getName());
         props.put(consumerPrefix + ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ProtobufKafkaDeserializer.class.getName());
 
         // Use the configured return class if available, otherwise use the default
