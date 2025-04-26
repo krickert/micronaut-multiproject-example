@@ -21,7 +21,7 @@ dependencies {
     api(mn.micronaut.kafka)
     api(mn.micronaut.test.resources.kafka)
     api(mn.micronaut.aws.sdk.v2)
-
+    api(mn.micronaut.discovery.client)
     // AWS for Moto
     api("software.amazon.glue:schema-registry-serde:1.1.23")
     api("software.amazon.msk:aws-msk-iam-auth:2.2.0")
@@ -32,6 +32,9 @@ dependencies {
 
     // Protobuf models from central project
     api(project(":protobuf-models"))
+
+    // Pipeline service core for PipeServiceDto and PipelineServiceProcessor
+    api(project(":pipeline-service-core"))
 
     // Testing
     api("org.testcontainers:junit-jupiter")
