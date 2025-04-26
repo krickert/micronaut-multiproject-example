@@ -7,8 +7,8 @@ import com.krickert.search.model.ErrorData;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeResponse;
 import com.krickert.search.model.PipeStream;
+import com.krickert.search.pipeline.service.PipeServiceDto;
 import com.krickert.search.pipeline.service.PipelineServiceProcessor;
-import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,42 +31,15 @@ public class EchoPipelineServiceProcessor implements PipelineServiceProcessor {
      * @return the updated PipeStream
      */
     public PipeStream processAndReturn(PipeStream pipeStream) {
-        // Process the PipeStream (this will return a PipeResponse)
-        PipeResponse response = process(pipeStream);
+        // Process the PipeStream (this will return a PipeServiceDto)
+        PipeServiceDto serviceDto = process(pipeStream);
 
         // Return the updated PipeStream that was created in the process method
-        if (pipeStream != null && pipeStream.hasRequest() && pipeStream.getRequest().hasDoc()) {
-            PipeDoc originalDoc = pipeStream.getRequest().getDoc();
-
-            // Create a builder from the original doc
-            PipeDoc.Builder docBuilder = originalDoc.toBuilder();
-
-            // Update the last_modified timestamp to current time
-            Timestamp currentTime = getCurrentTimestamp();
-            docBuilder.setLastModified(currentTime);
-
-            // Get or create the custom_data Struct
-            Struct.Builder customDataBuilder;
-            if (originalDoc.hasCustomData()) {
-                customDataBuilder = originalDoc.getCustomData().toBuilder();
-            } else {
-                customDataBuilder = Struct.newBuilder();
-            }
-
-            // Add "Hello instance" to "my_pipeline_struct_field"
-            customDataBuilder.putFields("my_pipeline_struct_field", 
-                Value.newBuilder().setStringValue("Hello instance").build());
-
-            // Set the updated custom_data back to the doc
-            docBuilder.setCustomData(customDataBuilder.build());
-
-            // Build the updated PipeDoc
-            PipeDoc updatedDoc = docBuilder.build();
-
+        if (pipeStream != null && pipeStream.hasRequest() && serviceDto.getPipeDoc() != null) {
             // Create and return a new PipeStream with the updated document
             return pipeStream.toBuilder()
                 .setRequest(pipeStream.getRequest().toBuilder()
-                    .setDoc(updatedDoc)
+                    .setDoc(serviceDto.getPipeDoc())
                     .build())
                 .build();
         }
@@ -75,8 +48,9 @@ public class EchoPipelineServiceProcessor implements PipelineServiceProcessor {
     }
 
     @Override
-    public PipeResponse process(PipeStream pipeStream) {
+    public PipeServiceDto process(PipeStream pipeStream) {
         log.debug("Processing PipeStream with EchoPipelineServiceProcessor");
+        PipeServiceDto serviceDto = new PipeServiceDto();
 
         // Check for null input
         if (pipeStream == null) {
@@ -87,10 +61,13 @@ public class EchoPipelineServiceProcessor implements PipelineServiceProcessor {
                 .setErrorMessage("Error processing PipeStream: Input was null")
                 .build();
 
-            return PipeResponse.newBuilder()
+            PipeResponse response = PipeResponse.newBuilder()
                 .setSuccess(false)
                 .setErrorDate(errorData)
                 .build();
+
+            serviceDto.setResponse(response);
+            return serviceDto;
         }
 
         try {
@@ -122,25 +99,20 @@ public class EchoPipelineServiceProcessor implements PipelineServiceProcessor {
             // Build the updated PipeDoc
             PipeDoc updatedDoc = docBuilder.build();
 
-            // Update the original PipeStream with the updated doc
-            // Note: In Protobuf, we can't modify the original object directly,
-            // but we can create a new one and assign it to the same variable.
-            // However, this updated PipeStream is not returned to the caller.
-            // The caller needs to manually create a new PipeStream with the updated document.
-            pipeStream = pipeStream.toBuilder()
-                .setRequest(pipeStream.getRequest().toBuilder()
-                    .setDoc(updatedDoc)
-                    .build())
-                .build();
-
             log.info("Successfully processed document with ID: {}", updatedDoc.getId());
             log.debug("Updated last_modified timestamp to: {}", 
                 Instant.ofEpochSecond(currentTime.getSeconds(), currentTime.getNanos()));
 
-            // Return a success response
-            return PipeResponse.newBuilder()
+            // Create a success response
+            PipeResponse response = PipeResponse.newBuilder()
                 .setSuccess(true)
                 .build();
+
+            // Set both the response and updated doc in the DTO
+            serviceDto.setResponse(response);
+            serviceDto.setPipeDoc(updatedDoc);
+
+            return serviceDto;
         } catch (Exception e) {
             log.error("Error processing PipeStream: {}", e.getMessage(), e);
 
@@ -149,10 +121,13 @@ public class EchoPipelineServiceProcessor implements PipelineServiceProcessor {
                 .setErrorMessage("Error processing PipeStream: " + e.getMessage())
                 .build();
 
-            return PipeResponse.newBuilder()
+            PipeResponse response = PipeResponse.newBuilder()
                 .setSuccess(false)
                 .setErrorDate(errorData)
                 .build();
+
+            serviceDto.setResponse(response);
+            return serviceDto;
         }
     }
 

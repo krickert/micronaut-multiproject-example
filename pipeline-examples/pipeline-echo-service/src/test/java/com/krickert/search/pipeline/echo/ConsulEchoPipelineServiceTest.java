@@ -10,6 +10,7 @@ import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.config.PipelineConfig;
 import com.krickert.search.pipeline.config.PipelineConfigManager;
 import com.krickert.search.pipeline.config.ServiceConfiguration;
+import com.krickert.search.pipeline.service.PipeServiceDto;
 import com.krickert.search.test.consul.ConsulContainer;
 // Removed Kafka imports to use real objects without Kafka
 import io.micronaut.context.env.Environment;
@@ -113,60 +114,39 @@ public class ConsulEchoPipelineServiceTest {
         // Log the PipeStream before processing
         log.debug("[DEBUG_LOG] PipeStream before processing: {}", pipeStream);
 
-        // Process the PipeStream
-        PipeResponse response = processor.process(pipeStream);
+        // Process the PipeStream - now returns PipeServiceDto
+        PipeServiceDto serviceDto = processor.process(pipeStream);
+        PipeResponse response = serviceDto.getResponse();
+        PipeDoc processedDoc = serviceDto.getPipeDoc();
 
         System.out.println("[DEBUG_LOG] Response: " + response);
+        System.out.println("[DEBUG_LOG] Processed document: " + processedDoc);
 
         // Verify the response
         assertTrue(response.getSuccess(), "Response should be successful");
 
-        // Create the expected document manually
-        // This is what the processor should have created internally
+        // Verify the processed document is not null
+        assertNotNull(processedDoc, "Processed document should not be null");
+
+        // Create the expected document manually for verification
         Struct expectedCustomData = Struct.newBuilder()
                 .putFields("existing_field", Value.newBuilder().setStringValue("existing value").build())
                 .putFields("my_pipeline_struct_field", Value.newBuilder().setStringValue("Hello instance").build())
                 .build();
 
-        // Create a timestamp for the last_modified field
-        Instant now = Instant.now();
-        Timestamp currentTime = Timestamp.newBuilder()
-                .setSeconds(now.getEpochSecond())
-                .setNanos(now.getNano())
-                .build();
+        System.out.println("[DEBUG_LOG] Expected custom data: " + expectedCustomData);
 
-        PipeDoc expectedDoc = PipeDoc.newBuilder()
-                .setId("test-id")
-                .setTitle("Test Document")
-                .setBody("This is a test document body")
-                .setCustomData(expectedCustomData)
-                .setLastModified(currentTime)
-                .build();
-
-        System.out.println("[DEBUG_LOG] Expected document: " + expectedDoc);
-
-        // Now manually create a new PipeStream with our expected document
-        // This simulates what the processor does internally
-        PipeStream updatedPipeStream = PipeStream.newBuilder()
-                .setRequest(PipeRequest.newBuilder()
-                    .setDoc(expectedDoc)
-                    .build())
-                .build();
-
-        // Get the document from our manually updated PipeStream
-        PipeDoc updatedDoc = updatedPipeStream.getRequest().getDoc();
-
-        System.out.println("[DEBUG_LOG] Updated document: " + updatedDoc);
-        if (updatedDoc.hasCustomData()) {
-            System.out.println("[DEBUG_LOG] Custom data: " + updatedDoc.getCustomData());
-            System.out.println("[DEBUG_LOG] Custom data fields: " + updatedDoc.getCustomData().getFieldsMap().keySet());
+        System.out.println("[DEBUG_LOG] Processed document: " + processedDoc);
+        if (processedDoc.hasCustomData()) {
+            System.out.println("[DEBUG_LOG] Custom data: " + processedDoc.getCustomData());
+            System.out.println("[DEBUG_LOG] Custom data fields: " + processedDoc.getCustomData().getFieldsMap().keySet());
         } else {
-            System.out.println("[DEBUG_LOG] No custom data in updated document");
+            System.out.println("[DEBUG_LOG] No custom data in processed document");
         }
 
-        // Verify the custom field was added to our expected document
-        assertTrue(updatedDoc.hasCustomData(), "Document should have custom data");
-        Struct customData = updatedDoc.getCustomData();
+        // Verify the custom field was added to the processed document
+        assertTrue(processedDoc.hasCustomData(), "Document should have custom data");
+        Struct customData = processedDoc.getCustomData();
         assertTrue(customData.containsFields("my_pipeline_struct_field"),
                 "Custom data should contain my_pipeline_struct_field");
         assertEquals("Hello instance",
@@ -174,8 +154,8 @@ public class ConsulEchoPipelineServiceTest {
                 "my_pipeline_struct_field should have value 'Hello instance'");
 
         // Verify the timestamp was updated
-        assertTrue(updatedDoc.hasLastModified(), "Document should have last_modified timestamp");
-        Timestamp lastModified = updatedDoc.getLastModified();
+        assertTrue(processedDoc.hasLastModified(), "Document should have last_modified timestamp");
+        Timestamp lastModified = processedDoc.getLastModified();
         Instant modifiedTime = Instant.ofEpochSecond(lastModified.getSeconds(), lastModified.getNanos());
 
         // The modified time should be after our "before" time
@@ -184,7 +164,7 @@ public class ConsulEchoPipelineServiceTest {
 
         log.debug("[DEBUG_LOG] Before processing: {}", beforeProcessing);
         log.debug("[DEBUG_LOG] Modified time: {}", modifiedTime);
-        log.debug("[DEBUG_LOG] Updated document: {}", updatedDoc);
+        log.debug("[DEBUG_LOG] Processed document: {}", processedDoc);
 
         // Verify that the pipeline configuration exists in the manager
         Map<String, PipelineConfig> pipelines = pipelineConfigManager.getPipelines();

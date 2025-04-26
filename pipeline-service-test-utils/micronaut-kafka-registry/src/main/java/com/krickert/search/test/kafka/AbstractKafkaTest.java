@@ -93,6 +93,7 @@ public abstract class AbstractKafkaTest implements TestPropertyProvider {
                 context.start();
                 SchemaRegistryFactory factory = context.getBean(SchemaRegistryFactory.class);
                 registry = factory.schemaRegistry(getSchemaRegistryType());
+                log.info("Created local SchemaRegistry of type: {}", getSchemaRegistryType());
             }
         }
 
@@ -121,8 +122,12 @@ public abstract class AbstractKafkaTest implements TestPropertyProvider {
         props.put("kafka.admin.request.timeout.ms", "5000");
         props.put("kafka.admin.retries", "3");
         props.put(adminPrefix + AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers());
+
         // Add schema registry properties
-        props.putAll(registry.getProperties());
+        Map<String, String> registryProps = registry.getProperties();
+        props.putAll(registryProps);
+
+        log.info("Kafka properties configured with bootstrap servers: {}", getBootstrapServers());
 
         return props;
     }

@@ -39,10 +39,6 @@ public class MicronautKafkaApicurioTest extends AbstractMicronautKafkaTest<PipeS
 
     @BeforeEach
     public void setup() {
-        // Set the system property to use Apicurio schema registry
-        System.setProperty(SCHEMA_REGISTRY_TYPE_PROP, "apicurio");
-        LOG.info("Set schema registry type to: apicurio");
-
         // Set the return class to PipeStream for this test
         if (apicurioSchemaRegistry != null) {
             apicurioSchemaRegistry.setReturnClass(PipeStream.class.getName());
@@ -50,7 +46,7 @@ public class MicronautKafkaApicurioTest extends AbstractMicronautKafkaTest<PipeS
         } else {
             LOG.warn("ApicurioSchemaRegistry not injected, cannot set return class");
         }
-        
+
         // Reset the listener for each test
         pipeStreamListener.reset();
     }
@@ -114,7 +110,7 @@ public class MicronautKafkaApicurioTest extends AbstractMicronautKafkaTest<PipeS
                 return new ArrayList<>(receivedMessages);
             }
         }
-        
+
         public void reset() {
             synchronized (receivedMessages) {
                 receivedMessages.clear();

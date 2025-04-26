@@ -138,7 +138,7 @@ public class ApicurioSchemaRegistry implements SchemaRegistry {
         // Use the configured return class if available, otherwise use the default
         String effectiveReturnClass = (returnClass != null) ? returnClass : DEFAULT_RETURN_CLASS;
         props.put(consumerPrefix + SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS, effectiveReturnClass);
-        log.debug("Using return class for deserializer: {}", effectiveReturnClass);
+        log.info("Using return class for deserializer: {}", effectiveReturnClass);
         return props;
     }
 

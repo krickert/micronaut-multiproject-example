@@ -38,10 +38,6 @@ public class KafkaApicurioIntegrationTest extends AbstractKafkaIntegrationTest<P
 
     @BeforeEach
     public void setup() {
-        // Set the system property to use Apicurio schema registry
-        System.setProperty(SCHEMA_REGISTRY_TYPE_PROP, "apicurio");
-        LOG.info("Set schema registry type to: apicurio");
-
         // Set the return class to PipeStream for this test
         if (apicurioSchemaRegistry != null) {
             apicurioSchemaRegistry.setReturnClass(PipeStream.class.getName());
@@ -49,6 +45,10 @@ public class KafkaApicurioIntegrationTest extends AbstractKafkaIntegrationTest<P
         } else {
             LOG.warn("ApicurioSchemaRegistry not injected, cannot set return class");
         }
+
+        // Reset the consumer for each test
+        consumer.reset();
+        LOG.info("Reset consumer for test");
     }
 
     @Override
@@ -77,7 +77,7 @@ public class KafkaApicurioIntegrationTest extends AbstractKafkaIntegrationTest<P
     @KafkaListener(groupId = "test-group-apicurio")
     public static class TestPipeStreamConsumer implements MessageConsumer<PipeStream> {
         private final List<PipeStream> receivedMessages = new ArrayList<>();
-        private final CompletableFuture<PipeStream> nextMessage = new CompletableFuture<>();
+        private CompletableFuture<PipeStream> nextMessage = new CompletableFuture<>();
 
         @Topic(TOPIC)
         void receive(PipeStream PipeStream) {
@@ -97,6 +97,15 @@ public class KafkaApicurioIntegrationTest extends AbstractKafkaIntegrationTest<P
         public List<PipeStream> getReceivedMessages() {
             synchronized (receivedMessages) {
                 return new ArrayList<>(receivedMessages);
+            }
+        }
+
+        public void reset() {
+            synchronized (receivedMessages) {
+                receivedMessages.clear();
+                if (nextMessage.isDone()) {
+                    nextMessage = new CompletableFuture<>();
+                }
             }
         }
     }
