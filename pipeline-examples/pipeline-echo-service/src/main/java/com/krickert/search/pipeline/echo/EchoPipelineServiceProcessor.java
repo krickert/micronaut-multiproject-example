@@ -23,6 +23,57 @@ import java.time.Instant;
 @Slf4j
 public class EchoPipelineServiceProcessor implements PipelineServiceProcessor {
 
+    /**
+     * Process a PipeStream and return the updated PipeStream.
+     * This method is used for testing purposes.
+     * 
+     * @param pipeStream the PipeStream to process
+     * @return the updated PipeStream
+     */
+    public PipeStream processAndReturn(PipeStream pipeStream) {
+        // Process the PipeStream (this will return a PipeResponse)
+        PipeResponse response = process(pipeStream);
+
+        // Return the updated PipeStream that was created in the process method
+        if (pipeStream != null && pipeStream.hasRequest() && pipeStream.getRequest().hasDoc()) {
+            PipeDoc originalDoc = pipeStream.getRequest().getDoc();
+
+            // Create a builder from the original doc
+            PipeDoc.Builder docBuilder = originalDoc.toBuilder();
+
+            // Update the last_modified timestamp to current time
+            Timestamp currentTime = getCurrentTimestamp();
+            docBuilder.setLastModified(currentTime);
+
+            // Get or create the custom_data Struct
+            Struct.Builder customDataBuilder;
+            if (originalDoc.hasCustomData()) {
+                customDataBuilder = originalDoc.getCustomData().toBuilder();
+            } else {
+                customDataBuilder = Struct.newBuilder();
+            }
+
+            // Add "Hello instance" to "my_pipeline_struct_field"
+            customDataBuilder.putFields("my_pipeline_struct_field", 
+                Value.newBuilder().setStringValue("Hello instance").build());
+
+            // Set the updated custom_data back to the doc
+            docBuilder.setCustomData(customDataBuilder.build());
+
+            // Build the updated PipeDoc
+            PipeDoc updatedDoc = docBuilder.build();
+
+            // Create and return a new PipeStream with the updated document
+            return pipeStream.toBuilder()
+                .setRequest(pipeStream.getRequest().toBuilder()
+                    .setDoc(updatedDoc)
+                    .build())
+                .build();
+        }
+
+        return pipeStream;
+    }
+
     @Override
     public PipeResponse process(PipeStream pipeStream) {
         log.debug("Processing PipeStream with EchoPipelineServiceProcessor");
