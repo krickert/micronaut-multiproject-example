@@ -1,6 +1,5 @@
 package com.krickert.search.pipeline.service;
 
-import com.krickert.search.model.PipeResponse;
 import com.krickert.search.model.PipeStream;
 
 /**
@@ -8,12 +7,12 @@ import com.krickert.search.model.PipeStream;
  * Implementations of this interface will handle the actual processing of PipeStream objects.
  */
 public interface PipelineServiceProcessor {
-    
+
     /**
-     * Process a PipeStream and return a PipeResponse.
+     * Process a PipeStream and return a PipeServiceDto.
      * 
      * @param pipeStream The PipeStream to process
-     * @return A PipeResponse indicating the result of processing
+     * @return A PipeServiceDto containing both the PipeResponse and the modified PipeDoc
      */
-    PipeResponse process(PipeStream pipeStream);
+    PipeServiceDto process(PipeStream pipeStream);
 }

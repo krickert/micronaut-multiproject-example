@@ -38,11 +38,18 @@ public class DefaultPipelineServiceProcessorTest {
                 .build();
 
         // Process the PipeStream
-        PipeResponse response = processor.process(pipeStream);
+        PipeServiceDto result = processor.process(pipeStream);
+
+        // Extract the response from the result
+        PipeResponse response = result.getResponse();
 
         // Verify the response
         assertTrue(response.getSuccess(), "Response should be successful");
         assertFalse(response.hasErrorDate(), "Error data should not be present for successful response");
+
+        // Verify the PipeDoc was set correctly
+        assertNotNull(result.getPipeDoc(), "PipeDoc should not be null");
+        assertEquals("test-id", result.getPipeDoc().getId(), "PipeDoc ID should match");
 
         System.out.println("[DEBUG_LOG] Response: " + response);
     }
@@ -53,13 +60,19 @@ public class DefaultPipelineServiceProcessorTest {
         PipeStream nullStream = null;
 
         // Process the null PipeStream (should throw an exception internally)
-        PipeResponse response = processor.process(nullStream);
+        PipeServiceDto result = processor.process(nullStream);
+
+        // Extract the response from the result
+        PipeResponse response = result.getResponse();
 
         // Verify the response
         assertFalse(response.getSuccess(), "Response should not be successful");
         assertNotNull(response.getErrorDate(), "Error data should not be null for failed response");
         assertTrue(response.getErrorDate().getErrorMessage().contains("Error processing PipeStream"), 
                 "Error message should contain the expected text");
+
+        // Verify the PipeDoc is null for error cases
+        assertNull(result.getPipeDoc(), "PipeDoc should be null for error cases");
 
         log.debug("[DEBUG_LOG] Error response: [{}]", response);
     }

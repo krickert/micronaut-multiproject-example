@@ -114,7 +114,19 @@ public class PipelineServiceImpl extends PipelineServiceGrpc.PipelineServiceImpl
             .build();
 
         // Process the PipeStream using the service processor
-        PipeResponse processorResponse = serviceProcessor.process(pipeStream);
+        // Now returns PipeServiceDto containing both response and updated doc
+        var serviceDto = serviceProcessor.process(pipeStream);
+        PipeResponse processorResponse = serviceDto.getResponse();
+        PipeDoc updatedDoc = serviceDto.getPipeDoc();
+
+        // Update the PipeStream with the modified document if available
+        if (updatedDoc != null) {
+            pipeStream = pipeStream.toBuilder()
+                .setRequest(pipeStream.getRequest().toBuilder()
+                    .setDoc(updatedDoc)
+                    .build())
+                .build();
+        }
 
         // If processing was successful, forward to configured routes
         if (processorResponse.getSuccess()) {
@@ -169,7 +181,19 @@ public class PipelineServiceImpl extends PipelineServiceGrpc.PipelineServiceImpl
 
     private void processStream(PipeStream pipeStream) {
         // First, process the PipeStream using the service processor
-        PipeResponse processorResponse = serviceProcessor.process(pipeStream);
+        // Now returns PipeServiceDto containing both response and updated doc
+        var serviceDto = serviceProcessor.process(pipeStream);
+        PipeResponse processorResponse = serviceDto.getResponse();
+        PipeDoc updatedDoc = serviceDto.getPipeDoc();
+
+        // Update the PipeStream with the modified document if available
+        if (updatedDoc != null) {
+            pipeStream = pipeStream.toBuilder()
+                .setRequest(pipeStream.getRequest().toBuilder()
+                    .setDoc(updatedDoc)
+                    .build())
+                .build();
+        }
 
         // If processing was successful, forward to configured routes
         if (processorResponse.getSuccess()) {
