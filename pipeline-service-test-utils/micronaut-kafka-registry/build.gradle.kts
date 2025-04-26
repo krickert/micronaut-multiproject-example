@@ -10,7 +10,7 @@ dependencies {
 
     // Annotation processors
     annotationProcessor(mn.micronaut.serde.processor)
-    annotationProcessor("org.projectlombok:lombok")
+    annotationProcessor(mn.lombok)
 
     // Micronaut
     api(mn.micronaut.discovery.core)
@@ -35,15 +35,15 @@ dependencies {
 
     // Testing
     api("org.testcontainers:junit-jupiter")
-    api("org.testcontainers:testcontainers")
-    api("org.testcontainers:kafka")
-    testImplementation("org.assertj:assertj-core")
+    api(mn.testcontainers.core)
+    api(mn.testcontainers.kafka)
+    api(mn.assertj.core)
     testImplementation("org.awaitility:awaitility")
 
     // Other
-    api("javax.annotation:javax.annotation-api")
-    api("jakarta.annotation:jakarta.annotation-api")
-    compileOnly("org.projectlombok:lombok")
+    api(mn.javax.annotation.api)
+    api(mn.jakarta.annotation.api)
+    compileOnly(mn.lombok)
     implementation(libs.logback.classic)
 }
 
