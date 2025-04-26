@@ -29,6 +29,7 @@ dependencies {
         api(libs.jackson.databind)
         api(libs.commons.lang3)
         api(libs.slf4j.api)
+        api(libs.logback.classic)
 
         // Constrain own modules
         api("${rootProject.group}:protobuf-models:${rootProject.version}")

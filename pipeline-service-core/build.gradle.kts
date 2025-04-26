@@ -51,6 +51,7 @@ dependencies {
 
     // Implementation dependencies - these are not exposed to consumers
     implementation(libs.slf4j.api)
+    implementation(libs.logback.classic)
     implementation("io.micronaut.discovery:micronaut-discovery-client")
     compileOnly(mn.lombok)
 
@@ -59,6 +60,7 @@ dependencies {
     testImplementation(mn.micronaut.http.client)
     testImplementation(mn.micronaut.http.server.netty)
     testImplementation(project(":pipeline-service-test-utils:micronaut-test-consul-container"))
+    testImplementation(project(":pipeline-service-test-utils:micronaut-kafka-registry"))
     testAnnotationProcessor(mn.micronaut.inject.java)
 }
 

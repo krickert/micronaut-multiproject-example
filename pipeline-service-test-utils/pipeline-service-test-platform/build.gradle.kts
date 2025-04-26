@@ -46,7 +46,7 @@ dependencies {
     implementation("javax.annotation:javax.annotation-api")
     implementation("jakarta.annotation:jakarta.annotation-api")
     compileOnly("org.projectlombok:lombok")
-    runtimeOnly(mn.logback.classic)
+    implementation(libs.logback.classic)
 }
 
 java {

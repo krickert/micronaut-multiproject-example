@@ -8,6 +8,7 @@ import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeResponse;
 import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.service.PipelineServiceProcessor;
+import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
 
@@ -70,8 +71,12 @@ public class EchoPipelineServiceProcessor implements PipelineServiceProcessor {
             // Build the updated PipeDoc
             PipeDoc updatedDoc = docBuilder.build();
 
-            // Create a new PipeStream with the updated doc
-            PipeStream updatedStream = pipeStream.toBuilder()
+            // Update the original PipeStream with the updated doc
+            // Note: In Protobuf, we can't modify the original object directly,
+            // but we can create a new one and assign it to the same variable.
+            // However, this updated PipeStream is not returned to the caller.
+            // The caller needs to manually create a new PipeStream with the updated document.
+            pipeStream = pipeStream.toBuilder()
                 .setRequest(pipeStream.getRequest().toBuilder()
                     .setDoc(updatedDoc)
                     .build())
@@ -81,7 +86,7 @@ public class EchoPipelineServiceProcessor implements PipelineServiceProcessor {
             log.debug("Updated last_modified timestamp to: {}", 
                 Instant.ofEpochSecond(currentTime.getSeconds(), currentTime.getNanos()));
 
-            // Return a success response with the updated PipeDoc
+            // Return a success response
             return PipeResponse.newBuilder()
                 .setSuccess(true)
                 .build();

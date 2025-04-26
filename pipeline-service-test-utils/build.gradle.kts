@@ -17,4 +17,8 @@ dependencies {
 
     // May depend on other utils
     api(project(":util"))
+
+    // Logging
+    implementation(libs.slf4j.api)
+    implementation(libs.logback.classic)
 }

@@ -10,6 +10,7 @@ protobuf = "3.25.3"
 grpc = "1.72.0"
 junit = "5.10.0"
 slf4j = "2.0.13"
+logback = "1.4.14"
 jackson = "2.18.3"
 guava = "33.4.8-jre"
 commonsLang3 = "3.14.0"
@@ -28,6 +29,7 @@ junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", vers
 # Other libraries
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 commons-lang3 = { module = "org.apache.commons:commons-lang3", version.ref = "commonsLang3" }

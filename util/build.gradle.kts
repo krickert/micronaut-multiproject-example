@@ -11,6 +11,8 @@ dependencies {
     testImplementation(platform(project(":bom")))
     implementation(mn.protobuf.java.util)
     api(libs.guava) // Expose Guava via API
+    implementation(libs.slf4j.api)
+    implementation(libs.logback.classic)
 
     // Testing dependencies
     testImplementation(libs.junit.jupiter.api)

@@ -29,6 +29,7 @@ dependencies {
     implementation(libs.grpc.protobuf)
     implementation(libs.grpc.stub)
     implementation(libs.slf4j.api)
+    implementation(libs.logback.classic)
     implementation(mn.javax.annotation.api)
     implementation(libs.guava)
     implementation(libs.commons.lang3)
