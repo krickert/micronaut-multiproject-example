@@ -6,11 +6,15 @@ import io.micronaut.context.ApplicationContext;
 import io.micronaut.core.annotation.NonNull;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
+import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.admin.CreateTopicsResult;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.UUIDDeserializer;
 import org.apache.kafka.common.serialization.UUIDSerializer;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,8 +23,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Abstract base class for Kafka tests that use a schema registry.
@@ -45,6 +52,65 @@ public abstract class AbstractKafkaTest implements TestPropertyProvider {
     public static void setupKafka() {
         log.info("Setup Kafka container...");
         // Kafka setup is handled by the container
+    }
+
+    /**
+     * Reset the schema registry after each test to ensure a clean state.
+     * This prevents tests from interfering with each other when run together.
+     */
+    @AfterEach
+    public void cleanupAfterTest() {
+        // Reset schema registry
+        if (schemaRegistry != null) {
+            log.info("Resetting schema registry after test");
+            schemaRegistry.reset();
+        } else {
+            log.warn("Schema registry is null, cannot reset");
+        }
+
+        // Ensure topics are created for the next test
+        createTopicsIfNeeded();
+
+        // Force garbage collection to help clean up resources
+        System.gc();
+    }
+
+    /**
+     * Create Kafka topics if they don't already exist.
+     * This ensures that topics are available for tests.
+     */
+    protected void createTopicsIfNeeded() {
+        if (!kafka.isRunning()) {
+            getBootstrapServers(); // This will start Kafka if it's not running
+        }
+
+        try {
+            Map<String, Object> adminProps = new HashMap<>();
+            adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers());
+
+            try (AdminClient adminClient = AdminClient.create(adminProps)) {
+                // List of topics to create
+                List<NewTopic> topics = Arrays.asList(
+                    new NewTopic("test-pipeline-input", 1, (short) 1),
+                    new NewTopic("test-pipeline-output", 1, (short) 1),
+                    new NewTopic("test-PipeStream", 1, (short) 1),
+                    new NewTopic("test-PipeStream-apicurio", 1, (short) 1),
+                    new NewTopic("test-micronaut-pipestream-apicurio", 1, (short) 1),
+                    new NewTopic("echo-output-test", 1, (short) 1),
+                    new NewTopic("input-pipe", 1, (short) 1)
+                );
+
+                // Create topics
+                CreateTopicsResult result = adminClient.createTopics(topics);
+
+                // Wait for topic creation to complete
+                result.all().get(30, TimeUnit.SECONDS);
+                log.info("Kafka topics created or already exist");
+            }
+        } catch (Exception e) {
+            // Log but don't fail if topics already exist
+            log.warn("Error creating Kafka topics (they may already exist): {}", e.getMessage());
+        }
     }
 
     /**
@@ -87,7 +153,11 @@ public abstract class AbstractKafkaTest implements TestPropertyProvider {
         // Then start Kafka
         log.info("Starting Kafka...");
         getBootstrapServers();
-        log.info("Both Schema Registry and Kafka are now running");
+
+        // Create topics after Kafka is started
+        createTopicsIfNeeded();
+
+        log.info("Both Schema Registry and Kafka are now running with required topics");
     }
 
     /**

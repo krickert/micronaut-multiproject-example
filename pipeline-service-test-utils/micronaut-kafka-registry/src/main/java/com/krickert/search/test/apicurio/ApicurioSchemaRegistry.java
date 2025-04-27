@@ -114,6 +114,15 @@ public class ApicurioSchemaRegistry implements SchemaRegistry {
     }
 
     @Override
+    public void reset() {
+        log.info("Resetting Apicurio Schema Registry state");
+        // Reset the initialized flag so that the next test will reinitialize the registry
+        initialized = false;
+        // Re-initialize the registry
+        start();
+    }
+
+    @Override
     public @NonNull Map<String, String> getProperties() {
         Map<String, String> props = new HashMap<>();
 
