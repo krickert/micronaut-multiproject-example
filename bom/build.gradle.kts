@@ -31,6 +31,10 @@ dependencies {
         api(libs.slf4j.api)
         api(libs.logback.classic)
 
+        // Add constraint for Wire library to fix dependency conflict
+        api("com.squareup.wire:wire-schema:4.9.3")
+        api("com.squareup.wire:wire-runtime:4.9.3")
+
         // Constrain own modules
         api("${rootProject.group}:protobuf-models:${rootProject.version}")
         api("${rootProject.group}:util:${rootProject.version}")

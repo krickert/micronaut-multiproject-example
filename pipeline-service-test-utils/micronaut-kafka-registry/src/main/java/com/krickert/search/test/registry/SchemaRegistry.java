@@ -53,4 +53,10 @@ public interface SchemaRegistry extends TestPropertyProvider {
      */
     @NonNull
     String getDeserializerClass();
+
+    /**
+     * Reset the schema registry state between tests.
+     * This method should clean up any resources that might cause interference between tests.
+     */
+    void reset();
 }

@@ -23,12 +23,22 @@ dependencies {
     api(mn.micronaut.aws.sdk.v2)
     api(mn.micronaut.discovery.client)
     // AWS for Moto
-    api("software.amazon.glue:schema-registry-serde:1.1.23")
+    api("software.amazon.glue:schema-registry-serde:1.1.23") {
+        // Exclude transitive Wire dependencies to avoid conflicts
+        exclude(group = "com.squareup.wire")
+    }
     api("software.amazon.msk:aws-msk-iam-auth:2.2.0")
     api("software.amazon.awssdk:url-connection-client:2.30.31")
 
     // Apicurio Registry
-    api("io.apicurio:apicurio-registry-protobuf-serde-kafka:3.0.6")
+    api("io.apicurio:apicurio-registry-protobuf-serde-kafka:3.0.6") {
+        // Exclude transitive Wire dependencies to avoid conflicts
+        exclude(group = "com.squareup.wire")
+    }
+
+    // Explicitly include Wire library to ensure consistent version
+    api("com.squareup.wire:wire-schema")
+    api("com.squareup.wire:wire-runtime")
 
     // Protobuf models from central project
     api(project(":protobuf-models"))

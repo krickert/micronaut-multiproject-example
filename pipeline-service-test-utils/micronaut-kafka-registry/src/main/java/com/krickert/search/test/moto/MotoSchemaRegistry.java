@@ -118,16 +118,51 @@ public class MotoSchemaRegistry implements SchemaRegistry {
         return motoContainer.isRunning();
     }
 
+    @Override
+    public void reset() {
+        log.info("Resetting Moto Schema Registry state");
+        // Reset the initialized flag so that the next test will reinitialize the registry
+        initialized = false;
+        // Delete the registry before re-initializing
+        deleteRegistry();
+        // Re-initialize the registry
+        start();
+        updateSystemProperties();
+    }
+
     /**
-     * Initialize the Glue registry.
+     * Delete the Glue registry if it exists.
      */
-    private void initializeRegistry() {
-        GlueClient glueClient = GlueClient.builder()
+    private void deleteRegistry() {
+        GlueClient glueClient = createGlueClient();
+        try {
+            glueClient.deleteRegistry(builder -> builder.registryId(id -> id.registryName(REGISTRY_NAME)));
+            log.info("Registry '{}' deleted successfully", REGISTRY_NAME);
+        } catch (EntityNotFoundException e) {
+            log.info("Registry '{}' does not exist, nothing to delete", REGISTRY_NAME);
+        } catch (Exception e) {
+            log.warn("Failed to delete registry: {}", e.getMessage());
+            // Continue execution even if deletion fails
+        }
+    }
+
+    /**
+     * Create a GlueClient for interacting with the Moto server.
+     */
+    private GlueClient createGlueClient() {
+        return GlueClient.builder()
                 .endpointOverride(URI.create(endpoint))
                 .region(Region.US_EAST_1)
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create("test", "test")))
                 .build();
+    }
+
+    /**
+     * Initialize the Glue registry.
+     */
+    private void initializeRegistry() {
+        GlueClient glueClient = createGlueClient();
 
         try {
             CreateRegistryRequest createRegistryRequest = CreateRegistryRequest.builder()

@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -63,8 +64,7 @@ public class SchemaRegistrySelectionTest {
         SchemaRegistry registry = factory.schemaRegistry("default");
 
         // Verify it's an ApicurioSchemaRegistry
-        assertTrue(registry instanceof ApicurioSchemaRegistry, 
-                "Default registry should be ApicurioSchemaRegistry but was " + registry.getClass().getSimpleName());
+        assertInstanceOf(ApicurioSchemaRegistry.class, registry, "Default registry should be ApicurioSchemaRegistry but was " + registry.getClass().getSimpleName());
 
         context.close();
     }
@@ -83,8 +83,7 @@ public class SchemaRegistrySelectionTest {
         SchemaRegistry registry = factory.schemaRegistry("default");
 
         // Verify it's a MotoSchemaRegistry
-        assertTrue(registry instanceof MotoSchemaRegistry, 
-                "Registry should be MotoSchemaRegistry but was " + registry.getClass().getSimpleName());
+        assertInstanceOf(MotoSchemaRegistry.class, registry, "Registry should be MotoSchemaRegistry but was " + registry.getClass().getSimpleName());
 
         context.close();
     }
@@ -103,8 +102,7 @@ public class SchemaRegistrySelectionTest {
         SchemaRegistry registry = factory.schemaRegistry("default");
 
         // Verify it's an ApicurioSchemaRegistry
-        assertTrue(registry instanceof ApicurioSchemaRegistry, 
-                "Registry should be ApicurioSchemaRegistry but was " + registry.getClass().getSimpleName());
+        assertInstanceOf(ApicurioSchemaRegistry.class, registry, "Registry should be ApicurioSchemaRegistry but was " + registry.getClass().getSimpleName());
 
         context.close();
     }

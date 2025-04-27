@@ -7,10 +7,13 @@ import com.krickert.search.model.Route;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.micronaut.context.annotation.Value;
+import jakarta.annotation.PreDestroy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.TimeUnit;
 
 @Singleton
 @Slf4j
@@ -20,7 +23,7 @@ public class GrpcForwarder {
     // For demonstration we create a single stub.
     // In practice, you may want to select the stub based on route.getDestination().
     private final PipelineServiceGrpc.PipelineServiceBlockingStub stub;
-
+    private final ManagedChannel channel;
     private final boolean usePlaintext;
 
     @Inject
@@ -35,7 +38,7 @@ public class GrpcForwarder {
             builder.usePlaintext();
         }
 
-        ManagedChannel channel = builder.build();
+        this.channel = builder.build();
         this.stub = PipelineServiceGrpc.newBlockingStub(channel);
     }
 
@@ -45,5 +48,22 @@ public class GrpcForwarder {
         log.debug("Forwarding to gRPC service: {}", route.getDestination());
         //noinspection ResultOfMethodCallIgnored
         stub.forward(pipe);
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        log.info("Shutting down gRPC channel");
+        if (channel != null && !channel.isShutdown()) {
+            try {
+                channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                log.warn("Error shutting down gRPC channel", e);
+                Thread.currentThread().interrupt();
+            } finally {
+                if (!channel.isTerminated()) {
+                    channel.shutdownNow();
+                }
+            }
+        }
     }
 }

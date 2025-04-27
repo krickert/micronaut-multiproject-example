@@ -107,6 +107,17 @@ public class ProtobufUtils {
     }
 
     /**
+     * Creates a UUID key from a given PipeDocument object.
+     *
+     * @param pipeDocument The PipeDocument object to generate the key from.
+     * @return The generated UUID key.
+     */
+    public static UUID createKey(PipeStream pipeDocument) {
+        return createKey(pipeDocument.getRequest().getDoc().getId());
+    }
+
+
+    /**
      * Creates a ListValue object from a collection of strings.
      *
      * @param collectionToConvert The collection of strings to be converted.

@@ -43,6 +43,7 @@ dependencies {
     api(mn.micronaut.grpc.server.runtime)
     api(mn.micronaut.grpc.annotation)
     api(mn.micronaut.kafka)
+    api(mn.rxjava3)
 
 
     // Project dependencies
