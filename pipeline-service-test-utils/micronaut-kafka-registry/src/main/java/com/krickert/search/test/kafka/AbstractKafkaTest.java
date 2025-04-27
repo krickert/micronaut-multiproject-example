@@ -53,7 +53,41 @@ public abstract class AbstractKafkaTest implements TestPropertyProvider {
      * @return the bootstrap servers as a string
      */
     protected String getBootstrapServers() {
+        if (!kafka.isRunning()) {
+            log.info("Starting Kafka container...");
+            kafka.start();
+            log.info("Kafka container started. Bootstrap servers: {}", kafka.getBootstrapServers());
+        }
         return kafka.getBootstrapServers();
+    }
+
+    /**
+     * Ensures both Schema Registry and Kafka are started in the correct order.
+     * First starts the Schema Registry, then Kafka.
+     */
+    protected void ensureServicesStarted() {
+        // First, ensure Schema Registry is started
+        if (schemaRegistry == null) {
+            log.warn("Schema Registry is null, creating a temporary instance");
+            // Create a temporary ApplicationContext to get the SchemaRegistry
+            ApplicationContext context = ApplicationContext.builder().build();
+            try (context) {
+                context.start();
+                SchemaRegistryFactory factory = context.getBean(SchemaRegistryFactory.class);
+                schemaRegistry = factory.schemaRegistry(getSchemaRegistryType());
+                log.info("Created local SchemaRegistry of type: {}", getSchemaRegistryType());
+            }
+        }
+
+        // Start Schema Registry first
+        log.info("Starting Schema Registry...");
+        schemaRegistry.start();
+        log.info("Schema Registry started: {}", schemaRegistry.getEndpoint());
+
+        // Then start Kafka
+        log.info("Starting Kafka...");
+        getBootstrapServers();
+        log.info("Both Schema Registry and Kafka are now running");
     }
 
     /**
@@ -81,24 +115,8 @@ public abstract class AbstractKafkaTest implements TestPropertyProvider {
 
     @Override
     public @NonNull Map<String, String> getProperties() {
-        if (!kafka.isRunning()) {
-            kafka.start();
-        }
-        // Create a local SchemaRegistry if injection hasn't happened yet
-        SchemaRegistry registry = schemaRegistry;
-        if (registry == null) {
-            // Create a temporary ApplicationContext to get the SchemaRegistry
-            ApplicationContext context = ApplicationContext.builder().build();
-            try (context) {
-                context.start();
-                SchemaRegistryFactory factory = context.getBean(SchemaRegistryFactory.class);
-                registry = factory.schemaRegistry(getSchemaRegistryType());
-                log.info("Created local SchemaRegistry of type: {}", getSchemaRegistryType());
-            }
-        }
-
-        // Ensure schema registry is started
-        registry.start();
+        // Ensure both Schema Registry and Kafka are started in the correct order
+        ensureServicesStarted();
 
         String producerPrefix = "kafka.producers.default.";
         Map<String, String> props = new HashMap<>();
@@ -106,7 +124,7 @@ public abstract class AbstractKafkaTest implements TestPropertyProvider {
         // Basic Kafka producer configuration
         props.put(producerPrefix + ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers());
         props.put(producerPrefix + ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, UUIDSerializer.class.getName());
-        props.put(producerPrefix + ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, registry.getSerializerClass());
+        props.put(producerPrefix + ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, schemaRegistry.getSerializerClass());
 
         // Basic Kafka consumer configuration
         String consumerPrefix = "kafka.consumers.default.";
@@ -114,7 +132,7 @@ public abstract class AbstractKafkaTest implements TestPropertyProvider {
         props.put(consumerPrefix + ConsumerConfig.GROUP_ID_CONFIG, "test-group");
         props.put(consumerPrefix + ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         props.put(consumerPrefix + ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, UUIDDeserializer.class.getName());
-        props.put(consumerPrefix + ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, registry.getDeserializerClass());
+        props.put(consumerPrefix + ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, schemaRegistry.getDeserializerClass());
 
         // Add AdminClient configuration
         String adminPrefix = "kafka.admin.";
@@ -124,7 +142,7 @@ public abstract class AbstractKafkaTest implements TestPropertyProvider {
         props.put(adminPrefix + AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers());
 
         // Add schema registry properties
-        Map<String, String> registryProps = registry.getProperties();
+        Map<String, String> registryProps = schemaRegistry.getProperties();
         props.putAll(registryProps);
 
         log.info("Kafka properties configured with bootstrap servers: {}", getBootstrapServers());

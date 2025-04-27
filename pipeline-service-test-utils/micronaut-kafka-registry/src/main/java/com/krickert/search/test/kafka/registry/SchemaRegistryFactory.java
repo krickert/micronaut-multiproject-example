@@ -4,10 +4,14 @@ import com.krickert.search.test.registry.SchemaRegistry;
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.context.annotation.Requires;
+import io.micronaut.core.annotation.NonNull;
+import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Singleton;
+import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
 import java.util.ServiceLoader;
 
 /**
@@ -16,7 +20,7 @@ import java.util.ServiceLoader;
  * and selects the appropriate one based on the configuration or environment variable.
  */
 @Factory
-public class SchemaRegistryFactory {
+public class SchemaRegistryFactory implements TestPropertyProvider {
     private static final Logger log = LoggerFactory.getLogger(SchemaRegistryFactory.class);
 
     // Environment variable and system property to control which schema registry to use
@@ -71,5 +75,17 @@ public class SchemaRegistryFactory {
 
         // If no registry is found at all, throw an exception
         throw new IllegalStateException("No SchemaRegistry implementation found. Make sure you have at least one implementation in the classpath.");
+    }
+
+    /**
+     * Allows dynamically providing properties for a test.
+     *
+     * @return A map of properties
+     */
+    @Override
+    public @NonNull Map<String, String> getProperties() {
+        // SchemaRegistryFactory doesn't provide any properties directly
+        // Properties will be provided by the specific SchemaRegistry implementation
+        return new java.util.HashMap<>();
     }
 }
