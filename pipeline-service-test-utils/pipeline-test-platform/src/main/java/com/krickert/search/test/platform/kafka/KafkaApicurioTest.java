@@ -3,6 +3,7 @@ package com.krickert.search.test.platform.kafka;
 import io.apicurio.registry.serde.config.SerdeConfig;
 import io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer;
 import io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer;
+import io.micronaut.test.support.TestPropertyProvider;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.slf4j.Logger;
@@ -23,7 +24,8 @@ public class KafkaApicurioTest extends AbstractKafkaTest {
     
     // Registry type
     private static final String REGISTRY_TYPE = "apicurio";
-    
+
+
     // Apicurio container
     private static final GenericContainer<?> apicurioContainer = new GenericContainer<>(
             DockerImageName.parse("apicurio/apicurio-registry:latest")
@@ -55,6 +57,8 @@ public class KafkaApicurioTest extends AbstractKafkaTest {
      */
     public KafkaApicurioTest(String returnClass) {
         this.returnClass = returnClass;
+        startContainers();
+        setupProperties();
         // Set the registry type in the container manager
         containerManager.setProperty(TestContainerManager.KAFKA_REGISTRY_TYPE_PROP, REGISTRY_TYPE);
     }
@@ -164,5 +168,10 @@ public class KafkaApicurioTest extends AbstractKafkaTest {
         
         // Add properties to container manager
         containerManager.setProperties(props);
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        return containerManager.getProperties();
     }
 }

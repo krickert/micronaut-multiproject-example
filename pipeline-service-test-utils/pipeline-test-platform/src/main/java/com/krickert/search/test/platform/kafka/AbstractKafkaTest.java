@@ -1,5 +1,6 @@
 package com.krickert.search.test.platform.kafka;
 
+import io.micronaut.test.support.TestPropertyProvider;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.CreateTopicsResult;
@@ -29,7 +30,7 @@ import java.util.concurrent.TimeoutException;
  * Abstract base class for Kafka tests.
  * This class provides common functionality for Kafka tests with different schema registry implementations.
  */
-public abstract class AbstractKafkaTest implements KafkaTest {
+public abstract class AbstractKafkaTest implements KafkaTest, TestPropertyProvider {
     protected static final Logger log = LoggerFactory.getLogger(AbstractKafkaTest.class);
     
     // Kafka container
