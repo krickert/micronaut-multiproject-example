@@ -243,11 +243,19 @@ public class KafkaGlueTest extends AbstractKafkaTest {
         props.put(producerPrefix + AWSSchemaRegistryConstants.SCHEMA_AUTO_REGISTRATION_SETTING, "true");
         props.put(producerPrefix + AWSSchemaRegistryConstants.AVRO_RECORD_TYPE, "SPECIFIC_RECORD");
 
+        // Add properties with the keys expected by the test
+        props.put(producerPrefix + "aws.region", AWS_REGION);
+        props.put(producerPrefix + "registry.name", REGISTRY_NAME);
+
         String consumerPrefix = "kafka.consumers.default.";
         props.put(consumerPrefix + ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, GlueSchemaRegistryKafkaDeserializer.class.getName());
         props.put(consumerPrefix + AWSSchemaRegistryConstants.AWS_REGION, AWS_REGION);
         props.put(consumerPrefix + AWSSchemaRegistryConstants.REGISTRY_NAME, REGISTRY_NAME);
         props.put(consumerPrefix + AWSSchemaRegistryConstants.AVRO_RECORD_TYPE, "SPECIFIC_RECORD");
+
+        // Add properties with the keys expected by the test
+        props.put(consumerPrefix + "aws.region", AWS_REGION);
+        props.put(consumerPrefix + "registry.name", REGISTRY_NAME);
 
         // Add properties to container manager
         containerManager.setProperties(props);
