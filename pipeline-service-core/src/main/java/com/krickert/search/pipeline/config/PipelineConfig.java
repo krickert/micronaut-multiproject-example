@@ -8,6 +8,7 @@ import jakarta.inject.Singleton;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Getter
@@ -22,7 +23,7 @@ public class PipelineConfig {
     private final String name;
 
     // The existing map of service configurations.
-    private Map<String, ServiceConfiguration> service;
+    private Map<String, ServiceConfiguration> service = new HashMap<>();
 
     public PipelineConfig(@Parameter String name) {
         this.name = name;

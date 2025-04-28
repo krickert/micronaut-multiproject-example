@@ -5,6 +5,7 @@ import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.grpc.PipelineService;
 import io.micronaut.configuration.kafka.annotation.KafkaListener;
 import io.micronaut.configuration.kafka.annotation.Topic;
+import io.micronaut.context.annotation.Requires;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 
@@ -12,6 +13,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 @KafkaListener(groupId = "${pipeline.name}")
 @Singleton
+@Requires(property = "kafka.consumer.dynamic.enabled", notEquals = "true")
 public class PipelineKafkaListener {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(PipelineKafkaListener.class);
