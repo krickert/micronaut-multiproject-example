@@ -23,52 +23,10 @@ import java.time.Instant;
 @Slf4j
 public class EchoPipelineServiceProcessor implements PipelineServiceProcessor {
 
-    /**
-     * Process a PipeStream and return the updated PipeStream.
-     * This method is used for testing purposes.
-     * 
-     * @param pipeStream the PipeStream to process
-     * @return the updated PipeStream
-     */
-    public PipeStream processAndReturn(PipeStream pipeStream) {
-        // Process the PipeStream (this will return a PipeServiceDto)
-        PipeServiceDto serviceDto = process(pipeStream);
-
-        // Return the updated PipeStream that was created in the process method
-        if (pipeStream != null && pipeStream.hasRequest() && serviceDto.getPipeDoc() != null) {
-            // Create and return a new PipeStream with the updated document
-            return pipeStream.toBuilder()
-                .setRequest(pipeStream.getRequest().toBuilder()
-                    .setDoc(serviceDto.getPipeDoc())
-                    .build())
-                .build();
-        }
-
-        return pipeStream;
-    }
-
     @Override
     public PipeServiceDto process(PipeStream pipeStream) {
         log.debug("Processing PipeStream with EchoPipelineServiceProcessor");
         PipeServiceDto serviceDto = new PipeServiceDto();
-
-        // Check for null input
-        if (pipeStream == null) {
-            log.error("Received null PipeStream");
-
-            // Return an error response for null input
-            ErrorData errorData = ErrorData.newBuilder()
-                .setErrorMessage("Error processing PipeStream: Input was null")
-                .build();
-
-            PipeResponse response = PipeResponse.newBuilder()
-                .setSuccess(false)
-                .setErrorDate(errorData)
-                .build();
-
-            serviceDto.setResponse(response);
-            return serviceDto;
-        }
 
         try {
             // Get the PipeDoc from the request

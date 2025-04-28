@@ -1,7 +1,7 @@
 package com.krickert.search.pipeline.config;
 
 import io.micronaut.context.annotation.ConfigurationProperties;
-import io.micronaut.context.annotation.EachProperty;
+import io.micronaut.context.annotation.Property;
 import io.micronaut.core.annotation.Introspected;
 import io.micronaut.serde.annotation.Serdeable;
 import jakarta.inject.Singleton;
@@ -15,5 +15,6 @@ import lombok.Setter;
 @Serdeable
 @Introspected
 public class InternalServiceConfig {
+    @Property(name = "pipeline.pipelineServiceName")
     private String pipelineServiceName;
 }
