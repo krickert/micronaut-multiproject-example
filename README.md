@@ -25,3 +25,21 @@ Our goal is to manage this system effectively within a single repository (monore
 Let's begin!
 
 The tutorial can me found [here](docs/tutorial.html)
+
+## Development Environment
+
+A Docker-based development environment is available in the `docker-dev` directory. This environment includes:
+
+- **Kafka** (in Kraft mode) - Message broker
+- **Apicurio Registry** - Schema registry
+- **Solr** (in cloud mode) - Search platform
+- **Kafka UI** - Web UI for Kafka management
+
+To start the development environment:
+
+```bash
+cd docker-dev
+docker-compose up -d
+```
+
+For more details, see the [docker-dev README](docker-dev/README.md).
