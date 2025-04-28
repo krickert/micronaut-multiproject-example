@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.util.List;
+import java.util.Map;
 
 @Getter
 @Setter
@@ -14,4 +15,10 @@ public class ServiceConfigurationDto {
     private List<String> kafkaListenTopics;
     private List<String> kafkaPublishTopics;
     private List<String> grpcForwardTo;
+
+    // The name of the service implementation
+    private String serviceImplementation;
+
+    // Service-specific configuration parameters
+    private Map<String, String> configParams;
 }

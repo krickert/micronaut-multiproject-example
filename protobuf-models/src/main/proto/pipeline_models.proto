@@ -87,6 +87,15 @@ message PipeStream {
   string pipeline = 4;
 }
 
+// Service configuration that points to a service implementation and contains service-specific configuration
+message ServiceConfig {
+  // The name of the service implementation
+  string service_implementation = 1;
+
+  // Service-specific configuration parameters
+  map<string, string> config_params = 2;
+}
+
 service PipelineService {
   rpc forward(PipeStream) returns (google.protobuf.Empty);
   rpc getOutput(PipeRequest) returns (OutputResponse);

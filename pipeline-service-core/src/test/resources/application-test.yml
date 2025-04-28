@@ -31,3 +31,7 @@ pipeline:
             - test-topic
           kafkaPublishTopics:
             - test-output-topic
+          serviceImplementation: test-service-impl
+          configParams:
+            param1: value1
+            param2: value2

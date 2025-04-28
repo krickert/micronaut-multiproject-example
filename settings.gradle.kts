@@ -30,5 +30,7 @@ include(
     "pipeline-instance-A",
     "pipeline-examples",
     "pipeline-examples:pipeline-echo-service",
+    "pipeline-services",
+    "pipeline-services:chunker",
     "util"
 )

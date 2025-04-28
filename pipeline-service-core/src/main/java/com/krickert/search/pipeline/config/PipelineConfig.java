@@ -37,6 +37,8 @@ public class PipelineConfig {
         config.setKafkaListenTopics(dto.getKafkaListenTopics());
         config.setKafkaPublishTopics(dto.getKafkaPublishTopics());
         config.setGrpcForwardTo(dto.getGrpcForwardTo());
+        config.setServiceImplementation(dto.getServiceImplementation());
+        config.setConfigParams(dto.getConfigParams());
         service.put(dto.getName(), config);
     }
 }
