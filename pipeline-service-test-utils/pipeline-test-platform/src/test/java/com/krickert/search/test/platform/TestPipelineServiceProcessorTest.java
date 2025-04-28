@@ -83,7 +83,7 @@ public class TestPipelineServiceProcessorTest extends AbstractPipelineTest imple
      */
     @Override
     @Test
-    public void testGrpcInput() {
+    public void testGrpcInput() throws Exception {
         // Call the parent test method
         super.testGrpcInput();
 

@@ -8,6 +8,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 
 @Singleton
+@io.micronaut.context.annotation.Requires(property = "kafka.enabled", value = "true")
 public class KafkaForwarder {
 
     @Inject

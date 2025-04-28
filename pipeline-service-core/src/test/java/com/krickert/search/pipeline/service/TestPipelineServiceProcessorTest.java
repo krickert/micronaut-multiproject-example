@@ -13,12 +13,12 @@ import org.slf4j.LoggerFactory;
 import static org.junit.jupiter.api.Assertions.*;
 
 @MicronautTest
-public class DefaultPipelineServiceProcessorTest {
+public class TestPipelineServiceProcessorTest {
 
-    private static final Logger log = LoggerFactory.getLogger(DefaultPipelineServiceProcessorTest.class);
+    private static final Logger log = LoggerFactory.getLogger(TestPipelineServiceProcessorTest.class);
 
     @Inject
-    DefaultPipelineServiceProcessor processor;
+    TestPipelineServiceProcessor processor;
 
     @Test
     void testProcessSuccess() {

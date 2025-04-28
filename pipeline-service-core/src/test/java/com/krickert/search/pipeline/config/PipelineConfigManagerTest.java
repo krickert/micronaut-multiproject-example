@@ -167,11 +167,12 @@ public class PipelineConfigManagerTest {
         // Verify pipeline1 services
         PipelineConfig pipeline1 = config.getPipelines().get("pipeline1");
         assertEquals("pipeline1", pipeline1.getName());
-        assertEquals(4, pipeline1.getService().size());
+        assertEquals(5, pipeline1.getService().size());
         assertTrue(pipeline1.getService().containsKey("importer"));
         assertTrue(pipeline1.getService().containsKey("chunker"));
         assertTrue(pipeline1.getService().containsKey("embedder"));
         assertTrue(pipeline1.getService().containsKey("solr-indexer"));
+        assertTrue(pipeline1.getService().containsKey("test-pipeline"));
 
         // Verify specific service configurations
         ServiceConfiguration importer = pipeline1.getService().get("importer");

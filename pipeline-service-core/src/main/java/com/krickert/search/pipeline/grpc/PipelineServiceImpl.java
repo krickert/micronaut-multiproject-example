@@ -22,9 +22,11 @@ import java.util.stream.Collectors;
 
 @GrpcService
 @Slf4j
-public class PipelineServiceImpl extends PipelineServiceGrpc.PipelineServiceImplBase {
+@io.micronaut.context.annotation.Requires(property = "kafka.enabled", notEquals = "false")
+public class PipelineServiceImpl extends PipelineServiceGrpc.PipelineServiceImplBase implements PipelineService {
 
     @Inject
+    @io.micronaut.context.annotation.Requires(property = "kafka.enabled", value = "true")
     KafkaForwarder kafkaForwarder;
 
     @Inject
@@ -103,11 +105,23 @@ public class PipelineServiceImpl extends PipelineServiceGrpc.PipelineServiceImpl
      * 
      * @param request The PipeStream to process
      */
+    @Override
     public void processKafkaMessage(PipeStream request) {
         processStream(request);
     }
 
     private PipeResponse processRequest(PipeRequest request) {
+        if (request == null) {
+           log.error("Received null PipeStream");
+            // Return an error response for null input
+            ErrorData errorData = ErrorData.newBuilder()
+                    .setErrorMessage("Error processing PipeStream: Input was null")
+                    .build();
+            return PipeResponse.newBuilder()
+                    .setSuccess(false)
+                    .setErrorDate(errorData)
+                    .build();
+        }
         // Create a PipeStream from the request
         PipeStream pipeStream = PipeStream.newBuilder()
             .setRequest(request)
@@ -140,7 +154,11 @@ public class PipelineServiceImpl extends PipelineServiceGrpc.PipelineServiceImpl
                 try {
                     switch (route.getRouteType()) {
                         case KAFKA:
-                            kafkaForwarder.forwardToKafka(pipeStream, route);
+                            if (kafkaForwarder != null) {
+                                kafkaForwarder.forwardToKafka(pipeStream, route);
+                            } else {
+                                log.debug("Kafka is disabled, skipping Kafka route: {}", route.getDestination());
+                            }
                             break;
                         case GRPC:
                             grpcForwarder.forwardToGrpc(pipeStream, route);
@@ -158,10 +176,14 @@ public class PipelineServiceImpl extends PipelineServiceGrpc.PipelineServiceImpl
                     success = false;
 
                     // Optionally: forward the same pipe to a backup Kafka topic for reprocessing
-                    try {
-                        kafkaForwarder.forwardToBackup(pipeStream, route);
-                    } catch (Exception backupEx) {
-                        log.error("Error forwarding to backup: {}", backupEx.getMessage(), backupEx);
+                    if (kafkaForwarder != null) {
+                        try {
+                            kafkaForwarder.forwardToBackup(pipeStream, route);
+                        } catch (Exception backupEx) {
+                            log.error("Error forwarding to backup: {}", backupEx.getMessage(), backupEx);
+                        }
+                    } else {
+                        log.debug("Kafka is disabled, skipping backup route for: {}", route.getDestination());
                     }
                 }
             }
@@ -203,7 +225,11 @@ public class PipelineServiceImpl extends PipelineServiceGrpc.PipelineServiceImpl
                 try {
                     switch (route.getRouteType()) {
                         case KAFKA:
-                            kafkaForwarder.forwardToKafka(pipeStream, route);
+                            if (kafkaForwarder != null) {
+                                kafkaForwarder.forwardToKafka(pipeStream, route);
+                            } else {
+                                log.debug("Kafka is disabled, skipping Kafka route: {}", route.getDestination());
+                            }
                             break;
                         case GRPC:
                             grpcForwarder.forwardToGrpc(pipeStream, route);
@@ -217,10 +243,14 @@ public class PipelineServiceImpl extends PipelineServiceGrpc.PipelineServiceImpl
                 } catch (Exception e) {
                     log.error("Error processing stream route {}: {}", route.getDestination(), e.getMessage(), e);
                     // Optionally: forward the same pipe to a backup Kafka topic for reprocessing
-                    try {
-                        kafkaForwarder.forwardToBackup(pipeStream, route);
-                    } catch (Exception backupEx) {
-                        log.error("Error forwarding stream to backup: {}", backupEx.getMessage(), backupEx);
+                    if (kafkaForwarder != null) {
+                        try {
+                            kafkaForwarder.forwardToBackup(pipeStream, route);
+                        } catch (Exception backupEx) {
+                            log.error("Error forwarding stream to backup: {}", backupEx.getMessage(), backupEx);
+                        }
+                    } else {
+                        log.debug("Kafka is disabled, skipping backup route for: {}", route.getDestination());
                     }
                 }
             }

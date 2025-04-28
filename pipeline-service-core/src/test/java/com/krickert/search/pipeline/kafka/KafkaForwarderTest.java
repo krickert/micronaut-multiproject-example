@@ -1,21 +1,20 @@
 package com.krickert.search.pipeline.kafka;
 
 import com.krickert.search.model.*;
-import com.krickert.search.test.kafka.AbstractKafkaTest;
+import com.krickert.search.test.platform.AbstractPipelineTest;
+import com.krickert.search.test.platform.proto.PipeDocExample;
 import io.micronaut.configuration.kafka.annotation.KafkaListener;
 import io.micronaut.configuration.kafka.annotation.OffsetReset;
 import io.micronaut.configuration.kafka.annotation.Topic;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.KafkaContainer;
-import org.testcontainers.utility.DockerImageName;
 
 import java.util.Collections;
 import java.util.List;
@@ -26,12 +25,15 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@MicronautTest(environments = "test", transactional = false)
+@MicronautTest(environments = "apicurio", transactional = false)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class KafkaForwarderTest extends AbstractKafkaTest {
+public class KafkaForwarderTest extends AbstractPipelineTest implements TestPropertyProvider {
     private static final Logger log = LoggerFactory.getLogger(KafkaForwarderTest.class);
     private static final String TEST_TOPIC = "test-topic";
     private static final String BACKUP_TOPIC = "backup-test-topic";
+
+    // Store the document ID to ensure consistency between getInput() and getExpectedPipeDoc()
+    private String testDocId = UUID.randomUUID().toString();
 
     @Inject
     private KafkaForwarder kafkaForwarder;
@@ -40,18 +42,24 @@ public class KafkaForwarderTest extends AbstractKafkaTest {
     private TestListener testListener;
 
     @BeforeEach
-    void setUp() {
+    public void setUp() {
+        // Call parent setUp method
+        super.setUp();
         // Clear any messages from previous tests
         testListener.reset();
         log.info("Test setup complete");
     }
 
-    @Test
-    void testForwardToKafka() throws Exception {
-        // Create test data
-        String docId = UUID.randomUUID().toString();
+    /**
+     * Get the input PipeStream for testing.
+     * 
+     * @return the input PipeStream
+     */
+    @Override
+    protected PipeStream getInput() {
+        // Create test data using the consistent testDocId
         PipeDoc doc = PipeDoc.newBuilder()
-                .setId(docId)
+                .setId(testDocId)
                 .setTitle("Test Document")
                 .setBody("This is a test document for Kafka forwarding")
                 .build();
@@ -60,9 +68,44 @@ public class KafkaForwarderTest extends AbstractKafkaTest {
                 .setDoc(doc)
                 .build();
 
-        PipeStream pipeStream = PipeStream.newBuilder()
+        return PipeStream.newBuilder()
                 .setRequest(request)
                 .build();
+    }
+
+    /**
+     * Get the expected output PipeResponse after processing.
+     * 
+     * @return the expected PipeResponse
+     */
+    @Override
+    protected PipeResponse getExpectedOutput() {
+        // For KafkaForwarder tests, we don't expect a specific response
+        // as we're just testing the forwarding functionality
+        return PipeResponse.newBuilder()
+                .setSuccess(true)
+                .build();
+    }
+
+    /**
+     * Get the expected output PipeDoc after processing.
+     * 
+     * @return the expected PipeDoc
+     */
+    @Override
+    protected PipeDoc getExpectedPipeDoc() {
+        // For KafkaForwarder tests, we expect the document to remain unchanged
+        return getInput().getRequest().getDoc();
+    }
+
+    /**
+     * Test forwarding a message to Kafka.
+     * This test uses the KafkaForwarder directly rather than the AbstractPipelineTest framework.
+     */
+    @Test
+    void testForwardToKafka() throws Exception {
+        // Get the input PipeStream
+        PipeStream pipeStream = getInput();
 
         Route route = Route.newBuilder()
                 .setDestination(TEST_TOPIC)
@@ -83,18 +126,35 @@ public class KafkaForwarderTest extends AbstractKafkaTest {
 
         PipeStream receivedMessage = receivedMessages.get(0);
         assertNotNull(receivedMessage, "Received message should not be null");
-        assertEquals(docId, receivedMessage.getRequest().getDoc().getId(), 
+        assertEquals(testDocId, receivedMessage.getRequest().getDoc().getId(), 
                 "Document ID should match");
         assertEquals("Test Document", receivedMessage.getRequest().getDoc().getTitle(), 
                 "Document title should match");
     }
 
+    /**
+     * Test using the AbstractPipelineTest framework's Kafka functionality.
+     * This test overrides the parent method to add KafkaForwarder-specific assertions.
+     */
+    @Override
+    @Test
+    public void testKafkaInput() throws Exception {
+        // Call the parent test method
+        super.testKafkaInput();
+
+        // Additional assertions specific to KafkaForwarder can be added here
+        log.info("KafkaForwarder Kafka input test completed successfully");
+    }
+
+    /**
+     * Test forwarding a message to the backup topic.
+     * This test uses the KafkaForwarder directly rather than the AbstractPipelineTest framework.
+     */
     @Test
     void testForwardToBackup() throws Exception {
-        // Create test data
-        String docId = UUID.randomUUID().toString();
+        // Create a custom PipeStream for backup testing with a different title/body but same ID
         PipeDoc doc = PipeDoc.newBuilder()
-                .setId(docId)
+                .setId(testDocId)
                 .setTitle("Backup Document")
                 .setBody("This is a test document for Kafka backup forwarding")
                 .build();
@@ -127,10 +187,24 @@ public class KafkaForwarderTest extends AbstractKafkaTest {
 
         PipeStream receivedMessage = receivedBackupMessages.get(0);
         assertNotNull(receivedMessage, "Received backup message should not be null");
-        assertEquals(docId, receivedMessage.getRequest().getDoc().getId(), 
+        assertEquals(testDocId, receivedMessage.getRequest().getDoc().getId(), 
                 "Document ID should match");
         assertEquals("Backup Document", receivedMessage.getRequest().getDoc().getTitle(), 
                 "Document title should match");
+    }
+
+    /**
+     * Test using the AbstractPipelineTest framework's gRPC functionality.
+     * This test overrides the parent method to add KafkaForwarder-specific assertions.
+     */
+    @Override
+    @Test
+    public void testGrpcInput() throws Exception {
+        // Call the parent test method
+        super.testGrpcInput();
+
+        // Additional assertions specific to KafkaForwarder can be added here
+        log.info("KafkaForwarder gRPC input test completed successfully");
     }
 
     @Singleton

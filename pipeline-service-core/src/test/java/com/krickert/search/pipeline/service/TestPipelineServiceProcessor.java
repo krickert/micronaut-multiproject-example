@@ -13,13 +13,13 @@ import org.slf4j.LoggerFactory;
  * Real implementations would process the PipeStream in some way.
  */
 @Singleton
-public class DefaultPipelineServiceProcessor implements PipelineServiceProcessor {
+public class TestPipelineServiceProcessor implements PipelineServiceProcessor {
 
-    private static final Logger log = LoggerFactory.getLogger(DefaultPipelineServiceProcessor.class);
+    private static final Logger log = LoggerFactory.getLogger(TestPipelineServiceProcessor.class);
 
     @Override
     public PipeServiceDto process(PipeStream pipeStream) {
-        log.debug("Processing PipeStream with DefaultPipelineServiceProcessor");
+        log.debug("Processing PipeStream with TestPipelineServiceProcessor");
 
         PipeServiceDto result = new PipeServiceDto();
 

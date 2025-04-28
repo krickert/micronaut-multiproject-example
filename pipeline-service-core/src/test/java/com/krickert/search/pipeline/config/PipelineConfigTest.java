@@ -2,6 +2,7 @@ package com.krickert.search.pipeline.config;
 
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
+import jakarta.inject.Named;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -14,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class PipelineConfigTest {
 
     @Inject
+    @Named("pipeline1")
     private PipelineConfig pipelineConfig;
 
     @Test
@@ -28,12 +30,12 @@ public class PipelineConfigTest {
         // Setup
         PipelineConfig config = new PipelineConfig("testPipeline");
         Map<String, ServiceConfiguration> services = new HashMap<>();
-        
+
         ServiceConfiguration chunker = new ServiceConfiguration("chunker");
         services.put("chunker", chunker);
-        
+
         config.setService(services);
-        
+
         // Test
         assertTrue(config.containsService("chunker"));
         assertFalse(config.containsService("nonExistentService"));
@@ -44,16 +46,16 @@ public class PipelineConfigTest {
         // Setup
         PipelineConfig config = new PipelineConfig("testPipeline");
         config.setService(new HashMap<>());
-        
+
         ServiceConfigurationDto dto = new ServiceConfigurationDto();
         dto.setName("embedder");
         dto.setKafkaListenTopics(List.of("chunker-results"));
         dto.setKafkaPublishTopics(List.of("enhanced-documents"));
         dto.setGrpcForwardTo(List.of("solr-indexer"));
-        
+
         // Test
         config.addOrUpdateService(dto);
-        
+
         // Verify
         assertTrue(config.containsService("embedder"));
         ServiceConfiguration addedService = config.getService().get("embedder");
@@ -61,11 +63,11 @@ public class PipelineConfigTest {
         assertEquals(List.of("chunker-results"), addedService.getKafkaListenTopics());
         assertEquals(List.of("enhanced-documents"), addedService.getKafkaPublishTopics());
         assertEquals(List.of("solr-indexer"), addedService.getGrpcForwardTo());
-        
+
         // Test update
         dto.setKafkaListenTopics(List.of("new-topic"));
         config.addOrUpdateService(dto);
-        
+
         // Verify update
         ServiceConfiguration updatedService = config.getService().get("embedder");
         assertEquals(List.of("new-topic"), updatedService.getKafkaListenTopics());

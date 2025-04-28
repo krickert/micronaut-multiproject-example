@@ -11,6 +11,7 @@ import java.util.UUID;
  * to handle UUID to String conversion for tests.
  */
 @Singleton
+@io.micronaut.context.annotation.Requires(property = "kafka.enabled", value = "true")
 public class TestKafkaForwarder extends KafkaForwarder {
 
     @Inject

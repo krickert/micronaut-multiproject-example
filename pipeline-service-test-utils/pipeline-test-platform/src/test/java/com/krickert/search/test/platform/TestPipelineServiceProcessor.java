@@ -7,6 +7,7 @@ import com.krickert.search.model.PipeResponse;
 import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.service.PipeServiceDto;
 import com.krickert.search.pipeline.service.PipelineServiceProcessor;
+import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +17,7 @@ import org.slf4j.LoggerFactory;
  * This implementation adds "hello pipelines!" to the custom data of the PipeDoc.
  */
 @Singleton
+@Named("testPipelineServiceProcessor")
 public class TestPipelineServiceProcessor implements PipelineServiceProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(TestPipelineServiceProcessor.class);
