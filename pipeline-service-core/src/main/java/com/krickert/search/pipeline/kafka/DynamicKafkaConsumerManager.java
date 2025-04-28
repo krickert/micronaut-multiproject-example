@@ -36,7 +36,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @Singleton
-@Requires(beans = {PipelineConfigService.class, PipelineServiceImpl.class, KafkaSerdeProvider.class}) // Add KafkaSerdeProvider
+@Requires(beans = {PipelineConfigService.class, PipelineServiceImpl.class, KafkaSerdeProvider.class},
+          property = "kafka.consumer.dynamic.enabled", 
+          notEquals = "false") // Make it optional in tests
 public class DynamicKafkaConsumerManager implements ApplicationEventListener<ServiceReadyEvent> {
 
     private static final Logger log = LoggerFactory.getLogger(DynamicKafkaConsumerManager.class);

@@ -1,0 +1,5 @@
+# Default test configuration
+kafka:
+  consumer:
+    dynamic:
+      enabled: false

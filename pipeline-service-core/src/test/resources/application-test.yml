@@ -1,0 +1,33 @@
+# Test configuration for KafkaSerdeFactory tests
+kafka:
+  consumer:
+    dynamic:
+      enabled: false
+  schema:
+    registry:
+      type: apicurio
+  bootstrap:
+    servers: localhost:9092
+  consumers:
+    default:
+      key.deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value.deserializer: io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer
+      apicurio.registry.url: http://localhost:8080/apis/registry/v3
+      deserializer.specific.value.return.class: com.krickert.search.model.PipeStream
+  producers:
+    default:
+      key.serializer: org.apache.kafka.common.serialization.StringSerializer
+      value.serializer: io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer
+      apicurio.registry.url: http://localhost:8080/apis/registry/v3
+
+# Pipeline configuration for testing
+pipeline:
+  pipelineServiceName: test-service
+  configs:
+    test-pipeline:
+      service:
+        test-service:
+          kafkaListenTopics:
+            - test-topic
+          kafkaPublishTopics:
+            - test-output-topic
