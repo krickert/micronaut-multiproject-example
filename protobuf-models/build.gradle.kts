@@ -26,6 +26,8 @@ dependencies {
     testImplementation(mn.mockito.core)
 
     implementation(libs.protobuf.java)
+    // Use the alias from libs.versions.toml
+    implementation(libs.protobufcommon)
     implementation(libs.grpc.protobuf)
     implementation(libs.grpc.stub)
     implementation(libs.slf4j.api)

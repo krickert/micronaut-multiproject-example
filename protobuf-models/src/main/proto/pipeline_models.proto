@@ -84,6 +84,7 @@ message PipeStream {
   PipeRequest request = 1;
   repeated PipeResponse pipeReplies = 2;
   repeated string streamLogs = 3;
+  string pipeline = 4;
 }
 
 service PipelineService {

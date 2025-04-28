@@ -1,0 +1,166 @@
+syntax = "proto3";
+
+package com.krickert.mcp; // Adjust package name as needed
+
+import "google/protobuf/any.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto"; // Import for standard error details
+option java_package = "com.example.mcp.proto";
+option java_outer_classname = "McpProto";
+option java_multiple_files = true;
+
+// --- Core Message Definitions ---
+
+// Represents a single resource managed by the MCP service.
+message McpResource {
+  // The unique identifier for this resource within its type.
+  // Example: "namespace/configmap-name", "global/policy-id"
+  string name = 1;
+
+  // A URL identifying the type of the resource payload. This allows the consumer
+  // to know how to unpack the 'payload'.
+  // Example: "type.googleapis.com/com.example.internal.PolicyV1"
+  string type_url = 2;
+
+  // The actual resource data, serialized as a Protobuf message and embedded
+  // within 'Any'. The specific message type is indicated by 'type_url'.
+  google.protobuf.Any payload = 3;
+
+  // Version identifier for the resource. Used for tracking changes and
+  // potentially for optimistic concurrency control or conditional updates.
+  string version = 4;
+
+  // Timestamp of the last update to this resource.
+  google.protobuf.Timestamp last_updated = 5;
+
+  // Optional metadata associated with the resource. Can be used for labels,
+  // annotations, or other contextual information.
+  map<string, string> annotations = 6;
+}
+
+// A request message sent from a client node to the MCP service via the stream.
+message McpRequest {
+  // Identifier of the client node making the request. Useful for tracking
+  // client state and potentially for authorization.
+  string node_id = 1;
+
+  // Unique identifier for this specific request message instance. Can be used
+  // for logging and debugging.
+  string request_id = 2;
+
+  // Defines the specific action or information requested by the client.
+  oneof change_type {
+    SubscribeRequest subscribe = 3; // Request to subscribe to resource types.
+    AckRequest ack = 4;             // Acknowledge successful processing of a resource.
+    NackRequest nack = 5;            // Indicate failure in processing a resource.
+    ModifyRequest modify = 6;        // Request to create/update/delete a resource (optional).
+  }
+}
+
+// Details for a subscription request.
+message SubscribeRequest {
+  // List of resource type URLs the client wishes to subscribe to.
+  // Example: ["type.googleapis.com/com.example.internal.PolicyV1",
+  //           "type.googleapis.com/com.example.internal.EndpointConfig"]
+  repeated string type_urls = 1;
+
+  // Optional: If specified, the client is requesting resources whose version
+  // is later than this identifier. Useful for resuming streams or requesting
+  // only incremental updates after a reconnect. If omitted, the server typically
+  // sends the current full state for the subscribed types.
+  string initial_resource_version = 2;
+}
+
+// Acknowledges successful processing of a resource version.
+message AckRequest {
+  // The name of the resource being acknowledged (matches McpResource.name).
+  string resource_name = 1;
+
+  // The version of the resource that was successfully processed.
+  string version_acked = 2;
+
+  // The nonce received in the McpResponse that delivered this resource version.
+  // Used by the server to correlate ACKs with sent responses.
+  string nonce = 3;
+}
+
+// Negatively acknowledges a resource version due to processing failure.
+message NackRequest {
+  // The name of the resource that failed processing.
+  string resource_name = 1;
+
+  // The version of the resource that failed processing.
+  string version_nacked = 2;
+
+  // The nonce received in the McpResponse that delivered this resource version.
+  string nonce = 3;
+
+  // A detailed error message or status explaining the failure.
+  // Using google.rpc.Status allows for structured error reporting.
+  google.rpc.Status error_detail = 4;
+}
+
+// Requests a modification to a resource (Create, Update, Delete).
+// Note: Support for this is optional and depends on the MCP service's role.
+message ModifyRequest {
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    CREATE = 1;
+    UPDATE = 2;
+    DELETE = 3;
+  }
+
+  // The type of modification being requested.
+  Action action = 1;
+
+  // The resource being modified.
+  // For CREATE/UPDATE, this should contain the full desired resource state.
+  // For DELETE, typically only the 'name' and 'type_url' are required for identification.
+  McpResource resource = 2;
+}
+
+// A response message sent from the MCP service to a client node via the stream.
+message McpResponse {
+  // Unique identifier for this specific response message instance.
+  string response_id = 1;
+
+  // A server-generated value included in the response. The client MUST include
+  // this nonce in any AckRequest or NackRequest related to the resources
+  // delivered in this response. This helps prevent race conditions and ensures
+  // acknowledgements correspond to the correct resource versions.[2]
+  string nonce = 2;
+
+  // The list of resources being sent in this response. These could be initial
+  // state dumps upon subscription or incremental updates.
+  repeated McpResource resources = 3;
+
+  // The type URL applicable to all resources in this message. This is an
+  // optimization; all resources within a single McpResponse message MUST
+  // share the same type_url.
+  string type_url = 4;
+
+  // Optional: An identifier representing the overall version or state of the
+  // configuration system from which these resources were derived.
+  string system_version_info = 5;
+
+  // Information about the specific control plane instance sending this response.
+  ControlPlaneInfo control_plane = 6;
+}
+
+// Information identifying the MCP control plane instance.
+message ControlPlaneInfo {
+  // A unique identifier for the MCP service instance (e.g., pod name, instance ID).
+  string identifier = 1;
+}
+
+// --- Service Definition ---
+
+// The MCP service definition, inspired by xDS ADS.[3, 4]
+service McpService {
+  // Establishes a bidirectional stream for ongoing exchange of resource
+  // information and acknowledgements between a client node and the MCP service.[5, 6, 7]
+  // Clients send McpRequest messages (subscriptions, acks, nacks, potentially modifies).
+  // The server sends McpResponse messages containing resource updates.
+  rpc StreamResources(stream McpRequest) returns (stream McpResponse);
+}
