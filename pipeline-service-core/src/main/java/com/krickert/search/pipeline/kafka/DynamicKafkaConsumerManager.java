@@ -72,13 +72,7 @@ public class DynamicKafkaConsumerManager implements ApplicationEventListener<Ser
         this.internalServiceConfig = internalServiceConfig;
     }
 
-    // Factory for a cached thread pool suitable for multiple dynamic consumers
-    @Context
-    @Named("dynamic-kafka-consumer-executor")
-    ExecutorService dynamicKafkaExecutor() {
-        // Consider using a fixed thread pool if you have many pipelines to limit resource usage
-        return Executors.newCachedThreadPool(r -> new Thread(r, "dynamic-kafka-consumer-pool"));
-    }
+    // The executor service is now provided by ExecutorConfiguration
 
     @PostConstruct
     void initialize() {

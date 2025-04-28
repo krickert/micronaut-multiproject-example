@@ -15,6 +15,6 @@ import lombok.Setter;
 @Serdeable
 @Introspected
 public class InternalServiceConfig {
-    @Property(name = "pipeline.pipelineServiceName")
+    @Property(name = "pipeline.service.name")
     private String pipelineServiceName;
 }

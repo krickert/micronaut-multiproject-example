@@ -39,6 +39,7 @@ class KafkaSerdeFactoryTest {
         @Bean
         @Singleton
         @Named("dynamic-kafka-consumer-executor")
+        @Replaces(bean = ExecutorService.class, named = "dynamic-kafka-consumer-executor")
         ExecutorService dynamicKafkaExecutor() {
             return Executors.newSingleThreadExecutor();
         }

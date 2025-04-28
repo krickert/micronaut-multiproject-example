@@ -42,6 +42,19 @@ public class ChunkerPipelineTest extends AbstractPipelineTest implements TestPro
     public static class TestBeanFactory {
 
         /**
+         * Provides an ExecutorService for the DynamicKafkaConsumerManager.
+         * 
+         * @return The ExecutorService
+         */
+        @Bean
+        @Singleton
+        @Named("dynamic-kafka-consumer-executor")
+        @io.micronaut.context.annotation.Replaces(bean = java.util.concurrent.ExecutorService.class, named = "dynamic-kafka-consumer-executor")
+        public java.util.concurrent.ExecutorService dynamicKafkaExecutor() {
+            return java.util.concurrent.Executors.newSingleThreadExecutor();
+        }
+
+        /**
          * Create a ProtoMapper bean for testing.
          * 
          * @return the ProtoMapper

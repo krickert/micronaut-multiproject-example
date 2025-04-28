@@ -35,7 +35,7 @@ public class InternalServiceConfigTest {
         properties.put("micronaut.config.files", "classpath:config-test.properties");
         properties.put("kafka.enabled", "false");
         properties.put("pipeline.name", "test-pipeline");
-        properties.put("pipeline.pipelineServiceName", "test-service");
+        properties.put("pipeline.service.name", "test-service");
 
         ApplicationContext context = ApplicationContext.run(properties);
 
