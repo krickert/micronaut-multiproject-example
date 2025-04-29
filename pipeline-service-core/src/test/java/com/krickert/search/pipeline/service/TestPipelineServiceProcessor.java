@@ -3,6 +3,7 @@ package com.krickert.search.pipeline.service;
 import com.krickert.search.model.ErrorData;
 import com.krickert.search.model.PipeResponse;
 import com.krickert.search.model.PipeStream;
+import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +14,7 @@ import org.slf4j.LoggerFactory;
  * Real implementations would process the PipeStream in some way.
  */
 @Singleton
+@Named("testPipelineServiceProcessor")
 public class TestPipelineServiceProcessor implements PipelineServiceProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(TestPipelineServiceProcessor.class);

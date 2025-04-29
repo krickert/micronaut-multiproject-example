@@ -10,13 +10,13 @@ kafka:
     servers: localhost:9092
   consumers:
     default:
-      key.deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      key.deserializer: org.apache.kafka.common.serialization.UUIDDeserializer
       value.deserializer: io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer
       apicurio.registry.url: http://localhost:8080/apis/registry/v3
       deserializer.specific.value.return.class: com.krickert.search.model.PipeStream
   producers:
     default:
-      key.serializer: org.apache.kafka.common.serialization.StringSerializer
+      key.serializer: org.apache.kafka.common.serialization.UUIDSerializer
       value.serializer: io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer
       apicurio.registry.url: http://localhost:8080/apis/registry/v3
 

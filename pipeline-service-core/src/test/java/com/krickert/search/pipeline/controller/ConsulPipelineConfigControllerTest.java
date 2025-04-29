@@ -4,7 +4,8 @@ import com.krickert.search.pipeline.config.PipelineConfig;
 import com.krickert.search.pipeline.config.PipelineConfigManager;
 import com.krickert.search.pipeline.config.ServiceConfiguration;
 import com.krickert.search.pipeline.config.ServiceConfigurationDto;
-import com.krickert.search.test.consul.ConsulContainer;
+
+import com.krickert.search.test.platform.consul.ConsulContainer;
 import io.micronaut.context.env.Environment;
 import io.micronaut.context.env.PropertySource;
 import io.micronaut.http.HttpRequest;

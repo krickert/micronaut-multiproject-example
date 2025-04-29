@@ -303,7 +303,7 @@ public class DynamicKafkaConsumerManager implements ApplicationEventListener<Ref
                         for (var record : records) {
                             if (!runningFlag.get()) break;
                             try {
-                                log.trace("[{}] Processing record from topic {}: key={}", pipelineName, record.topic(), record.key());
+                                log.info("[{}] Processing record from topic {}: key={}", pipelineName, record.topic(), record.key());
                                 pipelineService.processKafkaMessage(record.value());
                                 consumer.commitAsync((offsets, exception) -> {
                                     if (exception!= null) {
