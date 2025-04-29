@@ -51,53 +51,49 @@ public class ConsulPipelineConfigTest {
         // Load test properties directly into the environment
         loadTestPropertiesIntoEnvironment("test-pipeline1.properties");
 
-        try {
-            // Create a pipeline configuration and add it to the manager
-            PipelineConfig pipeline1 = new PipelineConfig("pipeline1");
-            Map<String, ServiceConfiguration> services = new HashMap<>();
+        // Create a pipeline configuration and add it to the manager
+        PipelineConfig pipeline1 = new PipelineConfig("pipeline1");
+        Map<String, ServiceConfiguration> services = new HashMap<>();
 
-            // Create importer service
-            ServiceConfiguration importer = new ServiceConfiguration("importer");
-            importer.setKafkaPublishTopics(List.of("test-input-documents"));
-            services.put("importer", importer);
+        // Create importer service
+        ServiceConfiguration importer = new ServiceConfiguration("importer");
+        importer.setKafkaPublishTopics(List.of("test-input-documents"));
+        services.put("importer", importer);
 
-            // Create chunker service
-            ServiceConfiguration chunker = new ServiceConfiguration("chunker");
-            chunker.setKafkaListenTopics(List.of("test-input-documents"));
-            chunker.setKafkaPublishTopics(List.of("test-chunker-results"));
-            services.put("chunker", chunker);
+        // Create chunker service
+        ServiceConfiguration chunker = new ServiceConfiguration("chunker");
+        chunker.setKafkaListenTopics(List.of("test-input-documents"));
+        chunker.setKafkaPublishTopics(List.of("test-chunker-results"));
+        services.put("chunker", chunker);
 
-            // Set services on pipeline
-            pipeline1.setService(services);
+        // Set services on pipeline
+        pipeline1.setService(services);
 
-            // Add pipeline to manager
-            Map<String, PipelineConfig> pipelines = new HashMap<>();
-            pipelines.put("pipeline1", pipeline1);
-            pipelineConfigManager.setPipelines(pipelines);
+        // Add pipeline to manager
+        Map<String, PipelineConfig> pipelines = new HashMap<>();
+        pipelines.put("pipeline1", pipeline1);
+        pipelineConfigManager.setPipelines(pipelines);
 
-            // Verify that the pipeline configuration was loaded
-            Map<String, PipelineConfig> loadedPipelines = pipelineConfigManager.getPipelines();
-            assertFalse(loadedPipelines.isEmpty(), "Pipelines map should not be empty");
-            assertTrue(loadedPipelines.containsKey("pipeline1"), "Pipelines map should contain pipeline1");
+        // Verify that the pipeline configuration was loaded
+        Map<String, PipelineConfig> loadedPipelines = pipelineConfigManager.getPipelines();
+        assertFalse(loadedPipelines.isEmpty(), "Pipelines map should not be empty");
+        assertTrue(loadedPipelines.containsKey("pipeline1"), "Pipelines map should contain pipeline1");
 
-            // Verify specific service configuration
-            PipelineConfig loadedPipeline1 = loadedPipelines.get("pipeline1");
-            assertNotNull(loadedPipeline1, "Pipeline1 should not be null");
-            Map<String, ServiceConfiguration> loadedServices = loadedPipeline1.getService();
-            assertNotNull(loadedServices, "Services map should not be null");
-            assertTrue(loadedServices.containsKey("importer"), "Services map should contain importer");
+        // Verify specific service configuration
+        PipelineConfig loadedPipeline1 = loadedPipelines.get("pipeline1");
+        assertNotNull(loadedPipeline1, "Pipeline1 should not be null");
+        Map<String, ServiceConfiguration> loadedServices = loadedPipeline1.getService();
+        assertNotNull(loadedServices, "Services map should not be null");
+        assertTrue(loadedServices.containsKey("importer"), "Services map should contain importer");
 
-            // Verify importer service configuration
-            ServiceConfiguration loadedImporter = loadedServices.get("importer");
-            assertNotNull(loadedImporter, "Importer service should not be null");
-            assertEquals("importer", loadedImporter.getName(), "Service name should be importer");
-            assertNotNull(loadedImporter.getKafkaPublishTopics(), "Kafka publish topics should not be null");
-            assertEquals(1, loadedImporter.getKafkaPublishTopics().size(), "Should have 1 kafka publish topic");
-            assertEquals("test-input-documents", loadedImporter.getKafkaPublishTopics().get(0), 
-                    "Kafka publish topic should be test-input-documents");
-        } finally {
-            // No cleanup needed
-        }
+        // Verify importer service configuration
+        ServiceConfiguration loadedImporter = loadedServices.get("importer");
+        assertNotNull(loadedImporter, "Importer service should not be null");
+        assertEquals("importer", loadedImporter.getName(), "Service name should be importer");
+        assertNotNull(loadedImporter.getKafkaPublishTopics(), "Kafka publish topics should not be null");
+        assertEquals(1, loadedImporter.getKafkaPublishTopics().size(), "Should have 1 kafka publish topic");
+        assertEquals("test-input-documents", loadedImporter.getKafkaPublishTopics().get(0),
+                "Kafka publish topic should be test-input-documents");
     }
 
     @Test
@@ -108,48 +104,44 @@ public class ConsulPipelineConfigTest {
         // Load test properties directly into the environment
         loadTestPropertiesIntoEnvironment("test-pipeline1.properties");
 
-        try {
-            // Create a pipeline configuration and add it to the manager
-            PipelineConfig pipeline1 = new PipelineConfig("pipeline1");
-            Map<String, ServiceConfiguration> services = new HashMap<>();
+        // Create a pipeline configuration and add it to the manager
+        PipelineConfig pipeline1 = new PipelineConfig("pipeline1");
+        Map<String, ServiceConfiguration> services = new HashMap<>();
 
-            // Create chunker service
-            ServiceConfiguration chunker = new ServiceConfiguration("chunker");
-            chunker.setKafkaListenTopics(List.of("test-input-documents"));
-            chunker.setKafkaPublishTopics(List.of("test-chunker-results"));
-            services.put("chunker", chunker);
+        // Create chunker service
+        ServiceConfiguration chunker = new ServiceConfiguration("chunker");
+        chunker.setKafkaListenTopics(List.of("test-input-documents"));
+        chunker.setKafkaPublishTopics(List.of("test-chunker-results"));
+        services.put("chunker", chunker);
 
-            // Set services on pipeline
-            pipeline1.setService(services);
+        // Set services on pipeline
+        pipeline1.setService(services);
 
-            // Add pipeline to manager
-            Map<String, PipelineConfig> pipelines = new HashMap<>();
-            pipelines.put("pipeline1", pipeline1);
-            pipelineConfigManager.setPipelines(pipelines);
+        // Add pipeline to manager
+        Map<String, PipelineConfig> pipelines = new HashMap<>();
+        pipelines.put("pipeline1", pipeline1);
+        pipelineConfigManager.setPipelines(pipelines);
 
-            // Update the service configuration
-            List<String> newKafkaListenTopics = Arrays.asList("new-topic1", "new-topic2");
-            chunker.setKafkaListenTopics(newKafkaListenTopics);
+        // Update the service configuration
+        List<String> newKafkaListenTopics = Arrays.asList("new-topic1", "new-topic2");
+        chunker.setKafkaListenTopics(newKafkaListenTopics);
 
-            // Update the service configuration in Consul
-            boolean success = pipelineConfigManager.updateServiceConfigInConsul("pipeline1", chunker);
-            assertTrue(success, "Should successfully update service configuration in Consul");
+        // Update the service configuration in Consul
+        boolean success = pipelineConfigManager.updateServiceConfigInConsul("pipeline1", chunker);
+        assertTrue(success, "Should successfully update service configuration in Consul");
 
-            // Verify that the service configuration was updated
-            Map<String, PipelineConfig> loadedPipelines = pipelineConfigManager.getPipelines();
-            PipelineConfig loadedPipeline1 = loadedPipelines.get("pipeline1");
-            assertNotNull(loadedPipeline1, "Pipeline1 should not be null");
-            ServiceConfiguration loadedChunker = loadedPipeline1.getService().get("chunker");
-            assertNotNull(loadedChunker, "Chunker service should not be null");
-            assertEquals(newKafkaListenTopics.size(), loadedChunker.getKafkaListenTopics().size(), 
-                    "Should have the same number of kafka listen topics");
-            assertEquals(newKafkaListenTopics.get(0), loadedChunker.getKafkaListenTopics().get(0), 
-                    "First kafka listen topic should match");
-            assertEquals(newKafkaListenTopics.get(1), loadedChunker.getKafkaListenTopics().get(1), 
-                    "Second kafka listen topic should match");
-        } finally {
-            // No cleanup needed
-        }
+        // Verify that the service configuration was updated
+        Map<String, PipelineConfig> loadedPipelines = pipelineConfigManager.getPipelines();
+        PipelineConfig loadedPipeline1 = loadedPipelines.get("pipeline1");
+        assertNotNull(loadedPipeline1, "Pipeline1 should not be null");
+        ServiceConfiguration loadedChunker = loadedPipeline1.getService().get("chunker");
+        assertNotNull(loadedChunker, "Chunker service should not be null");
+        assertEquals(newKafkaListenTopics.size(), loadedChunker.getKafkaListenTopics().size(),
+                "Should have the same number of kafka listen topics");
+        assertEquals(newKafkaListenTopics.get(0), loadedChunker.getKafkaListenTopics().get(0),
+                "First kafka listen topic should match");
+        assertEquals(newKafkaListenTopics.get(1), loadedChunker.getKafkaListenTopics().get(1),
+                "Second kafka listen topic should match");
     }
 
     /**

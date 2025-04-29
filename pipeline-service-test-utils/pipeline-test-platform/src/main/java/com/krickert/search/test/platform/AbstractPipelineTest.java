@@ -1,9 +1,8 @@
 package com.krickert.search.test.platform;
 
-import com.google.protobuf.Struct;
-import com.google.protobuf.Timestamp;
-import com.google.protobuf.Value;
-import com.krickert.search.model.*;
+import com.krickert.search.model.PipeDoc;
+import com.krickert.search.model.PipeResponse;
+import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.kafka.KafkaForwarderClient;
 import com.krickert.search.pipeline.service.PipeServiceDto;
 import com.krickert.search.pipeline.service.PipelineServiceProcessor;

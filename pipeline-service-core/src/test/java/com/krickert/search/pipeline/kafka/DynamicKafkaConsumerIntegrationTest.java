@@ -3,15 +3,12 @@ package com.krickert.search.pipeline.kafka;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeResponse;
 import com.krickert.search.model.PipeStream;
-import static com.krickert.search.model.ProtobufUtils.createKey;
 import com.krickert.search.pipeline.config.InternalServiceConfig;
 import com.krickert.search.pipeline.config.PipelineConfigService;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.context.annotation.Primary;
-import io.micronaut.context.annotation.Replaces;
 import io.micronaut.context.event.ApplicationEventPublisher;
-import io.micronaut.discovery.event.ServiceReadyEvent;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
@@ -29,6 +26,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import static com.krickert.search.model.ProtobufUtils.createKey;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**

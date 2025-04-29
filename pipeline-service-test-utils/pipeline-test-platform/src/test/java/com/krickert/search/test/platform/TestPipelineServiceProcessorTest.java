@@ -2,7 +2,9 @@ package com.krickert.search.test.platform;
 
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
-import com.krickert.search.model.*;
+import com.krickert.search.model.PipeDoc;
+import com.krickert.search.model.PipeResponse;
+import com.krickert.search.model.PipeStream;
 import com.krickert.search.test.platform.proto.PipeDocExample;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
@@ -11,7 +13,8 @@ import org.junit.jupiter.api.TestInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Test for the TestPipelineServiceProcessor.

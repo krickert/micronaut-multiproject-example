@@ -4,6 +4,7 @@ import com.krickert.search.model.PipeStream;
 import com.krickert.search.model.Route;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+
 import java.util.UUID;
 
 /**

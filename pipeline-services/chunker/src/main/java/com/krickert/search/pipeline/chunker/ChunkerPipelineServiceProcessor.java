@@ -1,7 +1,6 @@
 package com.krickert.search.pipeline.chunker;
 
 import com.google.protobuf.Timestamp;
-import com.google.protobuf.Value;
 import com.krickert.search.chunker.OverlapChunker;
 import com.krickert.search.model.*;
 import com.krickert.search.model.mapper.MappingException;
@@ -35,13 +34,12 @@ public class ChunkerPipelineServiceProcessor implements PipelineServiceProcessor
     private static final String CHUNK_FIELD_CONFIG_KEY = "chunk-field";
 
     private final OverlapChunker chunker;
-    private final PathResolver pathResolver;
     private final ValueHandler valueHandler;
 
     public ChunkerPipelineServiceProcessor(OverlapChunker chunker) {
         this.chunker = chunker;
-        this.pathResolver = new PathResolver();
-        this.valueHandler = new ValueHandler(this.pathResolver);
+        PathResolver pathResolver = new PathResolver();
+        this.valueHandler = new ValueHandler(pathResolver);
     }
 
     @Override
@@ -175,9 +173,8 @@ public class ChunkerPipelineServiceProcessor implements PipelineServiceProcessor
             // Handle different data types
             if (fieldValue instanceof String) {
                 return (String) fieldValue;
-            } else if (fieldValue instanceof List) {
+            } else if (fieldValue instanceof List<?> list) {
                 // For arrays, concatenate with spaces
-                List<?> list = (List<?>) fieldValue;
                 StringBuilder sb = new StringBuilder();
                 for (Object item : list) {
                     if (sb.length() > 0) {

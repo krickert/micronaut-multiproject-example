@@ -2,7 +2,6 @@ package com.krickert.search.pipeline.kafka;
 
 import com.krickert.search.model.*;
 import com.krickert.search.test.platform.AbstractPipelineTest;
-import com.krickert.search.test.platform.proto.PipeDocExample;
 import io.micronaut.configuration.kafka.annotation.KafkaListener;
 import io.micronaut.configuration.kafka.annotation.OffsetReset;
 import io.micronaut.configuration.kafka.annotation.Topic;
@@ -33,7 +32,7 @@ public class KafkaForwarderTest extends AbstractPipelineTest implements TestProp
     private static final String BACKUP_TOPIC = "backup-test-topic";
 
     // Store the document ID to ensure consistency between getInput() and getExpectedPipeDoc()
-    private String testDocId = UUID.randomUUID().toString();
+    private final String testDocId = UUID.randomUUID().toString();
 
     @Inject
     private KafkaForwarder kafkaForwarder;

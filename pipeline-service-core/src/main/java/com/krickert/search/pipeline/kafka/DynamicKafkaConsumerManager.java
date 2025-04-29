@@ -10,10 +10,9 @@ import com.krickert.search.pipeline.config.ServiceConfiguration;
 import com.krickert.search.pipeline.grpc.PipelineServiceImpl;
 import com.krickert.search.pipeline.kafka.serde.KafkaSerdeProvider;
 import io.micronaut.configuration.kafka.config.AbstractKafkaConsumerConfiguration;
-import io.micronaut.context.annotation.Context;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.event.ApplicationEventListener;
-import io.micronaut.discovery.event.ServiceReadyEvent; // Example trigger, replace if needed
+import io.micronaut.discovery.event.ServiceReadyEvent;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.inject.Inject;
@@ -26,12 +25,14 @@ import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.errors.WakeupException;
 import org.apache.kafka.common.serialization.Deserializer;
-import org.apache.kafka.common.serialization.StringDeserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;

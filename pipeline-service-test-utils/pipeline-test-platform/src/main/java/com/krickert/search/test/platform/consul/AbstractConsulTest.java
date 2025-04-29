@@ -4,7 +4,6 @@ import com.krickert.search.test.consul.ConsulContainer;
 import com.krickert.search.test.consul.ConsulTestHelper;
 import com.krickert.search.test.platform.kafka.TestContainerManager;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

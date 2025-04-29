@@ -3,7 +3,6 @@ package com.krickert.search.pipeline.kafka.serde;
 import com.krickert.search.pipeline.config.PipelineConfig;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
-import io.micronaut.context.annotation.Primary;
 import io.micronaut.context.annotation.Replaces;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
@@ -11,7 +10,6 @@ import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -54,7 +52,7 @@ class KafkaSerdeFactoryTest {
     @Test
     void testProviderInjection() {
         assertNotNull(serdeProvider);
-        assertTrue(serdeProvider instanceof DefaultKafkaSerdeProvider);
+        assertInstanceOf(DefaultKafkaSerdeProvider.class, serdeProvider);
     }
 
     /**
@@ -90,8 +88,7 @@ class KafkaSerdeFactoryTest {
 
         // Get the actual registry type from the provider
         String registryType = "unknown";
-        if (serdeProvider instanceof DefaultKafkaSerdeProvider) {
-            DefaultKafkaSerdeProvider provider = (DefaultKafkaSerdeProvider) serdeProvider;
+        if (serdeProvider instanceof DefaultKafkaSerdeProvider provider) {
             // We can't directly access the registry type, so we'll check the deserializer class
             String deserializerClass = valueDeserializer.getClass().getName();
 

@@ -2,9 +2,7 @@ package com.krickert.search.test.consul;
 
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.core.annotation.NonNull;
-import io.micronaut.discovery.consul.client.v1.ConsulClient;
 import io.micronaut.test.support.TestPropertyProvider;
-import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

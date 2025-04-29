@@ -1,6 +1,5 @@
 package com.krickert.search.test.platform.consul;
 
-import com.krickert.search.test.consul.ConsulContainer;
 import com.krickert.search.test.consul.ConsulTestHelper;
 import com.krickert.search.test.platform.kafka.TestContainerManager;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
@@ -25,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class ConsulTestIT extends AbstractConsulTest {
     private static final Logger log = LoggerFactory.getLogger(ConsulTestIT.class);
 
-    private TestContainerManager containerManager = TestContainerManager.getInstance();
+    private final TestContainerManager containerManager = TestContainerManager.getInstance();
 
     @Inject
     private ConsulTestHelper consulTestHelper;
