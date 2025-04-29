@@ -22,7 +22,7 @@ public class PathResolver {
      * Resolves a path within a message or builder.
      */
     public PathResolverResult resolvePath(Object root, String path, boolean resolveForSet, String ruleForError) throws MappingException {
-         String[] parts = path.split(PATH_SEPARATOR_REGEX);
+        String[] parts = path.split(PATH_SEPARATOR_REGEX);
         Object currentObj = root;
         Object parentObj = null;
         FieldDescriptor parentFd = null;

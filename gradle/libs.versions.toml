@@ -15,6 +15,10 @@ logback = "1.4.14"
 jackson = "2.18.3"
 guava = "33.4.8-jre"
 commonsLang3 = "3.14.0"
+amazonGlueSerde = "1.1.23"
+amazonMskIamAuth = "2.2.0"
+amazonConnection = "2.30.31"
+apicurioSerde = "3.0.6"
 
 [libraries]
 # Protobuf / gRPC
@@ -28,6 +32,10 @@ protobufcommon = { module = "com.google.api.grpc:proto-google-common-protos", ve
 junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit" }
 
+# Amazon
+amazon-glue = {  module = "software.amazon.glue:schema-registry-serde", version.ref = "amazonGlueSerde" }
+amazon-msk-iam = { module = "software.amazon.msk:aws-msk-iam-auth", version.ref = "amazonMskIamAuth"}
+amazon-connection-client = { module = "software.amazon.awssdk:url-connection-client", version.ref = "amazonConnection" }
 # Other libraries
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
@@ -36,6 +44,7 @@ jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", ver
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 commons-lang3 = { module = "org.apache.commons:commons-lang3", version.ref = "commonsLang3" }
 micronaut-platform = { module = "io.micronaut.platform:micronaut-platform", version.ref = "micronautPlatform" }
+apicurio-serde = { module = "io.apicurio:apicurio-registry-protobuf-serde-kafka", version.ref = "apicurioSerde" }
 
 [bundles]
 testing-jvm = ["junit-jupiter-api", "junit-jupiter-engine"]

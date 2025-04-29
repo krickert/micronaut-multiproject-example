@@ -1,5 +1,6 @@
 package com.krickert.search.pipeline.kafka.serde;
 
+import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.config.PipelineConfig;
 import io.apicurio.registry.serde.config.SerdeConfig;
 import io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer;
@@ -150,7 +151,7 @@ public class ApicurioKafkaSerdeFactory implements KafkaSerdeFactory {
         configs.put(SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID, "default");
 
         // Create and configure the serializer
-        ProtobufKafkaSerializer serializer = new ProtobufKafkaSerializer();
+        ProtobufKafkaSerializer<PipeStream> serializer = new ProtobufKafkaSerializer<>();
         serializer.configure(configs, false); // false = value serializer
 
         log.info("Created Apicurio Registry serializer for pipeline '{}' with registry={}",

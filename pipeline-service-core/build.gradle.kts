@@ -41,38 +41,50 @@ dependencies {
     api(mn.micronaut.runtime)
     api(mn.micronaut.validation)
     api(mn.micronaut.grpc.server.runtime)
+    api(mn.micronaut.grpc.health)
+    api(mn.micronaut.grpc.runtime)
     api(mn.micronaut.grpc.annotation)
+    api(mn.grpc.services)
+    api(mn.grpc.protobuf)
+
     api(mn.micronaut.kafka)
     api(mn.rxjava3)
+    api(mn.micronaut.reactor)
+    api(mn.micronaut.protobuff.support)
+    api(mn.micronaut.management)
+    api(mn.micronaut.http.client)
+    api(mn.micronaut.http.server.netty)
+    api(mn.micronaut.discovery.client)
+    api(mn.micronaut.discovery.core)
+    api(mn.micronaut.aws.sdk.v2)
+    // AWS Glue Schema Registry dependencies
+    api(libs.amazon.glue) {
+        // Exclude transitive Wire dependencies to avoid conflicts
+        exclude(group = "com.squareup.wire")
+    }
+    api(libs.amazon.msk.iam)
+    api(libs.amazon.connection.client)
 
-
-    // Project dependencies
-    api(project(":protobuf-models"))
-    api(project(":util"))
 
     // Implementation dependencies - these are not exposed to consumers
     implementation(libs.slf4j.api)
     implementation(libs.logback.classic)
-    implementation("io.micronaut.discovery:micronaut-discovery-client")
     compileOnly(mn.lombok)
 
-    // AWS Glue Schema Registry dependencies
-    implementation("software.amazon.glue:schema-registry-serde:1.1.23") {
-        // Exclude transitive Wire dependencies to avoid conflicts
-        exclude(group = "com.squareup.wire")
-    }
-    implementation("software.amazon.msk:aws-msk-iam-auth:2.2.0")
-    implementation("software.amazon.awssdk:url-connection-client:2.30.31")
 
     // Apicurio Registry dependencies
-    implementation("io.apicurio:apicurio-registry-protobuf-serde-kafka:3.0.6") {
+    api(libs.apicurio.serde) {
         // Exclude transitive Wire dependencies to avoid conflicts
         exclude(group = "com.squareup.wire")
     }
 
     // Explicitly include Wire library to ensure consistent version
-    implementation("com.squareup.wire:wire-schema")
-    implementation("com.squareup.wire:wire-runtime")
+    api("com.squareup.wire:wire-schema")
+    api("com.squareup.wire:wire-runtime")
+
+    // Project dependencies
+    api(project(":protobuf-models"))
+    api(project(":util"))
 
     // Testing dependencies
     testImplementation(mn.micronaut.test.junit5)
@@ -81,6 +93,8 @@ dependencies {
     testImplementation(project(":pipeline-service-test-utils:micronaut-test-consul-container"))
     testImplementation(project(":pipeline-service-test-utils:pipeline-test-platform"))
     testAnnotationProcessor(mn.micronaut.inject.java)
+
+
 }
 
 // Publishing configuration

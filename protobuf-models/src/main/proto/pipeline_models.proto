@@ -59,6 +59,7 @@ message PipeRequest {
   PipeDoc doc = 1;
   map<string, string> config = 2;
   repeated Route destinations = 3;
+  repeated string mapping_rules = 4;
 }
 
 message OutputResponse {
