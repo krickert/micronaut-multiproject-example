@@ -27,9 +27,6 @@ public class ConsulPipelineConfigTest {
     private ConsulContainer consulContainer;
 
     @Inject
-    private ApplicationContext applicationContext;
-
-    @Inject
     private Environment environment;
 
     @BeforeEach
@@ -92,7 +89,7 @@ public class ConsulPipelineConfigTest {
         assertEquals("importer", loadedImporter.getName(), "Service name should be importer");
         assertNotNull(loadedImporter.getKafkaPublishTopics(), "Kafka publish topics should not be null");
         assertEquals(1, loadedImporter.getKafkaPublishTopics().size(), "Should have 1 kafka publish topic");
-        assertEquals("test-input-documents", loadedImporter.getKafkaPublishTopics().get(0),
+        assertEquals("test-input-documents", loadedImporter.getKafkaPublishTopics().getFirst(),
                 "Kafka publish topic should be test-input-documents");
     }
 

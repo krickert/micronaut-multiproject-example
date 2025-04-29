@@ -5,10 +5,10 @@ import io.micronaut.runtime.Micronaut;
 /**
  * The main application class for the Chunker service.
  * This service processes documents by chunking them into smaller pieces with overlapping sections.
- * 
+ *<br/>
  * The service listens for documents on the "input-documents" Kafka topic and
  * publishes the chunked documents to the "chunked-documents" Kafka topic.
- * 
+ *<br/>
  * By default, this application runs in the dev environment, which is configured
  * to connect to local instances of Kafka, Apicurio, and Consul.
  */

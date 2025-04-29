@@ -26,14 +26,16 @@ public class ConsulTestIT extends AbstractConsulTest {
 
     private final TestContainerManager containerManager = TestContainerManager.getInstance();
 
+    @SuppressWarnings("unused")
     @Inject
-    private ConsulTestHelper consulTestHelper;
+    protected ConsulTestHelper consulTestHelper;
 
     /**
      * Test that the Consul container is properly set up and can be used.
      */
     @Test
     void testConsulSetup() {
+        log.info("Setting up consul with {}", containerManager.getRegistryType());
         // Verify that the container is running
         assertThat(isContainerRunning()).isTrue();
 
