@@ -2,6 +2,7 @@
 package com.krickert.search.pipeline.kafka;
 
 import com.krickert.search.model.PipeStream;
+import com.krickert.search.model.Route;
 import com.krickert.search.pipeline.config.InternalServiceConfig;
 import com.krickert.search.pipeline.config.PipelineConfig;
 import com.krickert.search.pipeline.config.PipelineConfigService;
@@ -49,6 +50,7 @@ public class DynamicKafkaConsumerManager implements ApplicationEventListener<Ser
     private final KafkaSerdeProvider serdeProvider; // Inject the provider
     private final AbstractKafkaConsumerConfiguration<?, ?> defaultKafkaConfig; // Keep for base props like bootstrap servers
     private final InternalServiceConfig internalServiceConfig; // For service name
+    private final KafkaForwarder kafkaForwarder; // For sending messages to DLQ
 
     // Map to hold running consumers: Key = pipelineName (groupId), Value = ManagedConsumer details
     private final Map<String, ManagedConsumer> runningConsumers = new ConcurrentHashMap<>();
@@ -62,7 +64,8 @@ public class DynamicKafkaConsumerManager implements ApplicationEventListener<Ser
             KafkaSerdeProvider serdeProvider,
             // Inject the default config to get bootstrap servers, schema registry URL etc.
             AbstractKafkaConsumerConfiguration<?, ?> defaultKafkaConfig,
-            InternalServiceConfig internalServiceConfig
+            InternalServiceConfig internalServiceConfig,
+            KafkaForwarder kafkaForwarder
     ) {
         this.configService = configService;
         this.pipelineService = pipelineService;
@@ -70,6 +73,7 @@ public class DynamicKafkaConsumerManager implements ApplicationEventListener<Ser
         this.serdeProvider = serdeProvider;
         this.defaultKafkaConfig = defaultKafkaConfig;
         this.internalServiceConfig = internalServiceConfig;
+        this.kafkaForwarder = kafkaForwarder;
     }
 
     // The executor service is now provided by ExecutorConfiguration
@@ -321,7 +325,17 @@ public class DynamicKafkaConsumerManager implements ApplicationEventListener<Ser
                                 consumer.commitAsync((offsets, exception) -> {
                                     if (exception != null) {
                                         log.error("[{}] Failed to commit offset {} for group {}: {}", pipelineName, offsets, groupId, exception.getMessage(), exception);
-                                        // TODO: Handle commit failure (e.g., retry logic, DLQ, potentially stop consumer?)
+
+                                        // Send the message to the DLQ on commit failure
+                                        String dlqTopic = record.topic() + "-dlq";
+                                        try {
+                                            log.info("[{}] Sending message with commit failure to DLQ topic: {}", pipelineName, dlqTopic);
+                                            Route dlqRoute = Route.newBuilder().setDestination(dlqTopic).build();
+                                            kafkaForwarder.forwardToKafka(record.value(), dlqRoute);
+                                        } catch (Exception dlqEx) {
+                                            log.error("[{}] Failed to send message to DLQ topic {} after commit failure: {}", 
+                                                    pipelineName, dlqTopic, dlqEx.getMessage(), dlqEx);
+                                        }
                                     } else {
                                         log.trace("[{}] Offset committed: {}", pipelineName, offsets);
                                     }
@@ -329,9 +343,30 @@ public class DynamicKafkaConsumerManager implements ApplicationEventListener<Ser
                             } catch (Exception processingEx) {
                                 log.error("[{}] Error processing Kafka message from topic {} (key={}) for group {}: {}",
                                         pipelineName, record.topic(), record.key(), groupId, processingEx.getMessage(), processingEx);
-                                // TODO: Implement robust error handling: skip, retry, DLQ, stop consumer?
-                                // Be careful not to block the polling loop indefinitely on errors.
-                                // Manual commit means this failed message's offset won't be committed.
+
+                                // Send the failed message to the DLQ
+                                String dlqTopic = record.topic() + "-dlq";
+                                try {
+                                    log.info("[{}] Sending failed message to DLQ topic: {}", pipelineName, dlqTopic);
+                                    // Create a Route with the DLQ topic as destination
+                                    Route dlqRoute = Route.newBuilder().setDestination(dlqTopic).build();
+                                    // Forward the message to the DLQ
+                                    kafkaForwarder.forwardToKafka(record.value(), dlqRoute);
+
+                                    // Commit the offset after sending to DLQ
+                                    consumer.commitAsync((offsets, exception) -> {
+                                        if (exception != null) {
+                                            log.error("[{}] Failed to commit offset {} after DLQ for group {}: {}", 
+                                                    pipelineName, offsets, groupId, exception.getMessage(), exception);
+                                        } else {
+                                            log.trace("[{}] Offset committed after DLQ: {}", pipelineName, offsets);
+                                        }
+                                    });
+                                } catch (Exception dlqEx) {
+                                    log.error("[{}] Failed to send message to DLQ topic {}: {}", 
+                                            pipelineName, dlqTopic, dlqEx.getMessage(), dlqEx);
+                                    // If DLQ fails, we don't commit the offset to allow reprocessing
+                                }
                             }
                         } // End record processing loop
                     }

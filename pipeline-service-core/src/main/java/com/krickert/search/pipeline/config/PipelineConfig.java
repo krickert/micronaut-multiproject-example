@@ -34,6 +34,23 @@ public class PipelineConfig {
     }
 
     public void addOrUpdateService(ServiceConfigurationDto dto) {
+        // Validate that no topic ends with "-dlq"
+        if (dto.getKafkaListenTopics() != null) {
+            for (String topic : dto.getKafkaListenTopics()) {
+                if (topic.endsWith("-dlq")) {
+                    throw new IllegalArgumentException("Topic names cannot end with '-dlq' as this suffix is reserved for Dead Letter Queues: " + topic);
+                }
+            }
+        }
+
+        if (dto.getKafkaPublishTopics() != null) {
+            for (String topic : dto.getKafkaPublishTopics()) {
+                if (topic.endsWith("-dlq")) {
+                    throw new IllegalArgumentException("Topic names cannot end with '-dlq' as this suffix is reserved for Dead Letter Queues: " + topic);
+                }
+            }
+        }
+
         ServiceConfiguration config = new ServiceConfiguration(dto.getName());
         config.setKafkaListenTopics(dto.getKafkaListenTopics());
         config.setKafkaPublishTopics(dto.getKafkaPublishTopics());
