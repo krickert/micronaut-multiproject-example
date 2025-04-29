@@ -299,9 +299,8 @@ public abstract class AbstractPipelineTest extends KafkaApicurioTest implements 
         public void reset() {
             synchronized (receivedMessages) {
                 receivedMessages.clear();
-                if (nextMessage.isDone()) {
-                    nextMessage = new CompletableFuture<>();
-                }
+                // Always create a new CompletableFuture, regardless of whether the current one is done
+                nextMessage = new CompletableFuture<>();
             }
         }
     }
