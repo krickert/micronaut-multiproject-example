@@ -1,5 +1,6 @@
 package com.krickert.search.test.platform.consul;
 
+import com.krickert.search.test.platform.kafka.TestContainerManager;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.env.Environment;
 import io.micronaut.context.env.PropertySource;
@@ -31,8 +32,13 @@ public class ConsulTestHelper {
      *
      */
     @Getter
-    @Inject
     private ConsulContainer consulContainer;
+
+    public ConsulTestHelper() {
+        // Get the ConsulContainer from TestContainerManager
+        this.consulContainer = TestContainerManager.getInstance().getConsulContainer();
+        log.debug("ConsulTestHelper initialized with ConsulContainer from TestContainerManager");
+    }
 
     /**
      * -- GETTER --
@@ -175,7 +181,7 @@ public class ConsulTestHelper {
         for (String key : properties.stringPropertyNames()) {
             String value = properties.getProperty(key);
             String fullKey = prefix + key;
-            
+
             log.debug("Storing in Consul KV: '{}' = '{}'", fullKey, value);
             if (!putKv(fullKey, value)) {
                 log.error("Failed to store key '{}' with value '{}'", fullKey, value);
@@ -201,23 +207,23 @@ public class ConsulTestHelper {
         try {
             // Convert the reactive Publisher to a blocking result using a CompletableFuture
             java.util.concurrent.CompletableFuture<Boolean> future = new java.util.concurrent.CompletableFuture<>();
-            
+
             consulClient.putValue(key, value).subscribe(new org.reactivestreams.Subscriber<Boolean>() {
                 @Override
                 public void onSubscribe(org.reactivestreams.Subscription s) {
                     s.request(1); // Request one item
                 }
-                
+
                 @Override
                 public void onNext(Boolean success) {
                     future.complete(success);
                 }
-                
+
                 @Override
                 public void onError(Throwable t) {
                     future.completeExceptionally(t);
                 }
-                
+
                 @Override
                 public void onComplete() {
                     if (!future.isDone()) {
@@ -225,9 +231,9 @@ public class ConsulTestHelper {
                     }
                 }
             });
-            
+
             Boolean success = future.get(10, java.util.concurrent.TimeUnit.SECONDS); // Timeout after 10 seconds
-            
+
             if (success != null && success) {
                 log.debug("Successfully stored KV in Consul: '{}' = '{}'", key, value);
                 return true;

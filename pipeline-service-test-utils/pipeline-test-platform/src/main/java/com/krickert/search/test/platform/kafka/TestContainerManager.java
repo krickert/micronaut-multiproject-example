@@ -2,6 +2,7 @@
 package com.krickert.search.test.platform.kafka;
 
 import com.krickert.search.test.platform.consul.ConsulContainer;
+import com.krickert.search.test.platform.kafka.registry.MotoSchemaRegistry;
 
 import io.apicurio.registry.serde.config.SerdeConfig;
 import lombok.Getter;
@@ -21,12 +22,9 @@ import org.testcontainers.utility.DockerImageName;
 // import software.amazon.awssdk.regions.Region;
 // import software.amazon.awssdk.services.glue.GlueClient;
 
-import java.net.URI; // Keep for potential URI parsing if needed elsewhere
 import java.time.Duration;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class TestContainerManager {
@@ -44,6 +42,9 @@ public class TestContainerManager {
     public static final String AWS_ACCESS_KEY_PROP = "aws.accessKeyId";
     public static final String AWS_SECRET_KEY_PROP = "aws.secretAccessKey";
     public static final String AWS_REGION_PROP = "aws.region";
+    // --- Moto Properties ---
+    public static final String MOTO_REGISTRY_URL_PROP = "moto.registry.url";
+    public static final String MOTO_REGISTRY_NAME_PROP = "moto.registry.name";
 
     @Getter
     private String registryType = "none";
@@ -55,6 +56,8 @@ public class TestContainerManager {
     // --- Removed LocalStackContainer ---
     @Getter
     private KafkaContainer kafkaContainer;
+    @Getter
+    private MotoSchemaRegistry motoSchemaRegistry; // For Moto
     private final Network network;
     private volatile boolean initialized = false;
 
@@ -67,8 +70,8 @@ public class TestContainerManager {
     private static final String APICURIO_PROTOBUF_DESERIALIZER_CLASS = "io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer";
     private static final String GLUE_SERIALIZER_CLASS = "com.amazonaws.services.schemaregistry.serializers.GlueSchemaRegistryKafkaSerializer";
     private static final String GLUE_DESERIALIZER_CLASS = "com.amazonaws.services.schemaregistry.deserializers.GlueSchemaRegistryKafkaDeserializer";
-    private static final String STRING_SERIALIZER_CLASS = "org.apache.kafka.common.serialization.StringSerializer";
-    private static final String STRING_DESERIALIZER_CLASS = "org.apache.kafka.common.serialization.StringDeserializer";
+    private static final String UUID_SERIALIZER_CLASS = "org.apache.kafka.common.serialization.UUIDSerializer";
+    private static final String UUID_DESERIALIZER_CLASS = "org.apache.kafka.common.serialization.UUIDDeserializer";
 
     // Default/Dummy AWS Config (still useful for Glue client library defaults)
     private static final String DEFAULT_AWS_REGION = System.getProperty("aws.region", "us-east-1");
@@ -80,8 +83,8 @@ public class TestContainerManager {
     private static final Map<String, String> preInitProperties = new ConcurrentHashMap<>();
 
     private TestContainerManager() {
-        // Determine registry type from pre-configured properties first, then default
-        this.registryType = preInitProperties.getOrDefault(KAFKA_REGISTRY_TYPE_PROP, "none");
+        // Determine registry type from pre-configured properties first, then default to apicurio
+        this.registryType = preInitProperties.getOrDefault(KAFKA_REGISTRY_TYPE_PROP, "apicurio");
         log.info("Initializing TestContainerManager with registry type: {}", this.registryType);
 
         // Use common network for all containers
@@ -100,7 +103,7 @@ public class TestContainerManager {
                 .withNetworkAliases("kafka");
         log.info("Kafka container configured.");
 
-        // Initialize Schema Registry ONLY for Apicurio
+        // Initialize Schema Registry based on type
         if ("apicurio".equalsIgnoreCase(this.registryType)) {
             this.schemaRegistryContainer = new GenericContainer<>(APICURIO_IMAGE)
                     .withExposedPorts(8080)
@@ -109,9 +112,16 @@ public class TestContainerManager {
                     .withNetworkAliases("apicurio-registry")
                     .withStartupTimeout(Duration.ofSeconds(120));
             log.info("Apicurio Registry container configured.");
+            this.motoSchemaRegistry = null;
+        } else if ("moto".equalsIgnoreCase(this.registryType)) {
+            this.schemaRegistryContainer = null;
+            log.info("Moto registry type configured. TestContainerManager will initialize MotoSchemaRegistry.");
+            // MotoSchemaRegistry will be initialized in startManagedContainers
+            this.motoSchemaRegistry = null; // Will be initialized later
         } else {
             // For Glue or none, we don't start a registry container here
             this.schemaRegistryContainer = null;
+            this.motoSchemaRegistry = null;
             if ("glue".equalsIgnoreCase(this.registryType)) {
                 log.info("Glue registry type configured. TestContainerManager will NOT start a Glue container. Ensure '{}' property is set externally.", GLUE_REGISTRY_URL_PROP);
             } else {
@@ -180,6 +190,13 @@ public class TestContainerManager {
                 schemaRegistryContainer.start();
                 log.info("Apicurio schema registry container started.");
             }
+
+            // Initialize MotoSchemaRegistry if configured
+            if ("moto".equalsIgnoreCase(this.registryType)) {
+                this.motoSchemaRegistry = new MotoSchemaRegistry();
+                log.info("MotoSchemaRegistry initialized.");
+            }
+
             log.info("All managed containers started.");
         } catch (Exception e) {
             log.error("Failed to start one or more managed containers", e);
@@ -203,8 +220,8 @@ public class TestContainerManager {
         properties.put("consul.client.registration.enabled", "true");
 
         // Add registry-specific properties
-        String serializerClass = STRING_SERIALIZER_CLASS; // Default
-        String deserializerClass = STRING_DESERIALIZER_CLASS; // Default
+        String serializerClass = UUID_SERIALIZER_CLASS; // Default
+        String deserializerClass = UUID_DESERIALIZER_CLASS; // Default
 
         if ("apicurio".equalsIgnoreCase(registryType)) {
             String registryUrl = getSchemaRegistryEndpointInternal(); // Gets from Apicurio container
@@ -217,6 +234,22 @@ public class TestContainerManager {
                 properties.put("kafka.consumers.default." + SerdeConfig.REGISTRY_URL, registryUrl);
             } else {
                 log.error("Apicurio registry configured but endpoint is not available!");
+            }
+
+        } else if ("moto".equalsIgnoreCase(registryType)) {
+            if (motoSchemaRegistry == null) {
+                log.error("Moto registry type is configured, but MotoSchemaRegistry is not initialized!");
+            } else {
+                log.info("Configuring Kafka clients for Moto registry at endpoint: {}", motoSchemaRegistry.getEndpoint());
+                serializerClass = motoSchemaRegistry.getSerializerClass();
+                deserializerClass = motoSchemaRegistry.getDeserializerClass();
+
+                // Add Moto properties to the properties map
+                properties.put(MOTO_REGISTRY_URL_PROP, motoSchemaRegistry.getEndpoint());
+                properties.put(MOTO_REGISTRY_NAME_PROP, motoSchemaRegistry.getRegistryName());
+
+                // Add all properties from MotoSchemaRegistry
+                properties.putAll(motoSchemaRegistry.getProperties());
             }
 
         } else if ("glue".equalsIgnoreCase(registryType)) {
@@ -267,10 +300,12 @@ public class TestContainerManager {
         }
 
         // Set the final determined Ser/De classes
-        properties.put("kafka.producers.default." + ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, STRING_SERIALIZER_CLASS);
+        properties.put("kafka.producers.default." + ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, UUID_SERIALIZER_CLASS);
         properties.put("kafka.producers.default." + ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, serializerClass);
-        properties.put("kafka.consumers.default." + ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, STRING_DESERIALIZER_CLASS);
+        properties.put("kafka.producers.default." + ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaContainer.getBootstrapServers());
+        properties.put("kafka.consumers.default." + ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, UUID_DESERIALIZER_CLASS);
         properties.put("kafka.consumers.default." + ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserializerClass);
+        properties.put("kafka.consumers.default." + ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaContainer.getBootstrapServers());
         String KAFKA = "kafka.";
         // Add the registry type itself
         properties.put(KAFKA + KAFKA_REGISTRY_TYPE_PROP, this.registryType);
@@ -285,11 +320,18 @@ public class TestContainerManager {
     private String getSchemaRegistryEndpointInternal() {
         if ("apicurio".equalsIgnoreCase(registryType)) {
             if (schemaRegistryContainer != null && schemaRegistryContainer.isRunning()) {
-                return String.format("http://%s:%d/apis/registry/v2",
+                return String.format("http://%s:%d/apis/registry/v3",
                         schemaRegistryContainer.getHost(),
                         schemaRegistryContainer.getMappedPort(8080));
             } else {
                 log.error("Apicurio container is not running or null when getting endpoint.");
+                return null;
+            }
+        } else if ("moto".equalsIgnoreCase(registryType)) {
+            if (motoSchemaRegistry != null) {
+                return motoSchemaRegistry.getEndpoint();
+            } else {
+                log.error("MotoSchemaRegistry is not initialized when getting endpoint.");
                 return null;
             }
         } else if ("glue".equalsIgnoreCase(registryType)) {
@@ -320,22 +362,30 @@ public class TestContainerManager {
     }
 
     public boolean isSchemaRegistryRunning() {
-        // Only checks Apicurio container status now
-        if ("apicurio".equalsIgnoreCase(registryType)) {
-            return schemaRegistryContainer != null && schemaRegistryContainer.isRunning();
-        } else if ("glue".equalsIgnoreCase(registryType)) {
+        // Check registry status based on type
+        if ("glue".equalsIgnoreCase(registryType)) {
             // For Glue, we assume the external service is "running" if configured
             String glueUrl = properties.get(GLUE_REGISTRY_URL_PROP);
             boolean configured = glueUrl != null && !glueUrl.isBlank();
             if (!configured) log.warn("Glue registry check: URL property '{}' is not set.", GLUE_REGISTRY_URL_PROP);
             return configured; // Return true if the URL is configured, false otherwise
+        } else if ("moto".equalsIgnoreCase(registryType)) {
+            // For Moto, check if the MotoSchemaRegistry is initialized and running
+            boolean running = motoSchemaRegistry != null && motoSchemaRegistry.isRunning();
+            if (!running) log.warn("Moto registry check: MotoSchemaRegistry is not initialized or not running.");
+            return running;
+        } else if ("apicurio".equalsIgnoreCase(registryType)) {
+            return schemaRegistryContainer != null && schemaRegistryContainer.isRunning();
+        } else {
+            log.warn("Unsupported registry type for schema registry check: {}", registryType);
+            return false;
         }
-        return false; // No registry configured or running (for 'none' type)
     }
 
     public boolean isConsulRunning() {
         return consulContainer != null && consulContainer.isRunning();
     }
+
 
     public boolean areEssentialContainersRunning(String... requiredTypes) {
         if (!initialized) {
@@ -375,6 +425,16 @@ public class TestContainerManager {
                         if (!checkResult) log.warn("Essential check failed: Glue registry URL is not configured.");
                     }
                     break;
+                case "moto":
+                    if (!"moto".equalsIgnoreCase(registryType)) {
+                        log.warn("Essential check mismatch: Requested Moto, but type is '{}'.", registryType);
+                        checkResult = false;
+                    } else {
+                        // Check if MotoSchemaRegistry is initialized and running
+                        checkResult = isSchemaRegistryRunning(); // Reuses the logic checking MotoSchemaRegistry
+                        if (!checkResult) log.warn("Essential check failed: MotoSchemaRegistry is not initialized or not running.");
+                    }
+                    break;
                 default:
                     log.warn("Unsupported container type in check: {}", type);
                     checkResult = false;
@@ -405,6 +465,14 @@ public class TestContainerManager {
             consulContainer.stop();
             log.info("Consul container stopped.");
         }
+
+        // Clear MotoSchemaRegistry reference
+        if (motoSchemaRegistry != null) {
+            // MotoSchemaRegistry doesn't have a stop method, but we should clear the reference
+            motoSchemaRegistry = null;
+            log.info("MotoSchemaRegistry reference cleared.");
+        }
+
         // network.close(); // Consider if needed
         initialized = false;
         properties.clear();

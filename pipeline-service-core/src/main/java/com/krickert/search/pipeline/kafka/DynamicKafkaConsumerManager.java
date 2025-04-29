@@ -9,6 +9,7 @@ import com.krickert.search.pipeline.config.InternalServiceConfig;
 import com.krickert.search.pipeline.config.PipelineConfig;
 import com.krickert.search.pipeline.config.PipelineConfigService;
 import com.krickert.search.pipeline.config.ServiceConfiguration;
+import com.krickert.search.pipeline.grpc.PipelineService;
 import com.krickert.search.pipeline.grpc.PipelineServiceImpl;
 import com.krickert.search.pipeline.kafka.serde.KafkaSerdeProvider;
 import io.micronaut.configuration.kafka.config.AbstractKafkaConsumerConfiguration;
@@ -45,7 +46,7 @@ public class DynamicKafkaConsumerManager implements ApplicationEventListener<Ref
     private static final Logger log = LoggerFactory.getLogger(DynamicKafkaConsumerManager.class);
 
     private final PipelineConfigService configService;
-    private final PipelineServiceImpl pipelineService;
+    private final PipelineService pipelineService;
     private final ExecutorService executorService;
     private final KafkaSerdeProvider serdeProvider;
     private final AbstractKafkaConsumerConfiguration<?,?> defaultKafkaConfig;
@@ -59,7 +60,7 @@ public class DynamicKafkaConsumerManager implements ApplicationEventListener<Ref
     @Inject
     public DynamicKafkaConsumerManager(
             PipelineConfigService configService,
-            PipelineServiceImpl pipelineService,
+            PipelineService pipelineService,
             @Named("dynamic-kafka-consumer-executor") ExecutorService executorService,
             KafkaSerdeProvider serdeProvider,
             AbstractKafkaConsumerConfiguration<?,?> defaultKafkaConfig,

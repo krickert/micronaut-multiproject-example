@@ -69,9 +69,9 @@ public class TestPipelineServiceProcessorTest extends AbstractPipelineTest imple
         Properties props = new Properties();
         // Keys are relative to the prefix defined in ConsulContainerManager
         String keyPrefix = "pipeline.configs." + TEST_PIPELINE_NAME + ".service." + TEST_SERVICE_NAME;
-        props.setProperty(keyPrefix + ".kafka-listen-topics", getInputTopic());
-        props.setProperty(keyPrefix + ".kafka-publish-topics", getOutputTopic());
-        props.setProperty(keyPrefix + ".service-implementation", TEST_PROCESSOR_BEAN_NAME);
+        props.setProperty(keyPrefix + ".kafkaListenTopics", getInputTopic());
+        props.setProperty(keyPrefix + ".kafkaPublishTopics", getOutputTopic());
+        props.setProperty(keyPrefix + ".serviceImplementation", TEST_PROCESSOR_BEAN_NAME);
         return props;
     }
 
@@ -111,4 +111,5 @@ public class TestPipelineServiceProcessorTest extends AbstractPipelineTest imple
         super.testGrpcInputDirectProcessorCall();
         LOG.info("TestPipelineServiceProcessorTest -> testGrpcInput completed successfully");
     }
+
 }
