@@ -45,9 +45,13 @@ guava = { module = "com.google.guava:guava", version.ref = "guava" }
 commons-lang3 = { module = "org.apache.commons:commons-lang3", version.ref = "commonsLang3" }
 micronaut-platform = { module = "io.micronaut.platform:micronaut-platform", version.ref = "micronautPlatform" }
 apicurio-serde = { module = "io.apicurio:apicurio-registry-protobuf-serde-kafka", version.ref = "apicurioSerde" }
+micronaut-inject-java = { module = "io.micronaut:micronaut-inject-java", version.ref = "micronautPlatform" }
+lombok = { module = "org.projectlombok:lombok", version = "1.18.30" }
+micronaut-validation-processor = { module = "io.micronaut.validation:micronaut-validation-processor", version.ref = "micronautPlatform" }
 
 [bundles]
 testing-jvm = ["junit-jupiter-api", "junit-jupiter-engine"]
+micronaut-annotation-processors = ["micronaut-inject-java", "lombok", "micronaut-validation-processor"]
 
 [plugins]
 # Update these to use micronautPlugins version

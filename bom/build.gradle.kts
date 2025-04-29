@@ -17,6 +17,11 @@ dependencies {
         // For BOM imports in constraints, use the specific notation:
         api(libs.micronaut.platform)  // This is the correct way to reference the BOM
 
+        // Add annotation processors from Micronaut
+        api("io.micronaut:micronaut-inject-java:4.8.2")
+        api("org.projectlombok:lombok:1.18.30")
+        api("io.micronaut.validation:micronaut-validation-processor:4.8.2")
+
         // Explicitly add JUnit with version
         api("org.junit.jupiter:junit-jupiter-api:5.10.0")
         api("org.junit.jupiter:junit-jupiter-engine:5.10.0")

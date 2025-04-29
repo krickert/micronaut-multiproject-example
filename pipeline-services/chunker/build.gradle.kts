@@ -30,9 +30,7 @@ dependencies {
     testImplementation(platform(project(":bom")))
     testAnnotationProcessor(platform(project(":bom")))
     // Micronaut dependencies using mn catalog
-    annotationProcessor(mn.micronaut.inject.java)
-    annotationProcessor(mn.lombok)
-    annotationProcessor(mn.micronaut.validation)
+    annotationProcessor(libs.bundles.micronaut.annotation.processors)
     // Project dependencies
     implementation(project(":pipeline-service-core"))
     // https://mvnrepository.com/artifact/com.google.guava/guava

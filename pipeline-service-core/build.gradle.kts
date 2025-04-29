@@ -30,9 +30,7 @@ dependencies {
     testAnnotationProcessor(platform(project(":bom")))
 
     // Micronaut dependencies using mn catalog
-    annotationProcessor(mn.micronaut.inject.java)
-    annotationProcessor(mn.lombok)
-    annotationProcessor(mn.micronaut.validation)
+    annotationProcessor(libs.bundles.micronaut.annotation.processors)
 
     // API dependencies - these are exposed to consumers of the library
     api(mn.micronaut.inject)

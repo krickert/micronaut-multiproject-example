@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 
 /**
  * The OverlapChunker class provides methods to chunk text into smaller parts with overlapping sections.
- *
+ *<br/>
  * Usage:
  * 1. Initialize an instance of the class, e.g. OverlapChunker chunker = new OverlapChunker();
  * 2. Call the chunkTextSplitNewline() method to chunk the text with overlapping sections.
@@ -26,13 +26,13 @@ import java.util.stream.Collectors;
  * 4. Optionally, call the squishText() method to squish the text by removing extra whitespace and empty lines.
  *     - This method splits the text by newline characters, trims each line, and filters out empty lines.
  *     - It returns a list of the resulting non-empty lines.
- *
+ *<br/>
  * Example Usage:
- * ```java
- * OverlapChunker chunker = new OverlapChunker();
- * List<String> chunks = chunker.chunkTextSplitNewline(text, 300, 30);
- * chunks.forEach(System.out::println);
- * ```
+ * <pre>
+ *     OverlapChunker chunker = new OverlapChunker();
+ *     List&lt;String&gt; chunks = chunker.chunkTextSplitNewline(text, 300, 30);
+ *     chunks.forEach(System.out::println);
+ * </pre>
  */
 @Singleton
 public class OverlapChunker {
