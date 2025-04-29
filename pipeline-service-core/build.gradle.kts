@@ -65,12 +65,10 @@ dependencies {
     api(libs.amazon.msk.iam)
     api(libs.amazon.connection.client)
 
-
     // Implementation dependencies - these are not exposed to consumers
-    implementation(libs.slf4j.api)
-    implementation(libs.logback.classic)
+    api(libs.slf4j.api)
+    api(libs.logback.classic)
     compileOnly(mn.lombok)
-
 
     // Apicurio Registry dependencies
     api(libs.apicurio.serde) {

@@ -24,38 +24,20 @@ micronaut {
 }
 
 dependencies {
+    //BOM
     implementation(platform(project(":bom")))
     annotationProcessor(platform(project(":bom")))
     testImplementation(platform(project(":bom")))
     testAnnotationProcessor(platform(project(":bom")))
-
     // Micronaut dependencies using mn catalog
     annotationProcessor(mn.micronaut.inject.java)
     annotationProcessor(mn.lombok)
     annotationProcessor(mn.micronaut.validation)
-
-    // API dependencies - these are exposed to consumers of the library
-    api(mn.micronaut.inject)
-    api(mn.micronaut.serde.api)
-    api(mn.micronaut.serde.jackson)
-    api(mn.micronaut.runtime)
-    api(mn.micronaut.validation)
-    api(mn.micronaut.grpc.server.runtime)
-    api(mn.micronaut.grpc.annotation)
-    api(mn.micronaut.kafka)
-
     // Project dependencies
-    api(project(":pipeline-service-core"))
-    api(project(":protobuf-models"))
-    api(project(":util"))
-
-    // Implementation dependencies - these are not exposed to consumers
-    implementation(libs.slf4j.api)
-    implementation(libs.logback.classic)
-    implementation("io.micronaut.discovery:micronaut-discovery-client")
-    implementation("com.google.guava:guava:31.1-jre") // Added for InternetDomainName
+    implementation(project(":pipeline-service-core"))
+    // https://mvnrepository.com/artifact/com.google.guava/guava
+    implementation(libs.guava)
     compileOnly(mn.lombok)
-
     // Testing dependencies
     testImplementation(mn.micronaut.test.junit5)
     testImplementation(mn.micronaut.http.client)
