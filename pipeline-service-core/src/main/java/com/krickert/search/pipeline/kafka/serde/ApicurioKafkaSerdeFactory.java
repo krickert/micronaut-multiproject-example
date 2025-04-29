@@ -1,11 +1,13 @@
 package com.krickert.search.pipeline.kafka.serde;
 
+import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.config.PipelineConfig;
 import io.apicurio.registry.serde.config.SerdeConfig;
 import io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer;
 import io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer;
 import io.micronaut.configuration.kafka.config.AbstractKafkaConfiguration;
+import io.micronaut.configuration.kafka.config.KafkaConsumerConfiguration;
 import io.micronaut.context.annotation.Requires;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -18,6 +20,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Implementation of KafkaSerdeFactory for Apicurio Registry.
@@ -32,10 +35,10 @@ public class ApicurioKafkaSerdeFactory implements KafkaSerdeFactory {
     private static final String DEFAULT_REGISTRY_URL = "http://localhost:8080/apis/registry/v3";
     private static final String DEFAULT_RETURN_CLASS = "com.krickert.search.model.PipeStream";
 
-    private final AbstractKafkaConfiguration kafkaConfiguration;
+    private final AbstractKafkaConfiguration<UUID,PipeStream> kafkaConfiguration;
 
     @Inject
-    public ApicurioKafkaSerdeFactory(io.micronaut.configuration.kafka.config.KafkaConsumerConfiguration kafkaConfiguration) {
+    public ApicurioKafkaSerdeFactory(KafkaConsumerConfiguration<UUID, PipeStream> kafkaConfiguration) {
         this.kafkaConfiguration = kafkaConfiguration;
         log.info("Initializing ApicurioKafkaSerdeFactory");
     }
@@ -92,7 +95,7 @@ public class ApicurioKafkaSerdeFactory implements KafkaSerdeFactory {
         configs.put(SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS, returnClass);
 
         // Create and configure the deserializer
-        ProtobufKafkaDeserializer deserializer = new ProtobufKafkaDeserializer();
+        ProtobufKafkaDeserializer<PipeStream> deserializer = new ProtobufKafkaDeserializer<>();
         deserializer.configure(configs, false); // false = value deserializer
 
         log.info("Created Apicurio Registry deserializer for pipeline '{}' with registry={}, returnClass={}",

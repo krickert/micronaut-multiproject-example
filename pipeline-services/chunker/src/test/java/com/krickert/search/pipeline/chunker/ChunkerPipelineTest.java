@@ -173,12 +173,11 @@ public class ChunkerPipelineTest extends AbstractPipelineTest implements TestPro
     @Override
     protected PipeDoc getExpectedPipeDoc() {
         // Get the original PipeDoc from the input
-        PipeDoc originalDoc = getInput().getRequest().getDoc();
 
         // We expect the original doc with a SemanticDoc containing chunks
         // The exact chunks will depend on the chunking algorithm and configuration
         // So we'll just check that the SemanticDoc exists and has chunks in the test methods
-        return originalDoc;
+        return getInput().getRequest().getDoc();
     }
 
     /**
@@ -219,7 +218,7 @@ public class ChunkerPipelineTest extends AbstractPipelineTest implements TestPro
         super.testKafkaInput();
 
         // Get the processed message for additional assertions
-        PipeStream processedMessage = consumer.getReceivedMessages().get(0);
+        PipeStream processedMessage = consumer.getReceivedMessages().getFirst();
         PipeDoc processedDoc = processedMessage.getRequest().getDoc();
 
         // Verify that the document has a SemanticDoc with chunks
