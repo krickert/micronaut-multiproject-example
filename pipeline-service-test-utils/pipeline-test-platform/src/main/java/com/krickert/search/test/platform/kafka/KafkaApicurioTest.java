@@ -1,176 +1,117 @@
+// <llm-snippet-file>pipeline-service-test-utils/pipeline-test-platform/src/main/java/com/krickert/search/test/platform/kafka/KafkaApicurioTest.java</llm-snippet-file>
 package com.krickert.search.test.platform.kafka;
 
+// Keep necessary imports for Kafka/Serde configuration keys if needed for verification or defaults
 import io.apicurio.registry.serde.config.SerdeConfig;
-import io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer;
-import io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.producer.ProducerConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.utility.DockerImageName;
-
-import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
- * Implementation of KafkaTest using Apicurio Registry.
- * This class manages the Kafka and Apicurio Registry containers and provides configuration for tests.
+ * Implementation of KafkaTest using Apicurio Registry, managed by TestContainerManager.
  */
 public class KafkaApicurioTest extends AbstractKafkaTest {
     private static final Logger log = LoggerFactory.getLogger(KafkaApicurioTest.class);
-    
-    // Registry type
+
     private static final String REGISTRY_TYPE = "apicurio";
+    // Default Protobuf message class for deserialization if not specified
+    private static final String DEFAULT_RETURN_CLASS = "com.krickert.search.model.PipeStream"; // Adjust if your model package/name is different
+    // Property key expected from TestContainerManager for the Apicurio registry URL
+    private static final String APICURIO_REGISTRY_URL_PROP = "apicurio.registry.url"; // Ensure this matches the key set in TestContainerManager
 
-
-    // Apicurio container
-    private static final GenericContainer<?> apicurioContainer = new GenericContainer<>(
-            DockerImageName.parse("apicurio/apicurio-registry:latest")
-    )
-            .withExposedPorts(8080)
-            .withAccessToHost(true)
-            .withEnv(Map.of(
-                    "QUARKUS_PROFILE", "prod",
-                    "REGISTRY_STORAGE_KIND", "in-memory",
-                    "REGISTRY_AUTH_ANONYMOUS_READ_ACCESS_ENABLED", "true",
-                    "REGISTRY_LOG_LEVEL", "DEBUG"
-            ))
-            .withStartupTimeout(Duration.ofSeconds(60))
-            .withReuse(false);
-    
-    // Registry endpoint
-    private static String registryEndpoint;
-    
-    // Default return class for the deserializer
-    private static final String DEFAULT_RETURN_CLASS = "com.krickert.search.model.PipeStream";
-    
-    // Return class for the deserializer
     private final String returnClass;
-    
+
     /**
-     * Constructor that initializes the test with a specific return class.
-     * 
-     * @param returnClass the return class for the deserializer
+     * Constructor specifying the Protobuf class for the default consumer deserializer.
+     * Ensures the TestContainerManager knows Apicurio is needed.
+     * @param returnClass The fully qualified name of the Protobuf class to deserialize into.
      */
     public KafkaApicurioTest(String returnClass) {
         this.returnClass = returnClass;
-        startContainers();
-        setupProperties();
-        // Set the registry type in the container manager
-        containerManager.setProperty(TestContainerManager.KAFKA_REGISTRY_TYPE_PROP, REGISTRY_TYPE);
+        // Ensure TestContainerManager is initialized and aware Apicurio is needed
+        log.debug("Initializing KafkaApicurioTest, ensuring TestContainerManager knows type is '{}'", REGISTRY_TYPE);
+        TestContainerManager.getInstance().setProperty(TestContainerManager.KAFKA_REGISTRY_TYPE_PROP, REGISTRY_TYPE);
+        // Pass the specific return class for the deserializer config
+        TestContainerManager.getInstance().setProperty(consumerDeserializerReturnClassPropKey(), returnClass);
     }
-    
+
     /**
-     * Default constructor that initializes the test with the default return class.
+     * Default constructor using the default Protobuf return class.
      */
     public KafkaApicurioTest() {
         this(DEFAULT_RETURN_CLASS);
     }
-    
-    /**
-     * Get the registry type.
-     * 
-     * @return the registry type
-     */
+
+    // Helper to get the specific property key for the deserializer return class
+    private String consumerDeserializerReturnClassPropKey() {
+        return "kafka.consumers.default." + SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS;
+    }
+
     @Override
     public String getRegistryType() {
         return REGISTRY_TYPE;
     }
-    
-    /**
-     * Get the registry endpoint.
-     * 
-     * @return the registry endpoint
-     */
+
     @Override
     public String getRegistryEndpoint() {
-        if (registryEndpoint == null) {
-            startContainers();
+        // Retrieve the endpoint registered by TestContainerManager
+        String endpoint = containerManager.getProperties().get(APICURIO_REGISTRY_URL_PROP);
+        if (endpoint == null || endpoint.isBlank()) {
+            // If called before TestContainerManager is fully initialized, force init and retry.
+            log.warn("Apicurio registry endpoint ('{}') not found in TestContainerManager properties. Forcing manager init.", APICURIO_REGISTRY_URL_PROP);
+            TestContainerManager.getInstance(); // Ensure init
+            endpoint = containerManager.getProperties().get(APICURIO_REGISTRY_URL_PROP);
+            if (endpoint == null || endpoint.isBlank()) {
+                throw new IllegalStateException("Apicurio Registry endpoint property ('" + APICURIO_REGISTRY_URL_PROP + "') not found in TestContainerManager properties after retry.");
+            }
         }
-        return registryEndpoint;
+        log.trace("Retrieved Apicurio endpoint: {}", endpoint);
+        return endpoint;
     }
-    
+
     /**
-     * Start the Kafka and Apicurio Registry containers.
+     * Ensures that the TestContainerManager singleton is initialized,
+     * which handles starting all necessary containers (Kafka, Apicurio, Consul).
      */
     @Override
     public void startContainers() {
-        // Start Kafka if not already running
-        if (!kafka.isRunning()) {
-            log.info("Starting Kafka container...");
-            kafka.start();
-        }
-        
-        // Start Apicurio if not already running
-        if (!apicurioContainer.isRunning()) {
-            log.info("Starting Apicurio Registry container...");
-            apicurioContainer.start();
-            
-            // Set the registry endpoint
-            registryEndpoint = "http://" + apicurioContainer.getHost() + ":" 
-                    + apicurioContainer.getMappedPort(8080) + "/apis/registry/v3";
-            log.info("Apicurio Registry endpoint: {}", registryEndpoint);
-        }
-        
-        // Set up properties
-        setupProperties();
+        log.debug("Requesting container start via TestContainerManager.getInstance()...");
+        // Getting the instance triggers the initialization logic within TestContainerManager
+        // if it hasn't run already. This includes starting containers.
+        TestContainerManager.getInstance();
+        log.debug("TestContainerManager instance obtained, containers should be starting/running.");
+        // We might want to add a wait condition here if tests immediately fail due to timing.
+        // However, TestContainerManager initialization should ideally block until ready.
     }
-    
+
     /**
-     * Check if the containers are running.
-     * 
-     * @return true if both containers are running, false otherwise
+     * Checks if the essential containers managed by TestContainerManager are running.
+     * Assumes TestContainerManager provides a way to check status.
+     * Modify based on TestContainerManager's actual API.
      */
     @Override
     public boolean areContainersRunning() {
-        return kafka.isRunning() && apicurioContainer.isRunning();
+        // Delegate check to TestContainerManager
+        // Assuming a method like this exists or checking individual container statuses
+        boolean running = containerManager.areEssentialContainersRunning("kafka", REGISTRY_TYPE, "consul");
+        log.trace("Checked container status via TestContainerManager: {}", running);
+        return running;
+        // Alternatively, check individual statuses if exposed:
+        // return containerManager.isKafkaRunning() && containerManager.isApicurioRunning() && containerManager.isConsulRunning();
     }
-    
+
     /**
-     * Reset the containers between tests.
+     * Resets container state if necessary.
+     * For Apicurio's in-memory registry, reset typically isn't needed unless
+     * specific test data needs clearing (which would require registry API calls).
+     * Stopping containers is handled globally by TestContainerManager's shutdown hook.
      */
     @Override
     public void resetContainers() {
-        log.info("Resetting containers...");
-        // No need to reset Apicurio container, just clear the properties
-        containerManager.clearProperties();
-        // Set up properties again
-        setupProperties();
-    }
-    
-    /**
-     * Set up the properties for the test.
-     */
-    private void setupProperties() {
-        Map<String, String> props = new HashMap<>();
-        
-        // Set up common Kafka properties
-        setupKafkaProperties(props);
-        
-        // Set up Apicurio Registry properties
-        String producerPrefix = "kafka.producers.default.";
-        props.put(producerPrefix + SerdeConfig.REGISTRY_URL, registryEndpoint);
-        props.put(producerPrefix + SerdeConfig.AUTO_REGISTER_ARTIFACT, "true");
-        props.put(producerPrefix + SerdeConfig.ARTIFACT_RESOLVER_STRATEGY, "io.apicurio.registry.serde.strategy.TopicIdStrategy");
-        props.put(producerPrefix + SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID, "default");
-        props.put(producerPrefix + ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ProtobufKafkaSerializer.class.getName());
-        
-        String consumerPrefix = "kafka.consumers.default.";
-        props.put(consumerPrefix + SerdeConfig.REGISTRY_URL, registryEndpoint);
-        props.put(consumerPrefix + SerdeConfig.AUTO_REGISTER_ARTIFACT, "true");
-        props.put(consumerPrefix + SerdeConfig.ARTIFACT_RESOLVER_STRATEGY, "io.apicurio.registry.serde.strategy.TopicIdStrategy");
-        props.put(consumerPrefix + SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID, "default");
-        props.put(consumerPrefix + ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ProtobufKafkaDeserializer.class.getName());
-        props.put(consumerPrefix + SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS, returnClass);
-        
-        // Add properties to container manager
-        containerManager.setProperties(props);
+        log.debug("Resetting containers for KafkaApicurioTest (typically no-op for Apicurio in-memory).");
+        // If TestContainerManager provides a specific reset mechanism, call it here:
+        // containerManager.resetRegistryState(); // Example
+        // Otherwise, this can be empty if no explicit reset action is needed between tests.
     }
 
-    @Override
-    public Map<String, String> getProperties() {
-        return containerManager.getProperties();
-    }
+    // REMOVE: registerApicurioProperties method - this is now handled by TestContainerManager
 }

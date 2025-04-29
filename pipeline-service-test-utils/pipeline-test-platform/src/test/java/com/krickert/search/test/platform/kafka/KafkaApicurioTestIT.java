@@ -53,13 +53,13 @@ public class KafkaApicurioTestIT extends KafkaApicurioTest {
             log.info("Available topics: {}", topicNames);
             
             // Verify that all expected topics are created
-            for (String topic : TOPICS) {
+            for (String topic : DEFAULT_TOPICS) {
                 assertThat(topicNames).contains(topic);
             }
         }
         
         // Verify that the properties are set correctly
-        Map<String, String> props = getProperties();
+        Map<String, String> props = new HashMap<>();
         assertThat(props).isNotEmpty();
         
         // Verify Kafka properties

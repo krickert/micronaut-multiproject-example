@@ -1,145 +1,193 @@
 package com.krickert.search.test.platform.consul;
 
-import com.krickert.search.test.consul.ConsulContainer;
-import com.krickert.search.test.consul.ConsulTestHelper;
 import com.krickert.search.test.platform.kafka.TestContainerManager;
+// REMOVE: Direct ConsulContainer import not needed here anymore
+// import com.krickert.search.test.platform.consul.ConsulContainer;
+import jakarta.inject.Inject; // Assuming ConsulTestHelper might be injected in subclasses
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
+// REMOVE: HashMap import no longer needed for setupConsulProperties
+// import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects; // Import Objects for requireNonNull
 
 /**
- * Abstract base class for Consul tests.
- * This class provides common functionality for Consul tests.
+ * Abstract base class for Consul tests, integrated with TestContainerManager.
+ * Relies on TestContainerManager for Consul container lifecycle and configuration properties.
  */
 public abstract class AbstractConsulTest implements ConsulTest {
     protected static final Logger log = LoggerFactory.getLogger(AbstractConsulTest.class);
-    
-    // Consul container
-    protected static final ConsulContainer consulContainer = new ConsulContainer();
-    
-    // Test container manager
+
+    // REMOVE: Consul container instance - managed by TestContainerManager
+    // protected static final ConsulContainer consulContainer = new ConsulContainer();
+
+    // Get the singleton TestContainerManager instance
     protected static final TestContainerManager containerManager = TestContainerManager.getInstance();
-    
+
+    // Property keys expected to be set by TestContainerManager
+    // Ensure these match the keys used in TestContainerManager when it starts Consul
+    protected static final String CONSUL_ENDPOINT_PROP = "consul.http.addr"; // e.g., "http://localhost:8500"
+    protected static final String CONSUL_HOST_PORT_PROP = "consul.host.and.port"; // e.g., "localhost:8500"
+    protected static final String CONSUL_ENABLED_PROP = "consul.client.enabled"; // Often set by manager
+
+    // Optional: Inject ConsulTestHelper if subclasses need it commonly
+    @Inject
+    protected ConsulTestHelper consulTestHelper;
+
     /**
      * Set up the test environment before each test.
-     * This method starts the container.
+     * Ensures the TestContainerManager (and thus Consul) is initialized.
      */
     @BeforeEach
     public void setUp() {
-        startContainer();
+        log.debug("Ensuring containers are started via TestContainerManager...");
+        // Getting the instance ensures the manager initializes and starts containers if needed.
+        TestContainerManager.getInstance();
+        log.debug("TestContainerManager instance obtained, Consul container should be running.");
+        // Optional: Verify essential properties are present
+        // Objects.requireNonNull(getEndpoint(), "Consul endpoint property missing");
+        // Objects.requireNonNull(getHostAndPort(), "Consul host/port property missing");
     }
-    
+
     /**
      * Clean up the test environment after each test.
-     * This method resets the container.
      */
     @AfterEach
     public void tearDown() {
+        // Reset specific Consul state if needed (e.g., clearing keys)
         resetContainer();
-        // Force garbage collection to help clean up resources
-        System.gc();
+        // REMOVE: System.gc() is generally discouraged in tests.
+        // System.gc();
     }
-    
+
     /**
-     * Get the endpoint URL for the Consul server.
-     * 
+     * Get the endpoint URL for the Consul server from TestContainerManager.
+     *
      * @return the endpoint URL as a string
+     * @throws IllegalStateException if the property is not found.
      */
     @Override
     public String getEndpoint() {
-        return consulContainer.getEndpoint();
+        String endpoint = containerManager.getProperties().get(CONSUL_ENDPOINT_PROP);
+        if (endpoint == null || endpoint.isBlank()) {
+            log.warn("Consul endpoint property ('{}') not found in TestContainerManager properties. Forcing manager init.", CONSUL_ENDPOINT_PROP);
+            TestContainerManager.getInstance(); // Ensure manager is initialized
+            endpoint = containerManager.getProperties().get(CONSUL_ENDPOINT_PROP);
+            if (endpoint == null || endpoint.isBlank()) {
+                throw new IllegalStateException("Consul endpoint property ('" + CONSUL_ENDPOINT_PROP + "') not found in TestContainerManager properties after retry.");
+            }
+        }
+        return endpoint;
     }
-    
+
     /**
-     * Get the host and port of the Consul server in the format "host:port".
-     * 
-     * @return the host and port as a string
+     * Get the host and port of the Consul server from TestContainerManager.
+     *
+     * @return the host and port as a string (e.g., "localhost:8500")
+     * @throws IllegalStateException if the property is not found.
      */
     @Override
     public String getHostAndPort() {
-        return consulContainer.getHostAndPort();
+        String hostAndPort = containerManager.getProperties().get(CONSUL_HOST_PORT_PROP);
+        if (hostAndPort == null || hostAndPort.isBlank()) {
+            log.warn("Consul host/port property ('{}') not found in TestContainerManager properties. Forcing manager init.", CONSUL_HOST_PORT_PROP);
+            TestContainerManager.getInstance(); // Ensure manager is initialized
+            hostAndPort = containerManager.getProperties().get(CONSUL_HOST_PORT_PROP);
+            if (hostAndPort == null || hostAndPort.isBlank()) {
+                throw new IllegalStateException("Consul host/port property ('" + CONSUL_HOST_PORT_PROP + "') not found in TestContainerManager properties after retry.");
+            }
+        }
+        return hostAndPort;
     }
-    
+
     /**
-     * Start the Consul container.
-     * This method is idempotent.
+     * REMOVE: Starting is handled by TestContainerManager during its initialization.
+     * This method is no longer needed in the same way. Kept for interface compatibility if needed,
+     * but delegates to ensuring the manager is initialized.
      */
     @Override
     public void startContainer() {
-        if (!isContainerRunning()) {
-            log.info("Starting Consul container...");
-            consulContainer.start();
-        }
-        
-        // Set up properties
-        setupConsulProperties();
+        log.debug("startContainer() called - ensuring TestContainerManager is initialized.");
+        TestContainerManager.getInstance(); // Ensures containers are requested if not already up
     }
-    
+
     /**
-     * Check if the Consul container is running.
-     * 
+     * Check if the Consul container (managed by TestContainerManager) is running.
+     *
      * @return true if the container is running, false otherwise
      */
     @Override
     public boolean isContainerRunning() {
-        return consulContainer.isRunning();
+        // Delegate check to TestContainerManager, assuming it has a way to check Consul status
+        // Adapt the key "consul" if TestContainerManager uses a different identifier.
+        boolean running = containerManager.areEssentialContainersRunning("consul");
+        log.trace("Checked Consul container status via TestContainerManager: {}", running);
+        return running;
     }
-    
+
     /**
-     * Reset the Consul state between tests.
-     * This method should clean up any resources that might cause interference between tests.
+     * Reset Consul state between tests if necessary.
+     * This implementation currently only logs. Subclasses or direct test calls
+     * should use ConsulTestHelper or a Consul client to clear specific keys if needed.
+     * It NO LONGER clears properties from the central TestContainerManager.
      */
     @Override
     public void resetContainer() {
-        log.info("Resetting Consul container...");
-        // Clear the properties
-        containerManager.clearProperties();
-        // Set up properties again
-        setupConsulProperties();
+        log.info("Resetting Consul state (if implemented by helper/client)...");
+        // Example using ConsulTestHelper if it had a clear method:
+        // if (consulTestHelper != null) {
+        //     consulTestHelper.clearAllKvPairs("config/"); // Example path
+        // } else {
+        //     log.warn("ConsulTestHelper not available for reset.");
+        // }
+        // For now, just logging as the default behavior.
     }
-    
+
     /**
-     * Load configuration into Consul.
-     * This method loads configuration from a properties file into Consul.
-     * 
+     * Load configuration into the Consul instance managed by TestContainerManager.
+     * Relies on ConsulTestHelper being available (e.g., injected).
+     *
      * @param filename the name of the properties file to load
-     * @param prefix the prefix to use for the keys in Consul
+     * @param prefix   the prefix to use for the keys in Consul
      * @return true if the operation was successful, false otherwise
+     * @throws IllegalStateException if ConsulTestHelper is not available.
      */
     @Override
     public boolean loadConfig(String filename, String prefix) {
         log.info("Loading configuration from {} with prefix {}", filename, prefix);
-        // Use ConsulTestHelper to load the configuration
-        ConsulTestHelper helper = new ConsulTestHelper();
-        return helper.loadPropertiesFile(filename, prefix);
+        // Ensure helper is available (might be injected or instantiated)
+        if (consulTestHelper == null) {
+            log.warn("ConsulTestHelper instance is null in loadConfig. Attempting to create a new one.");
+            // This might fail if ConsulTestHelper needs injection itself
+            try {
+                this.consulTestHelper = new ConsulTestHelper(); // Or get it from context if possible
+            } catch (Exception e) {
+                log.error("Failed to create ConsulTestHelper instance.", e);
+                throw new IllegalStateException("ConsulTestHelper not available to load config. Ensure it's injectable or manually instantiate.", e);
+            }
+        }
+        // Ensure endpoint is configured for the helper implicitly or explicitly
+        // Helper likely uses Micronaut config which should pick up properties from containerManager
+        return consulTestHelper.loadPropertiesFile(filename, prefix);
     }
-    
+
     /**
-     * Set up Consul properties.
-     * This method sets up properties for Consul.
+     * REMOVE: Property setup is now handled by TestContainerManager.
      */
-    protected void setupConsulProperties() {
-        Map<String, String> props = new HashMap<>();
-        
-        // Get properties from the Consul container
-        props.putAll(consulContainer.getProperties());
-        
-        // Add properties to container manager
-        containerManager.setProperties(props);
-    }
-    
+    // protected void setupConsulProperties() { ... }
+
     /**
-     * Get the properties for the test.
-     * This method returns the properties from the container manager.
-     * 
-     * @return the properties map
+     * Get all properties managed by the central TestContainerManager.
+     * This includes Consul properties set by the manager, and potentially others (Kafka, etc.).
+     *
+     * @return the properties map from TestContainerManager
      */
     @Override
     public Map<String, String> getProperties() {
+        // Properties are sourced directly from the central manager
         return containerManager.getProperties();
     }
 }

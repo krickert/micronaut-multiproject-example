@@ -25,7 +25,6 @@ include(
     "protobuf-models",
     "pipeline-service-core",
     "pipeline-service-test-utils",
-    "pipeline-service-test-utils:micronaut-test-consul-container",
     "pipeline-service-test-utils:pipeline-test-platform",
     "pipeline-instance-A",
     "pipeline-examples",

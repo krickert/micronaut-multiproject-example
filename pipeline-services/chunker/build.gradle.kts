@@ -40,7 +40,6 @@ dependencies {
     testImplementation(mn.micronaut.test.junit5)
     testImplementation(mn.micronaut.http.client)
     testImplementation(mn.micronaut.http.server.netty)
-    testImplementation(project(":pipeline-service-test-utils:micronaut-test-consul-container"))
     testImplementation(project(":pipeline-service-test-utils:pipeline-test-platform"))
     testAnnotationProcessor(mn.micronaut.inject.java)
 }

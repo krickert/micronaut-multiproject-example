@@ -47,9 +47,6 @@ dependencies {
     // Pipeline service core for PipeServiceDto and PipelineServiceProcessor
     api(project(":pipeline-service-core"))
 
-    // Consul container for testing
-    api(project(":pipeline-service-test-utils:micronaut-test-consul-container"))
-
     // Testing
     api("org.testcontainers:junit-jupiter")
     api(mn.testcontainers.core)

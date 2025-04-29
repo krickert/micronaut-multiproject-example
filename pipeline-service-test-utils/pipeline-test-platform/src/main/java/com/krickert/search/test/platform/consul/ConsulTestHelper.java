@@ -1,4 +1,4 @@
-package com.krickert.search.test.consul;
+package com.krickert.search.test.platform.consul;
 
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.env.Environment;
@@ -156,5 +156,142 @@ public class ConsulTestHelper {
             log.error("Error getting key-value pair from Consul with key: {}", key, e);
             return null;
         }
+    }
+
+    /**
+     * Store properties in Consul with the given prefix.
+     * 
+     * @param properties the properties to store
+     * @param prefix the prefix to use for keys
+     * @return true if the operation was successful, false otherwise
+     */
+    public boolean putProperties(Properties properties, String prefix) {
+        if (!isContainerRunning()) {
+            log.error("Cannot put properties, Consul container is not running.");
+            return false;
+        }
+
+        boolean allSuccess = true;
+        for (String key : properties.stringPropertyNames()) {
+            String value = properties.getProperty(key);
+            String fullKey = prefix + key;
+            
+            log.debug("Storing in Consul KV: '{}' = '{}'", fullKey, value);
+            if (!putKv(fullKey, value)) {
+                log.error("Failed to store key '{}' with value '{}'", fullKey, value);
+                allSuccess = false;
+            }
+        }
+        return allSuccess;
+    }
+
+    /**
+     * Put a key-value pair into Consul.
+     * 
+     * @param key the key to store
+     * @param value the value to store
+     * @return true if the operation was successful, false otherwise
+     */
+    public boolean putKv(String key, String value) {
+        if (!isContainerRunning()) {
+            log.error("Cannot put KV, Consul container is not running.");
+            return false;
+        }
+
+        try {
+            // Convert the reactive Publisher to a blocking result using a CompletableFuture
+            java.util.concurrent.CompletableFuture<Boolean> future = new java.util.concurrent.CompletableFuture<>();
+            
+            consulClient.putValue(key, value).subscribe(new org.reactivestreams.Subscriber<Boolean>() {
+                @Override
+                public void onSubscribe(org.reactivestreams.Subscription s) {
+                    s.request(1); // Request one item
+                }
+                
+                @Override
+                public void onNext(Boolean success) {
+                    future.complete(success);
+                }
+                
+                @Override
+                public void onError(Throwable t) {
+                    future.completeExceptionally(t);
+                }
+                
+                @Override
+                public void onComplete() {
+                    if (!future.isDone()) {
+                        future.complete(false); // No value received
+                    }
+                }
+            });
+            
+            Boolean success = future.get(10, java.util.concurrent.TimeUnit.SECONDS); // Timeout after 10 seconds
+            
+            if (success != null && success) {
+                log.debug("Successfully stored KV in Consul: '{}' = '{}'", key, value);
+                return true;
+            } else {
+                log.error("Failed to store KV in Consul: '{}' = '{}'", key, value);
+                return false;
+            }
+        } catch (Exception e) {
+            log.error("Error storing KV in Consul: '{}' = '{}'", key, value, e);
+            return false;
+        }
+    }
+
+    /**
+     * Delete a key-value pair from Consul.
+     * 
+     * @param key the key to delete
+     * @return true if the operation was successful, false otherwise
+     */
+    public boolean deleteKv(String key) {
+        if (!isContainerRunning()) {
+            log.error("Cannot delete KV, Consul container is not running.");
+            return false;
+        }
+
+        try {
+            // Based on ConsulClient API, we'd need to use a direct HTTP call, 
+            // but for simplicity we'll use a HTTP delete operation through the container
+            boolean success = consulContainer.deleteKv(key);
+            if (success) {
+                log.debug("Successfully deleted KV from Consul: '{}'", key);
+                return true;
+            } else {
+                log.warn("Failed to delete KV from Consul (key may not exist): '{}'", key);
+                return false;
+            }
+        } catch (Exception e) {
+            log.error("Error deleting KV from Consul: '{}'", key, e);
+            return false;
+        }
+    }
+
+    /**
+     * Delete a key path recursively from Consul.
+     * 
+     * @param keyPath the key path to delete
+     * @return true if the operation was successful, false otherwise
+     */
+    public boolean deleteKvRecursive(String keyPath) {
+        if (!isContainerRunning()) {
+            log.error("Cannot delete KV path recursively, Consul container is not running.");
+            return false;
+        }
+
+        // Delegate to the container which can execute the consul CLI command
+        return consulContainer.deleteKvRecursive(keyPath);
+    }
+
+    /**
+     * Check if the Consul container is running.
+     * 
+     * @return true if the container is running, false otherwise
+     */
+    public boolean isContainerRunning() {
+        return consulContainer != null && consulContainer.isRunning();
     }
 }

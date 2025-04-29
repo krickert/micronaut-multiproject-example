@@ -44,9 +44,8 @@ public class TestPipelineServiceProcessorTest extends AbstractPipelineTest imple
     @Override
     public void setUp() {
         LOG.info("Executing @BeforeEach in TestPipelineServiceProcessorTest");
-        // Load this test's specific config into Consul *before* super.setUp()
-        loadConfigIntoConsul(); // Uses base helper + getConfigToLoad() below
-        // Call super setup
+        // DO NOT call loadConfigIntoConsul() directly - it's called by super.setUp()
+        // Instead, ensure getConfigToLoad() returns the correct properties
         super.setUp();
         LOG.info("Finished @BeforeEach in TestPipelineServiceProcessorTest");
     }
@@ -67,11 +66,12 @@ public class TestPipelineServiceProcessorTest extends AbstractPipelineTest imple
     @Override
     protected Properties getConfigToLoad() {
         Properties props = new Properties();
-        // Keys are relative to the prefix defined in ConsulContainerManager
+        // Keys are relative to the prefix defined in AbstractPipelineTest.CONSUL_CONFIG_PATH_PREFIX
         String keyPrefix = "pipeline.configs." + TEST_PIPELINE_NAME + ".service." + TEST_SERVICE_NAME;
         props.setProperty(keyPrefix + ".kafka-listen-topics", getInputTopic());
         props.setProperty(keyPrefix + ".kafka-publish-topics", getOutputTopic());
         props.setProperty(keyPrefix + ".service-implementation", TEST_PROCESSOR_BEAN_NAME);
+        LOG.info("Configured test properties for Consul with {} entries", props.size());
         return props;
     }
 
@@ -83,6 +83,7 @@ public class TestPipelineServiceProcessorTest extends AbstractPipelineTest imple
         Map<String, String> properties = new HashMap<>(super.getProperties());
         // Add ONLY properties needed to configure THIS application context
         properties.put("pipeline.service.name", TEST_SERVICE_NAME); // Crucial for InternalServiceConfig
+        properties.put("kafka.consumer.dynamic.enabled", "true"); // Ensure dynamic consumer is enabled
         LOG.info("Providing Micronaut test properties for TestPipelineServiceProcessorTest: {}", properties.keySet());
         return properties;
     }

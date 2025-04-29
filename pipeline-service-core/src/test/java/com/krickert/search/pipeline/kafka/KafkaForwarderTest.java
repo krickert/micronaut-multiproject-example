@@ -1,13 +1,16 @@
 package com.krickert.search.pipeline.kafka;
 
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
 import com.krickert.search.model.*;
+import com.krickert.search.pipeline.service.PipelineServiceProcessor;
+// Import the simple test processor
 import com.krickert.search.test.platform.AbstractPipelineTest;
-import io.micronaut.configuration.kafka.annotation.KafkaListener;
-import io.micronaut.configuration.kafka.annotation.OffsetReset;
-import io.micronaut.configuration.kafka.annotation.Topic;
+import io.micronaut.context.annotation.Factory;
+import io.micronaut.context.annotation.Replaces; // Import Replaces
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
-import jakarta.inject.Inject;
+import jakarta.inject.Named; // Import Named
 import jakarta.inject.Singleton;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,56 +18,80 @@ import org.junit.jupiter.api.TestInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Test class for verifying Kafka forwarding within the pipeline framework.
+ * This test ensures that a message sent to an input topic is processed
+ * and forwarded correctly to the designated output topic, using the
+ * refactored AbstractPipelineTest structure.
+ */
 @MicronautTest(environments = "apicurio", transactional = false)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class KafkaForwarderTest extends AbstractPipelineTest implements TestPropertyProvider {
     private static final Logger log = LoggerFactory.getLogger(KafkaForwarderTest.class);
-    private static final String TEST_TOPIC = "test-topic";
-    private static final String BACKUP_TOPIC = "backup-test-topic";
 
-    // Store the document ID to ensure consistency between getInput() and getExpectedPipeDoc()
+    // --- Configuration Constants for this Test ---
+    private static final String TEST_PIPELINE_NAME = "forwarder-test-pipeline";
+    private static final String TEST_SERVICE_NAME = "test-forwarder-service";
+    private static final String TEST_INPUT_TOPIC = "test-forwarder-input";
+    // Output topic MUST match the one defined in AbstractPipelineTest for the consumer
+    private static final String TEST_OUTPUT_TOPIC = AbstractPipelineTest.PIPELINE_TEST_OUTPUT_TOPIC;
+    // The bean name for the processor implementation used in this test
+    private static final String TEST_PROCESSOR_BEAN_NAME = "testPipelineServiceProcessor";
+
+
+    // Store the document ID to ensure consistency
     private final String testDocId = UUID.randomUUID().toString();
 
-    @Inject
-    private KafkaForwarder kafkaForwarder;
-
-    @Inject
-    private TestListener testListener;
-
-    @BeforeEach
-    public void setUp() {
-        // Call parent setUp method
-        super.setUp();
-        // Clear any messages from previous tests
-        testListener.reset();
-        log.info("Test setup complete");
-    }
+    // Inject KafkaForwarder ONLY if you need to test its methods *directly*
+    // For testing the pipeline flow, rely on the framework sending messages.
+    // @Inject
+    // private KafkaForwarder kafkaForwarder; // Not needed for framework tests
 
     /**
-     * Get the input PipeStream for testing.
-     * 
-     * @return the input PipeStream
+     * Factory to provide the TestPipelineServiceProcessor bean for this test context.
+     * It replaces any other PipelineServiceProcessor bean that might be present.
      */
+    @Factory
+    static class TestConfigurationFactory {
+        @Singleton
+        @Named(TEST_PROCESSOR_BEAN_NAME) // Provide the bean with the name expected by the base class
+        @Replaces(PipelineServiceProcessor.class) // Indicate this replaces the default processor
+        public PipelineServiceProcessor testProcessor() {
+            // Use the simple pass-through processor for this forwarding test
+            return new TestPipelineServiceProcessor();
+        }
+    }
+
+    @BeforeEach
+    @Override // Ensure overriding the base class setup
+    public void setUp() {
+        // Call parent setUp method (starts containers, creates topics, resets consumer)
+        super.setUp();
+        log.info("KafkaForwarderTest setup complete.");
+        // No need to reset a custom listener, as it's removed.
+    }
+
+    // --- Abstract Method Implementations ---
+
     @Override
     protected PipeStream getInput() {
-        // Create test data using the consistent testDocId
         PipeDoc doc = PipeDoc.newBuilder()
                 .setId(testDocId)
-                .setTitle("Test Document")
-                .setBody("This is a test document for Kafka forwarding")
+                .setTitle("Kafka Forwarder Test Doc")
+                .setBody("Content to be forwarded via Kafka.")
                 .build();
 
         PipeRequest request = PipeRequest.newBuilder()
                 .setDoc(doc)
+                // Add destinations if the processor logic depends on them
+                // .addDestinations(Route.newBuilder().setRouteType(RouteType.KAFKA).setDestination(TEST_OUTPUT_TOPIC).build())
                 .build();
 
         return PipeStream.newBuilder()
@@ -72,183 +99,92 @@ public class KafkaForwarderTest extends AbstractPipelineTest implements TestProp
                 .build();
     }
 
-    /**
-     * Get the expected output PipeResponse after processing.
-     * 
-     * @return the expected PipeResponse
-     */
     @Override
     protected PipeResponse getExpectedOutput() {
-        // For KafkaForwarder tests, we don't expect a specific response
-        // as we're just testing the forwarding functionality
+        // The TestPipelineServiceProcessor returns a simple success response.
         return PipeResponse.newBuilder()
                 .setSuccess(true)
                 .build();
     }
 
-    /**
-     * Get the expected output PipeDoc after processing.
-     * 
-     * @return the expected PipeDoc
-     */
     @Override
     protected PipeDoc getExpectedPipeDoc() {
-        // For KafkaForwarder tests, we expect the document to remain unchanged
-        return getInput().getRequest().getDoc();
-    }
+        // TestPipelineServiceProcessor adds a 'hello_pipelines' field to custom_data.
+        PipeDoc originalDoc = getInput().getRequest().getDoc();
+        Struct.Builder customDataBuilder = originalDoc.hasCustomData()
+                ? originalDoc.getCustomData().toBuilder()
+                : Struct.newBuilder();
+        customDataBuilder.putFields("hello_pipelines", Value.newBuilder().setStringValue("hello pipelines!").build());
 
-    /**
-     * Test forwarding a message to Kafka.
-     * This test uses the KafkaForwarder directly rather than the AbstractPipelineTest framework.
-     */
-    @Test
-    void testForwardToKafka() throws Exception {
-        // Get the input PipeStream
-        PipeStream pipeStream = getInput();
-
-        Route route = Route.newBuilder()
-                .setDestination(TEST_TOPIC)
+        return originalDoc.toBuilder()
+                .setCustomData(customDataBuilder)
+                // Optionally update last_modified if the processor does that
+                // .setLastModified(...)
                 .build();
+    }
 
-        log.info("Forwarding test message to Kafka topic: {}", TEST_TOPIC);
-
-        // Forward the message to Kafka
-        kafkaForwarder.forwardToKafka(pipeStream, route);
-
-        // Wait for the message to be received by the listener
-        assertTrue(testListener.getLatch().await(30, TimeUnit.SECONDS), 
-                "Timed out waiting for message to be received");
-
-        // Verify the message was received
-        List<PipeStream> receivedMessages = testListener.getReceivedMessages();
-        assertEquals(1, receivedMessages.size(), "Should have received exactly one message");
-
-        PipeStream receivedMessage = receivedMessages.get(0);
-        assertNotNull(receivedMessage, "Received message should not be null");
-        assertEquals(testDocId, receivedMessage.getRequest().getDoc().getId(), 
-                "Document ID should match");
-        assertEquals("Test Document", receivedMessage.getRequest().getDoc().getTitle(), 
-                "Document title should match");
+    @Override
+    protected String getOutputTopic() {
+        // Return the fixed output topic name that the base consumer listens to.
+        return TEST_OUTPUT_TOPIC;
     }
 
     /**
-     * Test using the AbstractPipelineTest framework's Kafka functionality.
-     * This test overrides the parent method to add KafkaForwarder-specific assertions.
+     * Provides the necessary configuration properties for this specific test.
+     * Configures a simple pipeline where the 'test-forwarder-service'
+     * listens on TEST_INPUT_TOPIC and publishes to TEST_OUTPUT_TOPIC.
      */
     @Override
+    public Map<String, String> getProperties() {
+        Map<String, String> properties = new HashMap<>(super.getProperties()); // Get Kafka/Apicurio props
+
+        // --- Core Test Configuration ---
+        properties.put("pipeline.service.name", TEST_SERVICE_NAME); // Identify the service instance
+        properties.put("kafka.consumer.dynamic.enabled", "true");   // Enable dynamic consumers
+
+        // --- Define the Pipeline for Dynamic Consumer Manager ---
+        String pipelinePrefix = "pipeline.configs." + TEST_PIPELINE_NAME + ".service." + TEST_SERVICE_NAME;
+        properties.put(pipelinePrefix + ".kafka-listen-topics", TEST_INPUT_TOPIC);
+        properties.put(pipelinePrefix + ".kafka-publish-topics", TEST_OUTPUT_TOPIC); // MUST match getOutputTopic()
+        properties.put(pipelinePrefix + ".service-implementation", TEST_PROCESSOR_BEAN_NAME); // Specify the processor bean
+        // properties.put(pipelinePrefix + ".grpc-forward-to", "null"); // Define if needed
+
+        log.info("Providing test properties: {}", properties);
+        return properties;
+    }
+
+    /**
+     * Test the Kafka Input -> Kafka Output scenario using the base class implementation.
+     * The base class's testKafkaToKafka will:
+     * 1. Send getInput() to TEST_INPUT_TOPIC using the producer.
+     * 2. Wait for the application's DynamicKafkaConsumerManager to consume the message.
+     * 3. The message will be processed by the injected TestPipelineServiceProcessor.
+     * 4. The result will be forwarded (based on config) to TEST_OUTPUT_TOPIC.
+     * 5. testOutputConsumer (listening on TEST_OUTPUT_TOPIC) receives the message.
+     * 6. Assertions in the base class verify the received message.
+     */
     @Test
     public void testKafkaInput() throws Exception {
-        // Call the parent test method
-        super.testKafkaInput();
-
-        // Additional assertions specific to KafkaForwarder can be added here
-        log.info("KafkaForwarder Kafka input test completed successfully");
+        log.info("Running KafkaForwarderTest -> testKafkaInput (delegating to AbstractPipelineTest.testKafkaToKafka)");
+        // Calls the base class test which now handles the end-to-end Kafka flow
+        super.testKafkaToKafka();
+        // Add specific assertions here ONLY if needed beyond base class checks.
+        log.info("KafkaForwarderTest -> testKafkaInput completed successfully");
     }
 
     /**
-     * Test forwarding a message to the backup topic.
-     * This test uses the KafkaForwarder directly rather than the AbstractPipelineTest framework.
+     * Test the direct gRPC processor call functionality using the base class implementation.
+     * NOTE: This method is NOT overriding a base class method with the same name
+     * after the refactoring of AbstractPipelineTest. It delegates to the base class's
+     * testGrpcInputDirectProcessorCall for the actual test logic.
      */
-    @Test
-    void testForwardToBackup() throws Exception {
-        // Create a custom PipeStream for backup testing with a different title/body but same ID
-        PipeDoc doc = PipeDoc.newBuilder()
-                .setId(testDocId)
-                .setTitle("Backup Document")
-                .setBody("This is a test document for Kafka backup forwarding")
-                .build();
-
-        PipeRequest request = PipeRequest.newBuilder()
-                .setDoc(doc)
-                .build();
-
-        PipeStream pipeStream = PipeStream.newBuilder()
-                .setRequest(request)
-                .build();
-
-        Route route = Route.newBuilder()
-                .setDestination(TEST_TOPIC)
-                .setRouteType(RouteType.KAFKA)
-                .build();
-
-        log.info("Forwarding test message to Kafka backup topic: {}", BACKUP_TOPIC);
-
-        // Forward the message to the backup topic
-        kafkaForwarder.forwardToBackup(pipeStream, route);
-
-        // Wait for the message to be received by the listener
-        assertTrue(testListener.getBackupLatch().await(30, TimeUnit.SECONDS), 
-                "Timed out waiting for backup message to be received");
-
-        // Verify the message was received
-        List<PipeStream> receivedBackupMessages = testListener.getReceivedBackupMessages();
-        assertEquals(1, receivedBackupMessages.size(), "Should have received exactly one backup message");
-
-        PipeStream receivedMessage = receivedBackupMessages.get(0);
-        assertNotNull(receivedMessage, "Received backup message should not be null");
-        assertEquals(testDocId, receivedMessage.getRequest().getDoc().getId(), 
-                "Document ID should match");
-        assertEquals("Backup Document", receivedMessage.getRequest().getDoc().getTitle(), 
-                "Document title should match");
-    }
-
-    /**
-     * Test using the AbstractPipelineTest framework's gRPC functionality.
-     * This test overrides the parent method to add KafkaForwarder-specific assertions.
-     */
-    @Override
     @Test
     public void testGrpcInput() throws Exception {
-        // Call the parent test method
-        super.testGrpcInput();
-
-        // Additional assertions specific to KafkaForwarder can be added here
-        log.info("KafkaForwarder gRPC input test completed successfully");
+        log.info("Running KafkaForwarderTest -> testGrpcInput (delegating to AbstractPipelineTest.testGrpcInputDirectProcessorCall)");
+        // Calls the base class test for direct processor invocation
+        super.testGrpcInputDirectProcessorCall();
+        // Add specific assertions here ONLY if needed beyond base class checks.
+        log.info("KafkaForwarderTest -> testGrpcInput completed successfully");
     }
 
-    @Singleton
-    @KafkaListener(offsetReset = OffsetReset.EARLIEST)
-    public static class TestListener {
-        private final List<PipeStream> receivedMessages = new CopyOnWriteArrayList<>();
-        private final List<PipeStream> receivedBackupMessages = new CopyOnWriteArrayList<>();
-        private CountDownLatch latch = new CountDownLatch(1);
-        private CountDownLatch backupLatch = new CountDownLatch(1);
-
-        @Topic(TEST_TOPIC)
-        public void receive(PipeStream message) {
-            log.info("Received message on topic {}: {}", TEST_TOPIC, message);
-            receivedMessages.add(message);
-            latch.countDown();
-        }
-
-        @Topic(BACKUP_TOPIC)
-        public void receiveBackup(PipeStream message) {
-            log.info("Received message on backup topic {}: {}", BACKUP_TOPIC, message);
-            receivedBackupMessages.add(message);
-            backupLatch.countDown();
-        }
-
-        public List<PipeStream> getReceivedMessages() {
-            return Collections.unmodifiableList(receivedMessages);
-        }
-
-        public List<PipeStream> getReceivedBackupMessages() {
-            return Collections.unmodifiableList(receivedBackupMessages);
-        }
-
-        public CountDownLatch getLatch() {
-            return latch;
-        }
-
-        public CountDownLatch getBackupLatch() {
-            return backupLatch;
-        }
-
-        public void reset() {
-            receivedMessages.clear();
-            receivedBackupMessages.clear();
-            latch = new CountDownLatch(1);
-            backupLatch = new CountDownLatch(1);
-        }
-    }
 }

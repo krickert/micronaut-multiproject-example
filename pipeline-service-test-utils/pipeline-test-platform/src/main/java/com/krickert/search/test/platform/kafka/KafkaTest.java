@@ -1,56 +1,35 @@
 package com.krickert.search.test.platform.kafka;
 
-import io.micronaut.test.support.TestPropertyProvider;
+import java.util.List;
 
 /**
- * Common interface for Kafka test implementations.
- * This interface defines the contract for Kafka test implementations
- * that can be used with different schema registry types.
+ * Common interface for Kafka test implementations (Kafka + Schema Registry).
+ * Defines methods for managing containers and topics.
+ * This interface DOES NOT provide properties directly.
  */
-public interface KafkaTest extends TestPropertyProvider {
-    
-    /**
-     * Get the type of schema registry being used.
-     * 
-     * @return the registry type as a string
-     */
+public interface KafkaTest {
+
     String getRegistryType();
-    
-    /**
-     * Get the endpoint URL for the schema registry.
-     * 
-     * @return the endpoint URL as a string
-     */
+
     String getRegistryEndpoint();
-    
-    /**
-     * Start the Kafka and schema registry containers.
-     * This method should be idempotent.
-     */
+
+    /** Starts Kafka and the specific registry container. Idempotent. */
     void startContainers();
-    
-    /**
-     * Check if the Kafka and schema registry containers are running.
-     * 
-     * @return true if both containers are running, false otherwise
-     */
+
     boolean areContainersRunning();
-    
-    /**
-     * Reset the Kafka and schema registry state between tests.
-     * This method should clean up any resources that might cause interference between tests.
-     */
+
+    /** Resets registry state if applicable. */
     void resetContainers();
-    
-    /**
-     * Create Kafka topics needed for tests.
-     * This ensures that topics are available for tests.
-     */
+
+    /** Creates default Kafka topics. */
     void createTopics();
-    
-    /**
-     * Delete Kafka topics after tests.
-     * This ensures a clean state for the next test.
-     */
+
+    /** Deletes default Kafka topics. */
     void deleteTopics();
+
+    /** Creates the specified Kafka topics. */
+    void createTopics(List<String> topicsToCreate);
+
+    /** Deletes the specified Kafka topics. */
+    void deleteTopics(List<String> topicsToDelete);
 }

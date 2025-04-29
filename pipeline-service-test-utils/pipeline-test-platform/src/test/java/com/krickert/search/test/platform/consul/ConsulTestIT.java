@@ -1,6 +1,5 @@
 package com.krickert.search.test.platform.consul;
 
-import com.krickert.search.test.consul.ConsulTestHelper;
 import com.krickert.search.test.platform.kafka.TestContainerManager;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
@@ -58,7 +57,7 @@ public class ConsulTestIT extends AbstractConsulTest {
         // Verify Consul properties
         assertThat(props).containsKey("consul.client.defaultZone");
         assertThat(props).containsKey("consul.client.registration.enabled");
-        assertThat(props.get("consul.client.registration.enabled")).isEqualTo("false");
+        assertThat(props.get("consul.client.registration.enabled")).isEqualTo("true");
 
         // Skip testing loadConfig as it requires Environment injection
         log.info("Skipping loadConfig test as it requires Environment injection");

@@ -1,182 +1,228 @@
+// <llm-snippet-file>pipeline-service-test-utils/pipeline-test-platform/src/main/java/com/krickert/search/test/platform/kafka/AbstractKafkaTest.java</llm-snippet-file>
 package com.krickert.search.test.platform.kafka;
 
-import io.micronaut.test.support.TestPropertyProvider;
 import org.apache.kafka.clients.admin.*;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.common.serialization.UUIDDeserializer;
-import org.apache.kafka.common.serialization.UUIDSerializer;
+import org.apache.kafka.common.errors.TopicExistsException;
+import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.kafka.KafkaContainer;
-import org.testcontainers.utility.DockerImageName;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 /**
- * Abstract base class for Kafka tests.
- * This class provides common functionality for Kafka tests with different schema registry implementations.
+ * Abstract base for Kafka tests. Relies on TestContainerManager for container lifecycle
+ * and provides topic management utilities.
  */
-public abstract class AbstractKafkaTest implements KafkaTest, TestPropertyProvider {
+public abstract class AbstractKafkaTest implements KafkaTest {
     protected static final Logger log = LoggerFactory.getLogger(AbstractKafkaTest.class);
-    
-    // Kafka container
-    protected static final KafkaContainer kafka = new KafkaContainer(
-            DockerImageName.parse("apache/kafka:latest")
-    ).withPrivilegedMode(true).withAccessToHost(true);
-    
-    // Test container manager
+
+    // REMOVE: KafkaContainer instance and related constants
+
+    // Get the singleton TestContainerManager instance
     protected static final TestContainerManager containerManager = TestContainerManager.getInstance();
-    
-    // List of topics to create
-    protected static final List<String> TOPICS = Arrays.asList(
-        "test-pipeline-input",
-        "test-pipeline-output",
-        "test-PipeStream"
+
+    // REMOVE: Static initializer block that called setupKafkaContainer
+
+    public static final List<String> DEFAULT_TOPICS = Arrays.asList(
+            "test-pipeline-input", "test-pipeline-output", "test-PipeStream", "config-updates"
     );
-    
-    /**
-     * Start the Kafka container.
-     * This method is called before all tests.
-     */
-    @BeforeAll
-    public static void setupKafka() {
-        log.info("Setting up Kafka container...");
-        if (!kafka.isRunning()) {
-            kafka.start();
-            log.info("Kafka container started at: {}", kafka.getBootstrapServers());
-        }
-    }
-    
-    /**
-     * Set up the test environment before each test.
-     * This method starts the containers and creates the topics.
-     */
+
+    // REMOVE: setupKafkaContainer method
+    // REMOVE: registerKafkaProperties method
+
     @BeforeEach
     public void setUp() {
+        log.debug("Ensuring containers are started via TestContainerManager...");
+        // Ensure containers are started (subclass implementation relies on TestContainerManager)
         startContainers();
+        log.debug("Creating default Kafka topics...");
+        // Create topics using the bootstrap servers from TestContainerManager
         createTopics();
+        log.debug("Kafka setup complete for test.");
     }
-    
-    /**
-     * Clean up the test environment after each test.
-     * This method deletes the topics and resets the containers.
-     */
+
     @AfterEach
     public void tearDown() {
+        log.debug("Deleting default Kafka topics...");
+        // Delete topics using the bootstrap servers from TestContainerManager
         deleteTopics();
-        resetContainers();
-        // Force garbage collection to help clean up resources
-        System.gc();
+        // Reset containers (subclass implementation relies on TestContainerManager)
+        // This might clear state within containers if implemented, but doesn't stop them here.
+        // Stopping happens via JVM shutdown hook in TestContainerManager.
+        // resetContainers(); // Optional: depends on what resetContainers does in subclasses
+        log.debug("Kafka teardown complete for test.");
     }
-    
+
     /**
-     * Get the bootstrap servers for the Kafka container.
-     * 
-     * @return the bootstrap servers as a string
+     * Gets the Kafka bootstrap servers from the central TestContainerManager.
+     *
+     * @return Kafka bootstrap servers string.
+     * @throws IllegalStateException if TestContainerManager hasn't populated properties yet.
      */
     protected String getBootstrapServers() {
-        if (!kafka.isRunning()) {
-            log.info("Kafka container is not running, starting it...");
-            kafka.start();
+        String bootstrapServers = containerManager.getProperties().get("kafka.bootstrap.servers");
+        if (bootstrapServers == null || bootstrapServers.isBlank()) {
+            // This might happen if accessed too early, before TestContainerManager finishes init.
+            log.error("Kafka bootstrap servers property is missing from TestContainerManager. Forcing manager init.");
+            // Attempt to force initialization again, though ideally it should be ready.
+            TestContainerManager.getInstance();
+            bootstrapServers = containerManager.getProperties().get("kafka.bootstrap.servers");
+            if (bootstrapServers == null || bootstrapServers.isBlank()) {
+                throw new IllegalStateException("Kafka bootstrap servers property ('kafka.bootstrap.servers') not found in TestContainerManager properties after retry.");
+            }
         }
-        return kafka.getBootstrapServers();
+        log.trace("Retrieved bootstrap servers: {}", bootstrapServers);
+        return bootstrapServers;
     }
-    
-    /**
-     * Create Kafka topics needed for tests.
-     * This ensures that topics are available for tests.
-     */
+
+    // createTopics/deleteTopics unchanged internally, but now use the updated getBootstrapServers()
     @Override
     public void createTopics() {
-        log.info("Creating Kafka topics...");
-        try {
-            Map<String, Object> adminProps = new HashMap<>();
-            adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers());
-            
-            try (AdminClient adminClient = AdminClient.create(adminProps)) {
-                List<NewTopic> newTopics = TOPICS.stream()
-                    .map(topic -> new NewTopic(topic, 1, (short) 1))
-                    .toList();
-                
-                CreateTopicsResult result = adminClient.createTopics(newTopics);
-                result.all().get(30, TimeUnit.SECONDS);
-                log.info("Topics created successfully");
-            }
-        } catch (InterruptedException | ExecutionException | TimeoutException e) {
-            log.warn("Error creating topics: {}", e.getMessage());
-            // Topics might already exist, which is fine
-        }
+        createTopics(DEFAULT_TOPICS);
     }
-    
-    /**
-     * Delete Kafka topics after tests.
-     * This ensures a clean state for the next test.
-     */
+
     @Override
     public void deleteTopics() {
-        log.info("Deleting Kafka topics...");
-        try {
-            Map<String, Object> adminProps = new HashMap<>();
-            adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers());
-            
-            try (AdminClient adminClient = AdminClient.create(adminProps)) {
-                DeleteTopicsResult result = adminClient.deleteTopics(TOPICS);
-                result.all().get(30, TimeUnit.SECONDS);
-                log.info("Topics deleted successfully");
+        deleteTopics(DEFAULT_TOPICS);
+    }
+
+    @Override
+    public void createTopics(List<String> topicsToCreate) {
+        if (topicsToCreate == null || topicsToCreate.isEmpty()) {
+            log.warn("No topics specified for creation.");
+            return;
+        }
+        log.info("Attempting to create Kafka topics: {}", topicsToCreate);
+        // Use the centrally managed bootstrap servers
+        Map<String, Object> adminProps = new HashMap<>();
+        adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers()); // Uses updated method
+        adminProps.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, "30000"); // Consider making timeouts configurable
+        adminProps.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, "30000");
+
+        try (AdminClient adminClient = AdminClient.create(adminProps)) {
+            Set<String> existingTopics = adminClient.listTopics().names().get(20, TimeUnit.SECONDS);
+            List<NewTopic> topicsToActuallyCreate = topicsToCreate.stream()
+                    .filter(topic -> !existingTopics.contains(topic))
+                    // Defaulting to 1 partition, 1 replica - suitable for testing
+                    .map(topic -> new NewTopic(topic, 1, (short) 1))
+                    .collect(Collectors.toList());
+
+            if (topicsToActuallyCreate.isEmpty()) {
+                log.info("All requested topics {} already exist.", topicsToCreate);
+                return;
             }
-        } catch (InterruptedException | ExecutionException | TimeoutException e) {
-            log.warn("Error deleting topics: {}", e.getMessage());
-            // Topics might not exist, which is fine
+
+            log.info("Topics to actually create: {}", topicsToActuallyCreate.stream().map(NewTopic::name).collect(Collectors.toList()));
+            CreateTopicsResult result = adminClient.createTopics(topicsToActuallyCreate);
+            // Wait for topic creation to complete
+            result.all().get(60, TimeUnit.SECONDS);
+            log.info("Topics created successfully: {}", topicsToActuallyCreate.stream().map(NewTopic::name).collect(Collectors.toList()));
+
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof TopicExistsException) {
+                log.warn("One or more topics already existed (likely race condition or previous run): {}", e.getCause().getMessage());
+            } else {
+                log.error("Error creating topics (ExecutionException): {}", e.getMessage(), e);
+                // Re-throw or handle more gracefully depending on requirements
+                throw new RuntimeException("Failed to create Kafka topics", e);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Interrupted while creating Kafka topics: {}", e.getMessage(), e);
+            throw new RuntimeException("Interrupted during topic creation", e);
+        } catch (TimeoutException e) {
+            log.error("Timed out while creating Kafka topics: {}", e.getMessage(), e);
+            throw new RuntimeException("Timed out during topic creation", e);
+        } catch (Exception e) {
+            // Catch unexpected errors
+            log.error("Unexpected error during topic creation: {}", e.getMessage(), e);
+            throw new RuntimeException("Unexpected error during topic creation", e);
         }
     }
-    
-    /**
-     * Set up common Kafka properties.
-     * This method sets up properties for Kafka producers and consumers.
-     * 
-     * @param props the properties map to add to
-     */
-    protected void setupKafkaProperties(Map<String, String> props) {
-        // Bootstrap servers
-        String bootstrapServers = getBootstrapServers();
-        props.put("kafka.bootstrap.servers", bootstrapServers);
-        
-        // Producer properties
-        String producerPrefix = "kafka.producers.default.";
-        props.put(producerPrefix + ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        props.put(producerPrefix + ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, UUIDSerializer.class.getName());
-        props.put(producerPrefix + ProducerConfig.ACKS_CONFIG, "all");
-        props.put(producerPrefix + ProducerConfig.RETRIES_CONFIG, "3");
-        
-        // Consumer properties
-        String consumerPrefix = "kafka.consumers.default.";
-        props.put(consumerPrefix + ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        props.put(consumerPrefix + ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, UUIDDeserializer.class.getName());
-        props.put(consumerPrefix + ConsumerConfig.GROUP_ID_CONFIG, "test-consumer-group");
-        props.put(consumerPrefix + ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-        
-        // Add properties to container manager
-        containerManager.setProperties(props);
+
+    @Override
+    public void deleteTopics(List<String> topicsToDelete) {
+        if (topicsToDelete == null || topicsToDelete.isEmpty()) {
+            log.warn("No topics specified for deletion.");
+            return;
+        }
+        log.info("Attempting to delete Kafka topics: {}", topicsToDelete);
+        // Use the centrally managed bootstrap servers
+        Map<String, Object> adminProps = new HashMap<>();
+        adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers()); // Uses updated method
+        adminProps.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, "30000");
+        adminProps.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, "30000");
+
+        try (AdminClient adminClient = AdminClient.create(adminProps)) {
+            Set<String> existingTopics = adminClient.listTopics().names().get(20, TimeUnit.SECONDS);
+            List<String> topicsToActuallyDelete = topicsToDelete.stream()
+                    .filter(existingTopics::contains)
+                    .collect(Collectors.toList());
+
+            if (topicsToActuallyDelete.isEmpty()) {
+                log.info("None of the specified topics {} exist for deletion.", topicsToDelete);
+                return;
+            }
+
+            log.info("Topics to actually delete: {}", topicsToActuallyDelete);
+            DeleteTopicsResult result = adminClient.deleteTopics(topicsToActuallyDelete);
+            // Wait for topic deletion to complete
+            result.all().get(60, TimeUnit.SECONDS);
+            log.info("Topics deleted successfully: {}", topicsToActuallyDelete);
+
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof UnknownTopicOrPartitionException) {
+                log.warn("One or more topics did not exist during deletion attempt: {}", e.getCause().getMessage());
+            } else {
+                log.error("Error deleting topics (ExecutionException): {}", e.getMessage(), e);
+                // Consider if this should halt tests
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Interrupted while deleting Kafka topics: {}", e.getMessage(), e);
+        } catch (TimeoutException e) {
+            log.error("Timed out while deleting Kafka topics: {}", e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("Unexpected error during topic deletion: {}", e.getMessage(), e);
+        }
     }
-    
+
+
+    // --- Abstract methods to be implemented by subclasses ---
+    // These subclasses will interact with containerManager as needed
+
+    @Override
+    public abstract String getRegistryType(); // e.g., "apicurio" or "glue"
+
+    @Override
+    public abstract String getRegistryEndpoint(); // Get endpoint from containerManager properties
+
     /**
-     * Get the properties for the test.
-     * This method returns the properties from the container manager.
-     * 
-     * @return the properties map
+     * Starts necessary containers via TestContainerManager.
+     * Implemented by subclasses (e.g., KafkaApicurioTest, KafkaGlueTest).
+     * This method should ensure TestContainerManager.getInstance() is called if not already.
      */
     @Override
-    public Map<String, String> getProperties() {
-        return containerManager.getProperties();
-    }
+    public abstract void startContainers();
+
+    /**
+     * Checks if the relevant containers (Kafka, Schema Registry, Consul) are running.
+     * Implemented by subclasses, likely checking containerManager's container states.
+     */
+    @Override
+    public abstract boolean areContainersRunning();
+
+    /**
+     * Resets container state if necessary (e.g., clearing data).
+     * Stopping is handled by TestContainerManager's shutdown hook.
+     * Implementation depends on specific test needs. Might be a no-op.
+     */
+    @Override
+    public abstract void resetContainers();
 }

@@ -1,75 +1,67 @@
 package com.krickert.search.test.platform.kafka;
 
-import com.amazonaws.services.schemaregistry.deserializers.GlueSchemaRegistryKafkaDeserializer;
-import com.amazonaws.services.schemaregistry.serializers.GlueSchemaRegistryKafkaSerializer;
-import com.amazonaws.services.schemaregistry.utils.AWSSchemaRegistryConstants;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.producer.ProducerConfig;
+import com.amazonaws.services.schemaregistry.utils.AWSSchemaRegistryConstants; // Keep for constants if needed by TestContainerManager hints
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.glue.GlueClient;
 import software.amazon.awssdk.services.glue.model.CreateRegistryRequest;
 import software.amazon.awssdk.services.glue.model.CreateRegistryResponse;
+import software.amazon.awssdk.services.glue.model.DeleteRegistryRequest;
 import software.amazon.awssdk.services.glue.model.EntityNotFoundException;
+import software.amazon.awssdk.services.glue.model.GetRegistryRequest; // Import GetRegistryRequest
 
 import java.net.URI;
-import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
+// Removed testcontainers/DockerImageName imports as TestContainerManager handles containers
 
 /**
- * Implementation of KafkaTest using AWS Glue Schema Registry with Moto.
- * This class manages the Kafka and Moto containers and provides configuration for tests.
+ * Implementation of KafkaTest using AWS Glue Schema Registry (via Moto), managed by TestContainerManager.
+ * This class interacts with the Glue registry (e.g., for reset) using configuration
+ * provided by the central TestContainerManager.
  */
 public class KafkaGlueTest extends AbstractKafkaTest {
     private static final Logger log = LoggerFactory.getLogger(KafkaGlueTest.class);
 
-    // Registry type
+    // Registry type identifier
     private static final String REGISTRY_TYPE = "glue";
 
-    // Moto container
-    private static final GenericContainer<?> motoContainer = new GenericContainer<>(DockerImageName.parse("motoserver/moto:latest"))
-            .withExposedPorts(5000)
-            .withAccessToHost(true)
-            .withCommand("-H0.0.0.0")
-            .withEnv(Map.of(
-                    "MOTO_SERVICE", "glue",
-                    "TEST_SERVER_MODE", "true"
-            ))
-            .withStartupTimeout(Duration.ofSeconds(30))
-            .withReuse(false);
+    // --- Container Management Delegated to TestContainerManager ---
+    // REMOVE: motoContainer field and its definition
 
-    // Registry endpoint
-    private static String registryEndpoint;
+    // Property key expected from TestContainerManager for the Glue registry endpoint
+    // Ensure TestContainerManager sets a property with this key.
+    private static final String GLUE_REGISTRY_ENDPOINT_PROP = "aws.glue.endpoint";
+    // Property key TestContainerManager might use for AWS region
+    private static final String GLUE_AWS_REGION_PROP = "aws.region"; // Assuming TestContainerManager provides region
+    // Property key TestContainerManager might use for AWS access key
+    private static final String GLUE_AWS_ACCESS_KEY_PROP = "aws.accessKeyId";
+    // Property key TestContainerManager might use for AWS secret key
+    private static final String GLUE_AWS_SECRET_KEY_PROP = "aws.secretKey";
+    // Property key TestContainerManager might use for Registry Name
+    private static final String GLUE_REGISTRY_NAME_PROP = "registry.name"; // Assuming TestContainerManager provides registry name
 
-    // AWS credentials
-    private static final String AWS_ACCESS_KEY = "test";
-    private static final String AWS_SECRET_KEY = "test";
-    private static final String AWS_REGION = "us-east-1";
+    // Default return class for the deserializer (can be overridden)
+    // TestContainerManager should use this value when configuring the Kafka consumer properties
+    private static final String DEFAULT_RETURN_CLASS = "com.krickert.search.model.PipeStream"; // Adjust if needed
 
-    // Registry name
-    private static final String REGISTRY_NAME = "test-registry";
 
-    // Default return class for the deserializer
-    private static final String DEFAULT_RETURN_CLASS = "com.krickert.search.model.PipeStream";
-
-    // Return class for the deserializer
+    // The specific class to deserialize into for this test instance
     private final String returnClass;
 
     /**
      * Constructor that initializes the test with a specific return class.
-     * 
+     * Informs TestContainerManager about the required registry type and deserializer class.
+     *
      * @param returnClass the return class for the deserializer
      */
     public KafkaGlueTest(String returnClass) {
         this.returnClass = returnClass;
-        // Set the registry type in the container manager
+        log.debug("Initializing KafkaGlueTest, ensuring TestContainerManager knows type is '{}'", REGISTRY_TYPE);
+        // Inform the manager about the registry type needed
         containerManager.setProperty(TestContainerManager.KAFKA_REGISTRY_TYPE_PROP, REGISTRY_TYPE);
+        // Provide the return class as a hint for TestContainerManager to configure the consumer
     }
 
     /**
@@ -79,199 +71,170 @@ public class KafkaGlueTest extends AbstractKafkaTest {
         this(DEFAULT_RETURN_CLASS);
     }
 
-    /**
-     * Get the registry type.
-     * 
-     * @return the registry type
-     */
     @Override
     public String getRegistryType() {
         return REGISTRY_TYPE;
     }
 
     /**
-     * Get the registry endpoint.
-     * 
-     * @return the registry endpoint
+     * Retrieves the Glue registry endpoint from the central TestContainerManager.
+     *
+     * @return The Glue registry endpoint URL.
+     * @throws IllegalStateException if the property is not found in TestContainerManager.
      */
     @Override
     public String getRegistryEndpoint() {
-        if (registryEndpoint == null) {
-            startContainers();
+        String endpoint = containerManager.getProperties().get(GLUE_REGISTRY_ENDPOINT_PROP);
+        if (endpoint == null || endpoint.isBlank()) {
+            log.warn("Glue registry endpoint ('{}') not found in TestContainerManager properties. Forcing manager init.", GLUE_REGISTRY_ENDPOINT_PROP);
+            TestContainerManager.getInstance(); // Ensure init
+            endpoint = containerManager.getProperties().get(GLUE_REGISTRY_ENDPOINT_PROP);
+            if (endpoint == null || endpoint.isBlank()) {
+                throw new IllegalStateException("Glue Registry endpoint property ('" + GLUE_REGISTRY_ENDPOINT_PROP + "') not found in TestContainerManager properties after retry.");
+            }
         }
-        return registryEndpoint;
+        log.trace("Retrieved Glue endpoint: {}", endpoint);
+        return endpoint;
     }
 
     /**
-     * Start the Kafka and Moto containers.
+     * Ensures that the TestContainerManager singleton is initialized,
+     * which handles starting all necessary containers (Kafka, Moto, Consul).
      */
     @Override
     public void startContainers() {
-        // Start Kafka if not already running
-        if (!kafka.isRunning()) {
-            log.info("Starting Kafka container...");
-            kafka.start();
-        }
-
-        // Start Moto if not already running
-        if (!motoContainer.isRunning()) {
-            log.info("Starting Moto container...");
-            motoContainer.start();
-
-            // Set the registry endpoint
-            registryEndpoint = "http://" + motoContainer.getHost() + ":" + motoContainer.getMappedPort(5000);
-            log.info("Moto endpoint: {}", registryEndpoint);
-
-            // Initialize the registry
-            initializeRegistry();
-        }
-
-        // Set up properties
-        setupProperties();
+        log.debug("Requesting container start via TestContainerManager.getInstance()...");
+        // Getting the instance triggers the initialization logic within TestContainerManager
+        TestContainerManager.getInstance();
+        log.debug("TestContainerManager instance obtained, containers should be starting/running.");
+        // Initialize the registry after ensuring containers are up
+        initializeRegistry();
     }
 
     /**
-     * Check if the containers are running.
-     * 
-     * @return true if both containers are running, false otherwise
+     * Checks if the essential containers managed by TestContainerManager are running.
      */
     @Override
     public boolean areContainersRunning() {
-        return kafka.isRunning() && motoContainer.isRunning();
+        // Delegate check to TestContainerManager
+        boolean running = containerManager.areEssentialContainersRunning("kafka", REGISTRY_TYPE, "consul");
+        log.trace("Checked container status via TestContainerManager for Kafka, Glue, Consul: {}", running);
+        return running;
     }
 
     /**
-     * Reset the containers between tests.
+     * Resets the Glue registry state by deleting and recreating the registry.
+     * This is useful for ensuring test isolation.
      */
     @Override
     public void resetContainers() {
-        log.info("Resetting containers...");
-        // Delete and recreate the registry
+        log.info("Resetting Glue registry state...");
+        // Stopping/starting containers is handled globally by TestContainerManager's shutdown hook.
+        // Reset here means cleaning up registry state specific to Glue.
         deleteRegistry();
         initializeRegistry();
-        // Clear the properties
-        containerManager.clearProperties();
-        // Set up properties again
-        setupProperties();
+        // No need to clear/reset properties in containerManager here, as that's central.
+        log.info("Glue registry reset complete.");
     }
 
+    // --- Glue Registry Specific Methods ---
+
     /**
-     * Initialize the Glue registry.
+     * Initialize the Glue registry (create if not exists).
+     * Uses configuration provided by TestContainerManager.
      */
     private void initializeRegistry() {
-        log.info("Initializing Glue registry...");
-        try {
-            GlueClient glueClient = createGlueClient();
-
+        String registryName = getRegistryNameOrFail();
+        log.info("Initializing Glue registry '{}' via endpoint: {}", registryName, getRegistryEndpoint());
+        try (GlueClient glueClient = createGlueClient()) {
             try {
                 // Check if registry exists
-                glueClient.getRegistry(builder -> builder.registryId(id -> id.registryName(REGISTRY_NAME)));
-                log.info("Registry '{}' already exists", REGISTRY_NAME);
+                glueClient.getRegistry(GetRegistryRequest.builder() // Use correct builder pattern
+                        .registryId(id -> id.registryName(registryName))
+                        .build());
+                log.info("Registry '{}' already exists.", registryName);
             } catch (EntityNotFoundException e) {
                 // Create registry if it doesn't exist
+                log.info("Registry '{}' not found, creating...", registryName);
                 CreateRegistryRequest request = CreateRegistryRequest.builder()
-                        .registryName(REGISTRY_NAME)
-                        .description("Test registry for Kafka tests")
+                        .registryName(registryName)
+                        .description("Test registry for Kafka tests (managed by TestContainerManager)")
                         .build();
 
                 CreateRegistryResponse response = glueClient.createRegistry(request);
-                log.info("Created registry '{}' with ARN: {}", REGISTRY_NAME, response.registryArn());
+                log.info("Created registry '{}' with ARN: {}", registryName, response.registryArn());
             }
-
-            glueClient.close();
         } catch (Exception e) {
-            log.error("Error initializing Glue registry: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to initialize Glue registry", e);
+            log.error("Error initializing Glue registry '{}': {}", registryName, e.getMessage(), e);
+            throw new RuntimeException("Failed to initialize Glue registry: " + registryName, e);
         }
     }
 
     /**
      * Delete the Glue registry.
+     * Uses configuration provided by TestContainerManager.
      */
     private void deleteRegistry() {
-        log.info("Deleting Glue registry...");
-        try {
-            GlueClient glueClient = createGlueClient();
-
+        String registryName = getRegistryNameOrFail();
+        log.info("Deleting Glue registry '{}' via endpoint: {}", registryName, getRegistryEndpoint());
+        try (GlueClient glueClient = createGlueClient()) {
             try {
                 // Delete registry if it exists
-                glueClient.deleteRegistry(builder -> builder.registryId(id -> id.registryName(REGISTRY_NAME)));
-                log.info("Deleted registry '{}'", REGISTRY_NAME);
+                glueClient.deleteRegistry(DeleteRegistryRequest.builder() // Use correct builder pattern
+                        .registryId(id -> id.registryName(registryName))
+                        .build());
+                log.info("Deleted registry '{}'", registryName);
             } catch (EntityNotFoundException e) {
-                log.info("Registry '{}' does not exist, nothing to delete", REGISTRY_NAME);
+                log.info("Registry '{}' does not exist, nothing to delete.", registryName);
             }
-
-            glueClient.close();
         } catch (Exception e) {
-            log.error("Error deleting Glue registry: {}", e.getMessage(), e);
-            // Continue even if deletion fails
+            log.error("Error deleting Glue registry '{}': {}", registryName, e.getMessage(), e);
+            // Log error but continue, maybe cleanup failed but tests might still run
         }
     }
 
     /**
-     * Create a Glue client.
-     * 
+     * Create a Glue client configured using properties from TestContainerManager.
+     *
      * @return the Glue client
      */
     private GlueClient createGlueClient() {
+        String endpoint = getRegistryEndpoint(); // Get dynamically from manager
+        String region = containerManager.getProperties().getOrDefault(GLUE_AWS_REGION_PROP, "us-east-1"); // Get from manager or default
+        String accessKey = containerManager.getProperties().get(GLUE_AWS_ACCESS_KEY_PROP); // Get from manager
+        String secretKey = containerManager.getProperties().get(GLUE_AWS_SECRET_KEY_PROP); // Get from manager
+
+        if (accessKey == null || secretKey == null) {
+            log.warn("AWS Credentials (accessKeyId/secretKey) not found in TestContainerManager properties. Glue operations might fail if not implicitly configured.");
+            // Depending on environment, implicit credentials might work, but for Moto it's safer to provide them.
+            // Throw error if explicitly needed for Moto
+            throw new IllegalStateException("AWS Credentials ('" + GLUE_AWS_ACCESS_KEY_PROP + "', '" + GLUE_AWS_SECRET_KEY_PROP + "') are required for GlueClient but not found in TestContainerManager properties.");
+        }
+
         return GlueClient.builder()
-                .endpointOverride(URI.create(registryEndpoint))
-                .region(Region.of(AWS_REGION))
+                .endpointOverride(URI.create(endpoint))
+                .region(Region.of(region))
                 .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(AWS_ACCESS_KEY, AWS_SECRET_KEY)
+                        AwsBasicCredentials.create(accessKey, secretKey)
                 ))
                 .build();
     }
 
     /**
-     * Set up the properties for the test.
+     * Helper to get the configured registry name from TestContainerManager properties.
+     * @return The registry name.
+     * @throws IllegalStateException if the property is not set.
      */
-    private void setupProperties() {
-        Map<String, String> props = new HashMap<>();
-
-        // Set up common Kafka properties
-        setupKafkaProperties(props);
-
-        // Set up AWS system properties
-        updateSystemProperties();
-
-        // Set up Glue Schema Registry properties
-        String producerPrefix = "kafka.producers.default.";
-        props.put(producerPrefix + ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, GlueSchemaRegistryKafkaSerializer.class.getName());
-        props.put(producerPrefix + AWSSchemaRegistryConstants.AWS_REGION, AWS_REGION);
-        props.put(producerPrefix + AWSSchemaRegistryConstants.REGISTRY_NAME, REGISTRY_NAME);
-        props.put(producerPrefix + AWSSchemaRegistryConstants.SCHEMA_AUTO_REGISTRATION_SETTING, "true");
-        props.put(producerPrefix + AWSSchemaRegistryConstants.AVRO_RECORD_TYPE, "SPECIFIC_RECORD");
-
-        // Add properties with the keys expected by the test
-        props.put(producerPrefix + "aws.region", AWS_REGION);
-        props.put(producerPrefix + "registry.name", REGISTRY_NAME);
-
-        String consumerPrefix = "kafka.consumers.default.";
-        props.put(consumerPrefix + ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, GlueSchemaRegistryKafkaDeserializer.class.getName());
-        props.put(consumerPrefix + AWSSchemaRegistryConstants.AWS_REGION, AWS_REGION);
-        props.put(consumerPrefix + AWSSchemaRegistryConstants.REGISTRY_NAME, REGISTRY_NAME);
-        props.put(consumerPrefix + AWSSchemaRegistryConstants.AVRO_RECORD_TYPE, "SPECIFIC_RECORD");
-
-        // Add properties with the keys expected by the test
-        props.put(consumerPrefix + "aws.region", AWS_REGION);
-        props.put(consumerPrefix + "registry.name", REGISTRY_NAME);
-
-        // Add properties to container manager
-        containerManager.setProperties(props);
+    private String getRegistryNameOrFail() {
+        String registryName = containerManager.getProperties().get(GLUE_REGISTRY_NAME_PROP);
+        if (registryName == null || registryName.isBlank()) {
+            log.error("Glue registry name ('{}') not found in TestContainerManager properties.", GLUE_REGISTRY_NAME_PROP);
+            throw new IllegalStateException("Required property '" + GLUE_REGISTRY_NAME_PROP + "' not found in TestContainerManager properties.");
+        }
+        return registryName;
     }
 
-    /**
-     * Update system properties for AWS.
-     */
-    private void updateSystemProperties() {
-        // Set AWS system properties
-        System.setProperty("aws.accessKeyId", AWS_ACCESS_KEY);
-        System.setProperty("aws.secretKey", AWS_SECRET_KEY);
-        System.setProperty("aws.region", AWS_REGION);
-        System.setProperty("aws.disableEc2Metadata", "true");
-
-        // Set endpoint override for Glue
-        System.setProperty("aws.glue.endpoint", registryEndpoint);
-    }
+    // REMOVE: setupProperties method - Handled by TestContainerManager
+    // REMOVE: updateSystemProperties method - Handled by TestContainerManager via client config
+    // REMOVE: registryEndpoint field - Use getRegistryEndpoint()
 }
