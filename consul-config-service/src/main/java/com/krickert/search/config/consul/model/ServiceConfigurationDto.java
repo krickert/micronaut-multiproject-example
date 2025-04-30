@@ -43,5 +43,5 @@ public class ServiceConfigurationDto {
     /**
      * Service-specific configuration parameters.
      */
-    private Map<String, String> configParams;
+    private PipestepConfigOptions configParams;
 }

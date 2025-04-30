@@ -2,6 +2,9 @@ package com.krickert.search.config.consul.seeding;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.krickert.search.config.consul.model.ApplicationConfig;
+import com.krickert.search.config.consul.model.PipelineConfig;
+import com.krickert.search.config.consul.service.ConfigurationService;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value;
@@ -32,6 +35,9 @@ public class ConsulDataSeeder implements ApplicationEventListener<StartupEvent> 
     private final ResourceLoader resourceLoader;
     private final String seedFile;
     private final boolean skipIfExists;
+    private final ApplicationConfig applicationConfig;
+    private final PipelineConfig pipelineConfig;
+    private final ConfigurationService configurationService;
 
     /**
      * Creates a new ConsulDataSeeder with the specified services and configuration.
@@ -44,11 +50,17 @@ public class ConsulDataSeeder implements ApplicationEventListener<StartupEvent> 
     public ConsulDataSeeder(ConsulKvService consulKvService,
                            ResourceLoader resourceLoader,
                            @Value("${consul.data.seeding.file:seed-data.yaml}") String seedFile,
-                           @Value("${consul.data.seeding.skip-if-exists:true}") boolean skipIfExists) {
+                           @Value("${consul.data.seeding.skip-if-exists:true}") boolean skipIfExists,
+                           ApplicationConfig applicationConfig,
+                           PipelineConfig pipelineConfig,
+                           ConfigurationService configurationService) {
         this.consulKvService = consulKvService;
         this.resourceLoader = resourceLoader;
         this.seedFile = seedFile;
         this.skipIfExists = skipIfExists;
+        this.applicationConfig = applicationConfig;
+        this.pipelineConfig = pipelineConfig;
+        this.configurationService = configurationService;
         LOG.info("ConsulDataSeeder initialized with seed file: {}, skipIfExists: {}", seedFile, skipIfExists);
     }
 
@@ -61,6 +73,27 @@ public class ConsulDataSeeder implements ApplicationEventListener<StartupEvent> 
     public void onApplicationEvent(StartupEvent event) {
         LOG.info("AdminApplication startup detected, checking if Consul KV store needs seeding");
 
+        // Check if configuration is already enabled in Consul
+        consulKvService.getValue(consulKvService.getFullPath("pipeline.enabled"))
+            .subscribe(enabledOpt -> {
+                if (enabledOpt.isPresent() && "true".equals(enabledOpt.get())) {
+                    LOG.info("Configuration is already enabled in Consul, skipping seeding");
+                    // Load configuration from Consul
+                    configurationService.onApplicationEvent(event);
+                    // Mark configuration as enabled
+                    applicationConfig.markAsEnabled();
+                    pipelineConfig.markAsEnabled();
+                } else {
+                    LOG.info("Configuration is not enabled in Consul, proceeding with seeding");
+                    seedFromFile();
+                }
+            });
+    }
+
+    /**
+     * Seeds configuration from the seed file.
+     */
+    private void seedFromFile() {
         // Load the seed file
         Optional<InputStream> seedStream = resourceLoader.getResourceAsStream(seedFile);
         if (seedStream.isEmpty()) {
@@ -88,7 +121,13 @@ public class ConsulDataSeeder implements ApplicationEventListener<StartupEvent> 
                 // Seed the properties into Consul KV store
                 seedProperties(seedProperties)
                         .subscribe(
-                                count -> LOG.info("Successfully seeded {} properties into Consul KV store", count),
+                                count -> {
+                                    LOG.info("Successfully seeded {} properties into Consul KV store", count);
+                                    // Mark configuration as enabled
+                                    applicationConfig.markAsEnabled();
+                                    pipelineConfig.markAsEnabled();
+                                    LOG.info("Configuration marked as enabled");
+                                },
                                 error -> LOG.error("Error seeding properties into Consul KV store", error)
                         );
             } else {
@@ -100,7 +139,13 @@ public class ConsulDataSeeder implements ApplicationEventListener<StartupEvent> 
                 // Seed the properties into Consul KV store
                 seedProperties(seedProperties)
                         .subscribe(
-                                count -> LOG.info("Successfully seeded {} properties into Consul KV store", count),
+                                count -> {
+                                    LOG.info("Successfully seeded {} properties into Consul KV store", count);
+                                    // Mark configuration as enabled
+                                    applicationConfig.markAsEnabled();
+                                    pipelineConfig.markAsEnabled();
+                                    LOG.info("Configuration marked as enabled");
+                                },
                                 error -> LOG.error("Error seeding properties into Consul KV store", error)
                         );
             }
@@ -180,6 +225,18 @@ public class ConsulDataSeeder implements ApplicationEventListener<StartupEvent> 
                 })
                 .filter(Boolean::booleanValue) // Only count successful puts
                 .doOnNext(success -> count.incrementAndGet())
-                .then(Mono.just(count.get()));
+                .then(Mono.just(count.get()))
+                .flatMap(finalCount -> {
+                    // Set the enabled flag in Consul
+                    return consulKvService.putValue(consulKvService.getFullPath("pipeline.enabled"), "true")
+                            .map(success -> {
+                                if (success) {
+                                    LOG.info("Successfully set enabled flag in Consul");
+                                } else {
+                                    LOG.warn("Failed to set enabled flag in Consul");
+                                }
+                                return finalCount;
+                            });
+                });
     }
 }

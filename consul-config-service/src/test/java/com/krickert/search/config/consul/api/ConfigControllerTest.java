@@ -1,10 +1,11 @@
 package com.krickert.search.config.consul.api;
 
 import com.ecwid.consul.v1.ConsulClient;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
-import io.micronaut.context.annotation.Replaces;
 import java.io.IOException;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
@@ -49,15 +50,6 @@ public class ConfigControllerTest implements TestPropertyProvider {
         }
     }
 
-    @Bean
-    @Singleton
-    @Replaces(bean = ConsulKvService.class)
-    public ConsulKvService consulKvService() {
-        // Create a ConsulClient directly
-        ConsulClient client = new ConsulClient(consulContainer.getHost(), consulContainer.getMappedPort(8500));
-        return new ConsulKvService(client, "config/test");
-    }
-
     @Container
     public static ConsulContainer consulContainer = new ConsulContainer("hashicorp/consul:latest")
             .withExposedPorts(8500);
@@ -73,6 +65,8 @@ public class ConfigControllerTest implements TestPropertyProvider {
     @Inject
     @Client("/")
     private HttpClient client;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public Map<String, String> getProperties() {
@@ -92,8 +86,10 @@ public class ConfigControllerTest implements TestPropertyProvider {
         // Disable the Consul config client to prevent Micronaut from trying to connect to Consul for configuration
         properties.put("micronaut.config-client.enabled", "false");
 
-        // Disable data seeding for tests
-        properties.put("consul.data.seeding.enabled", "false");
+        // Enable data seeding for tests with a custom seed file
+        properties.put("consul.data.seeding.enabled", "true");
+        properties.put("consul.data.seeding.file", "test-seed-data.yaml");
+        properties.put("consul.data.seeding.skip-if-exists", "false");
 
         return properties;
     }
@@ -155,20 +151,28 @@ public class ConfigControllerTest implements TestPropertyProvider {
         assertEquals(HttpStatus.OK, createResponse.status());
 
         // When - Get
-        HttpRequest<?> getRequest = HttpRequest.GET("/config/" + keyPath);
+        HttpRequest<?> getRequest = HttpRequest.GET("/config/" + keyPath)
+                .accept(MediaType.APPLICATION_JSON);
         HttpResponse<String> getResponse = client.toBlocking().exchange(getRequest, String.class);
 
         // Then - Get
         assertEquals(HttpStatus.OK, getResponse.status());
 
-        // Print the response body for debugging
-        System.out.println("Response body: " + getResponse.body());
+        // Verify the response body contains the expected JSON
+        String responseBody = getResponse.body();
+        assertNotNull(responseBody, "Response body should not be null");
 
-        // The response might be an Optional containing a byte array
-        // Just verify that we got a non-null response
-        assertNotNull(getResponse.body(), "Response body should not be null");
+        try {
+            // Parse the response body as JSON
+            JsonNode jsonNode = objectMapper.readTree(responseBody);
 
-        // Skip detailed content verification since the response format is not as expected
+            // Verify the JSON contains the expected values
+            assertEquals("test-service", jsonNode.get("name").asText(), "Name should match");
+            assertTrue(jsonNode.get("enabled").asBoolean(), "Enabled should be true");
+            assertEquals(8080, jsonNode.get("port").asInt(), "Port should match");
+        } catch (IOException e) {
+            fail("Failed to parse response body as JSON: " + e.getMessage());
+        }
     }
 
     @Test
@@ -280,17 +284,25 @@ public class ConfigControllerTest implements TestPropertyProvider {
         assertEquals(HttpStatus.OK, updateResponse.status());
 
         // Verify updated value
-        HttpRequest<?> getRequest = HttpRequest.GET("/config/" + keyPath);
+        HttpRequest<?> getRequest = HttpRequest.GET("/config/" + keyPath)
+                .accept(MediaType.APPLICATION_JSON);
         HttpResponse<String> getResponse = client.toBlocking().exchange(getRequest, String.class);
         assertEquals(HttpStatus.OK, getResponse.status());
 
-        // Print the response body for debugging
-        System.out.println("Response body for service node: " + getResponse.body());
+        // Verify the response body contains the expected JSON
+        String responseBody = getResponse.body();
+        assertNotNull(responseBody, "Response body should not be null");
 
-        // The response might be an Optional containing a byte array
-        // Just verify that we got a non-null response
-        assertNotNull(getResponse.body(), "Response body should not be null");
+        try {
+            // Parse the response body as JSON
+            JsonNode jsonNode = objectMapper.readTree(responseBody);
 
-        // Skip detailed content verification since the response format is not as expected
+            // Verify the JSON contains the updated values
+            assertEquals("test-service", jsonNode.get("name").asText(), "Name should match");
+            assertFalse(jsonNode.get("enabled").asBoolean(), "Enabled should be false");
+            assertEquals(9090, jsonNode.get("port").asInt(), "Port should match");
+        } catch (IOException e) {
+            fail("Failed to parse response body as JSON: " + e.getMessage());
+        }
     }
 }
