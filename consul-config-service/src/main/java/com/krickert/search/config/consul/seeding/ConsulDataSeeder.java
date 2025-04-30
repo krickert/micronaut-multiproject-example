@@ -59,7 +59,7 @@ public class ConsulDataSeeder implements ApplicationEventListener<StartupEvent> 
      */
     @Override
     public void onApplicationEvent(StartupEvent event) {
-        LOG.info("Application startup detected, checking if Consul KV store needs seeding");
+        LOG.info("AdminApplication startup detected, checking if Consul KV store needs seeding");
 
         // Load the seed file
         Optional<InputStream> seedStream = resourceLoader.getResourceAsStream(seedFile);

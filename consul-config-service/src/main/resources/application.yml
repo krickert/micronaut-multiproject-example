@@ -2,8 +2,7 @@ micronaut:
   application:
     name: consul-config-service
   server:
-    port: 8080
-
+    port: 61100
   # Enable the management endpoints for health checks and refresh
   management:
     endpoints:
@@ -25,20 +24,23 @@ micronaut:
         paths: classpath:META-INF/swagger
         mapping: /swagger/**
       swagger-ui:
-        paths: classpath:META-INF/resources/webjars/swagger-ui/4.18.2
+        paths: classpath:META-INF/swagger/views/swagger-ui
         mapping: /swagger-ui/**
+      openapi-explorer:
+        paths: classpath:META-INF/swagger/views/openapi-explorer
+        mapping: /openapi-explorer/**
 
 # Consul client configuration
 consul:
-  host: localhost
-  port: 8500
+  host: "${CONSUL_HOST:localhost}"
+  port: "${CONSUL_PORT:8500}"
   client:
     enabled: true
     defaultZone: "${CONSUL_HOST:localhost}:${CONSUL_PORT:8500}"
     config:
       enabled: true
       format: YAML
-      path: /config/pipeline
+      path: config/pipeline
     registration:
       check:
         http: true
@@ -48,3 +50,13 @@ logger:
   levels:
     com.krickert.search.config.consul: INFO
     io.micronaut.discovery: INFO
+
+# Kafka configuration
+kafka:
+  enabled: true
+  consumer:
+    dynamic:
+      enabled: true
+  producer:
+    dynamic:
+      enabled: true

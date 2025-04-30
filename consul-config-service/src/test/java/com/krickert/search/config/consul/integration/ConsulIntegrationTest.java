@@ -83,7 +83,8 @@ public class ConsulIntegrationTest implements TestPropertyProvider {
         properties.put("consul.port", consulContainer.getMappedPort(8500).toString());
         properties.put("consul.client.host", consulContainer.getHost());
         properties.put("consul.client.port", consulContainer.getMappedPort(8500).toString());
-        
+        //defaultZone: "${CONSUL_HOST:localhost}:${CONSUL_PORT:8501}"
+        properties.put("consul.client.defaultZone", consulContainer.getHost() + ":" + consulContainer.getMappedPort(8500));
         // Enable Consul client and config client
         properties.put("consul.client.enabled", "true");
         properties.put("micronaut.config-client.enabled", "true");
@@ -115,7 +116,7 @@ public class ConsulIntegrationTest implements TestPropertyProvider {
     @Test
     void testApplicationStartsWithConsulEnabled() {
         // Verify that the application context is running
-        assertTrue(applicationContext.isRunning(), "Application context should be running");
+        assertTrue(applicationContext.isRunning(), "AdminApplication context should be running");
         
         // Verify that the embedded server is running
         assertTrue(embeddedServer.isRunning(), "Embedded server should be running");

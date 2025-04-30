@@ -8,8 +8,8 @@ import org.slf4j.LoggerFactory;
  * Main application class for the Consul Configuration Service.
  * This service provides a centralized configuration management system using Consul KV store.
  */
-public class Application {
-    private static final Logger LOG = LoggerFactory.getLogger(Application.class);
+public class AdminApplication {
+    private static final Logger LOG = LoggerFactory.getLogger(AdminApplication.class);
 
     /**
      * The main method serves as the entry point for the Consul Configuration Service application.
@@ -19,6 +19,6 @@ public class Application {
      */
     public static void main(String[] args) {
         LOG.info("Starting Consul Configuration Service...");
-        Micronaut.run(Application.class, args);
+        Micronaut.run(AdminApplication.class, args);
     }
 }

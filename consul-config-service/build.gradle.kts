@@ -2,7 +2,9 @@
 plugins {
     `java-library`
     `maven-publish`
-    alias(libs.plugins.micronaut.library)
+    id("io.micronaut.application") version "4.5.3"
+    id("com.gradleup.shadow") version "8.3.6"
+    id("io.micronaut.aot") version "4.5.3"
 }
 
 group = rootProject.group
@@ -17,29 +19,35 @@ java {
 
 micronaut {
     version("4.8.2")
+    runtime("netty")
+    testRuntime("junit5")
     processing {
         incremental(true)
         annotations("com.krickert.search.config.consul.*")
     }
+    aot {
+        optimizeServiceLoading = false
+        convertYamlToJava = false
+        precomputeOperations = true
+        cacheEnvironment = true
+        optimizeClassLoading = true
+        deduceEnvironment = true
+        optimizeNetty = true
+        replaceLogbackXml = true
+    }
 }
 
 dependencies {
+    // Apply BOM/platform dependencies
     implementation(platform(project(":bom")))
     annotationProcessor(platform(project(":bom")))
     testImplementation(platform(project(":bom")))
     testAnnotationProcessor(platform(project(":bom")))
-    // https://mvnrepository.com/artifact/io.micronaut.reactor/micronaut-reactor
-    implementation(mn.micronaut.reactor)
-    // Micronaut dependencies using mn catalog
+    
+    // Annotation processors
     annotationProcessor(libs.bundles.micronaut.annotation.processors)
-
-    // OpenAPI dependencies
     annotationProcessor(mn.micronaut.openapi.common)
-    // https://mvnrepository.com/artifact/io.micronaut.openapi/micronaut-openapi
-    runtimeOnly(mn.micronaut.openapi.common)
-    // https://mvnrepository.com/artifact/io.micronaut.openapi/micronaut-openapi-annotations
-    implementation(mn.micronaut.openapi.annotations)
-
+    
     // API dependencies - these are exposed to consumers of the library
     api(mn.micronaut.inject)
     api(mn.micronaut.serde.api)
@@ -52,35 +60,44 @@ dependencies {
     api(mn.micronaut.http.server.netty)
     api(mn.micronaut.discovery.client)
     api(mn.micronaut.discovery.core)
-
-    // Implementation dependencies
     api(libs.slf4j.api)
     api(libs.logback.classic)
-    compileOnly(mn.lombok)
-    implementation(mn.snakeyaml)
+    
+    // Implementation dependencies
+    implementation(mn.micronaut.reactor)
+    implementation(mn.micronaut.reactor.http.client)
+    implementation(mn.micronaut.openapi.annotations)
+    implementation(mn.micronaut.kafka)
+    implementation(mn.micronaut.jmx)
+    implementation(mn.micronaut.micrometer.core)
+    implementation(mn.micronaut.micrometer.registry.jmx)
+    implementation(mn.micronaut.views.fieldset)
+    implementation(mn.micronaut.views.thymeleaf)
 
-    // Project dependencies
-    api(project(":util"))
+    // Compile-only dependencies
+    compileOnly(mn.lombok)
+    
+    // Runtime dependencies
+    runtimeOnly(mn.micronaut.openapi.common)
+    runtimeOnly(mn.snakeyaml)
+    
+    // Test dependencies
     testAnnotationProcessor(mn.micronaut.inject.java)
     testImplementation(mn.junit.jupiter.api)
-    testImplementation(mn.micronaut.test.junit5)
-    testRuntimeOnly(mn.junit.jupiter.engine)
     testImplementation(mn.junit.jupiter.engine)
-    // Testing dependencies
     testImplementation(mn.micronaut.test.junit5)
-    testImplementation(mn.micronaut.http.client)
+    testImplementation(mn.testcontainers.consul)
+    testImplementation(libs.junit.jupiter.engine)
+    testImplementation(mn.testcontainers.kafka)
+    testImplementation(mn.testcontainers.consul)
+    testImplementation(mn.reactor.test)
     testImplementation(mn.micronaut.http.server.netty)
-    testAnnotationProcessor(mn.micronaut.inject.java)
-    // Testcontainers dependencies
-    testImplementation(mn.testcontainers.consul)
-    testImplementation(mn.testcontainers.consul)
-    testImplementation("io.projectreactor:reactor-test")
-    testImplementation("org.awaitility:awaitility")
+    testImplementation("org.junit.platform:junit-platform-suite-engine")
     testImplementation("org.testcontainers:junit-jupiter")
-    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.15.2")
+    // https://mvnrepository.com/artifact/com.fasterxml.jackson.dataformat/jackson-dataformat-yaml
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.19.0")
     // https://mvnrepository.com/artifact/com.ecwid.consul/consul-api
     implementation("com.ecwid.consul:consul-api:1.4.5")
-
 }
 
 // Publishing configuration
@@ -102,4 +119,14 @@ publishing {
             }
         }
     }
+}
+
+application {
+    mainClass = "com.krickert.search.config.consul.Application"
+}
+
+graalvmNative.toolchainDetection = false
+
+tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative") {
+    jdkVersion = "21"
 }

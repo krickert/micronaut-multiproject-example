@@ -1,9 +1,10 @@
 micronaut:
   application:
     name: consul-config-service-test
+  server:
+    port: ${random.port}
   config-client:
     enabled: false
-  
   # OpenAPI configuration
   router:
     static-resources:
@@ -24,3 +25,6 @@ logger:
   levels:
     com.krickert.search.config.consul: DEBUG
     io.micronaut.discovery: DEBUG
+
+kafka:
+  enabled: false

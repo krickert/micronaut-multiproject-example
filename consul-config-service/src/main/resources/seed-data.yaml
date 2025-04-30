@@ -63,12 +63,3 @@ pipeline:
   # ========== GLOBAL CONFIGURATION ==========
   active: pipeline1
 
-# Kafka configuration
-kafka:
-  enabled: true
-  consumer:
-    dynamic:
-      enabled: true
-  producer:
-    dynamic:
-      enabled: true
