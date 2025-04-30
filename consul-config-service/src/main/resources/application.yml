@@ -3,7 +3,7 @@ micronaut:
     name: consul-config-service
   server:
     port: 8080
-  
+
   # Enable the management endpoints for health checks and refresh
   management:
     endpoints:
@@ -13,9 +13,25 @@ micronaut:
       refresh:
         enabled: true
         sensitive: false
+      swagger-ui:
+        enabled: true
+        sensitive: false
+      openapi:
+        enabled: true
+        sensitive: false
+  router:
+    static-resources:
+      swagger:
+        paths: classpath:META-INF/swagger
+        mapping: /swagger/**
+      swagger-ui:
+        paths: classpath:META-INF/resources/webjars/swagger-ui/4.18.2
+        mapping: /swagger-ui/**
 
 # Consul client configuration
 consul:
+  host: localhost
+  port: 8500
   client:
     enabled: true
     defaultZone: "${CONSUL_HOST:localhost}:${CONSUL_PORT:8500}"
@@ -26,8 +42,6 @@ consul:
     registration:
       check:
         http: true
-    host: "${consul.host}"
-    port: "${consul.port}"
 
 # Logging configuration
 logger:

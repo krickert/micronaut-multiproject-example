@@ -6,7 +6,7 @@ micronaut:
 
 consul:
   client:
-    defaultZone: "${consul.host:localhost}:${consul.port:8501}"
+    defaultZone: "${CONSUL_HOST:localhost}:${CONSUL_PORT:8500}"
     config:
       enabled: true
       format: YAML

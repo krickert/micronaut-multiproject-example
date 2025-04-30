@@ -11,6 +11,12 @@ import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.Controller;
 import io.micronaut.http.annotation.Get;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +32,7 @@ import java.util.stream.Collectors;
  * Provides endpoints for querying services registered with Consul.
  */
 @Controller("/api/services")
+@Tag(name = "Service Discovery", description = "API for discovering services registered with Consul")
 public class ServiceDiscoveryController {
 
     private static final Logger LOG = LoggerFactory.getLogger(ServiceDiscoveryController.class);
@@ -50,6 +57,22 @@ public class ServiceDiscoveryController {
      *
      * @return a JSON response with the list of services and their status
      */
+    @Operation(
+        summary = "Get PipeService gRPC services",
+        description = "Retrieves a list of all PipeService gRPC services registered with Consul and their running status"
+    )
+    @ApiResponses({
+        @ApiResponse(
+            responseCode = "200", 
+            description = "List of services retrieved successfully",
+            content = @Content(mediaType = "application/json", 
+                schema = @Schema(implementation = Map.class))
+        ),
+        @ApiResponse(
+            responseCode = "500", 
+            description = "Error retrieving services from Consul"
+        )
+    })
     @Get(produces = MediaType.APPLICATION_JSON)
     public HttpResponse<Map<String, Object>> getServices() {
         LOG.info("GET request for PipeService gRPC services");

@@ -142,3 +142,18 @@ The service includes comprehensive tests using Testcontainers to run Consul in a
 ## License
 
 This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
+
+
+# Roadmap
+1. Concurrency edit exception checks
+2. Edit mode which will allow for validation before saving
+3. Integration with pipeline-core 
+4. Kafka/protobuf update triggers for NRT config updates (even on the front end)
+5. Front end editor
+6. Service editor
+7. Service specific configuration
+8. Marmaid form graph representation via an API call
+9. UML Diagram generation
+10. Front end to have Kafka status, pause, continue functionality 
+11. Rewind / fast forward offset
+12. 
