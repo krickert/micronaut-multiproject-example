@@ -1,6 +1,8 @@
 package com.krickert.search.pipeline.controller;
 
+import com.krickert.search.pipeline.config.PipelineConfig;
 import com.krickert.search.pipeline.config.PipelineConfigManager;
+import com.krickert.search.pipeline.config.PipelineConfigService;
 import com.krickert.search.pipeline.config.ServiceConfiguration;
 import com.krickert.search.pipeline.config.ServiceConfigurationDto;
 import io.micronaut.http.HttpResponse;
@@ -22,6 +24,9 @@ public class PipelineConfigController {
 
     @Inject
     private PipelineConfigManager pipelineConfig;
+
+    @Inject
+    private PipelineConfigService pipelineConfigService;
 
     /**
      * Get the current pipeline configuration.
@@ -139,6 +144,73 @@ public class PipelineConfigController {
             log.error("Error updating service configuration", e);
             response.put("status", "error");
             response.put("message", "Error updating service configuration: " + e.getMessage());
+            return HttpResponse.serverError(response);
+        }
+    }
+
+    /**
+     * Remove a service from the pipeline configuration.
+     * This will also remove references to the service from all other services' grpcForwardTo lists.
+     * 
+     * @param pipelineName The name of the pipeline
+     * @param serviceName The name of the service to remove
+     * @return A response indicating success or failure
+     */
+    @Delete("/{pipelineName}/service/{serviceName}")
+    public HttpResponse<Map<String, Object>> removeService(
+            @PathVariable String pipelineName,
+            @PathVariable String serviceName) {
+        log.info("Removing service '{}' from pipeline '{}'", serviceName, pipelineName);
+
+        Map<String, Object> response = new HashMap<>();
+
+        // Check if the pipeline exists
+        if (!pipelineConfig.getPipelines().containsKey(pipelineName)) {
+            response.put("status", "error");
+            response.put("message", "Pipeline not found: " + pipelineName);
+            return HttpResponse.notFound(response);
+        }
+
+        // Check if the service exists in the pipeline
+        PipelineConfig pipeline = pipelineConfig.getPipelines().get(pipelineName);
+        if (!pipeline.containsService(serviceName)) {
+            response.put("status", "error");
+            response.put("message", "Service not found in pipeline: " + serviceName);
+            return HttpResponse.notFound(response);
+        }
+
+        try {
+            // Set the active pipeline name to ensure we're working with the correct pipeline
+            pipelineConfigService.setActivePipelineName(pipelineName);
+
+            // Delete the service from the pipeline configuration
+            pipelineConfigService.deleteService(serviceName);
+
+            // Update the configuration in Consul
+            boolean success = true;
+            for (ServiceConfiguration service : pipeline.getService().values()) {
+                success = pipelineConfig.updateServiceConfigInConsul(pipelineName, service) && success;
+            }
+
+            // Reload from Consul to ensure the changes are persisted
+            if (success) {
+                success = pipelineConfig.loadPropertiesFromConsul();
+            }
+
+            if (success) {
+                response.put("status", "success");
+                response.put("message", "Service '" + serviceName + "' removed from pipeline '" + pipelineName + "'");
+                response.put("pipeline", pipelineConfig.getPipelines().get(pipelineName));
+                return HttpResponse.ok(response);
+            } else {
+                response.put("status", "error");
+                response.put("message", "Failed to persist service removal to Consul");
+                return HttpResponse.serverError(response);
+            }
+        } catch (Exception e) {
+            log.error("Error removing service from pipeline", e);
+            response.put("status", "error");
+            response.put("message", "Error removing service from pipeline: " + e.getMessage());
             return HttpResponse.serverError(response);
         }
     }
