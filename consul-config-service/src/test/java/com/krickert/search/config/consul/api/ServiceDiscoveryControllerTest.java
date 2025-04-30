@@ -37,7 +37,7 @@ public class ServiceDiscoveryControllerTest implements TestPropertyProvider {
     static class TestBeanFactory {
         @Bean
         @Singleton
-        @jakarta.inject.Named("testConsulClient")
+        @Replaces(bean = ConsulClient.class)
         public ConsulClient consulClient() {
             // Ensure the container is started before creating the client
             if (!consulContainer.isRunning()) {
@@ -50,10 +50,8 @@ public class ServiceDiscoveryControllerTest implements TestPropertyProvider {
     @Bean
     @Singleton
     @Replaces(bean = ConsulKvService.class)
-    public ConsulKvService consulKvService() {
-        // Create a ConsulClient directly
-        ConsulClient client = new ConsulClient(consulContainer.getHost(), consulContainer.getMappedPort(8500));
-        return new ConsulKvService(client, "config/test");
+    public ConsulKvService consulKvService(ConsulClient consulClient) {
+        return new ConsulKvService(consulClient, "config/test");
     }
 
     @Container
