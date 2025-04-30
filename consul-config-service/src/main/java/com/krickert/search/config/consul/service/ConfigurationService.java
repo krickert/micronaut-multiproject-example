@@ -166,6 +166,7 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
 
     /**
      * Loads pipeline configurations from Consul KV store.
+     * Uses parallel execution to load multiple pipelines simultaneously.
      *
      * @return a Mono that emits true if the operation was successful, false otherwise
      */
@@ -178,8 +179,12 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
         // you would need to handle more complex loading logic.
 
         // For now, we'll just load pipeline1 and pipeline2 as examples
-        return loadPipelineConfiguration("pipeline1")
-            .flatMap(success1 -> loadPipelineConfiguration("pipeline2"))
+        // Using parallel execution to load both pipelines simultaneously
+        Mono<Boolean> pipeline1Mono = loadPipelineConfiguration("pipeline1");
+        Mono<Boolean> pipeline2Mono = loadPipelineConfiguration("pipeline2");
+
+        return Mono.zip(pipeline1Mono, pipeline2Mono)
+            .map(tuple -> tuple.getT1() && tuple.getT2()) // Both must succeed
             .defaultIfEmpty(true);
     }
 

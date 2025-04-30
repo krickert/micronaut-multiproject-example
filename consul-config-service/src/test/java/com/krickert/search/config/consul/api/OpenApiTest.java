@@ -1,6 +1,5 @@
 package com.krickert.search.config.consul.api;
 
-import com.ecwid.consul.v1.ConsulClient;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.http.HttpRequest;
@@ -14,6 +13,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.kiwiproject.consul.Consul;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.consul.ConsulContainer;
@@ -26,7 +26,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-@MicronautTest(environments = {"test"}, propertySources = "classpath:application-test.yml")
+@MicronautTest(environments = {"test"}, propertySources = "classpath:application-test.yml", rebuildContext = true)
 @Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class OpenApiTest implements TestPropertyProvider {
@@ -36,12 +36,15 @@ public class OpenApiTest implements TestPropertyProvider {
     static class TestBeanFactory {
         @Bean
         @Singleton
-        public ConsulClient consulClient() {
+        @jakarta.inject.Named("openApiTest")
+        public Consul consulClient() {
             // Ensure the container is started before creating the client
             if (!consulContainer.isRunning()) {
                 consulContainer.start();
             }
-            return new ConsulClient(consulContainer.getHost(), consulContainer.getMappedPort(8500));
+            return Consul.builder()
+                    .withUrl("http://" + consulContainer.getHost() + ":" + consulContainer.getMappedPort(8500))
+                    .build();
         }
     }
 

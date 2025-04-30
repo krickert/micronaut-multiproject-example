@@ -1,12 +1,5 @@
 package com.krickert.search.config.consul.api;
 
-import com.ecwid.consul.v1.ConsulClient;
-import com.ecwid.consul.v1.QueryParams;
-import com.ecwid.consul.v1.Response;
-import com.ecwid.consul.v1.catalog.CatalogServicesRequest;
-import com.ecwid.consul.v1.health.HealthServicesRequest;
-import com.ecwid.consul.v1.health.model.Check;
-import com.ecwid.consul.v1.health.model.HealthService;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.Controller;
@@ -18,6 +11,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
+import org.kiwiproject.consul.Consul;
+import org.kiwiproject.consul.model.health.HealthCheck;
+import org.kiwiproject.consul.model.health.ServiceHealth;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,15 +34,15 @@ public class ServiceDiscoveryController {
     private static final Logger LOG = LoggerFactory.getLogger(ServiceDiscoveryController.class);
     private static final String PIPE_SERVICE_TAG = "grpc-pipeservice";
 
-    private final ConsulClient consulClient;
+    private final Consul consulClient;
 
     /**
-     * Creates a new ServiceDiscoveryController with the specified ConsulClient.
+     * Creates a new ServiceDiscoveryController with the specified Consul client.
      *
      * @param consulClient the client for interacting with Consul
      */
     @Inject
-    public ServiceDiscoveryController(ConsulClient consulClient) {
+    public ServiceDiscoveryController(@jakarta.inject.Named("primaryConsulClient") Consul consulClient) {
         this.consulClient = consulClient;
         LOG.info("ServiceDiscoveryController initialized");
     }
@@ -79,8 +75,7 @@ public class ServiceDiscoveryController {
 
         try {
             // Get all services from Consul catalog
-            Response<Map<String, List<String>>> servicesResponse = consulClient.getCatalogServices(CatalogServicesRequest.newBuilder().build());
-            Map<String, List<String>> services = servicesResponse.getValue();
+            Map<String, List<String>> services = consulClient.catalogClient().getServices().getResponse();
             LOG.debug("Found {} services in Consul catalog", services.size());
 
             // Filter services with the PipeService tag or name containing "pipe"
@@ -128,20 +123,11 @@ public class ServiceDiscoveryController {
      */
     private Map<String, Object> getServiceStatus(String serviceName) {
         try {
-            // Create a request for health services
-            HealthServicesRequest request = HealthServicesRequest.newBuilder()
-                    .setQueryParams(QueryParams.DEFAULT)
-                    .setPassing(false)
-                    .build();
-
             // Get health services for the specified service name
-            Response<List<HealthService>> healthResponse = consulClient.getHealthServices(serviceName, request);
-            List<HealthService> healthServices = healthResponse.getValue();
+            List<ServiceHealth> healthServices = consulClient.healthClient().getHealthyServiceInstances(serviceName).getResponse();
 
             // Check if the service is running (all checks are passing)
-            boolean isRunning = healthServices.stream()
-                    .anyMatch(service -> service.getChecks().stream()
-                            .allMatch(check -> Check.CheckStatus.PASSING == check.getStatus()));
+            boolean isRunning = !healthServices.isEmpty();
 
             Map<String, Object> serviceStatus = new HashMap<>();
             serviceStatus.put("name", serviceName);
@@ -149,14 +135,29 @@ public class ServiceDiscoveryController {
 
             // Add node information if available
             if (!healthServices.isEmpty()) {
-                HealthService firstService = healthServices.get(0);
-                HealthService.Service service = firstService.getService();
+                ServiceHealth firstService = healthServices.get(0);
 
-                serviceStatus.put("address", service.getAddress());
-                serviceStatus.put("port", service.getPort());
+                // Only add address if it's not null
+                String address = firstService.getService().getAddress();
+                if (address != null && !address.isEmpty()) {
+                    serviceStatus.put("address", address);
+                } else {
+                    // Use node address as fallback or a default value
+                    serviceStatus.put("address", firstService.getNode().getAddress() != null ? 
+                                    firstService.getNode().getAddress() : "localhost");
+                }
 
-                if (service.getTags() != null && !service.getTags().isEmpty()) {
-                    serviceStatus.put("tags", service.getTags());
+                // Only add port if it's not null
+                Integer port = firstService.getService().getPort();
+                if (port != null) {
+                    serviceStatus.put("port", port);
+                } else {
+                    // Use a default port value
+                    serviceStatus.put("port", 8500); // Default Consul port as fallback
+                }
+
+                if (firstService.getService().getTags() != null && !firstService.getService().getTags().isEmpty()) {
+                    serviceStatus.put("tags", firstService.getService().getTags());
                 }
             }
 

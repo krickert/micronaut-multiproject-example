@@ -1,6 +1,5 @@
 package com.krickert.search.config.consul.service;
 
-import com.ecwid.consul.v1.ConsulClient;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.context.annotation.Replaces;
@@ -10,6 +9,8 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.kiwiproject.consul.Consul;
+import org.kiwiproject.consul.KeyValueClient;
 import org.testcontainers.consul.ConsulContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -22,7 +23,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@MicronautTest
+@MicronautTest(rebuildContext = true)
 @Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ConsulKvServiceTest implements TestPropertyProvider {
@@ -31,12 +32,21 @@ public class ConsulKvServiceTest implements TestPropertyProvider {
     static class ConsulClientFactory {
         @Bean
         @Singleton
-        public ConsulClient consulClient() {
+        @jakarta.inject.Named("consulKvServiceTest")
+        public Consul consulClient() {
             // Ensure the container is started before creating the client
             if (!consulContainer.isRunning()) {
                 consulContainer.start();
             }
-            return new ConsulClient(consulContainer.getHost(), consulContainer.getMappedPort(8500));
+            return Consul.builder()
+                    .withUrl("http://" + consulContainer.getHost() + ":" + consulContainer.getMappedPort(8500))
+                    .build();
+        }
+
+        @Bean
+        @Singleton
+        public KeyValueClient keyValueClient(Consul consulClient) {
+            return consulClient.keyValueClient();
         }
     }
 

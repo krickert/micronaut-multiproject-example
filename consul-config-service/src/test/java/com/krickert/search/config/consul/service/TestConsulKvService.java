@@ -1,8 +1,10 @@
 package com.krickert.search.config.consul.service;
 
+import org.kiwiproject.consul.KeyValueClient;
 import reactor.core.publisher.Mono;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -80,5 +82,29 @@ public class TestConsulKvService extends ConsulKvService {
      */
     public void clear() {
         kvStore.clear();
+    }
+
+    /**
+     * Puts multiple values into the in-memory KV store.
+     *
+     * @param keyValueMap a map of keys to values to put
+     * @return a Mono that emits true if the operation was successful, false otherwise
+     */
+    @Override
+    public Mono<Boolean> putValues(Map<String, String> keyValueMap) {
+        keyValueMap.forEach(kvStore::put);
+        return Mono.just(true);
+    }
+
+    /**
+     * Deletes multiple keys from the in-memory KV store.
+     *
+     * @param keys a list of keys to delete
+     * @return a Mono that emits true if the operation was successful, false otherwise
+     */
+    @Override
+    public Mono<Boolean> deleteKeys(List<String> keys) {
+        keys.forEach(kvStore::remove);
+        return Mono.just(true);
     }
 }

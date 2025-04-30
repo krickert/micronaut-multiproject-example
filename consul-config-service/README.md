@@ -179,8 +179,8 @@ This project is licensed under the Apache License 2.0 - see the LICENSE file for
 
 
 # Roadmap
-1. Concurrency edit exception checks
-2. Edit mode which will allow for validation before saving
+1. (done) Concurrency edit exception checks
+2. (done) Edit mode which will allow for validation before saving
 3. Integration with pipeline-core 
 4. Kafka/protobuf update triggers for NRT config updates (even on the front end)
 5. Front end editor
