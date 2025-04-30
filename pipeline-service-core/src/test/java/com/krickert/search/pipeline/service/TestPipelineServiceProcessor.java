@@ -53,6 +53,7 @@ public class TestPipelineServiceProcessor implements PipelineServiceProcessor {
 
             // Set the response and the original PipeDoc from the request
             result.setResponse(response);
+            //noinspection ConstantValue
             if (pipeStream.getRequest() != null) {
                 result.setPipeDoc(pipeStream.getRequest().getDoc());
             }

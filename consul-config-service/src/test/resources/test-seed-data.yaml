@@ -1,0 +1,44 @@
+# ========== TEST CONFIGURATION ==========
+# This is a test seed data file for the Consul Configuration Service tests.
+# These properties will be loaded into Consul KV store when the test starts.
+
+# ========== APPLICATION CONFIGURATION ==========
+# Application-specific settings
+consul-config-service-test:
+  config:
+    # Application settings
+    server:
+      port: 8080
+    logging:
+      level: DEBUG
+    kafka:
+      enabled: true
+      bootstrap-servers: localhost:9092
+    consul:
+      host: localhost
+      port: 8500
+
+# ========== PIPELINE CONFIGURATION ==========
+# Pipeline-specific settings
+pipeline:
+  configs:
+    test-pipeline:
+      service:
+        test-service:
+          kafka-listen-topics: test-input
+          kafka-publish-topics: test-output
+          serviceImplementation: com.krickert.search.pipeline.service.TestService
+          configParams:
+            param1: value1
+            param2: value2
+
+        chunker:
+          kafka-listen-topics: test-input
+          kafka-publish-topics: test-chunks
+          serviceImplementation: com.krickert.search.pipeline.service.ChunkerService
+          configParams:
+            chunk-size: 500
+            overlap: 100
+
+  # ========== GLOBAL PIPELINE CONFIGURATION ==========
+  active: test-pipeline
