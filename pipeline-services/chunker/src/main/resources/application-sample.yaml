@@ -1,0 +1,108 @@
+# Show me a generic config service in micronaut with a complete implementation of classes and some tests that work in the following way:
+
+# This will be a generic config service.  It is made to sync between consul and the configuration.  Updates are going to go to consul and for a near realtime experience, changes once saved into consul should be seen by all services automatically.  For faster sync, consider using a kafka kafka-listen-topics
+
+# Each service is a pipeline - a connector, pipeline step, or a sink - all 3 share the same interface (an object called PipeStream that's a protobuf struct)grpc-forward-to
+
+# The config will all be focused on being loaded via consul (at least this configuration).
+
+# The configuration types:
+#   service-definition configurtion - configuration that is specific to the running service.  Things like reasonable defaults, and the name of the service as well as allowed topics it can take for input
+#   service-graph - configuration that is shared by all running services registered to consul (consul will also use service discovery)
+#
+#  The service graph works as follows
+#
+#  Pipeline - the main pipeline that is a full graph that connects services together.
+#  Each pipeline contains one to many pipeline steps
+#  Each pipeline step will have a set of kafka-listen-topics and kafka-publish-topics as well as a list of services IDs it will forward to as well as the name of the grpc registrion name in consul (a service ID must choose exactly one grpc instance it will attach to) (see the config below for full details)
+
+# ========== CHUNKER SERVICE DEV ENVIRONMENT CONFIGURATION ==========
+# This configuration file is for the development environment of the chunker service.
+# It configures the service to connect to local instances of Kafka, Apicurio, and Consul.
+
+
+# ========== CHUNKER SERVICE CONFIGURATION ==========
+# Chunker service configuration
+micronaut.application.name: chunker
+service-implementation: # service-level config - will not be exposed for editing but may be shown
+  name: ${micronaut.application.name} #the name of the service - in this case it's going to me "chunker"
+  #The configs should come back as a map - field name is "config", key-values (default-chuck size:1000, default-chunk-overlap:50) - see above
+  config: # service-specific configuration - all services will share a similar config setting
+    default-chunk-size: 1000 #this can be overwritten by the pipeline, but this is the default value if not filled out
+    default-chunk-overlap: 150 #this can be overwritten by the pipeline, but this is the default value if not filled out
+    #for topic creation at startup and registration changes, validation rule checking
+    allowed-listen-topics: input-documents, s3-docs, upload-docs, science-input-documents, science-s3-docs, science-upload-docs
+    allowed-publish-topics: chunked-documents
+
+pipelines: #this is a graph representation
+  data-pipeline:  # thne name of the pipeline
+    steps: # a k-v map of pipeline steps
+      tika: # the id of the first step - just a string
+        service-implementation: tika-service # the tika service-implemention config will have a micronaut application name of "tika-service"
+        kafka-listen-topics: input-documents, s3-docs, upload-docs
+        kafka-publish-topics: chunked-documents
+        grpc-forward-to: null # 'null' in properties becomes YAML null - this means forward to nothing and log an ack
+        config:
+          include-metadata: true
+          max-doc-size: 20M
+        #mappings - none right now but chunker has them
+      chunker: # the id of the first step - just a string
+        service-implementation: chunker-service # the chunker service-implemention config will have a micronaut application name of "chunker-service"
+        kafka-listen-topics: chunked-documents # the listeners that will be polled and allocated
+        # publish-topics is optional so we commented it out here kafka-publish-topics: chunked-documents # the topics that would be
+        grpc-forward-to: embedder # this is fast to do, so we won't save the output to tika and just forward it to the embedder
+        config: # map of string-string?
+          chunk-field: body
+          chunk-size: 500
+          chunk-overlap: 40
+        mappings: # a collection
+          - body=custom_data.content_normalized # this is just a string
+      embeddings: # the id of the first step - just a string
+        service-implementation: embedder-service # the chunker service-implemention config will have a micronaut application name of
+        kafka-listen-topics: chunked-documents,embedding-intake # the listeners that will be polled and allocated
+        kafka-publish-topics: search-documents
+        #not needed but could grpc-forward-to
+        config: # map of string-string?
+          model: mini-lm-v2
+          query-prefix: "query:"
+          document-prefix: "document: "
+          embedding-fields: title
+          embedding-chunks: body
+        mappings: # a collection
+          - last-modified=last_updated
+  science-pipeline:
+    steps: # a k-v map of pipeline steps
+      science-tika: # the id of the first step - just a string
+        service-implementation: tika-service # the tika service-implemention config will have a micronaut application name of "tika-service"
+        kafka-listen-topics: science-input-documents, science-s3-docs, science-upload-docs
+        kafka-publish-topics: science-chunked-documents
+        grpc-forward-to: null # 'null' in properties becomes YAML null - this means forward to nothing and log an ack
+        config:
+          include-metadata: true
+          max-doc-size: 20M
+        #mappings - none right now but chunker has them
+      science-chunker: # the id of the first step - just a string
+        service-implementation: chunker-service # the chunker service-implemention config will have a micronaut application name of "chunker-service"
+        kafka-listen-topics: chunked-documents # the listeners that will be polled and allocated
+        # publish-topics is optional so we commented it out here kafka-publish-topics: chunked-documents # the topics that would be
+        grpc-forward-to: embedder # this is fast to do, so we won't save the output to tika and just forward it to the embedder
+        config: # map of string-string?
+          chunk-field: body
+          chunk-size: 500
+          chunk-overlap: 40
+        mappings: # a collection
+          - body=custom_data.content_normalized # this is just a string
+      science-embeddings: # the id of the first step - just a string
+        service-implementation: embedder-service # the chunker service-implemention config will have a micronaut application name of
+        kafka-listen-topics: chunked-documents,embedding-intake # the listeners that will be polled and allocated
+        kafka-publish-topics: search-documents
+        #not needed but could grpc-forward-to
+        config: # map of string-string?
+          model: mini-lm-v2
+          query-prefix: "query:"
+          document-prefix: "document: "
+          embedding-fields: title
+          embedding-chunks: body
+        mappings: # a collection
+          - last-modified=last_updated
+

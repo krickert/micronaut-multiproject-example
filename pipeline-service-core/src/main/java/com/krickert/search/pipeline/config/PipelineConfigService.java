@@ -12,7 +12,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Singleton
 @Refreshable
-@Getter
 public class PipelineConfigService {
 
     // All pipeline configs are injected as a map, keyed by the configuration name.
@@ -57,4 +56,14 @@ public class PipelineConfigService {
         // Remove the service itself from the active configuration.
         activeConfig.getService().remove(serviceName);
     }
+
+    public Map<String, PipelineConfig> getPipelineConfigs() {
+        return pipelineConfigs;
+    }
+
+    public String getActivePipelineName() {
+        return activePipelineName;
+    }
+
+
 }

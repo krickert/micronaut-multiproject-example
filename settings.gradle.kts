@@ -26,10 +26,10 @@ include(
     "pipeline-service-core",
     "pipeline-service-test-utils",
     "pipeline-service-test-utils:pipeline-test-platform",
-    "pipeline-instance-A",
     "pipeline-examples",
     "pipeline-examples:pipeline-echo-service",
     "pipeline-services",
     "pipeline-services:chunker",
-    "util"
+    "util",
+    "consul-config-service"
 )

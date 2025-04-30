@@ -1,0 +1,12 @@
+micronaut:
+  application:
+    name: consul-config-service
+  config-client:
+    enabled: true
+
+consul:
+  client:
+    defaultZone: "${consul.host:localhost}:${consul.port:8501}"
+    config:
+      enabled: true
+      format: YAML

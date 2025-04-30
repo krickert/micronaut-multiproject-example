@@ -1,0 +1,74 @@
+# ========== PIPELINE 1 CONFIGURATION ==========
+# This is a sample seed data file for the Consul Configuration Service.
+# These properties will be loaded into Consul KV store when the application starts.
+
+pipeline:
+  configs:
+    pipeline1:
+      service:
+        importer:
+          kafka-publish-topics: input-documents
+          serviceImplementation: com.krickert.search.pipeline.service.ImporterService
+        
+        chunker:
+          kafka-listen-topics:
+            - input-documents
+            - tika-documents
+          kafka-publish-topics: chunker-results
+          serviceImplementation: com.krickert.search.pipeline.service.ChunkerService
+          configParams:
+            chunk-size: 1000
+            overlap: 200
+        
+        embedder:
+          kafka-listen-topics: chunker-results
+          kafka-publish-topics: enhanced-documents
+          serviceImplementation: com.krickert.search.pipeline.service.EmbedderService
+          configParams:
+            model: all-MiniLM-L6-v2
+            dimension: 384
+        
+        solr-indexer:
+          kafka-listen-topics: enhanced-documents
+          serviceImplementation: com.krickert.search.pipeline.service.SolrIndexerService
+          configParams:
+            solr-url: http://solr:8983/solr
+            collection: pipeline1
+    
+    pipeline2:
+      service:
+        chunker:
+          kafka-listen-topics: input-documents2
+          kafka-publish-topics: chunker-results2
+          serviceImplementation: com.krickert.search.pipeline.service.ChunkerService
+          configParams:
+            chunk-size: 500
+            overlap: 100
+        
+        embedder:
+          kafka-listen-topics: chunker-results2
+          kafka-publish-topics: enhanced-documents2
+          serviceImplementation: com.krickert.search.pipeline.service.EmbedderService
+          configParams:
+            model: paraphrase-multilingual-MiniLM-L12-v2
+            dimension: 384
+        
+        solr-indexer:
+          kafka-listen-topics: enhanced-documents2
+          serviceImplementation: com.krickert.search.pipeline.service.SolrIndexerService
+          configParams:
+            solr-url: http://solr:8983/solr
+            collection: pipeline2
+
+  # ========== GLOBAL CONFIGURATION ==========
+  active: pipeline1
+
+# Kafka configuration
+kafka:
+  enabled: true
+  consumer:
+    dynamic:
+      enabled: true
+  producer:
+    dynamic:
+      enabled: true

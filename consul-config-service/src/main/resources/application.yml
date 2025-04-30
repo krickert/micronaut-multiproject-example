@@ -1,0 +1,36 @@
+micronaut:
+  application:
+    name: consul-config-service
+  server:
+    port: 8080
+  
+  # Enable the management endpoints for health checks and refresh
+  management:
+    endpoints:
+      health:
+        enabled: true
+        details-visible: ANONYMOUS
+      refresh:
+        enabled: true
+        sensitive: false
+
+# Consul client configuration
+consul:
+  client:
+    enabled: true
+    defaultZone: "${CONSUL_HOST:localhost}:${CONSUL_PORT:8500}"
+    config:
+      enabled: true
+      format: YAML
+      path: /config/pipeline
+    registration:
+      check:
+        http: true
+    host: "${consul.host}"
+    port: "${consul.port}"
+
+# Logging configuration
+logger:
+  levels:
+    com.krickert.search.config.consul: INFO
+    io.micronaut.discovery: INFO

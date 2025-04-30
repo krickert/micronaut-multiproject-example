@@ -8,8 +8,6 @@ import lombok.Setter;
 import java.util.List;
 import java.util.Map;
 
-@Getter
-@Setter
 @Serdeable
 @Introspected
 public class ServiceConfiguration {
@@ -31,5 +29,53 @@ public class ServiceConfiguration {
 
     public ServiceConfiguration(String name) {
         this.name = name;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public List<String> getKafkaListenTopics() {
+        return kafkaListenTopics;
+    }
+
+    public void setKafkaListenTopics(List<String> kafkaListenTopics) {
+        this.kafkaListenTopics = kafkaListenTopics;
+    }
+
+    public List<String> getKafkaPublishTopics() {
+        return kafkaPublishTopics;
+    }
+
+    public void setKafkaPublishTopics(List<String> kafkaPublishTopics) {
+        this.kafkaPublishTopics = kafkaPublishTopics;
+    }
+
+    public List<String> getGrpcForwardTo() {
+        return grpcForwardTo;
+    }
+
+    public void setGrpcForwardTo(List<String> grpcForwardTo) {
+        this.grpcForwardTo = grpcForwardTo;
+    }
+
+    public String getServiceImplementation() {
+        return serviceImplementation;
+    }
+
+    public void setServiceImplementation(String serviceImplementation) {
+        this.serviceImplementation = serviceImplementation;
+    }
+
+    public Map<String, String> getConfigParams() {
+        return configParams;
+    }
+
+    public void setConfigParams(Map<String, String> configParams) {
+        this.configParams = configParams;
     }
 }

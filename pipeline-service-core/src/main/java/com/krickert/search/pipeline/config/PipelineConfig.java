@@ -11,8 +11,6 @@ import lombok.Setter;
 import java.util.HashMap;
 import java.util.Map;
 
-@Getter
-@Setter
 @EachProperty("pipeline.configs")
 @Singleton
 @Serdeable
@@ -58,5 +56,17 @@ public class PipelineConfig {
         config.setServiceImplementation(dto.getServiceImplementation());
         config.setConfigParams(dto.getConfigParams());
         service.put(dto.getName(), config);
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public Map<String, ServiceConfiguration> getService() {
+        return service;
+    }
+
+    public void setService(Map<String, ServiceConfiguration> service) {
+        this.service = service;
     }
 }
