@@ -1,11 +1,14 @@
 package com.krickert.search.config.consul.model;
 
+import com.krickert.search.config.consul.validation.PipelineValidator;
 import io.micronaut.serde.annotation.Serdeable;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Data Transfer Object for pipeline configuration.
@@ -19,18 +22,18 @@ public class PipelineConfigDto {
      * The name of the pipeline.
      */
     private String name;
-    
+
     /**
      * Map of service configurations, keyed by service name.
      */
     private Map<String, ServiceConfigurationDto> services = new HashMap<>();
-    
+
     /**
      * Default constructor.
      */
     public PipelineConfigDto() {
     }
-    
+
     /**
      * Constructor with pipeline name.
      *
@@ -39,7 +42,7 @@ public class PipelineConfigDto {
     public PipelineConfigDto(String name) {
         this.name = name;
     }
-    
+
     /**
      * Checks if the pipeline contains a service with the given name.
      *
@@ -49,11 +52,12 @@ public class PipelineConfigDto {
     public boolean containsService(String serviceName) {
         return services.containsKey(serviceName);
     }
-    
+
     /**
      * Adds or updates a service configuration.
      *
      * @param serviceConfig the service configuration to add or update
+     * @throws IllegalArgumentException if adding or updating the service would create a loop in the pipeline
      */
     public void addOrUpdateService(ServiceConfigurationDto serviceConfig) {
         // Validate that no topic ends with "-dlq"
@@ -72,10 +76,16 @@ public class PipelineConfigDto {
                 }
             }
         }
-        
+
+        // Check if adding or updating the service would create a loop
+        if (PipelineValidator.hasLoop(this, serviceConfig)) {
+            throw new IllegalArgumentException("Adding or updating service '" + serviceConfig.getName() + 
+                "' would create a loop in the pipeline");
+        }
+
         services.put(serviceConfig.getName(), serviceConfig);
     }
-    
+
     /**
      * Removes a service configuration.
      *
@@ -84,5 +94,36 @@ public class PipelineConfigDto {
      */
     public ServiceConfigurationDto removeService(String serviceName) {
         return services.remove(serviceName);
+    }
+
+    /**
+     * Removes a service configuration and all services that depend on it.
+     * A service depends on another service if it listens to a topic that the other service publishes to,
+     * or if it is forwarded to by the other service via gRPC.
+     *
+     * @param serviceName the name of the service to remove
+     * @return a set of service names that were removed, including the specified service
+     */
+    public Set<String> removeServiceWithDependents(String serviceName) {
+        Set<String> removedServices = new HashSet<>();
+
+        // Check if the service exists
+        if (!services.containsKey(serviceName)) {
+            return removedServices;
+        }
+
+        // Get all services that depend on this service
+        Set<String> dependentServices = PipelineValidator.getDependentServices(this, serviceName);
+
+        // Recursively remove dependent services
+        for (String dependentService : dependentServices) {
+            removedServices.addAll(removeServiceWithDependents(dependentService));
+        }
+
+        // Remove the service itself
+        services.remove(serviceName);
+        removedServices.add(serviceName);
+
+        return removedServices;
     }
 }

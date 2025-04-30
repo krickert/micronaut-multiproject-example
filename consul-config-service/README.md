@@ -127,6 +127,40 @@ pipeline:
 
 For backward compatibility, the service can also load configuration from properties files.
 
+## Pipeline Configuration Graph Structure
+
+The pipeline configuration forms a directed graph where services are nodes and connections (via Kafka topics or gRPC) are edges. This structure allows for complex data processing pipelines with multiple stages.
+
+### Service Configuration Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | String | The name of the service |
+| `kafkaListenTopics` | List<String> | The list of Kafka topics this service listens to |
+| `kafkaPublishTopics` | List<String> | The list of Kafka topics this service publishes to |
+| `grpcForwardTo` | List<String> | The list of services this service forwards to via gRPC |
+| `serviceImplementation` | String | The name of the service implementation class |
+| `configParams` | Map<String, String> | Service-specific configuration parameters |
+
+### Loop Detection
+
+The service automatically detects and prevents loops in the pipeline configuration. A loop would occur if a service indirectly listens to a topic it publishes to, or if there's a circular reference in gRPC forwarding. For example:
+
+1. Service A publishes to topic1
+2. Service B listens to topic1 and publishes to topic2
+3. Service C listens to topic2 and publishes to topic3
+4. If Service A were to listen to topic3, it would create a loop
+
+When adding or updating a service, the system validates that it won't create a loop in the pipeline.
+
+### Service Dependencies
+
+Services can depend on each other in two ways:
+1. **Kafka Topic Dependency**: Service B depends on Service A if B listens to a topic that A publishes to
+2. **gRPC Dependency**: Service B depends on Service A if A forwards to B via gRPC
+
+When removing a service, you can choose to also remove all services that depend on it, recursively. This ensures that the pipeline remains consistent and prevents orphaned services.
+
 ## Dynamic Configuration Updates
 
 When configuration is updated via the API, the service publishes events to notify consumers of the changes. Consumers can listen for these events and refresh their configuration accordingly.
