@@ -96,8 +96,8 @@ dependencies {
     testImplementation("org.testcontainers:junit-jupiter")
     // https://mvnrepository.com/artifact/com.fasterxml.jackson.dataformat/jackson-dataformat-yaml
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.19.0")
-    // https://mvnrepository.com/artifact/com.ecwid.consul/consul-api
-    implementation("com.ecwid.consul:consul-api:1.4.5")
+    // https://mvnrepository.com/artifact/org.kiwiproject/consul-client
+    implementation("org.kiwiproject:consul-client:1.5.0")
 }
 
 // Publishing configuration

@@ -1,28 +1,26 @@
 package com.krickert.search.config.consul.model;
 
+import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.service.ConfigurationService;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.consul.ConsulContainer;
-import org.testcontainers.junit.jupiter.Container;
+import org.junit.jupiter.api.TestInstance;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
-import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-@MicronautTest
+@MicronautTest(rebuildContext = true)
 @Testcontainers
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ConfigurationTest implements TestPropertyProvider {
-
-    @Container
-    private static final ConsulContainer consulContainer = new ConsulContainer(DockerImageName.parse("consul:1.15"))
-            .withExposedPorts(8500);
+    private static final Logger LOG = LoggerFactory.getLogger(ConfigurationTest.class);
 
     @Inject
     private ApplicationConfig applicationConfig;
@@ -35,20 +33,11 @@ public class ConfigurationTest implements TestPropertyProvider {
 
     @Override
     public Map<String, String> getProperties() {
-        if (!consulContainer.isRunning()) {
-            consulContainer.start();
-        }
+        ConsulTestContainer container = ConsulTestContainer.getInstance();
+        LOG.info("Using shared Consul container");
 
-        Map<String, String> properties = new HashMap<>();
-        properties.put("consul.client.host", consulContainer.getHost());
-        properties.put("consul.client.port", String.valueOf(consulContainer.getMappedPort(8500)));
-        properties.put("consul.client.config.enabled", "true");
-        properties.put("consul.client.config.format", "yaml");
-        properties.put("consul.client.config.path", "config/pipeline");
-        properties.put("consul.data.seeding.enabled", "true");
-        properties.put("consul.data.seeding.file", "seed-data.yaml");
-        properties.put("consul.data.seeding.skip-if-exists", "false");
-        return properties;
+        // Use centralized property management
+        return container.getPropertiesWithDataSeeding();
     }
 
     @Test

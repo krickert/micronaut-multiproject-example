@@ -1,12 +1,10 @@
 package com.krickert.search.config.consul.api;
 
-import com.ecwid.consul.v1.ConsulClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
-import java.io.IOException;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
@@ -21,18 +19,18 @@ import jakarta.inject.Singleton;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.kiwiproject.consul.Consul;
 import org.testcontainers.consul.ConsulContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@MicronautTest
+@MicronautTest(rebuildContext = true)
 @Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ConfigControllerTest implements TestPropertyProvider {
@@ -41,12 +39,15 @@ public class ConfigControllerTest implements TestPropertyProvider {
     static class TestBeanFactory {
         @Bean
         @Singleton
-        public ConsulClient consulClient() {
+        @jakarta.inject.Named("configControllerTest")
+        public Consul consulClient() {
             // Ensure the container is started before creating the client
             if (!consulContainer.isRunning()) {
                 consulContainer.start();
             }
-            return new ConsulClient(consulContainer.getHost(), consulContainer.getMappedPort(8500));
+            return Consul.builder()
+                    .withUrl("http://" + consulContainer.getHost() + ":" + consulContainer.getMappedPort(8500))
+                    .build();
         }
     }
 

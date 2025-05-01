@@ -1,5 +1,6 @@
 package com.krickert.search.config.consul.api;
 
+import com.krickert.search.config.consul.container.ConsulTestContainer;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
@@ -9,23 +10,28 @@ import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-@MicronautTest(environments = {"test"}, propertySources = "classpath:application-test.yml")
+@MicronautTest(environments = {"test"}, propertySources = "classpath:application-test.yml", rebuildContext = true)
+@Testcontainers
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class OpenApiTest implements TestPropertyProvider {
+    private static final Logger LOG = LoggerFactory.getLogger(OpenApiTest.class);
 
     @Override
     public Map<String, String> getProperties() {
-        Map<String, String> properties = new HashMap<>();
-        // Disable the Consul config client to prevent Micronaut from trying to connect to Consul for configuration
-        properties.put("micronaut.config-client.enabled", "false");
-        properties.put("consul.client.enabled", "false");
-        return properties;
+        ConsulTestContainer container = ConsulTestContainer.getInstance();
+        LOG.info("Using shared Consul container");
+
+        // Use centralized property management
+        return container.getProperties();
     }
 
     @Inject

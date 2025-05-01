@@ -5,10 +5,8 @@ import io.micronaut.serde.annotation.Serdeable;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.time.LocalDateTime;
+import java.util.*;
 
 /**
  * Data Transfer Object for pipeline configuration.
@@ -29,6 +27,17 @@ public class PipelineConfigDto {
     private Map<String, ServiceConfigurationDto> services = new HashMap<>();
 
     /**
+     * The version of the pipeline configuration.
+     * This is incremented each time the pipeline is updated.
+     */
+    private long pipelineVersion = 0;
+
+    /**
+     * The timestamp when the pipeline was last updated.
+     */
+    private LocalDateTime pipelineLastUpdated = LocalDateTime.now();
+
+    /**
      * Default constructor.
      */
     public PipelineConfigDto() {
@@ -41,6 +50,52 @@ public class PipelineConfigDto {
      */
     public PipelineConfigDto(String name) {
         this.name = name;
+        this.pipelineVersion = 0;
+        this.pipelineLastUpdated = LocalDateTime.now();
+    }
+
+    /**
+     * Copy constructor.
+     * Creates a deep copy of the provided pipeline configuration.
+     *
+     * @param other the pipeline configuration to copy
+     */
+    public PipelineConfigDto(PipelineConfigDto other) {
+        this.name = other.name;
+        this.pipelineVersion = other.pipelineVersion;
+        this.pipelineLastUpdated = other.pipelineLastUpdated;
+
+        // Deep copy the services map
+        this.services = new HashMap<>();
+        for (Map.Entry<String, ServiceConfigurationDto> entry : other.services.entrySet()) {
+            ServiceConfigurationDto serviceCopy = new ServiceConfigurationDto();
+            serviceCopy.setName(entry.getValue().getName());
+            serviceCopy.setKafkaListenTopics(entry.getValue().getKafkaListenTopics() != null ? 
+                new ArrayList<>(entry.getValue().getKafkaListenTopics()) : null);
+            serviceCopy.setKafkaPublishTopics(entry.getValue().getKafkaPublishTopics() != null ? 
+                new ArrayList<>(entry.getValue().getKafkaPublishTopics()) : null);
+            serviceCopy.setGrpcForwardTo(entry.getValue().getGrpcForwardTo() != null ? 
+                new ArrayList<>(entry.getValue().getGrpcForwardTo()) : null);
+            serviceCopy.setServiceImplementation(entry.getValue().getServiceImplementation());
+
+            // Copy config params if present
+            if (entry.getValue().getConfigParams() != null) {
+                PipestepConfigOptions configParamsCopy = new PipestepConfigOptions();
+                configParamsCopy.putAll(entry.getValue().getConfigParams());
+                serviceCopy.setConfigParams(configParamsCopy);
+            }
+
+            this.services.put(entry.getKey(), serviceCopy);
+        }
+    }
+
+    /**
+     * Increments the pipeline version and updates the last updated timestamp.
+     * This should be called whenever the pipeline is updated.
+     */
+    public void incrementVersion() {
+        this.pipelineVersion++;
+        this.pipelineLastUpdated = LocalDateTime.now();
     }
 
     /**

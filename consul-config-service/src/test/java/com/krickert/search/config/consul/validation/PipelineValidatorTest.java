@@ -5,7 +5,6 @@ import com.krickert.search.config.consul.model.PipestepConfigOptions;
 import com.krickert.search.config.consul.model.ServiceConfigurationDto;
 import org.junit.jupiter.api.Test;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Set;
 

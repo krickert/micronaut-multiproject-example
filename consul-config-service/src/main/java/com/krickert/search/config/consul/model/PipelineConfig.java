@@ -1,5 +1,6 @@
 package com.krickert.search.config.consul.model;
 
+import com.krickert.search.config.consul.exception.PipelineVersionConflictException;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.runtime.context.scope.Refreshable;
 import io.micronaut.serde.annotation.Serdeable;
@@ -11,39 +12,34 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.time.LocalDateTime;
+import java.util.*;
 
 /**
  * Pipeline configuration POJO.
- * This class represents the pipeline-specific configuration settings loaded from Consul.
- * It holds a map of all discovered pipeline configurations.
+ * This class represents the pipeline-specific configuration settings.
  * It is a singleton and is refreshable when configuration changes.
  */
 @Singleton
-@Refreshable // This bean will be recreated when a RefreshEvent occurs
+@Refreshable
 @Getter
-@Setter // Lombok setters for enabling map population by Micronaut config
+@Setter
 @Serdeable
 public class PipelineConfig {
     private static final Logger LOG = LoggerFactory.getLogger(PipelineConfig.class);
 
-    // Removed: activePipeline field - No longer tracking a single active pipeline here.
-    // private String activePipeline;
+    /**
+     * The active pipeline name.
+     */
+    private String activePipeline;
 
     /**
-     * Map of all pipeline configurations discovered and loaded from Consul, keyed by pipeline name.
-     * Micronaut's configuration system populates this map based on keys matching 'pipeline.configs.*'.
+     * Map of pipeline configurations, keyed by pipeline name.
      */
     private Map<String, PipelineConfigDto> pipelines = new HashMap<>();
 
     /**
-     * Flag indicating whether the configuration has been initialized (e.g., after seeding or loading).
-     * This helps differentiate between an empty config and an uninitialized state.
-     * -- GETTER --
-     *  Checks if the configuration has been marked as enabled (loaded).
-     *<br/>
-     * The setter returns true if the configuration is enabled, false otherwise.
+     * Flag indicating whether the configuration has been initialized.
      */
     private boolean enabled = false;
 
@@ -56,60 +52,325 @@ public class PipelineConfig {
      */
     @Inject
     public PipelineConfig(ConsulKvService consulKvService) {
-        // We inject ConsulKvService but don't use it directly in this modified version
-        // It might be used if we later add functionality to sync the *entire* pipeline map back to Consul.
         this.consulKvService = consulKvService;
-        LOG.info("Creating PipelineConfig singleton bean.");
+        LOG.info("Creating PipelineConfig singleton");
     }
 
     /**
-     * Gets a specific pipeline configuration by its name.
+     * Gets a pipeline configuration by name.
+     * Returns a deep copy of the pipeline to prevent concurrent modification issues.
      *
      * @param pipelineName the name of the pipeline
-     * @return the pipeline configuration DTO, or null if a pipeline with that name is not found.
+     * @return a deep copy of the pipeline configuration, or null if not found
      */
     public PipelineConfigDto getPipeline(String pipelineName) {
-        return pipelines.get(pipelineName);
+        PipelineConfigDto pipeline = pipelines.get(pipelineName);
+
+        if (pipeline == null) {
+            // Try to load the pipeline from Consul
+            String versionKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".version");
+            Optional<String> versionOpt = consulKvService.getValue(versionKey).block();
+
+            if (versionOpt != null && versionOpt.isPresent()) {
+                // Pipeline exists in Consul, load it
+                String lastUpdatedKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".lastUpdated");
+                Optional<String> lastUpdatedOpt = consulKvService.getValue(lastUpdatedKey).block();
+
+                if (lastUpdatedOpt != null && lastUpdatedOpt.isPresent()) {
+                    // Create a new pipeline with the version and last updated timestamp
+                    pipeline = new PipelineConfigDto(pipelineName);
+                    pipeline.setPipelineVersion(Long.parseLong(versionOpt.get()));
+                    pipeline.setPipelineLastUpdated(LocalDateTime.parse(lastUpdatedOpt.get()));
+
+                    // Load services for this pipeline
+                    loadServicesFromConsul(pipeline);
+
+                    // Add the pipeline to the in-memory cache
+                    pipelines.put(pipelineName, pipeline);
+                    LOG.info("Loaded pipeline from Consul: {}", pipelineName);
+                }
+            }
+        }
+
+        return pipeline != null ? new PipelineConfigDto(pipeline) : null;
     }
+
     /**
-     * Adds or updates a pipeline configuration in the internal map.
-     * Note: This primarily updates the in-memory representation.
-     * Persisting changes back to Consul is handled by the ConfigController -> ConsulKvService flow.
+     * Loads services for a pipeline from Consul KV store.
      *
-     * @param pipeline the pipeline configuration DTO to add or update.
-     * @return a Mono indicating completion (currently simplified).
+     * @param pipeline the pipeline to load services for
+     */
+    public void loadServicesFromConsul(PipelineConfigDto pipeline) {
+        String pipelineName = pipeline.getName();
+        String servicesPrefix = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".services.");
+
+        // Get all keys with the services prefix
+        List<String> serviceKeys = consulKvService.getKeysWithPrefix(servicesPrefix).block();
+
+        if (serviceKeys == null || serviceKeys.isEmpty()) {
+            LOG.debug("No services found for pipeline: {}", pipelineName);
+            return;
+        }
+
+        // Group keys by service name
+        Map<String, List<String>> serviceKeyGroups = new HashMap<>();
+
+        for (String key : serviceKeys) {
+            // Extract service name from key
+            // Format: prefix/pipeline.configs.{pipelineName}.services.{serviceName}.{property}
+            String[] parts = key.split("\\.");
+            if (parts.length < 6) {
+                LOG.warn("Invalid service key format: {}", key);
+                continue;
+            }
+
+            String serviceName = parts[parts.length - 2];
+            serviceKeyGroups.computeIfAbsent(serviceName, k -> new ArrayList<>()).add(key);
+        }
+
+        // Process each service
+        for (Map.Entry<String, List<String>> entry : serviceKeyGroups.entrySet()) {
+            String serviceName = entry.getKey();
+            List<String> keys = entry.getValue();
+
+            ServiceConfigurationDto serviceConfig = new ServiceConfigurationDto();
+            serviceConfig.setName(serviceName);
+
+            // Load service properties
+            for (String key : keys) {
+                Optional<String> valueOpt = consulKvService.getValue(key).block();
+                if (valueOpt == null || !valueOpt.isPresent()) {
+                    continue;
+                }
+
+                String value = valueOpt.get();
+                String propertyName = key.substring(key.lastIndexOf('.') + 1);
+
+                switch (propertyName) {
+                    case "name":
+                        serviceConfig.setName(value);
+                        break;
+                    case "kafkaListenTopics":
+                        serviceConfig.setKafkaListenTopics(Arrays.asList(value.split(",")));
+                        break;
+                    case "kafkaPublishTopics":
+                        serviceConfig.setKafkaPublishTopics(Arrays.asList(value.split(",")));
+                        break;
+                    case "grpcForwardTo":
+                        serviceConfig.setGrpcForwardTo(Arrays.asList(value.split(",")));
+                        break;
+                    case "serviceImplementation":
+                        serviceConfig.setServiceImplementation(value);
+                        break;
+                    default:
+                        if (propertyName.startsWith("configParams.")) {
+                            String paramName = propertyName.substring("configParams.".length());
+                            if (serviceConfig.getConfigParams() == null) {
+                                serviceConfig.setConfigParams(new PipestepConfigOptions());
+                            }
+                            serviceConfig.getConfigParams().put(paramName, value);
+                        }
+                        break;
+                }
+            }
+
+            // Add the service to the pipeline
+            pipeline.addOrUpdateService(serviceConfig);
+            LOG.debug("Loaded service {} for pipeline {}", serviceName, pipelineName);
+        }
+    }
+
+    /**
+     * Gets the active pipeline configuration.
+     * Returns a deep copy of the pipeline to prevent concurrent modification issues.
+     *
+     * @return a deep copy of the active pipeline configuration, or null if not set
+     */
+    public PipelineConfigDto getActivePipeline() {
+        return activePipeline != null ? getPipeline(activePipeline) : null;
+    }
+
+    /**
+     * Adds or updates a pipeline configuration.
+     *
+     * @param pipeline the pipeline configuration to add or update
+     * @return a Mono that completes when the operation is done
+     * @throws PipelineVersionConflictException if the pipeline has been updated since it was loaded
      */
     public Mono<Boolean> addOrUpdatePipeline(PipelineConfigDto pipeline) {
         String pipelineName = pipeline.getName();
-        if (pipelineName == null || pipelineName.isBlank()) {
-            LOG.error("Attempted to add or update a pipeline with a null or blank name.");
-            return Mono.just(false); // Indicate failure
+
+        // Check if the pipeline already exists
+        PipelineConfigDto existingPipeline = pipelines.get(pipelineName);
+        if (existingPipeline != null) {
+            // Check if the versions match
+            if (existingPipeline.getPipelineVersion() != pipeline.getPipelineVersion()) {
+                // Versions don't match, throw an exception
+                throw new PipelineVersionConflictException(
+                    pipelineName,
+                    pipeline.getPipelineVersion(),
+                    existingPipeline.getPipelineVersion(),
+                    existingPipeline.getPipelineLastUpdated()
+                );
+            }
+
+            // Increment the version for existing pipelines
+            pipeline.incrementVersion();
+        } else {
+            // For new pipelines, ensure the version is set to 1
+            if (pipeline.getPipelineVersion() == 0) {
+                pipeline.setPipelineVersion(1);
+                pipeline.setPipelineLastUpdated(LocalDateTime.now());
+            }
         }
-        LOG.debug("Updating in-memory map for pipeline: {}", pipelineName);
+
+        // Update the pipeline in the map
         pipelines.put(pipelineName, pipeline);
 
-        // Removed call to syncPipelineToConsul as it's simplified and
-        // persistence is handled elsewhere (ConfigController).
-        // If we needed to sync *other* aspects of the pipeline here, we would call a revised sync method.
-        return Mono.just(true); // Indicate success (of updating the map)
+        // Sync with Consul
+        return syncPipelineToConsul(pipeline);
     }
 
-    // Removed: setActivePipeline() - This concept is removed.
-    // public Mono<Boolean> setActivePipeline(String pipelineName) { ... }
+    /**
+     * Sets the active pipeline.
+     *
+     * @param pipelineName the name of the pipeline to set as active
+     * @return a Mono that completes when the operation is done
+     */
+    public Mono<Boolean> setActivePipeline(String pipelineName) {
+        if (!pipelines.containsKey(pipelineName)) {
+            LOG.error("Cannot set active pipeline to non-existent pipeline: {}", pipelineName);
+            return Mono.just(false);
+        }
 
-    // Removed: syncPipelineToConsul() - Simplified as the active pipeline concept is gone
-    // and service name setting should ideally happen during loading or DTO creation.
-    // Persistence is handled by ConfigController.
-    // private Mono<Boolean> syncPipelineToConsul(PipelineConfigDto pipeline) { ... }
+        this.activePipeline = pipelineName;
+
+        // Sync with Consul
+        return consulKvService.putValue(
+                consulKvService.getFullPath("pipeline.active"), 
+                pipelineName);
+    }
 
     /**
-     * Marks the configuration as enabled, typically after initial loading.
+     * Syncs a pipeline configuration to Consul KV store.
+     *
+     * @param pipeline the pipeline configuration to sync
+     * @return a Mono that completes when the operation is done
+     */
+    private Mono<Boolean> syncPipelineToConsul(PipelineConfigDto pipeline) {
+        // This implementation uses a more atomic approach by batching operations
+        String pipelineName = pipeline.getName();
+
+        // For each service in the pipeline, sync its configuration
+        return Mono.just(true)
+                .flatMap(success -> {
+                    // Prepare a map to hold all key-value pairs to be updated
+                    Map<String, String> keyValueMap = new HashMap<>();
+
+                    // Sync pipeline version and last updated timestamp
+                    String versionKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".version");
+                    String lastUpdatedKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".lastUpdated");
+                    String servicesKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".services");
+
+                    // Prepare the values to be updated
+                    String versionValue = String.valueOf(pipeline.getPipelineVersion());
+                    String lastUpdatedValue = pipeline.getPipelineLastUpdated().toString();
+
+                    // Add version and lastUpdated to the key-value map
+                    keyValueMap.put(versionKey, versionValue);
+                    keyValueMap.put(lastUpdatedKey, lastUpdatedValue);
+
+                    // Sync pipeline services
+                    for (Map.Entry<String, ServiceConfigurationDto> entry : pipeline.getServices().entrySet()) {
+                        String serviceName = entry.getKey();
+                        ServiceConfigurationDto serviceConfig = entry.getValue();
+
+                        // Set the service name if not already set
+                        if (serviceConfig.getName() == null) {
+                            serviceConfig.setName(serviceName);
+                        }
+
+                        // Create keys for service configuration
+                        String serviceBaseKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".services." + serviceName);
+                        String serviceNameKey = serviceBaseKey + ".name";
+                        String serviceListenTopicsKey = serviceBaseKey + ".kafkaListenTopics";
+                        String servicePublishTopicsKey = serviceBaseKey + ".kafkaPublishTopics";
+                        String serviceGrpcForwardToKey = serviceBaseKey + ".grpcForwardTo";
+                        String serviceImplementationKey = serviceBaseKey + ".serviceImplementation";
+
+                        // Add service configuration to the key-value map
+                        keyValueMap.put(serviceNameKey, serviceConfig.getName());
+
+                        // Handle lists by converting them to comma-separated strings
+                        if (serviceConfig.getKafkaListenTopics() != null && !serviceConfig.getKafkaListenTopics().isEmpty()) {
+                            keyValueMap.put(serviceListenTopicsKey, String.join(",", serviceConfig.getKafkaListenTopics()));
+                        }
+
+                        if (serviceConfig.getKafkaPublishTopics() != null && !serviceConfig.getKafkaPublishTopics().isEmpty()) {
+                            keyValueMap.put(servicePublishTopicsKey, String.join(",", serviceConfig.getKafkaPublishTopics()));
+                        }
+
+                        if (serviceConfig.getGrpcForwardTo() != null && !serviceConfig.getGrpcForwardTo().isEmpty()) {
+                            keyValueMap.put(serviceGrpcForwardToKey, String.join(",", serviceConfig.getGrpcForwardTo()));
+                        }
+
+                        if (serviceConfig.getServiceImplementation() != null) {
+                            keyValueMap.put(serviceImplementationKey, serviceConfig.getServiceImplementation());
+                        }
+
+                        // Handle config params if present
+                        if (serviceConfig.getConfigParams() != null && !serviceConfig.getConfigParams().isEmpty()) {
+                            for (Map.Entry<String, String> paramEntry : serviceConfig.getConfigParams().entrySet()) {
+                                String paramKey = serviceBaseKey + ".configParams." + paramEntry.getKey();
+                                keyValueMap.put(paramKey, paramEntry.getValue());
+                            }
+                        }
+                    }
+
+                    // Update all values in a single operation
+                    return consulKvService.putValues(keyValueMap)
+                            .map(success1 -> {
+                                if (success1) {
+                                    LOG.info("Successfully synced pipeline configuration to Consul: {}", pipelineName);
+                                    return true;
+                                } else {
+                                    LOG.error("Failed to sync pipeline configuration to Consul: {}", pipelineName);
+                                    return false;
+                                }
+                            })
+                            .onErrorResume(e -> {
+                                LOG.error("Error syncing pipeline configuration to Consul: {}", pipelineName, e);
+                                return Mono.just(false);
+                            });
+                });
+    }
+
+    /**
+     * Sets the enabled flag to true.
+     * This method is called after the configuration has been seeded.
      */
     public void markAsEnabled() {
         this.enabled = true;
-        LOG.info("PipelineConfig marked as enabled (configuration loaded).");
+        LOG.info("PipelineConfig marked as enabled");
     }
 
-    // Getter for the pipelines map is automatically provided by Lombok's @Getter
-    // public Map<String, PipelineConfigDto> getPipelines() { return pipelines; }
+    /**
+     * Checks if the configuration is enabled.
+     *
+     * @return true if the configuration is enabled, false otherwise
+     */
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    /**
+     * Resets the state of this PipelineConfig instance.
+     * This is primarily used for testing to ensure a clean state between tests.
+     */
+    public void reset() {
+        this.pipelines.clear();
+        this.activePipeline = null;
+        this.enabled = false;
+        LOG.info("PipelineConfig state has been reset");
+    }
 }

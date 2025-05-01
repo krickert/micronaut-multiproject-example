@@ -1,226 +1,278 @@
 package com.krickert.search.config.consul.service;
 
-import com.ecwid.consul.v1.ConsulClient;
-import com.ecwid.consul.v1.QueryParams;
-import com.ecwid.consul.v1.Response;
-import com.ecwid.consul.v1.kv.model.GetValue;
 import io.micronaut.context.annotation.Value;
 import jakarta.inject.Singleton;
+import org.kiwiproject.consul.KeyValueClient;
+import org.kiwiproject.consul.model.ConsulResponse;
+import org.kiwiproject.consul.model.kv.ImmutableOperation;
+import org.kiwiproject.consul.model.kv.Operation;
+import org.kiwiproject.consul.model.kv.TxResponse;
+import org.kiwiproject.consul.model.kv.Verb;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
-import java.util.stream.Stream; // Import Stream
 
 /**
  * Service for interacting with Consul's Key-Value store.
- * Provides methods for reading, writing, deleting, and listing configuration values.
+ * Provides methods for reading, writing, and deleting configuration values.
+ * Uses transactions for batch operations.
  */
 @Singleton
 public class ConsulKvService {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConsulKvService.class);
-    private final ConsulClient consulClient;
+    private final KeyValueClient keyValueClient;
     private final String configPath;
 
     /**
-     * Creates a new ConsulKvService with the specified ConsulClient.
+     * Creates a new ConsulKvService with the specified KeyValueClient.
      *
-     * @param consulClient the ConsulClient to use for KV operations
+     * @param keyValueClient the KeyValueClient to use for KV operations
      * @param configPath the base path for configuration in Consul KV store
      */
-    public ConsulKvService(ConsulClient consulClient,
-                           @Value("${consul.client.config.path:config/pipeline}") String configPath) {
-        this.consulClient = consulClient;
-        // Ensure configPath ends with a slash for consistent prefix handling
-        this.configPath = configPath.endsWith("/") ? configPath : configPath + "/";
-        LOG.info("ConsulKvService initialized with config path: {}", this.configPath);
+    public ConsulKvService(@jakarta.inject.Named("primaryKeyValueClient") KeyValueClient keyValueClient, 
+                          @Value("${consul.client.config.path:config/pipeline}") String configPath) {
+        this.keyValueClient = keyValueClient;
+        this.configPath = configPath;
+        LOG.info("ConsulKvService initialized with config path: {}", configPath);
     }
 
     /**
-     * Encodes a key path for use with the Consul KV API.
-     * This method URL-encodes each segment of the path individually,
-     * preserving the '/' separators. This is necessary because characters like
-     * '[' and ']' are valid in Consul keys but invalid in URI paths without encoding.
+     * Encodes a key for use with Consul KV store.
+     * This method URL-encodes special characters in the key to ensure they are properly handled.
      *
-     * @param keyPath the raw key path (e.g., "config/pipeline/service[0]/setting")
-     * @return the encoded key path suitable for the Consul client library's API calls.
+     * @param key the key to encode
+     * @return the encoded key
      */
-    private String encodeKeyPath(String keyPath) {
+    private String encodeKey(String key) {
         try {
-            // Split by '/', encode each part, then rejoin with '/'
-            return Stream.of(keyPath.split("/"))
-                    .map(part -> {
-                        try {
-                            // URLEncoder encodes spaces as '+', replace with %20
-                            // Also explicitly don't encode '/' although split should prevent it in `part`
-                            return URLEncoder.encode(part, StandardCharsets.UTF_8.toString())
-                                    .replace("+", "%20");
-                        } catch (Exception e) {
-                            LOG.warn("Failed to encode path segment '{}': {}", part, e.getMessage());
-                            return part; // Return original part on error
-                        }
-                    })
-                    .collect(Collectors.joining("/"));
+            // Split the key by '/' and encode each part separately
+            String[] parts = key.split("/");
+            StringBuilder encodedKey = new StringBuilder();
+
+            for (int i = 0; i < parts.length; i++) {
+                if (i > 0) {
+                    encodedKey.append("/");
+                }
+                // URL encode the part, preserving only forward slashes
+                encodedKey.append(URLEncoder.encode(parts[i], StandardCharsets.UTF_8.toString())
+                        .replace("+", "%20")); // Replace + with %20 for spaces
+            }
+
+            LOG.debug("Encoded key '{}' to '{}'", key, encodedKey);
+            return encodedKey.toString();
         } catch (Exception e) {
-            LOG.warn("Error encoding key path: {}. Using original path.", keyPath, e);
-            return keyPath; // Fallback to original path on unexpected error
+            LOG.warn("Error encoding key: {}. Using original key.", key, e);
+            return key;
         }
     }
-
 
     /**
      * Gets a value from Consul KV store.
      *
-     * @param key the key to get (relative to configPath or absolute)
-     * @return a Mono containing an Optional with the decoded value if found, or empty if not found/error.
+     * @param key the key to get
+     * @return a Mono containing an Optional with the value if found, or empty if not found
      */
     public Mono<Optional<String>> getValue(String key) {
-        String fullPath = getFullPath(key); // Get the full, logical path
-        String encodedPath = encodeKeyPath(fullPath); // Encode for API call
-        LOG.debug("Getting value for key: '{}', encoded as: '{}'", fullPath, encodedPath);
+        LOG.debug("Getting value for key: {}", key);
         return Mono.fromCallable(() -> {
             try {
-                Response<GetValue> response = consulClient.getKVValue(encodedPath); // Use encoded path
-                if (response.getValue() != null) {
-                    return Optional.ofNullable(response.getValue().getDecodedValue());
+                String encodedKey = encodeKey(key);
+                Optional<org.kiwiproject.consul.model.kv.Value> valueOpt = keyValueClient.getValue(encodedKey);
+
+                if (valueOpt.isPresent()) {
+                    org.kiwiproject.consul.model.kv.Value value = valueOpt.get();
+                    return value.getValueAsString();
                 } else {
-                    LOG.debug("No value found for key: {}", fullPath);
-                    return Optional.<String>empty();
+                    LOG.debug("No value found for key: {}", key);
+                    return Optional.empty();
                 }
             } catch (Exception e) {
-                LOG.error("Error getting value for key '{}': {}", fullPath, e.getMessage());
-                return Optional.<String>empty();
+                LOG.error("Error getting value for key: {}", key, e);
+                return Optional.empty();
             }
-        }).onErrorReturn(Optional.<String>empty());
+        });
     }
 
     /**
      * Puts a value into Consul KV store.
      *
-     * @param key the key to put (relative to configPath or absolute)
+     * @param key the key to put
      * @param value the value to put
      * @return a Mono that emits true if the operation was successful, false otherwise
      */
     public Mono<Boolean> putValue(String key, String value) {
-        String fullPath = getFullPath(key); // Get the full, logical path
-        String encodedPath = encodeKeyPath(fullPath); // Encode for API call
-        LOG.debug("Putting value for key: '{}', encoded as: '{}'", fullPath, encodedPath);
+        LOG.debug("Putting value for key: {}", key);
         return Mono.fromCallable(() -> {
             try {
-                // setKVValue expects raw UTF-8 string for value, encoding is for the key path
-                Response<Boolean> response = consulClient.setKVValue(encodedPath, value); // Use encoded path
-                boolean success = response.getValue() != null && response.getValue();
+                String encodedKey = encodeKey(key);
+                boolean success = keyValueClient.putValue(encodedKey, value);
+
                 if (success) {
-                    LOG.info("Successfully wrote value to Consul KV for key: {}", fullPath);
+                    LOG.info("Successfully wrote value to Consul KV for key: {}", key);
+                    return true;
                 } else {
-                    LOG.error("Failed to write value to Consul KV for key: {}. Consul response: {}", fullPath, response);
+                    LOG.error("Failed to write value to Consul KV for key: {}", key);
+                    return false;
                 }
-                return success;
             } catch (Exception e) {
-                LOG.error("Error writing value to Consul KV for key '{}': {}", fullPath, e.getMessage(), e);
+                LOG.error("Error writing value to Consul KV for key: {}", key, e);
                 return false;
             }
-        }).onErrorReturn(false);
+        });
+    }
+
+    /**
+     * Puts multiple values into Consul KV store using a transaction.
+     *
+     * @param keyValueMap a map of keys to values to put
+     * @return a Mono that emits true if the operation was successful, false otherwise
+     */
+    public Mono<Boolean> putValues(Map<String, String> keyValueMap) {
+        LOG.debug("Putting multiple values using transaction: {}", keyValueMap.keySet());
+        return Mono.fromCallable(() -> {
+            try {
+                // Create an array of operations for the transaction
+                Operation[] operations = new Operation[keyValueMap.size()];
+                int i = 0;
+                List<String> keys = new ArrayList<>();
+
+                for (Map.Entry<String, String> entry : keyValueMap.entrySet()) {
+                    String encodedKey = encodeKey(entry.getKey());
+                    keys.add(entry.getKey());
+
+                    // Create a SET operation for each key-value pair
+                    operations[i++] = ImmutableOperation.builder()
+                            .verb(Verb.SET.toValue())
+                            .key(encodedKey)
+                            .value(entry.getValue())
+                            .build();
+                }
+
+                // Perform the transaction
+                ConsulResponse<TxResponse> response = keyValueClient.performTransaction(operations);
+
+                // Check if the transaction was successful
+                if (response != null && response.getResponse() != null && 
+                    response.getResponse().errors() == null || response.getResponse().errors().isEmpty()) {
+                    LOG.info("Successfully wrote all values to Consul KV using transaction: {}", keys);
+                    return true;
+                } else {
+                    LOG.error("Failed to write values to Consul KV using transaction. Errors: {}", 
+                            response != null && response.getResponse() != null ? 
+                            response.getResponse().errors() : "Unknown error");
+                    return false;
+                }
+            } catch (Exception e) {
+                LOG.error("Error writing multiple values to Consul KV using transaction: {}", keyValueMap.keySet(), e);
+                return false;
+            }
+        });
     }
 
     /**
      * Deletes a key from Consul KV store.
      *
-     * @param key the key to delete (relative to configPath or absolute)
+     * @param key the key to delete
      * @return a Mono that emits true if the operation was successful, false otherwise
      */
     public Mono<Boolean> deleteKey(String key) {
-        String fullPath = getFullPath(key); // Get the full, logical path
-        String encodedPath = encodeKeyPath(fullPath); // Encode for API call
-        LOG.debug("Deleting key: '{}', encoded as: '{}'", fullPath, encodedPath);
+        LOG.debug("Deleting key: {}", key);
         return Mono.fromCallable(() -> {
             try {
-                consulClient.deleteKVValue(encodedPath); // Use encoded path
-                LOG.debug("Successfully deleted key: {}", fullPath);
+                String encodedKey = encodeKey(key);
+                keyValueClient.deleteKey(encodedKey);
+                LOG.debug("Successfully deleted key: {}", key);
                 return true;
             } catch (Exception e) {
-                LOG.error("Error deleting key '{}': {}", fullPath, e.getMessage());
+                LOG.error("Error deleting key: {}", key, e);
                 return false;
             }
-        }).onErrorReturn(false);
+        });
     }
 
     /**
-     * Gets all keys recursively under a given prefix.
+     * Deletes all keys with a given prefix from Consul KV store.
      *
-     * @param prefix The key prefix to search under (relative to configPath or absolute).
-     * @return A Mono emitting a List of keys found under the prefix, or an empty list if none found/error.
+     * @param prefix the prefix of the keys to delete
+     * @return a Mono that emits true if the operation was successful, false otherwise
      */
-    public Mono<List<String>> getKeysRecursive(String prefix) {
-        String fullPrefix = getFullPath(prefix); // Get the full, logical path
-        // IMPORTANT: Do NOT encode the prefix for getKVKeysOnly, the client library handles prefix matching logic.
-        // Ensure the prefix ends with a slash for directory-like listing.
-        String consulPrefix = fullPrefix.endsWith("/") ? fullPrefix : fullPrefix + "/";
-        LOG.debug("Getting keys recursively under prefix: {}", consulPrefix);
+    public Mono<Boolean> deleteKeysWithPrefix(String prefix) {
+        LOG.debug("Deleting keys with prefix: {}", prefix);
         return Mono.fromCallable(() -> {
             try {
-                // Pass the logical prefix directly to the client method
-                Response<List<String>> response = consulClient.getKVKeysOnly(consulPrefix);
-                List<String> keys = response.getValue();
-                if (keys != null) {
-                    LOG.debug("Found {} keys under prefix {}", keys.size(), consulPrefix);
-                    // Return the keys as reported by Consul (they include the prefix)
-                    return keys;
-                } else {
-                    LOG.debug("No keys found under prefix {}", consulPrefix);
-                    return Collections.<String>emptyList();
-                }
+                String encodedPrefix = encodeKey(prefix);
+                keyValueClient.deleteKeys(encodedPrefix);
+                LOG.debug("Successfully deleted keys with prefix: {}", prefix);
+                return true;
             } catch (Exception e) {
-                LOG.error("Error getting keys for prefix '{}': {}", consulPrefix, e.getMessage(), e);
-                return Collections.<String>emptyList();
+                LOG.error("Error deleting keys with prefix: {}", prefix, e);
+                return false;
             }
-        }).onErrorReturn(Collections.emptyList());
+        });
     }
 
     /**
-     * Gets the full path for a key in Consul KV store, ensuring it's relative to the base configPath.
-     * Removes leading/trailing slashes from the input key for consistent joining.
-     * Does NOT add a trailing slash, as this should only be done for prefix *queries*.
+     * Deletes multiple keys from Consul KV store.
      *
-     * @param key the key (can be relative or absolute)
-     * @return the full absolute path starting with configPath, without a trailing slash unless the key is the config path itself.
+     * @param keys a list of keys to delete
+     * @return a Mono that emits true if the operation was successful, false otherwise
+     */
+    public Mono<Boolean> deleteKeys(List<String> keys) {
+        LOG.debug("Deleting multiple keys: {}", keys);
+        return Mono.fromCallable(() -> {
+            try {
+                for (String key : keys) {
+                    String encodedKey = encodeKey(key);
+                    keyValueClient.deleteKey(encodedKey);
+                }
+                LOG.info("Successfully deleted multiple keys from Consul KV: {}", keys);
+                return true;
+            } catch (Exception e) {
+                LOG.error("Error deleting multiple keys from Consul KV: {}", keys, e);
+                return false;
+            }
+        });
+    }
+
+    /**
+     * Gets all keys with a given prefix from Consul KV store.
+     *
+     * @param prefix the prefix to search for
+     * @return a Mono containing a List of keys with the given prefix
+     */
+    public Mono<List<String>> getKeysWithPrefix(String prefix) {
+        LOG.debug("Getting keys with prefix: {}", prefix);
+        return Mono.fromCallable(() -> {
+            try {
+                String encodedPrefix = encodeKey(prefix);
+                List<String> keys = keyValueClient.getKeys(encodedPrefix);
+                LOG.debug("Found {} keys with prefix: {}", keys.size(), prefix);
+                return keys;
+            } catch (Exception e) {
+                LOG.error("Error getting keys with prefix: {}", prefix, e);
+                return new ArrayList<>();
+            }
+        });
+    }
+
+    /**
+     * Gets the full path for a key in Consul KV store.
+     *
+     * @param key the key
+     * @return the full path
      */
     public String getFullPath(String key) {
-        String trimmedKey = key.trim().replaceAll("^/+|/+$", ""); // Remove leading/trailing slashes
-        String trimmedConfigPath = configPath.replaceAll("^/+|/+$", ""); // Base path without trailing slash
-
-        // Handle case where key IS the config path
-        if (trimmedKey.isEmpty() || trimmedKey.equals(trimmedConfigPath)) {
-            // For the base path itself, we might want the trailing slash for queries,
-            // but for get/put/delete, the exact path is usually needed. Return without trailing slash for consistency.
-            // If a trailing slash IS needed for a specific operation, add it there.
-            return trimmedConfigPath;
+        if (key.startsWith(configPath)) {
+            return key;
         }
-
-        // Check if the key already starts with the base path segment
-        if (trimmedKey.startsWith(trimmedConfigPath + "/")) {
-            // It's already an absolute path, return it as is (after trimming)
-            return trimmedKey;
-        }
-
-        // Construct the full path relative to the base config path
-        // Avoid double slashes if configPath was "/" or key starts with "/" (handled by trim)
-        return trimmedConfigPath.isEmpty() ? trimmedKey : trimmedConfigPath + "/" + trimmedKey;
-    }
-
-    /**
-     * Gets the configured base configuration path (always ends with /).
-     *
-     * @return The base config path used by this service.
-     */
-    public String getConfigPath() {
-        return configPath; // Returns the path ensured to end with '/' from constructor
+        return configPath + (configPath.endsWith("/") ? "" : "/") + key;
     }
 }
