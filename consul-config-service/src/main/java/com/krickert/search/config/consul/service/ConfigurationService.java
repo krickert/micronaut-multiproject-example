@@ -4,7 +4,6 @@ import com.krickert.search.config.consul.event.ConfigChangeEvent;
 import com.krickert.search.config.consul.model.ApplicationConfig;
 import com.krickert.search.config.consul.model.PipelineConfig;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
-import com.krickert.search.config.consul.model.ServiceConfigurationDto;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.event.ApplicationEventListener;
 import io.micronaut.context.event.StartupEvent;
@@ -15,9 +14,6 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**

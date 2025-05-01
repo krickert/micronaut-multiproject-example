@@ -1,6 +1,5 @@
 package com.krickert.search.config.consul.api;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.model.CreatePipelineRequest;
 import com.krickert.search.config.consul.model.PipelineConfig;
@@ -28,11 +27,8 @@ import org.kiwiproject.consul.KeyValueClient;
 import org.testcontainers.consul.ConsulContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;

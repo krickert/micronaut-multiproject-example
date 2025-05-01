@@ -5,7 +5,6 @@ import com.krickert.search.config.consul.exception.PipelineVersionConflictExcept
 import com.krickert.search.config.consul.model.CreatePipelineRequest;
 import com.krickert.search.config.consul.model.PipelineConfig;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
-import com.krickert.search.config.consul.model.ServiceConfigurationDto;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
@@ -24,14 +23,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 /**
  * REST controller for managing pipeline configurations.

@@ -3,7 +3,6 @@ package com.krickert.search.config.consul.model;
 import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.exception.PipelineVersionConflictException;
 import com.krickert.search.config.consul.service.ConsulKvService;
-import io.micronaut.core.annotation.NonNull;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
@@ -12,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 

@@ -11,11 +11,10 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.test.StepVerifier;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @MicronautTest(rebuildContext = true)
 @Testcontainers

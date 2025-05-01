@@ -12,7 +12,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import org.kiwiproject.consul.Consul;
-import org.kiwiproject.consul.model.health.HealthCheck;
 import org.kiwiproject.consul.model.health.ServiceHealth;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

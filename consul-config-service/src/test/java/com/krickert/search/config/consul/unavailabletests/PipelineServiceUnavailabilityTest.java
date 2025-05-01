@@ -1,17 +1,10 @@
 package com.krickert.search.config.consul.unavailabletests;
 
-import com.krickert.search.config.consul.api.PipelineController;
-import com.krickert.search.config.consul.event.ConfigChangeNotifier;
 import com.krickert.search.config.consul.model.CreatePipelineRequest;
 import com.krickert.search.config.consul.model.PipelineConfig;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
 import com.krickert.search.config.consul.service.ConsulKvService;
-import io.micronaut.context.annotation.Bean;
-import io.micronaut.context.annotation.Factory;
-import io.micronaut.context.annotation.Primary;
-import io.micronaut.context.annotation.Property;
-import io.micronaut.context.annotation.Replaces;
-import io.micronaut.context.annotation.Requires;
+import io.micronaut.context.annotation.*;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpStatus;
 import io.micronaut.http.client.HttpClient;
@@ -24,7 +17,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import reactor.core.publisher.Mono;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;

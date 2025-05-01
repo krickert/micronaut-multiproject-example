@@ -8,12 +8,9 @@ import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.*;
 import io.micronaut.jackson.serialize.JacksonObjectSerializer;
-import io.micronaut.runtime.context.scope.Refreshable;
 import io.micronaut.runtime.context.scope.refresh.RefreshEvent;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,7 +20,6 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * REST controller for managing configuration in Consul KV store.
