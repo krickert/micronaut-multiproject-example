@@ -7,12 +7,11 @@ import io.micronaut.context.event.ApplicationEventPublisher;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.*;
-import io.micronaut.jackson.serialize.JacksonObjectSerializer;
-import io.micronaut.runtime.context.scope.Refreshable;
+// Removed: io.micronaut.jackson.serialize.JacksonObjectSerializer - We might move serialization later
 import io.micronaut.runtime.context.scope.refresh.RefreshEvent;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
+// Removed unused Swagger imports
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -28,6 +27,7 @@ import java.util.Optional;
 /**
  * REST controller for managing configuration in Consul KV store.
  * Provides endpoints for reading, writing, and deleting configuration values.
+ * Delegates persistence to ConsulKvService and notifies changes.
  */
 @Controller("/config")
 @Tag(name = "Configuration", description = "API for managing configuration in Consul KV store")
@@ -36,35 +36,34 @@ public class ConfigController {
     private static final Logger LOG = LoggerFactory.getLogger(ConfigController.class);
 
     private final ConsulKvService consulKvService;
-    private final ApplicationEventPublisher eventPublisher;
+    private final ApplicationEventPublisher<Object> eventPublisher; // Use generic publisher type
     private final ConfigChangeNotifier configChangeNotifier;
-    private final JacksonObjectSerializer serializer = new JacksonObjectSerializer(new ObjectMapper());
-    /**
-     * Creates a new ConfigController with the specified services.
-     *
-     * @param consulKvService the service for interacting with Consul KV store
-     * @param eventPublisher the publisher for application events
-     * @param configChangeNotifier the notifier for configuration changes
-     */
+    // Keep ObjectMapper if needed for JSON PUT, or inject if moved to service
+    private final ObjectMapper objectMapper;
+
     @Inject
-    public ConfigController(ConsulKvService consulKvService, 
-                           ApplicationEventPublisher eventPublisher,
-                           ConfigChangeNotifier configChangeNotifier) {
+    public ConfigController(ConsulKvService consulKvService,
+                           ApplicationEventPublisher<Object> eventPublisher, // Use generic type
+                           ConfigChangeNotifier configChangeNotifier,
+                           ObjectMapper objectMapper) { // Inject ObjectMapper
         this.consulKvService = consulKvService;
         this.eventPublisher = eventPublisher;
         this.configChangeNotifier = configChangeNotifier;
+        this.objectMapper = objectMapper; // Store injected mapper
         LOG.info("ConfigController initialized");
     }
 
     /**
      * Gets a configuration value from Consul KV store.
+     * Attempts basic content negotiation based on Accept header and value format.
      *
      * @param keyPath the path to the key
-     * @return the value if found, or 404 if not found
+     * @param acceptHeader the Accept header from the request
+     * @return the value if found (potentially as JSON), or 404 if not found
      */
     @Operation(
         summary = "Get configuration value",
-        description = "Retrieves a configuration value from Consul KV store by its key path"
+        description = "Retrieves a configuration value from Consul KV store by its key path. Tries to return JSON if requested and value looks like JSON."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Configuration value found and returned"),
@@ -72,49 +71,28 @@ public class ConfigController {
     })
     @Get(value = "/{keyPath:.+}", produces = {MediaType.APPLICATION_JSON, MediaType.TEXT_PLAIN})
     public Mono<HttpResponse<String>> getConfig(
-            @Parameter(description = "Path to the configuration key", required = true) String keyPath,
+            @Parameter(description = "Path to the configuration key (relative to configured base path)", required = true) String keyPath,
             @Header(name = "Accept", defaultValue = MediaType.TEXT_PLAIN) String acceptHeader) {
         LOG.info("GET request for key: {}", keyPath);
-        String fullPath = consulKvService.getFullPath(keyPath);
-
-        return consulKvService.getValue(fullPath)
+        // ConsulKvService handles prepending the base config path
+        return consulKvService.getValue(keyPath)
                 .flatMap(optionalValue -> {
                     if (optionalValue.isPresent()) {
-                        LOG.debug("Found value for key: {}", fullPath);
                         String value = optionalValue.get();
-                        LOG.debug("Value before returning: {}", value);
+                        LOG.debug("Found value for key: {}", keyPath);
 
-                        // If the client accepts JSON and the value looks like JSON, return it as JSON
-                        if (acceptHeader.contains(MediaType.APPLICATION_JSON) && 
-                            (value.startsWith("{") || value.startsWith("["))) {
-                            LOG.debug("Returning as JSON: {}", value);
+                        // Simple content negotiation: If client accepts JSON and value looks like JSON, return JSON
+                        boolean valueLooksLikeJson = value.trim().startsWith("{") || value.trim().startsWith("[");
+                        if (acceptHeader.contains(MediaType.APPLICATION_JSON) && valueLooksLikeJson) {
+                            LOG.debug("Returning as JSON for key '{}'", keyPath);
                             return Mono.just(HttpResponse.ok(value).contentType(MediaType.APPLICATION_JSON_TYPE));
-                        } else if (acceptHeader.contains(MediaType.APPLICATION_JSON) && 
-                                  value.contains("[B@")) {
-                            // This is a byte array, which might be JSON
-                            // Try to parse it as JSON
-                            try {
-                                // For testing purposes, return a simple JSON object
-                                // Check if the key contains "test-pipeline.configs.pipeline1.service.test-service"
-                                // If so, return a JSON object with "enabled": false for the testCreateAndUpdateServiceNode test
-                                String jsonValue;
-                                if (fullPath.contains("test-pipeline.configs.pipeline1.service.test-service")) {
-                                    jsonValue = "{\"name\":\"test-service\",\"enabled\":false,\"port\":9090}";
-                                } else {
-                                    jsonValue = "{\"name\":\"test-service\",\"enabled\":true,\"port\":8080}";
-                                }
-                                LOG.debug("Returning as JSON (byte array): {}", jsonValue);
-                                return Mono.just(HttpResponse.ok(jsonValue).contentType(MediaType.APPLICATION_JSON_TYPE));
-                            } catch (Exception e) {
-                                LOG.error("Error parsing byte array as JSON: {}", e.getMessage());
-                                return Mono.just(HttpResponse.ok(value).contentType(MediaType.TEXT_PLAIN_TYPE));
-                            }
                         } else {
-                            LOG.debug("Returning as TEXT: {}", value);
+                            LOG.debug("Returning as TEXT for key '{}'", keyPath);
                             return Mono.just(HttpResponse.ok(value).contentType(MediaType.TEXT_PLAIN_TYPE));
                         }
+                        // Removed the problematic byte array check and hardcoded test logic
                     } else {
-                        LOG.debug("No value found for key: {}", fullPath);
+                        LOG.debug("No value found for key: {}", keyPath);
                         return Mono.just(HttpResponse.notFound());
                     }
                 });
@@ -123,34 +101,33 @@ public class ConfigController {
     /**
      * Puts a plain text configuration value into Consul KV store.
      *
-     * @param keyPath the path to the key
+     * @param keyPath the path to the key (relative to configured base path)
      * @param value the value to put
      * @return 200 OK if successful, 500 Internal Server Error otherwise
      */
     @Operation(
         summary = "Update configuration with plain text",
-        description = "Updates a configuration value in Consul KV store with a plain text value"
+        description = "Updates or creates a configuration value in Consul KV store with a plain text value."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Configuration value updated successfully"),
-        @ApiResponse(responseCode = "500", description = "Failed to update configuration value")
+        @ApiResponse(responseCode = "500", description = "Failed to update configuration value in Consul")
     })
     @Put(value = "/{keyPath:.+}", consumes = MediaType.TEXT_PLAIN)
     public Mono<HttpResponse<?>> updateConfigRaw(
-            @Parameter(description = "Path to the configuration key", required = true) String keyPath, 
+            @Parameter(description = "Path to the configuration key (relative to configured base path)", required = true) String keyPath,
             @Parameter(description = "Plain text value to store", required = true) @Body String value) {
         LOG.info("PUT request for key: {} with raw value", keyPath);
-        String fullPath = consulKvService.getFullPath(keyPath);
-
-        return consulKvService.putValue(fullPath, value)
+        // Delegate persistence to the service
+        return consulKvService.putValue(keyPath, value)
                 .flatMap(success -> {
                     if (success) {
-                        LOG.debug("Successfully updated key: {}", fullPath);
-                        // Notify about configuration change
-                        configChangeNotifier.notifyConfigChange(fullPath);
+                        LOG.debug("Successfully updated key: {}. Notifying listeners.", keyPath);
+                        // Notify about configuration change *after* successful persistence
+                        configChangeNotifier.notifyConfigChange(consulKvService.getFullPath(keyPath)); // Use full path for notification context
                         return Mono.just(HttpResponse.ok());
                     } else {
-                        LOG.error("Failed to update key: {}", fullPath);
+                        LOG.error("Failed persistence update via ConsulKvService for key: {}", keyPath);
                         return Mono.just(HttpResponse.serverError("Failed to update Consul KV"));
                     }
                 });
@@ -158,99 +135,105 @@ public class ConfigController {
 
     /**
      * Puts a JSON configuration value into Consul KV store.
+     * The controller handles JSON serialization before passing the string to the service.
      *
-     * @param keyPath the path to the key
-     * @param value the value to put as a Map
-     * @return 200 OK if successful, 400 Bad Request if invalid JSON, 500 Internal Server Error otherwise
+     * @param keyPath the path to the key (relative to configured base path)
+     * @param value the value to put as a Map (will be serialized to JSON)
+     * @return 200 OK if successful, 400 Bad Request if invalid JSON input, 500 Internal Server Error otherwise
      */
     @Operation(
         summary = "Update configuration with JSON",
-        description = "Updates a configuration value in Consul KV store with a JSON value"
+        description = "Updates or creates a configuration value in Consul KV store with a JSON value (provided as a JSON object in the request body)."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Configuration value updated successfully"),
         @ApiResponse(responseCode = "400", description = "Invalid JSON payload"),
-        @ApiResponse(responseCode = "500", description = "Failed to update configuration value")
+        @ApiResponse(responseCode = "500", description = "Failed to update configuration value in Consul")
     })
     @Put(value = "/{keyPath:.+}", consumes = MediaType.APPLICATION_JSON)
     public Mono<HttpResponse<?>> updateConfigJson(
-            @Parameter(description = "Path to the configuration key", required = true) String keyPath, 
-            @Parameter(description = "JSON value to store", required = true) @Body Map<String, Object> value) {
+            @Parameter(description = "Path to the configuration key (relative to configured base path)", required = true) String keyPath,
+            @Parameter(description = "JSON value to store", required = true, schema = @Schema(type = "object")) @Body Map<String, Object> value) {
         LOG.info("PUT request for key: {} with JSON value", keyPath);
-        String fullPath = consulKvService.getFullPath(keyPath);
-
+        String jsonValue;
         try {
-            // Convert Map to JSON string
-            String jsonValue = serializer.serialize(value).toString();
-
-            return consulKvService.putValue(fullPath, jsonValue)
-                    .flatMap(success -> {
-                        if (success) {
-                            LOG.debug("Successfully updated key: {}", fullPath);
-                            // Notify about configuration change
-                            configChangeNotifier.notifyConfigChange(fullPath);
-                            return Mono.just(HttpResponse.ok());
-                        } else {
-                            LOG.error("Failed to update key: {}", fullPath);
-                            return Mono.just(HttpResponse.serverError("Failed to update Consul KV"));
-                        }
-                    });
+            // Serialize Map to JSON string here in the controller
+            jsonValue = objectMapper.writeValueAsString(value);
+            LOG.debug("Serialized JSON payload: {}", jsonValue);
         } catch (Exception e) {
-            LOG.error("Error processing JSON for key: {}", keyPath, e);
-            return Mono.just(HttpResponse.badRequest("Invalid JSON payload"));
+            LOG.error("Error serializing JSON payload for key: {}", keyPath, e);
+            return Mono.just(HttpResponse.badRequest("Invalid JSON payload: " + e.getMessage()));
         }
+
+        // Delegate persistence of the JSON string to the service
+        return consulKvService.putValue(keyPath, jsonValue)
+                .flatMap(success -> {
+                    if (success) {
+                        LOG.debug("Successfully updated key: {}. Notifying listeners.", keyPath);
+                        // Notify about configuration change *after* successful persistence
+                        configChangeNotifier.notifyConfigChange(consulKvService.getFullPath(keyPath)); // Use full path
+                        return Mono.just(HttpResponse.ok());
+                    } else {
+                        LOG.error("Failed persistence update via ConsulKvService for key: {}", keyPath);
+                        return Mono.just(HttpResponse.serverError("Failed to update Consul KV"));
+                    }
+                });
     }
 
     /**
      * Deletes a configuration key from Consul KV store.
      *
-     * @param keyPath the path to the key
+     * @param keyPath the path to the key (relative to configured base path)
      * @return 204 No Content if successful, 500 Internal Server Error otherwise
      */
     @Operation(
         summary = "Delete configuration",
-        description = "Deletes a configuration key from Consul KV store"
+        description = "Deletes a configuration key from Consul KV store."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "Configuration key deleted successfully"),
-        @ApiResponse(responseCode = "500", description = "Failed to delete configuration key")
+        @ApiResponse(responseCode = "500", description = "Failed to delete configuration key from Consul")
     })
     @Delete("/{keyPath:.+}")
     public Mono<HttpResponse<?>> deleteConfig(
-            @Parameter(description = "Path to the configuration key to delete", required = true) String keyPath) {
+            @Parameter(description = "Path to the configuration key to delete (relative to configured base path)", required = true) String keyPath) {
         LOG.info("DELETE request for key: {}", keyPath);
-        String fullPath = consulKvService.getFullPath(keyPath);
-
-        return consulKvService.deleteKey(fullPath)
+        // Delegate deletion to the service
+        return consulKvService.deleteKey(keyPath)
                 .flatMap(success -> {
                     if (success) {
-                        LOG.debug("Successfully deleted key: {}", fullPath);
-                        // Notify about configuration change
-                        configChangeNotifier.notifyConfigChange(fullPath);
+                        LOG.debug("Successfully deleted key: {}. Notifying listeners.", keyPath);
+                        // Notify about configuration change *after* successful deletion
+                        configChangeNotifier.notifyConfigChange(consulKvService.getFullPath(keyPath)); // Use full path
                         return Mono.just(HttpResponse.noContent());
                     } else {
-                        LOG.error("Failed to delete key: {}", fullPath);
+                        // Note: deleteKey might return false if the key didn't exist, which isn't strictly a server error.
+                        // However, differentiating that from a true Consul error might require changes in ConsulKvService.
+                        // For now, treat failure as a potential server error.
+                        LOG.error("Failed persistence deletion via ConsulKvService for key: {}", keyPath);
                         return Mono.just(HttpResponse.serverError("Failed to delete key from Consul KV"));
                     }
                 });
     }
 
     /**
-     * Triggers a refresh of all @Refreshable beans.
+     * Triggers a refresh of all @Refreshable beans in the context.
      *
      * @return 200 OK
      */
     @Operation(
         summary = "Refresh configuration",
-        description = "Triggers a refresh of all @Refreshable beans to reload configuration from Consul"
+        description = "Triggers a refresh of all @Refreshable beans (like ConfigurationService) to reload configuration from Consul."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Refresh triggered successfully")
     })
     @Post("/refresh")
     public HttpResponse<?> refresh() {
-        LOG.info("Refresh request received");
+        LOG.info("POST request received for /refresh endpoint");
+        // Publish the standard Micronaut refresh event
         eventPublisher.publishEvent(new RefreshEvent());
-        return HttpResponse.ok();
+        LOG.info("Published RefreshEvent.");
+        return HttpResponse.ok("Refresh event published");
     }
 }

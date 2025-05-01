@@ -16,34 +16,39 @@ import java.util.Map;
 
 /**
  * Pipeline configuration POJO.
- * This class represents the pipeline-specific configuration settings.
+ * This class represents the pipeline-specific configuration settings loaded from Consul.
+ * It holds a map of all discovered pipeline configurations.
  * It is a singleton and is refreshable when configuration changes.
  */
 @Singleton
-@Refreshable
+@Refreshable // This bean will be recreated when a RefreshEvent occurs
 @Getter
-@Setter
+@Setter // Lombok setters for enabling map population by Micronaut config
 @Serdeable
 public class PipelineConfig {
     private static final Logger LOG = LoggerFactory.getLogger(PipelineConfig.class);
-    
+
+    // Removed: activePipeline field - No longer tracking a single active pipeline here.
+    // private String activePipeline;
+
     /**
-     * The active pipeline name.
-     */
-    private String activePipeline;
-    
-    /**
-     * Map of pipeline configurations, keyed by pipeline name.
+     * Map of all pipeline configurations discovered and loaded from Consul, keyed by pipeline name.
+     * Micronaut's configuration system populates this map based on keys matching 'pipeline.configs.*'.
      */
     private Map<String, PipelineConfigDto> pipelines = new HashMap<>();
-    
+
     /**
-     * Flag indicating whether the configuration has been initialized.
+     * Flag indicating whether the configuration has been initialized (e.g., after seeding or loading).
+     * This helps differentiate between an empty config and an uninitialized state.
+     * -- GETTER --
+     *  Checks if the configuration has been marked as enabled (loaded).
+     *<br/>
+     * The setter returns true if the configuration is enabled, false otherwise.
      */
     private boolean enabled = false;
-    
+
     private final ConsulKvService consulKvService;
-    
+
     /**
      * Constructor with ConsulKvService.
      *
@@ -51,107 +56,60 @@ public class PipelineConfig {
      */
     @Inject
     public PipelineConfig(ConsulKvService consulKvService) {
+        // We inject ConsulKvService but don't use it directly in this modified version
+        // It might be used if we later add functionality to sync the *entire* pipeline map back to Consul.
         this.consulKvService = consulKvService;
-        LOG.info("Creating PipelineConfig singleton");
+        LOG.info("Creating PipelineConfig singleton bean.");
     }
-    
+
     /**
-     * Gets a pipeline configuration by name.
+     * Gets a specific pipeline configuration by its name.
      *
      * @param pipelineName the name of the pipeline
-     * @return the pipeline configuration, or null if not found
+     * @return the pipeline configuration DTO, or null if a pipeline with that name is not found.
      */
     public PipelineConfigDto getPipeline(String pipelineName) {
         return pipelines.get(pipelineName);
     }
-    
     /**
-     * Gets the active pipeline configuration.
+     * Adds or updates a pipeline configuration in the internal map.
+     * Note: This primarily updates the in-memory representation.
+     * Persisting changes back to Consul is handled by the ConfigController -> ConsulKvService flow.
      *
-     * @return the active pipeline configuration, or null if not set
-     */
-    public PipelineConfigDto getActivePipeline() {
-        return activePipeline != null ? pipelines.get(activePipeline) : null;
-    }
-    
-    /**
-     * Adds or updates a pipeline configuration.
-     *
-     * @param pipeline the pipeline configuration to add or update
-     * @return a Mono that completes when the operation is done
+     * @param pipeline the pipeline configuration DTO to add or update.
+     * @return a Mono indicating completion (currently simplified).
      */
     public Mono<Boolean> addOrUpdatePipeline(PipelineConfigDto pipeline) {
         String pipelineName = pipeline.getName();
-        pipelines.put(pipelineName, pipeline);
-        
-        // Sync with Consul
-        return syncPipelineToConsul(pipeline);
-    }
-    
-    /**
-     * Sets the active pipeline.
-     *
-     * @param pipelineName the name of the pipeline to set as active
-     * @return a Mono that completes when the operation is done
-     */
-    public Mono<Boolean> setActivePipeline(String pipelineName) {
-        if (!pipelines.containsKey(pipelineName)) {
-            LOG.error("Cannot set active pipeline to non-existent pipeline: {}", pipelineName);
-            return Mono.just(false);
+        if (pipelineName == null || pipelineName.isBlank()) {
+            LOG.error("Attempted to add or update a pipeline with a null or blank name.");
+            return Mono.just(false); // Indicate failure
         }
-        
-        this.activePipeline = pipelineName;
-        
-        // Sync with Consul
-        return consulKvService.putValue(
-                consulKvService.getFullPath("pipeline.active"), 
-                pipelineName);
+        LOG.debug("Updating in-memory map for pipeline: {}", pipelineName);
+        pipelines.put(pipelineName, pipeline);
+
+        // Removed call to syncPipelineToConsul as it's simplified and
+        // persistence is handled elsewhere (ConfigController).
+        // If we needed to sync *other* aspects of the pipeline here, we would call a revised sync method.
+        return Mono.just(true); // Indicate success (of updating the map)
     }
-    
+
+    // Removed: setActivePipeline() - This concept is removed.
+    // public Mono<Boolean> setActivePipeline(String pipelineName) { ... }
+
+    // Removed: syncPipelineToConsul() - Simplified as the active pipeline concept is gone
+    // and service name setting should ideally happen during loading or DTO creation.
+    // Persistence is handled by ConfigController.
+    // private Mono<Boolean> syncPipelineToConsul(PipelineConfigDto pipeline) { ... }
+
     /**
-     * Syncs a pipeline configuration to Consul KV store.
-     *
-     * @param pipeline the pipeline configuration to sync
-     * @return a Mono that completes when the operation is done
-     */
-    private Mono<Boolean> syncPipelineToConsul(PipelineConfigDto pipeline) {
-        // This is a simplified implementation. In a real-world scenario,
-        // you would need to handle more complex synchronization logic.
-        String pipelineName = pipeline.getName();
-        
-        // For each service in the pipeline, sync its configuration
-        return Mono.just(true)
-                .flatMap(success -> {
-                    // Sync pipeline services
-                    for (Map.Entry<String, ServiceConfigurationDto> entry : pipeline.getServices().entrySet()) {
-                        String serviceName = entry.getKey();
-                        ServiceConfigurationDto serviceConfig = entry.getValue();
-                        
-                        // Set the service name if not already set
-                        if (serviceConfig.getName() == null) {
-                            serviceConfig.setName(serviceName);
-                        }
-                    }
-                    
-                    return Mono.just(true);
-                });
-    }
-    
-    /**
-     * Sets the enabled flag to true.
-     * This method is called after the configuration has been seeded.
+     * Marks the configuration as enabled, typically after initial loading.
      */
     public void markAsEnabled() {
         this.enabled = true;
-        LOG.info("PipelineConfig marked as enabled");
+        LOG.info("PipelineConfig marked as enabled (configuration loaded).");
     }
-    
-    /**
-     * Checks if the configuration is enabled.
-     *
-     * @return true if the configuration is enabled, false otherwise
-     */
-    public boolean isEnabled() {
-        return enabled;
-    }
+
+    // Getter for the pipelines map is automatically provided by Lombok's @Getter
+    // public Map<String, PipelineConfigDto> getPipelines() { return pipelines; }
 }
