@@ -98,6 +98,8 @@ dependencies {
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.19.0")
     // https://mvnrepository.com/artifact/org.kiwiproject/consul-client
     implementation("org.kiwiproject:consul-client:1.5.0")
+    // https://mvnrepository.com/artifact/org.awaitility/awaitility
+    testImplementation("org.awaitility:awaitility:4.3.0")
 }
 
 // Publishing configuration
