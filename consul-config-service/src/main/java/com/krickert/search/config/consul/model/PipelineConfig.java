@@ -12,8 +12,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Pipeline configuration POJO.
@@ -65,7 +70,119 @@ public class PipelineConfig {
      */
     public PipelineConfigDto getPipeline(String pipelineName) {
         PipelineConfigDto pipeline = pipelines.get(pipelineName);
+
+        if (pipeline == null) {
+            // Try to load the pipeline from Consul
+            String versionKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".version");
+            Optional<String> versionOpt = consulKvService.getValue(versionKey).block();
+
+            if (versionOpt != null && versionOpt.isPresent()) {
+                // Pipeline exists in Consul, load it
+                String lastUpdatedKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".lastUpdated");
+                Optional<String> lastUpdatedOpt = consulKvService.getValue(lastUpdatedKey).block();
+
+                if (lastUpdatedOpt != null && lastUpdatedOpt.isPresent()) {
+                    // Create a new pipeline with the version and last updated timestamp
+                    pipeline = new PipelineConfigDto(pipelineName);
+                    pipeline.setPipelineVersion(Long.parseLong(versionOpt.get()));
+                    pipeline.setPipelineLastUpdated(LocalDateTime.parse(lastUpdatedOpt.get()));
+
+                    // Load services for this pipeline
+                    loadServicesFromConsul(pipeline);
+
+                    // Add the pipeline to the in-memory cache
+                    pipelines.put(pipelineName, pipeline);
+                    LOG.info("Loaded pipeline from Consul: {}", pipelineName);
+                }
+            }
+        }
+
         return pipeline != null ? new PipelineConfigDto(pipeline) : null;
+    }
+
+    /**
+     * Loads services for a pipeline from Consul KV store.
+     *
+     * @param pipeline the pipeline to load services for
+     */
+    public void loadServicesFromConsul(PipelineConfigDto pipeline) {
+        String pipelineName = pipeline.getName();
+        String servicesPrefix = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".services.");
+
+        // Get all keys with the services prefix
+        List<String> serviceKeys = consulKvService.getKeysWithPrefix(servicesPrefix).block();
+
+        if (serviceKeys == null || serviceKeys.isEmpty()) {
+            LOG.debug("No services found for pipeline: {}", pipelineName);
+            return;
+        }
+
+        // Group keys by service name
+        Map<String, List<String>> serviceKeyGroups = new HashMap<>();
+
+        for (String key : serviceKeys) {
+            // Extract service name from key
+            // Format: prefix/pipeline.configs.{pipelineName}.services.{serviceName}.{property}
+            String[] parts = key.split("\\.");
+            if (parts.length < 6) {
+                LOG.warn("Invalid service key format: {}", key);
+                continue;
+            }
+
+            String serviceName = parts[parts.length - 2];
+            serviceKeyGroups.computeIfAbsent(serviceName, k -> new ArrayList<>()).add(key);
+        }
+
+        // Process each service
+        for (Map.Entry<String, List<String>> entry : serviceKeyGroups.entrySet()) {
+            String serviceName = entry.getKey();
+            List<String> keys = entry.getValue();
+
+            ServiceConfigurationDto serviceConfig = new ServiceConfigurationDto();
+            serviceConfig.setName(serviceName);
+
+            // Load service properties
+            for (String key : keys) {
+                Optional<String> valueOpt = consulKvService.getValue(key).block();
+                if (valueOpt == null || !valueOpt.isPresent()) {
+                    continue;
+                }
+
+                String value = valueOpt.get();
+                String propertyName = key.substring(key.lastIndexOf('.') + 1);
+
+                switch (propertyName) {
+                    case "name":
+                        serviceConfig.setName(value);
+                        break;
+                    case "kafkaListenTopics":
+                        serviceConfig.setKafkaListenTopics(Arrays.asList(value.split(",")));
+                        break;
+                    case "kafkaPublishTopics":
+                        serviceConfig.setKafkaPublishTopics(Arrays.asList(value.split(",")));
+                        break;
+                    case "grpcForwardTo":
+                        serviceConfig.setGrpcForwardTo(Arrays.asList(value.split(",")));
+                        break;
+                    case "serviceImplementation":
+                        serviceConfig.setServiceImplementation(value);
+                        break;
+                    default:
+                        if (propertyName.startsWith("configParams.")) {
+                            String paramName = propertyName.substring("configParams.".length());
+                            if (serviceConfig.getConfigParams() == null) {
+                                serviceConfig.setConfigParams(new PipestepConfigOptions());
+                            }
+                            serviceConfig.getConfigParams().put(paramName, value);
+                        }
+                        break;
+                }
+            }
+
+            // Add the service to the pipeline
+            pipeline.addOrUpdateService(serviceConfig);
+            LOG.debug("Loaded service {} for pipeline {}", serviceName, pipelineName);
+        }
     }
 
     /**
@@ -101,10 +218,16 @@ public class PipelineConfig {
                     existingPipeline.getPipelineLastUpdated()
                 );
             }
-        }
 
-        // Always increment the version and update the timestamp when saving
-        pipeline.incrementVersion();
+            // Increment the version for existing pipelines
+            pipeline.incrementVersion();
+        } else {
+            // For new pipelines, ensure the version is set to 1
+            if (pipeline.getPipelineVersion() == 0) {
+                pipeline.setPipelineVersion(1);
+                pipeline.setPipelineLastUpdated(LocalDateTime.now());
+            }
+        }
 
         // Update the pipeline in the map
         pipelines.put(pipelineName, pipeline);
@@ -146,6 +269,22 @@ public class PipelineConfig {
         // For each service in the pipeline, sync its configuration
         return Mono.just(true)
                 .flatMap(success -> {
+                    // Prepare a map to hold all key-value pairs to be updated
+                    Map<String, String> keyValueMap = new HashMap<>();
+
+                    // Sync pipeline version and last updated timestamp
+                    String versionKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".version");
+                    String lastUpdatedKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".lastUpdated");
+                    String servicesKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".services");
+
+                    // Prepare the values to be updated
+                    String versionValue = String.valueOf(pipeline.getPipelineVersion());
+                    String lastUpdatedValue = pipeline.getPipelineLastUpdated().toString();
+
+                    // Add version and lastUpdated to the key-value map
+                    keyValueMap.put(versionKey, versionValue);
+                    keyValueMap.put(lastUpdatedKey, lastUpdatedValue);
+
                     // Sync pipeline services
                     for (Map.Entry<String, ServiceConfigurationDto> entry : pipeline.getServices().entrySet()) {
                         String serviceName = entry.getKey();
@@ -155,43 +294,58 @@ public class PipelineConfig {
                         if (serviceConfig.getName() == null) {
                             serviceConfig.setName(serviceName);
                         }
+
+                        // Create keys for service configuration
+                        String serviceBaseKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".services." + serviceName);
+                        String serviceNameKey = serviceBaseKey + ".name";
+                        String serviceListenTopicsKey = serviceBaseKey + ".kafkaListenTopics";
+                        String servicePublishTopicsKey = serviceBaseKey + ".kafkaPublishTopics";
+                        String serviceGrpcForwardToKey = serviceBaseKey + ".grpcForwardTo";
+                        String serviceImplementationKey = serviceBaseKey + ".serviceImplementation";
+
+                        // Add service configuration to the key-value map
+                        keyValueMap.put(serviceNameKey, serviceConfig.getName());
+
+                        // Handle lists by converting them to comma-separated strings
+                        if (serviceConfig.getKafkaListenTopics() != null && !serviceConfig.getKafkaListenTopics().isEmpty()) {
+                            keyValueMap.put(serviceListenTopicsKey, String.join(",", serviceConfig.getKafkaListenTopics()));
+                        }
+
+                        if (serviceConfig.getKafkaPublishTopics() != null && !serviceConfig.getKafkaPublishTopics().isEmpty()) {
+                            keyValueMap.put(servicePublishTopicsKey, String.join(",", serviceConfig.getKafkaPublishTopics()));
+                        }
+
+                        if (serviceConfig.getGrpcForwardTo() != null && !serviceConfig.getGrpcForwardTo().isEmpty()) {
+                            keyValueMap.put(serviceGrpcForwardToKey, String.join(",", serviceConfig.getGrpcForwardTo()));
+                        }
+
+                        if (serviceConfig.getServiceImplementation() != null) {
+                            keyValueMap.put(serviceImplementationKey, serviceConfig.getServiceImplementation());
+                        }
+
+                        // Handle config params if present
+                        if (serviceConfig.getConfigParams() != null && !serviceConfig.getConfigParams().isEmpty()) {
+                            for (Map.Entry<String, String> paramEntry : serviceConfig.getConfigParams().entrySet()) {
+                                String paramKey = serviceBaseKey + ".configParams." + paramEntry.getKey();
+                                keyValueMap.put(paramKey, paramEntry.getValue());
+                            }
+                        }
                     }
 
-                    // Sync pipeline version and last updated timestamp
-                    String versionKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".version");
-                    String lastUpdatedKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".lastUpdated");
-
-                    // Use a more atomic approach by batching the operations
-                    // First, prepare the values to be updated
-                    String versionValue = String.valueOf(pipeline.getPipelineVersion());
-                    String lastUpdatedValue = pipeline.getPipelineLastUpdated().toString();
-
-                    // Then, update both values in a single flatMap chain
-                    return consulKvService.putValue(versionKey, versionValue)
-                            .flatMap(versionSuccess -> {
-                                if (!versionSuccess) {
-                                    LOG.error("Failed to update version for pipeline: {}", pipelineName);
-                                    return Mono.just(false);
+                    // Update all values in a single operation
+                    return consulKvService.putValues(keyValueMap)
+                            .map(success1 -> {
+                                if (success1) {
+                                    LOG.info("Successfully synced pipeline configuration to Consul: {}", pipelineName);
+                                    return true;
+                                } else {
+                                    LOG.error("Failed to sync pipeline configuration to Consul: {}", pipelineName);
+                                    return false;
                                 }
-                                return consulKvService.putValue(lastUpdatedKey, lastUpdatedValue)
-                                        .map(lastUpdatedSuccess -> {
-                                            if (!lastUpdatedSuccess) {
-                                                LOG.error("Failed to update last updated timestamp for pipeline: {}", pipelineName);
-                                                // If the last updated timestamp update fails, we should try to revert the version update
-                                                // to maintain consistency, but this is a best-effort approach
-                                                consulKvService.putValue(versionKey, String.valueOf(pipeline.getPipelineVersion() - 1))
-                                                        .subscribe(
-                                                                revertSuccess -> {
-                                                                    if (!revertSuccess) {
-                                                                        LOG.error("Failed to revert version update for pipeline: {}", pipelineName);
-                                                                    }
-                                                                },
-                                                                error -> LOG.error("Error reverting version update for pipeline: {}", pipelineName, error)
-                                                        );
-                                                return false;
-                                            }
-                                            return true;
-                                        });
+                            })
+                            .onErrorResume(e -> {
+                                LOG.error("Error syncing pipeline configuration to Consul: {}", pipelineName, e);
+                                return Mono.just(false);
                             });
                 });
     }
@@ -212,5 +366,16 @@ public class PipelineConfig {
      */
     public boolean isEnabled() {
         return enabled;
+    }
+
+    /**
+     * Resets the state of this PipelineConfig instance.
+     * This is primarily used for testing to ensure a clean state between tests.
+     */
+    public void reset() {
+        this.pipelines.clear();
+        this.activePipeline = null;
+        this.enabled = false;
+        LOG.info("PipelineConfig state has been reset");
     }
 }

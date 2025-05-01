@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -174,17 +175,20 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
         // Clear existing pipelines
         pipelineConfig.getPipelines().clear();
 
-        // For each pipeline in Consul KV store, load its configuration
-        // This is a simplified implementation. In a real-world scenario,
-        // you would need to handle more complex loading logic.
+        // Get all pipeline configurations from Consul KV store
+        String pipelineConfigsPath = consulKvService.getFullPath("pipeline.configs");
 
-        // For now, we'll just load pipeline1 and pipeline2 as examples
-        // Using parallel execution to load both pipelines simultaneously
+        // For now, we'll still load pipeline1 and pipeline2 as examples
+        // In a real implementation, we would list all keys under pipeline.configs
+        // and load each pipeline dynamically
         Mono<Boolean> pipeline1Mono = loadPipelineConfiguration("pipeline1");
         Mono<Boolean> pipeline2Mono = loadPipelineConfiguration("pipeline2");
 
-        return Mono.zip(pipeline1Mono, pipeline2Mono)
-            .map(tuple -> tuple.getT1() && tuple.getT2()) // Both must succeed
+        // Also load any test-pipeline that might have been created in tests
+        Mono<Boolean> testPipelineMono = loadPipelineConfiguration("test-pipeline");
+
+        return Mono.zip(pipeline1Mono, pipeline2Mono, testPipelineMono)
+            .map(tuple -> tuple.getT1() && tuple.getT2() && tuple.getT3()) // All must succeed
             .defaultIfEmpty(true);
     }
 
@@ -197,18 +201,48 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
     private Mono<Boolean> loadPipelineConfiguration(String pipelineName) {
         PipelineConfigDto pipeline = new PipelineConfigDto(pipelineName);
 
-        // Load services for the pipeline
-        return loadPipelineServices(pipelineName, pipeline)
-            .flatMap(success -> {
-                if (success) {
-                    pipelineConfig.getPipelines().put(pipelineName, pipeline);
-                    LOG.info("Pipeline configuration loaded for: {}", pipelineName);
-                    return Mono.just(true);
-                } else {
-                    LOG.warn("Failed to load services for pipeline: {}", pipelineName);
+        // Load pipeline version
+        String versionKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".version");
+        Mono<Optional<String>> versionMono = consulKvService.getValue(versionKey);
+
+        // Load pipeline last updated timestamp
+        String lastUpdatedKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".lastUpdated");
+        Mono<Optional<String>> lastUpdatedMono = consulKvService.getValue(lastUpdatedKey);
+
+        // Combine the results
+        return Mono.zip(versionMono, lastUpdatedMono)
+            .flatMap(tuple -> {
+                Optional<String> versionOpt = tuple.getT1();
+                Optional<String> lastUpdatedOpt = tuple.getT2();
+
+                // If either version or lastUpdated is missing, skip this pipeline
+                if (versionOpt.isEmpty() || lastUpdatedOpt.isEmpty()) {
+                    return Mono.just(true); // Skip this pipeline but don't fail
+                }
+
+                // Set the version and last updated timestamp
+                try {
+                    pipeline.setPipelineVersion(Long.parseLong(versionOpt.get()));
+                    pipeline.setPipelineLastUpdated(LocalDateTime.parse(lastUpdatedOpt.get()));
+                } catch (Exception e) {
+                    LOG.error("Error parsing pipeline version or last updated timestamp for pipeline: {}", pipelineName, e);
                     return Mono.just(false);
                 }
-            });
+
+                // Load services for the pipeline
+                return loadPipelineServices(pipelineName, pipeline)
+                    .flatMap(success -> {
+                        if (success) {
+                            pipelineConfig.getPipelines().put(pipelineName, pipeline);
+                            LOG.info("Pipeline configuration loaded for: {}", pipelineName);
+                            return Mono.just(true);
+                        } else {
+                            LOG.warn("Failed to load services for pipeline: {}", pipelineName);
+                            return Mono.just(false);
+                        }
+                    });
+            })
+            .defaultIfEmpty(true); // If the pipeline doesn't exist, don't fail
     }
 
     /**

@@ -37,7 +37,9 @@ docker run -d -p 8500:8500 hashicorp/consul:latest
 
 ## API Endpoints
 
-### Get Configuration
+### Configuration Management
+
+#### Get Configuration
 
 ```
 GET /config/{keyPath}
@@ -45,7 +47,7 @@ GET /config/{keyPath}
 
 Retrieves the configuration value for the specified key path.
 
-### Update Configuration (Plain Text)
+#### Update Configuration (Plain Text)
 
 ```
 PUT /config/{keyPath}
@@ -56,7 +58,7 @@ value
 
 Updates the configuration value for the specified key path with a plain text value.
 
-### Update Configuration (JSON)
+#### Update Configuration (JSON)
 
 ```
 PUT /config/{keyPath}
@@ -70,7 +72,7 @@ Content-Type: application/json
 
 Updates the configuration value for the specified key path with a JSON value.
 
-### Delete Configuration
+#### Delete Configuration
 
 ```
 DELETE /config/{keyPath}
@@ -78,13 +80,84 @@ DELETE /config/{keyPath}
 
 Deletes the configuration value for the specified key path.
 
-### Refresh Configuration
+#### Refresh Configuration
 
 ```
 POST /config/refresh
 ```
 
 Triggers a refresh of all @Refreshable beans.
+
+### Pipeline Management
+
+#### List Pipelines
+
+```
+GET /api/pipelines
+```
+
+Retrieves a list of names for all configured pipelines.
+
+#### Create Pipeline
+
+```
+POST /api/pipelines
+Content-Type: application/json
+
+{
+  "name": "new-pipeline-name"
+}
+```
+
+Creates a new pipeline configuration with the given name. Initializes version to 1 and sets the creation/update timestamp.
+
+#### Get Pipeline Configuration
+
+```
+GET /api/pipelines/{pipelineName}
+```
+
+Retrieves the complete configuration for a specific pipeline.
+
+#### Delete Pipeline
+
+```
+DELETE /api/pipelines/{pipelineName}
+```
+
+Deletes the entire configuration for the specified pipeline.
+
+#### Update Pipeline Configuration
+
+```
+PUT /api/pipelines/{pipelineName}
+Content-Type: application/json
+
+{
+  "name": "pipeline-name",
+  "services": { ... },
+  "pipelineVersion": 5,
+  "pipelineLastUpdated": "..."
+}
+```
+
+Replaces the entire configuration for a given pipeline. Uses optimistic locking based on the provided `pipelineVersion`. The `pipelineVersion` in the request must match the current version in Consul, otherwise a 409 Conflict response will be returned.
+
+### API Documentation
+
+The service provides OpenAPI documentation that can be accessed at:
+
+```
+/swagger/consul-config-service-1.0.0.yml
+```
+
+A Swagger UI is also available at:
+
+```
+/swagger-ui/
+```
+
+This provides an interactive interface to explore and test the API endpoints.
 
 ## Configuration
 
@@ -190,4 +263,4 @@ This project is licensed under the Apache License 2.0 - see the LICENSE file for
 9. UML Diagram generation
 10. Front end to have Kafka status, pause, continue functionality 
 11. Rewind / fast forward offset
-12. 
+12. (done) Implement transactions for atomic updates

@@ -1,20 +1,14 @@
 package com.krickert.search.config.consul.service;
 
-import io.micronaut.context.annotation.Bean;
-import io.micronaut.context.annotation.Factory;
-import io.micronaut.context.annotation.Replaces;
+import com.krickert.search.config.consul.container.ConsulTestContainer;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.kiwiproject.consul.Consul;
-import org.kiwiproject.consul.KeyValueClient;
-import org.testcontainers.consul.ConsulContainer;
-import org.testcontainers.junit.jupiter.Container;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.util.HashMap;
@@ -27,60 +21,18 @@ import static org.junit.jupiter.api.Assertions.*;
 @Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ConsulKvServiceTest implements TestPropertyProvider {
-
-    @Factory
-    static class ConsulClientFactory {
-        @Bean
-        @Singleton
-        @jakarta.inject.Named("consulKvServiceTest")
-        public Consul consulClient() {
-            // Ensure the container is started before creating the client
-            if (!consulContainer.isRunning()) {
-                consulContainer.start();
-            }
-            return Consul.builder()
-                    .withUrl("http://" + consulContainer.getHost() + ":" + consulContainer.getMappedPort(8500))
-                    .build();
-        }
-
-        @Bean
-        @Singleton
-        public KeyValueClient keyValueClient(Consul consulClient) {
-            return consulClient.keyValueClient();
-        }
-    }
-
-    @Container
-    public static ConsulContainer consulContainer = new ConsulContainer("hashicorp/consul:latest")
-            .withExposedPorts(8500);
-    static {
-        if (!consulContainer.isRunning()) {
-            consulContainer.start();
-        }
-    }
+    private static final Logger LOG = LoggerFactory.getLogger(ConsulKvServiceTest.class);
 
     @Inject
     private ConsulKvService consulKvService;
 
     @Override
     public Map<String, String> getProperties() {
-        Map<String, String> properties = new HashMap<>();
+        ConsulTestContainer container = ConsulTestContainer.getInstance();
+        LOG.info("Using shared Consul container");
 
-        // Ensure the container is started before getting host and port
-        if (!consulContainer.isRunning()) {
-            consulContainer.start();
-        }
-        properties.put("consul.host", consulContainer.getHost());
-        properties.put("consul.port", consulContainer.getMappedPort(8500).toString());
-
-        properties.put("consul.client.host", consulContainer.getHost());
-        properties.put("consul.client.port", consulContainer.getMappedPort(8500).toString());
-        properties.put("consul.client.config.path", "config/test");
-
-        // Disable the Consul config client to prevent Micronaut from trying to connect to Consul for configuration
-        properties.put("micronaut.config-client.enabled", "false");
-
-        return properties;
+        // Use centralized property management
+        return container.getPropertiesWithTestConfigPath();
     }
 
     @Test

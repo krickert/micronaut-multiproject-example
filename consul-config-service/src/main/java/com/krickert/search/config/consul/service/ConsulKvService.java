@@ -3,6 +3,11 @@ package com.krickert.search.config.consul.service;
 import io.micronaut.context.annotation.Value;
 import jakarta.inject.Singleton;
 import org.kiwiproject.consul.KeyValueClient;
+import org.kiwiproject.consul.model.ConsulResponse;
+import org.kiwiproject.consul.model.kv.ImmutableOperation;
+import org.kiwiproject.consul.model.kv.Operation;
+import org.kiwiproject.consul.model.kv.TxResponse;
+import org.kiwiproject.consul.model.kv.Verb;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -131,29 +136,42 @@ public class ConsulKvService {
      * @return a Mono that emits true if the operation was successful, false otherwise
      */
     public Mono<Boolean> putValues(Map<String, String> keyValueMap) {
-        LOG.debug("Putting multiple values: {}", keyValueMap.keySet());
+        LOG.debug("Putting multiple values using transaction: {}", keyValueMap.keySet());
         return Mono.fromCallable(() -> {
             try {
-                // Use putValues method to put multiple values at once
+                // Create an array of operations for the transaction
+                Operation[] operations = new Operation[keyValueMap.size()];
+                int i = 0;
                 List<String> keys = new ArrayList<>();
+
                 for (Map.Entry<String, String> entry : keyValueMap.entrySet()) {
                     String encodedKey = encodeKey(entry.getKey());
-                    boolean success = keyValueClient.putValue(encodedKey, entry.getValue());
-                    if (success) {
-                        keys.add(entry.getKey());
-                    }
+                    keys.add(entry.getKey());
+
+                    // Create a SET operation for each key-value pair
+                    operations[i++] = ImmutableOperation.builder()
+                            .verb(Verb.SET.toValue())
+                            .key(encodedKey)
+                            .value(entry.getValue())
+                            .build();
                 }
 
-                if (keys.size() == keyValueMap.size()) {
-                    LOG.info("Successfully wrote all values to Consul KV: {}", keys);
+                // Perform the transaction
+                ConsulResponse<TxResponse> response = keyValueClient.performTransaction(operations);
+
+                // Check if the transaction was successful
+                if (response != null && response.getResponse() != null && 
+                    response.getResponse().errors() == null || response.getResponse().errors().isEmpty()) {
+                    LOG.info("Successfully wrote all values to Consul KV using transaction: {}", keys);
                     return true;
                 } else {
-                    LOG.error("Failed to write some values to Consul KV. Wrote: {}, Expected: {}", 
-                            keys.size(), keyValueMap.size());
+                    LOG.error("Failed to write values to Consul KV using transaction. Errors: {}", 
+                            response != null && response.getResponse() != null ? 
+                            response.getResponse().errors() : "Unknown error");
                     return false;
                 }
             } catch (Exception e) {
-                LOG.error("Error writing multiple values to Consul KV: {}", keyValueMap.keySet(), e);
+                LOG.error("Error writing multiple values to Consul KV using transaction: {}", keyValueMap.keySet(), e);
                 return false;
             }
         });
@@ -181,6 +199,27 @@ public class ConsulKvService {
     }
 
     /**
+     * Deletes all keys with a given prefix from Consul KV store.
+     *
+     * @param prefix the prefix of the keys to delete
+     * @return a Mono that emits true if the operation was successful, false otherwise
+     */
+    public Mono<Boolean> deleteKeysWithPrefix(String prefix) {
+        LOG.debug("Deleting keys with prefix: {}", prefix);
+        return Mono.fromCallable(() -> {
+            try {
+                String encodedPrefix = encodeKey(prefix);
+                keyValueClient.deleteKeys(encodedPrefix);
+                LOG.debug("Successfully deleted keys with prefix: {}", prefix);
+                return true;
+            } catch (Exception e) {
+                LOG.error("Error deleting keys with prefix: {}", prefix, e);
+                return false;
+            }
+        });
+    }
+
+    /**
      * Deletes multiple keys from Consul KV store.
      *
      * @param keys a list of keys to delete
@@ -199,6 +238,27 @@ public class ConsulKvService {
             } catch (Exception e) {
                 LOG.error("Error deleting multiple keys from Consul KV: {}", keys, e);
                 return false;
+            }
+        });
+    }
+
+    /**
+     * Gets all keys with a given prefix from Consul KV store.
+     *
+     * @param prefix the prefix to search for
+     * @return a Mono containing a List of keys with the given prefix
+     */
+    public Mono<List<String>> getKeysWithPrefix(String prefix) {
+        LOG.debug("Getting keys with prefix: {}", prefix);
+        return Mono.fromCallable(() -> {
+            try {
+                String encodedPrefix = encodeKey(prefix);
+                List<String> keys = keyValueClient.getKeys(encodedPrefix);
+                LOG.debug("Found {} keys with prefix: {}", keys.size(), prefix);
+                return keys;
+            } catch (Exception e) {
+                LOG.error("Error getting keys with prefix: {}", prefix, e);
+                return new ArrayList<>();
             }
         });
     }

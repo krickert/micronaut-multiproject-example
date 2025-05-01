@@ -88,7 +88,7 @@ public class ServiceDiscoveryController {
                                    tag.equals(PIPE_SERVICE_TAG) || tag.toLowerCase().contains("pipe")));
                     })
                     .map(Map.Entry::getKey)
-                    .collect(Collectors.toList());
+                    .toList();
 
             LOG.debug("Found {} PipeService gRPC services", pipeServices.size());
 

@@ -1,27 +1,37 @@
 package com.krickert.search.config.consul.model;
 
+import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.exception.PipelineVersionConflictException;
-import com.krickert.search.config.consul.service.TestConsulKvService;
+import com.krickert.search.config.consul.service.ConsulKvService;
+import io.micronaut.core.annotation.NonNull;
+import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import io.micronaut.test.support.TestPropertyProvider;
+import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for the pipeline versioning functionality.
  */
-public class PipelineVersioningTest {
-
-    private TestConsulKvService consulKvService;
+@MicronautTest(rebuildContext = true)
+@Testcontainers
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+public class PipelineVersioningTest implements TestPropertyProvider {
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(PipelineVersioningTest.class);
+    @Inject
+    private ConsulKvService consulKvService;
     private PipelineConfig pipelineConfig;
 
     @BeforeEach
     void setUp() {
-        // Create a TestConsulKvService
-        consulKvService = new TestConsulKvService("config/pipeline");
-
         // Create a PipelineConfig with the TestConsulKvService
         pipelineConfig = new PipelineConfig(consulKvService);
     }
@@ -163,5 +173,25 @@ public class PipelineVersioningTest {
         assertEquals(1, exception.getExpectedVersion());
         assertEquals(2, exception.getActualVersion());
         assertNotNull(exception.getLastUpdated());
+    }
+
+    /**
+     * Allows dynamically providing properties for a test.
+     *
+     * @return A map of properties
+     */
+    public Map<String, String> getProperties() {
+        ConsulTestContainer container = ConsulTestContainer.getInstance();
+        LOG.info("Using shared Consul container");
+
+        // Get base properties from the container
+        Map<String, String> properties = new HashMap<>(container.getProperties());
+
+        // Add test-specific properties
+        properties.put("consul.data.seeding.enabled", "true");
+        properties.put("consul.data.seeding.file", "seed-data.yaml");
+        properties.put("consul.data.seeding.skip-if-exists", "true");
+
+        return properties;
     }
 }
