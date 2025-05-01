@@ -29,11 +29,6 @@ public class PipelineConfig {
     private static final Logger LOG = LoggerFactory.getLogger(PipelineConfig.class);
 
     /**
-     * The active pipeline name.
-     */
-    private String activePipeline;
-
-    /**
      * Map of pipeline configurations, keyed by pipeline name.
      */
     private Map<String, PipelineConfigDto> pipelines = new HashMap<>();
@@ -181,16 +176,6 @@ public class PipelineConfig {
     }
 
     /**
-     * Gets the active pipeline configuration.
-     * Returns a deep copy of the pipeline to prevent concurrent modification issues.
-     *
-     * @return a deep copy of the active pipeline configuration, or null if not set
-     */
-    public PipelineConfigDto getActivePipeline() {
-        return activePipeline != null ? getPipeline(activePipeline) : null;
-    }
-
-    /**
      * Adds or updates a pipeline configuration.
      *
      * @param pipeline the pipeline configuration to add or update
@@ -231,25 +216,6 @@ public class PipelineConfig {
         return syncPipelineToConsul(pipeline);
     }
 
-    /**
-     * Sets the active pipeline.
-     *
-     * @param pipelineName the name of the pipeline to set as active
-     * @return a Mono that completes when the operation is done
-     */
-    public Mono<Boolean> setActivePipeline(String pipelineName) {
-        if (!pipelines.containsKey(pipelineName)) {
-            LOG.error("Cannot set active pipeline to non-existent pipeline: {}", pipelineName);
-            return Mono.just(false);
-        }
-
-        this.activePipeline = pipelineName;
-
-        // Sync with Consul
-        return consulKvService.putValue(
-                consulKvService.getFullPath("pipeline.active"), 
-                pipelineName);
-    }
 
     /**
      * Syncs a pipeline configuration to Consul KV store.
@@ -369,7 +335,6 @@ public class PipelineConfig {
      */
     public void reset() {
         this.pipelines.clear();
-        this.activePipeline = null;
         this.enabled = false;
         LOG.info("PipelineConfig state has been reset");
     }

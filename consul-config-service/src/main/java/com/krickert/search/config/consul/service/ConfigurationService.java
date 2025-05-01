@@ -150,7 +150,6 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
             .flatMap(activePipelineOpt -> {
                 if (activePipelineOpt.isPresent()) {
                     String activePipeline = activePipelineOpt.get();
-                    pipelineConfig.setActivePipeline(activePipeline);
                     LOG.info("Active pipeline set to: {}", activePipeline);
                 } else {
                     LOG.warn("No active pipeline found in Consul KV store");

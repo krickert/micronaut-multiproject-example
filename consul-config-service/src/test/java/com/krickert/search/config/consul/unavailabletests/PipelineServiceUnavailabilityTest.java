@@ -141,11 +141,6 @@ public class PipelineServiceUnavailabilityTest {
         }
 
         @Override
-        public Mono<Boolean> setActivePipeline(String pipelineName) {
-            return Mono.error(new RuntimeException("Consul is unavailable"));
-        }
-
-        @Override
         public boolean isEnabled() {
             return false;
         }
