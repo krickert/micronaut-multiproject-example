@@ -1,5 +1,0 @@
-package com.krickert.search.config.consul.api;
-
-// This file is intentionally left empty to replace the original file.
-// The functionality has been moved to PipelineServiceUnavailabilityTestNew.java
-// and the mock implementations have been moved to separate classes.
