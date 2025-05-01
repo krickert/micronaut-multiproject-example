@@ -1,8 +1,0 @@
-Don't worry about any other project other than consul-config-service
-
-First, can you study that module first?  Give me a summary of what it is supposed to do and point out where it has static references that
-need to be addressed.  Here's two changes to start
-
-1) Remove the concept of an "active pipeline"
-2) Anything with hardcoded data "pipeline1" or "chunker" should be removed
-

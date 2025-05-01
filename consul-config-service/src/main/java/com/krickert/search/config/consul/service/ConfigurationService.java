@@ -14,7 +14,10 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Service for managing configuration.
@@ -161,30 +164,62 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
     }
 
     /**
-     * Loads pipeline configurations from Consul KV store.
+     * Loads pipeline configurations from Consul KV store dynamically.
      * Uses parallel execution to load multiple pipelines simultaneously.
      *
-     * @return a Mono that emits true if the operation was successful, false otherwise
+     * @return a Mono that emits true if all discovered pipelines were loaded successfully, false otherwise
      */
     private Mono<Boolean> loadPipelineConfigurations() {
         // Clear existing pipelines
         pipelineConfig.getPipelines().clear();
 
-        // Get all pipeline configurations from Consul KV store
-        String pipelineConfigsPath = consulKvService.getFullPath("pipeline.configs");
+        // Define the base path for pipeline configs
+        String pipelineConfigsPrefix = consulKvService.getFullPath("pipeline.configs") + "/"; // Ensure trailing slash
 
-        // For now, we'll still load pipeline1 and pipeline2 as examples
-        // In a real implementation, we would list all keys under pipeline.configs
-        // and load each pipeline dynamically
-        Mono<Boolean> pipeline1Mono = loadPipelineConfiguration("pipeline1");
-        Mono<Boolean> pipeline2Mono = loadPipelineConfiguration("pipeline2");
+        LOG.info("Dynamically loading pipeline configurations from prefix: {}", pipelineConfigsPrefix);
 
-        // Also load any test-pipeline that might have been created in tests
-        Mono<Boolean> testPipelineMono = loadPipelineConfiguration("test-pipeline");
+        return consulKvService.getKeysWithPrefix(pipelineConfigsPrefix)
+                .flatMap(keys -> {
+                    if (keys.isEmpty()) {
+                        LOG.warn("No pipeline configuration keys found under prefix: {}", pipelineConfigsPrefix);
+                        return Mono.just(true); // No pipelines to load, operation is successful
+                    }
 
-        return Mono.zip(pipeline1Mono, pipeline2Mono, testPipelineMono)
-            .map(tuple -> tuple.getT1() && tuple.getT2() && tuple.getT3()) // All must succeed
-            .defaultIfEmpty(true);
+                    // Extract unique pipeline names from the keys
+                    // Example key: config/pipeline/pipeline.configs/my-pipeline/version
+                    // We want to extract "my-pipeline"
+                    Set<String> pipelineNames = keys.stream()
+                            .map(key -> key.substring(pipelineConfigsPrefix.length())) // Remove prefix -> "my-pipeline/version"
+                            .map(subKey -> subKey.split("/")[0]) // Get first part -> "my-pipeline"
+                            .collect(Collectors.toSet());
+
+                    LOG.info("Discovered pipeline names: {}", pipelineNames);
+
+                    if (pipelineNames.isEmpty()) {
+                        return Mono.just(true); // Should not happen if keys were found, but handle defensively
+                    }
+
+                    // Create a list of Monos, one for loading each discovered pipeline
+                    List<Mono<Boolean>> loadMonos = pipelineNames.stream()
+                            .map(this::loadPipelineConfiguration)
+                            .collect(Collectors.toList());
+
+                    // Use Mono.zip to execute all loads in parallel and combine results
+                    // Ensure all operations return true
+                    return Mono.zip(loadMonos, results -> {
+                        for (Object result : results) {
+                            if (!(Boolean) result) {
+                                return false; // If any load failed, return false
+                            }
+                        }
+                        return true; // All loads succeeded
+                    });
+                })
+                .defaultIfEmpty(true) // If getKeysWithPrefix returns empty or error, consider it success (no pipelines loaded)
+        .onErrorResume(e -> { // Handle potential errors during key fetching or processing
+            LOG.error("Error loading dynamic pipeline configurations from prefix: {}", pipelineConfigsPrefix, e);
+            return Mono.just(false); // Indicate failure
+        });
     }
 
     /**

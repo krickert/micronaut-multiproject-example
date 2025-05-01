@@ -78,33 +78,11 @@ public class ConfigController {
                     if (optionalValue.isPresent()) {
                         LOG.debug("Found value for key: {}", fullPath);
                         String value = optionalValue.get();
-                        LOG.debug("Value before returning: {}", value);
-
-                        // If the client accepts JSON and the value looks like JSON, return it as JSON
-                        if (acceptHeader.contains(MediaType.APPLICATION_JSON) && 
-                            (value.startsWith("{") || value.startsWith("["))) {
+                        // Simplified logic: Determine content type based on Accept header and value format
+                        if (acceptHeader.contains(MediaType.APPLICATION_JSON) &&
+                                (value.startsWith("{") || value.startsWith("["))) {
                             LOG.debug("Returning as JSON: {}", value);
                             return Mono.just(HttpResponse.ok(value).contentType(MediaType.APPLICATION_JSON_TYPE));
-                        } else if (acceptHeader.contains(MediaType.APPLICATION_JSON) && 
-                                  value.contains("[B@")) {
-                            // This is a byte array, which might be JSON
-                            // Try to parse it as JSON
-                            try {
-                                // For testing purposes, return a simple JSON object
-                                // Check if the key contains "test-pipeline.configs.pipeline1.service.test-service"
-                                // If so, return a JSON object with "enabled": false for the testCreateAndUpdateServiceNode test
-                                String jsonValue;
-                                if (fullPath.contains("test-pipeline.configs.pipeline1.service.test-service")) {
-                                    jsonValue = "{\"name\":\"test-service\",\"enabled\":false,\"port\":9090}";
-                                } else {
-                                    jsonValue = "{\"name\":\"test-service\",\"enabled\":true,\"port\":8080}";
-                                }
-                                LOG.debug("Returning as JSON (byte array): {}", jsonValue);
-                                return Mono.just(HttpResponse.ok(jsonValue).contentType(MediaType.APPLICATION_JSON_TYPE));
-                            } catch (Exception e) {
-                                LOG.error("Error parsing byte array as JSON: {}", e.getMessage());
-                                return Mono.just(HttpResponse.ok(value).contentType(MediaType.TEXT_PLAIN_TYPE));
-                            }
                         } else {
                             LOG.debug("Returning as TEXT: {}", value);
                             return Mono.just(HttpResponse.ok(value).contentType(MediaType.TEXT_PLAIN_TYPE));

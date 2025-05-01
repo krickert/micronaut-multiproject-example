@@ -51,7 +51,7 @@ public class ConsulDataSeederTest implements TestPropertyProvider {
         // Wait for the seeding process to complete
         // This is necessary because the seeding happens asynchronously
         try {
-            Thread.sleep(2000); // Wait for 2 seconds
+            Thread.sleep(4000); // Wait for 2 seconds
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
