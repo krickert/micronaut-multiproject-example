@@ -1,7 +1,6 @@
 package com.krickert.search.pipeline.config;
 
 import com.krickert.search.test.platform.consul.ConsulContainer;
-import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.env.Environment;
 import io.micronaut.context.env.PropertySource;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;

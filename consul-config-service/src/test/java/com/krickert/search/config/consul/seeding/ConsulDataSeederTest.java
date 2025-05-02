@@ -3,18 +3,14 @@ package com.krickert.search.config.consul.seeding;
 import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.model.ApplicationConfig;
 import com.krickert.search.config.consul.model.PipelineConfig;
-import com.krickert.search.config.consul.model.PipelineConfigDto;
 import com.krickert.search.config.consul.service.ConsulKvService;
-import com.krickert.search.config.consul.seeding.ConsulDataSeeder; // Import seeder
-
-import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.event.ApplicationEventPublisher;
 import io.micronaut.runtime.context.scope.refresh.RefreshEvent;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.*;
-import org.kiwiproject.consul.KeyValueClient; // Import needed
+import org.kiwiproject.consul.KeyValueClient;
 import org.kiwiproject.consul.model.kv.Value;
 import org.kiwiproject.consul.option.ConsistencyMode;
 import org.kiwiproject.consul.option.ImmutableQueryOptions;
@@ -22,17 +18,14 @@ import org.kiwiproject.consul.option.QueryOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-import org.awaitility.Awaitility;
 
-import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 @MicronautTest // REMOVE rebuildContext = true
 @Testcontainers

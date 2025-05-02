@@ -1,17 +1,12 @@
 package com.krickert.search.test.platform.kafka;
 
-import com.amazonaws.services.schemaregistry.utils.AWSSchemaRegistryConstants; // Keep for constants if needed by TestContainerManager hints
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.glue.GlueClient;
-import software.amazon.awssdk.services.glue.model.CreateRegistryRequest;
-import software.amazon.awssdk.services.glue.model.CreateRegistryResponse;
-import software.amazon.awssdk.services.glue.model.DeleteRegistryRequest;
-import software.amazon.awssdk.services.glue.model.EntityNotFoundException;
-import software.amazon.awssdk.services.glue.model.GetRegistryRequest; // Import GetRegistryRequest
+import software.amazon.awssdk.services.glue.model.*;
 
 import java.net.URI;
 // Removed testcontainers/DockerImageName imports as TestContainerManager handles containers

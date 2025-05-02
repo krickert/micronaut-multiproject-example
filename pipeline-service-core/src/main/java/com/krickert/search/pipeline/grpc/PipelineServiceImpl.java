@@ -2,7 +2,6 @@
 package com.krickert.search.pipeline.grpc;
 
 import com.google.protobuf.Empty;
-import com.krickert.search.model.*;
 import com.krickert.search.pipeline.config.PipelineConfigService;
 import com.krickert.search.pipeline.config.ServiceConfiguration;
 import com.krickert.search.pipeline.kafka.KafkaForwarder;

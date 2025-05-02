@@ -3,7 +3,6 @@ package com.krickert.search.pipeline.config;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.runtime.context.scope.Refreshable;
 import jakarta.inject.Singleton;
-import lombok.Getter;
 
 import java.util.Collection;
 import java.util.Map;

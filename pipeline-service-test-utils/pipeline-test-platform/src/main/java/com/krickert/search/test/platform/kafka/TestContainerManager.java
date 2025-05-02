@@ -3,7 +3,6 @@ package com.krickert.search.test.platform.kafka;
 
 import com.krickert.search.test.platform.consul.ConsulContainer;
 import com.krickert.search.test.platform.kafka.registry.MotoSchemaRegistry;
-
 import io.apicurio.registry.serde.config.SerdeConfig;
 import lombok.Getter;
 import org.apache.kafka.clients.admin.AdminClientConfig;
@@ -14,13 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.kafka.KafkaContainer;
-// Removed LocalStack imports
 import org.testcontainers.utility.DockerImageName;
-// AWS SDK imports are still relevant for property names and context, even if not creating a client here
-// import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-// import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-// import software.amazon.awssdk.regions.Region;
-// import software.amazon.awssdk.services.glue.GlueClient;
 
 import java.time.Duration;
 import java.util.Collections;

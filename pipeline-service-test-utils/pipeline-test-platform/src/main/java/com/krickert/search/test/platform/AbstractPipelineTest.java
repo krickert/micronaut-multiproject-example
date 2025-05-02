@@ -2,6 +2,7 @@
 package com.krickert.search.test.platform;
 
 // Core model/pipeline classes
+
 import com.google.protobuf.Timestamp;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeResponse;
@@ -12,12 +13,8 @@ import com.krickert.search.pipeline.kafka.DynamicKafkaConsumerManager;
 import com.krickert.search.pipeline.kafka.KafkaForwarderClient;
 import com.krickert.search.pipeline.service.PipeServiceDto;
 import com.krickert.search.pipeline.service.PipelineServiceProcessor;
-
-// Test framework classes (Helpers and Central Manager)
-import com.krickert.search.test.platform.consul.ConsulTestHelper; // Use the helper
-import com.krickert.search.test.platform.kafka.TestContainerManager; // Central property store
-
-// Micronaut / Testing / JUnit / Logging / Utilities
+import com.krickert.search.test.platform.consul.ConsulTestHelper;
+import com.krickert.search.test.platform.kafka.TestContainerManager;
 import io.micronaut.configuration.kafka.annotation.KafkaListener;
 import io.micronaut.configuration.kafka.annotation.Topic;
 import io.micronaut.context.annotation.Requires;
@@ -28,18 +25,18 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import org.apache.kafka.clients.admin.AdminClientConfig;
-import org.apache.kafka.clients.admin.NewTopic; // For creating topics
+import org.apache.kafka.clients.admin.NewTopic;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Duration; // For AdminClient timeout
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors; // For topic creation/deletion
+import java.util.stream.Collectors;
 
 import static com.krickert.search.model.ProtobufUtils.createKey;
 import static org.junit.jupiter.api.Assertions.*;

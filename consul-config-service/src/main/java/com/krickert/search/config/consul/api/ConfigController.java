@@ -6,7 +6,7 @@ import com.krickert.search.config.consul.event.ConfigChangeNotifier;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.context.event.ApplicationEventPublisher;
 import io.micronaut.http.HttpResponse;
-import io.micronaut.http.HttpResponseFactory; // Import needed
+import io.micronaut.http.HttpResponseFactory;
 import io.micronaut.http.HttpStatus;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.*;
@@ -22,7 +22,6 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * REST controller for managing configuration in Consul KV store.

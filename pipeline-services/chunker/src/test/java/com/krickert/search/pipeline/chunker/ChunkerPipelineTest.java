@@ -1,7 +1,6 @@
 package com.krickert.search.pipeline.chunker;
 
 import com.krickert.search.chunker.OverlapChunker;
-import com.krickert.search.model.*;
 import com.krickert.search.model.mapper.ProtoMapper;
 import com.krickert.search.pipeline.config.PipelineConfig;
 import com.krickert.search.pipeline.config.ServiceConfiguration;
@@ -23,7 +22,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Integration test for the ChunkerPipelineServiceProcessor.

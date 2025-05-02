@@ -1,18 +1,13 @@
 package com.krickert.search.test.platform.consul;
 
 import com.krickert.search.test.platform.kafka.TestContainerManager;
-// REMOVE: Direct ConsulContainer import not needed here anymore
-// import com.krickert.search.test.platform.consul.ConsulContainer;
-import jakarta.inject.Inject; // Assuming ConsulTestHelper might be injected in subclasses
+import jakarta.inject.Inject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-// REMOVE: HashMap import no longer needed for setupConsulProperties
-// import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects; // Import Objects for requireNonNull
 
 /**
  * Abstract base class for Consul tests, integrated with TestContainerManager.

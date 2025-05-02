@@ -1,6 +1,5 @@
 package com.krickert.search.pipeline.kafka.serde;
 
-import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.config.PipelineConfig;
 import io.apicurio.registry.serde.config.SerdeConfig;

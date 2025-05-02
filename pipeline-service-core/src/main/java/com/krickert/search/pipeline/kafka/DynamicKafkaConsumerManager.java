@@ -2,7 +2,7 @@
 package com.krickert.search.pipeline.kafka; // Assuming same package
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper; // Added for JSON snapshot
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.model.PipeStream;
 import com.krickert.search.model.Route;
 import com.krickert.search.pipeline.config.InternalServiceConfig;
@@ -13,10 +13,9 @@ import com.krickert.search.pipeline.grpc.PipelineService;
 import com.krickert.search.pipeline.grpc.PipelineServiceImpl;
 import com.krickert.search.pipeline.kafka.serde.KafkaSerdeProvider;
 import io.micronaut.configuration.kafka.config.AbstractKafkaConsumerConfiguration;
-import io.micronaut.context.annotation.Context;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.event.ApplicationEventListener;
-import io.micronaut.runtime.context.scope.refresh.RefreshEvent; // Added
+import io.micronaut.runtime.context.scope.refresh.RefreshEvent;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.inject.Inject;
@@ -27,7 +26,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.errors.WakeupException;
 import org.apache.kafka.common.serialization.Deserializer;
-import org.apache.kafka.common.serialization.StringDeserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

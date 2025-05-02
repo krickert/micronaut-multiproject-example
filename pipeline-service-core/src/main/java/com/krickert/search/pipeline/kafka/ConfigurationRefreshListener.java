@@ -1,8 +1,8 @@
 package com.krickert.search.pipeline.kafka;
 
+import io.micronaut.context.event.ApplicationEventListener;
 import io.micronaut.context.event.ApplicationEventPublisher;
 import io.micronaut.runtime.context.scope.refresh.RefreshEvent;
-import io.micronaut.context.event.ApplicationEventListener;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

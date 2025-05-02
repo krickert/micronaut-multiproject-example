@@ -3,7 +3,6 @@ package com.krickert.search.test.platform.proto;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Timestamp;
 import com.google.protobuf.Value;
-import com.krickert.search.model.*;
 
 import java.time.Instant;
 import java.util.Arrays;

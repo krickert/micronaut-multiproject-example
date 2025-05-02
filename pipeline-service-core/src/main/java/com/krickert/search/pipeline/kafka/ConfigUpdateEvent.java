@@ -1,6 +1,7 @@
 package com.krickert.search.pipeline.kafka;
 
-import io.micronaut.serde.annotation.Serdeable; // For JSON/Kafka serialization
+import io.micronaut.serde.annotation.Serdeable;
+
 import java.time.Instant;
 
 /**

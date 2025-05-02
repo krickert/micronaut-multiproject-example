@@ -1,8 +1,8 @@
 package com.krickert.search.test.platform.consul;
 
 import com.krickert.search.test.platform.kafka.TestContainerManager;
-import io.micronaut.context.annotation.Factory;
 import io.micronaut.context.annotation.Bean;
+import io.micronaut.context.annotation.Factory;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -2,7 +2,6 @@ package com.krickert.search.pipeline.chunker;
 
 import com.google.protobuf.Timestamp;
 import com.krickert.search.chunker.OverlapChunker;
-import com.krickert.search.model.*;
 import com.krickert.search.model.mapper.MappingException;
 import com.krickert.search.model.mapper.PathResolver;
 import com.krickert.search.model.mapper.ValueHandler;

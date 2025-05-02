@@ -6,16 +6,15 @@ import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.kiwiproject.consul.KeyValueClient;
+import org.kiwiproject.consul.model.kv.Value;
 import org.kiwiproject.consul.option.ConsistencyMode;
 import org.kiwiproject.consul.option.ImmutableQueryOptions;
+import org.kiwiproject.consul.option.QueryOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.test.StepVerifier;
-import org.kiwiproject.consul.option.ConsistencyMode;
-import org.kiwiproject.consul.option.QueryOptions; // Correct import
-import org.kiwiproject.consul.KeyValueClient;
-import org.kiwiproject.consul.model.kv.Value; // May need this if using getValue
 
 import java.time.Duration;
 import java.util.Map;
