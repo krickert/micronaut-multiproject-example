@@ -218,97 +218,95 @@ public class PipelineConfig {
 
 
     /**
-     * Syncs a pipeline configuration to Consul KV store.
+     * Syncs a pipeline configuration to Consul KV store using Compare-And-Swap (CAS) to ensure
+     * atomic updates and prevent concurrent modification issues.
      *
      * @param pipeline the pipeline configuration to sync
-     * @return a Mono that completes when the operation is done
+     * @return a Mono that completes with true if the operation was successful, false otherwise
      */
     private Mono<Boolean> syncPipelineToConsul(PipelineConfigDto pipeline) {
-        // This implementation uses a more atomic approach by batching operations
         String pipelineName = pipeline.getName();
+        String versionKey = "pipeline.configs." + pipelineName + ".version";
+        String versionKeyFullPath = consulKvService.getFullPath(versionKey);
 
-        // For each service in the pipeline, sync its configuration
-        return Mono.just(true)
-                .flatMap(success -> {
-                    // Prepare a map to hold all key-value pairs to be updated
-                    Map<String, String> keyValueMap = new HashMap<>();
+        // First, get the current ModifyIndex of the version key
+        return consulKvService.getModifyIndex(versionKeyFullPath)
+        .flatMap(modifyIndex -> {
+            LOG.debug("Current ModifyIndex for pipeline '{}' version key: {}", pipelineName, modifyIndex);
 
-                    // Sync pipeline version and last updated timestamp
-                    String versionKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".version");
-                    String lastUpdatedKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".lastUpdated");
-                    String servicesKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".services");
+            // Prepare a map to hold all key-value pairs to be updated (except version and lastUpdated)
+            Map<String, String> otherKeysMap = new HashMap<>();
 
-                    // Prepare the values to be updated
-                    String versionValue = String.valueOf(pipeline.getPipelineVersion());
-                    String lastUpdatedValue = pipeline.getPipelineLastUpdated().toString();
+            // Sync pipeline services
+            for (Map.Entry<String, ServiceConfigurationDto> entry : pipeline.getServices().entrySet()) {
+                String serviceName = entry.getKey();
+                ServiceConfigurationDto serviceConfig = entry.getValue();
 
-                    // Add version and lastUpdated to the key-value map
-                    keyValueMap.put(versionKey, versionValue);
-                    keyValueMap.put(lastUpdatedKey, lastUpdatedValue);
+                // Set the service name if not already set
+                if (serviceConfig.getName() == null) {
+                    serviceConfig.setName(serviceName);
+                }
 
-                    // Sync pipeline services
-                    for (Map.Entry<String, ServiceConfigurationDto> entry : pipeline.getServices().entrySet()) {
-                        String serviceName = entry.getKey();
-                        ServiceConfigurationDto serviceConfig = entry.getValue();
+                // Create keys for service configuration
+                String serviceBaseKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".services." + serviceName);
+                String serviceNameKey = serviceBaseKey + ".name";
+                String serviceListenTopicsKey = serviceBaseKey + ".kafkaListenTopics";
+                String servicePublishTopicsKey = serviceBaseKey + ".kafkaPublishTopics";
+                String serviceGrpcForwardToKey = serviceBaseKey + ".grpcForwardTo";
+                String serviceImplementationKey = serviceBaseKey + ".serviceImplementation";
 
-                        // Set the service name if not already set
-                        if (serviceConfig.getName() == null) {
-                            serviceConfig.setName(serviceName);
-                        }
+                // Add service configuration to the key-value map
+                otherKeysMap.put(serviceNameKey, serviceConfig.getName());
 
-                        // Create keys for service configuration
-                        String serviceBaseKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".services." + serviceName);
-                        String serviceNameKey = serviceBaseKey + ".name";
-                        String serviceListenTopicsKey = serviceBaseKey + ".kafkaListenTopics";
-                        String servicePublishTopicsKey = serviceBaseKey + ".kafkaPublishTopics";
-                        String serviceGrpcForwardToKey = serviceBaseKey + ".grpcForwardTo";
-                        String serviceImplementationKey = serviceBaseKey + ".serviceImplementation";
+                // Handle lists by converting them to comma-separated strings
+                if (serviceConfig.getKafkaListenTopics() != null && !serviceConfig.getKafkaListenTopics().isEmpty()) {
+                    otherKeysMap.put(serviceListenTopicsKey, String.join(",", serviceConfig.getKafkaListenTopics()));
+                }
 
-                        // Add service configuration to the key-value map
-                        keyValueMap.put(serviceNameKey, serviceConfig.getName());
+                if (serviceConfig.getKafkaPublishTopics() != null && !serviceConfig.getKafkaPublishTopics().isEmpty()) {
+                    otherKeysMap.put(servicePublishTopicsKey, String.join(",", serviceConfig.getKafkaPublishTopics()));
+                }
 
-                        // Handle lists by converting them to comma-separated strings
-                        if (serviceConfig.getKafkaListenTopics() != null && !serviceConfig.getKafkaListenTopics().isEmpty()) {
-                            keyValueMap.put(serviceListenTopicsKey, String.join(",", serviceConfig.getKafkaListenTopics()));
-                        }
+                if (serviceConfig.getGrpcForwardTo() != null && !serviceConfig.getGrpcForwardTo().isEmpty()) {
+                    otherKeysMap.put(serviceGrpcForwardToKey, String.join(",", serviceConfig.getGrpcForwardTo()));
+                }
 
-                        if (serviceConfig.getKafkaPublishTopics() != null && !serviceConfig.getKafkaPublishTopics().isEmpty()) {
-                            keyValueMap.put(servicePublishTopicsKey, String.join(",", serviceConfig.getKafkaPublishTopics()));
-                        }
+                if (serviceConfig.getServiceImplementation() != null) {
+                    otherKeysMap.put(serviceImplementationKey, serviceConfig.getServiceImplementation());
+                }
 
-                        if (serviceConfig.getGrpcForwardTo() != null && !serviceConfig.getGrpcForwardTo().isEmpty()) {
-                            keyValueMap.put(serviceGrpcForwardToKey, String.join(",", serviceConfig.getGrpcForwardTo()));
-                        }
-
-                        if (serviceConfig.getServiceImplementation() != null) {
-                            keyValueMap.put(serviceImplementationKey, serviceConfig.getServiceImplementation());
-                        }
-
-                        // Handle config params if present
-                        if (serviceConfig.getConfigParams() != null && !serviceConfig.getConfigParams().isEmpty()) {
-                            for (Map.Entry<String, String> paramEntry : serviceConfig.getConfigParams().entrySet()) {
-                                String paramKey = serviceBaseKey + ".configParams." + paramEntry.getKey();
-                                keyValueMap.put(paramKey, paramEntry.getValue());
-                            }
-                        }
+                // Handle config params if present
+                if (serviceConfig.getConfigParams() != null && !serviceConfig.getConfigParams().isEmpty()) {
+                    for (Map.Entry<String, String> paramEntry : serviceConfig.getConfigParams().entrySet()) {
+                        String paramKey = serviceBaseKey + ".configParams." + paramEntry.getKey();
+                        otherKeysMap.put(paramKey, paramEntry.getValue());
                     }
+                }
+            }
 
-                    // Update all values in a single operation
-                    return consulKvService.putValues(keyValueMap)
-                            .map(success1 -> {
-                                if (success1) {
-                                    LOG.info("Successfully synced pipeline configuration to Consul: {}", pipelineName);
-                                    return true;
-                                } else {
-                                    LOG.error("Failed to sync pipeline configuration to Consul: {}", pipelineName);
-                                    return false;
-                                }
-                            })
-                            .onErrorResume(e -> {
-                                LOG.error("Error syncing pipeline configuration to Consul: {}", pipelineName, e);
-                                return Mono.just(false);
-                            });
-                });
+            // Use CAS to update the pipeline atomically
+            LOG.debug("Attempting CAS update for pipeline '{}' with ModifyIndex {}", pipelineName, modifyIndex);
+            return consulKvService.savePipelineUpdateWithCas(
+                    pipelineName,
+                    pipeline.getPipelineVersion(),
+                    pipeline.getPipelineLastUpdated(),
+                    modifyIndex,
+                    otherKeysMap
+            )
+            .map(success -> {
+                if (success) {
+                    LOG.info("Successfully synced pipeline configuration to Consul using CAS: {}", pipelineName);
+                    return true;
+                } else {
+                    LOG.error("Failed to sync pipeline configuration to Consul using CAS: {}", pipelineName);
+                    return false;
+                }
+            })
+            .onErrorResume(e -> {
+                LOG.error("Error syncing pipeline configuration to Consul using CAS: {}", pipelineName, e);
+                return Mono.just(false);
+            });
+        });
     }
 
     /**

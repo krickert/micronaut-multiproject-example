@@ -29,6 +29,14 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
     private final PipelineConfig pipelineConfig;
     private final String applicationName;
 
+    /**
+     * Constructor with dependencies.
+     *
+     * @param consulKvService the service for interacting with Consul KV store
+     * @param applicationConfig the application configuration POJO
+     * @param pipelineConfig the pipeline configuration POJO
+     * @param applicationName the name of the application
+     */
     public ConfigurationService(
             ConsulKvService consulKvService,
             ApplicationConfig applicationConfig,
@@ -41,6 +49,11 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
         LOG.info("ConfigurationService initialized for application: {}", applicationName);
     }
 
+    /**
+     * Handles the StartupEvent by loading configuration from Consul KV store.
+     *
+     * @param event the startup event
+     */
     @Override
     public void onApplicationEvent(StartupEvent event) {
         LOG.info("Loading configuration from Consul KV store on StartupEvent");

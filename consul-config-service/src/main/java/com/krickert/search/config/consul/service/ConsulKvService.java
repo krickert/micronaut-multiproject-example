@@ -12,8 +12,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
+import java.math.BigInteger;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -62,7 +64,7 @@ public class ConsulKvService {
                     encodedKey.append("/");
                 }
                 // URL encode the part, preserving only forward slashes
-                encodedKey.append(URLEncoder.encode(parts[i], StandardCharsets.UTF_8.toString())
+                encodedKey.append(URLEncoder.encode(parts[i], StandardCharsets.UTF_8)
                         .replace("+", "%20")); // Replace + with %20 for spaces
             }
 
@@ -169,8 +171,8 @@ public class ConsulKvService {
                     LOG.info("Successfully wrote all values to Consul KV using transaction: {}", keys);
                     return true;
                 } else {
-                    LOG.error("Failed to write values to Consul KV using transaction. Errors: {}", 
-                            response != null && response.getResponse() != null ? 
+                    LOG.error("Failed to write values to Consul KV using transaction. Errors: {}",
+                            response.getResponse() != null ?
                             response.getResponse().errors() : "Unknown error");
                     return false;
                 }
@@ -278,5 +280,177 @@ public class ConsulKvService {
             return key;
         }
         return configPath + (configPath.endsWith("/") ? "" : "/") + key;
+    }
+
+    /**
+     * Gets the ModifyIndex of a key in Consul KV store.
+     * This is useful for Compare-And-Swap (CAS) operations.
+     *
+     * @param key the key to get the ModifyIndex for
+     * @return a Mono containing the ModifyIndex of the key, or 0 if the key doesn't exist
+     */
+    public Mono<Long> getModifyIndex(String key) {
+        LOG.debug("Getting ModifyIndex for key: {}", key);
+        return Mono.fromCallable(() -> {
+            try {
+                String encodedKey = encodeKey(key);
+
+                // Use consistent read to ensure we get the latest index
+                org.kiwiproject.consul.option.QueryOptions consistentQueryOptions = 
+                    org.kiwiproject.consul.option.ImmutableQueryOptions.builder()
+                        .consistencyMode(org.kiwiproject.consul.option.ConsistencyMode.CONSISTENT)
+                        .build();
+
+                Optional<org.kiwiproject.consul.model.kv.Value> valueOpt = 
+                    keyValueClient.getValue(encodedKey, consistentQueryOptions);
+
+                if (valueOpt.isPresent()) {
+                    long modifyIndex = valueOpt.get().getModifyIndex();
+                    LOG.debug("ModifyIndex for key '{}': {}", key, modifyIndex);
+                    return modifyIndex;
+                } else {
+                    LOG.debug("Key '{}' not found, returning ModifyIndex 0", key);
+                    return 0L;
+                }
+            } catch (Exception e) {
+                LOG.error("Error getting ModifyIndex for key: {}", key, e);
+                return 0L;
+            }
+        });
+    }
+
+    /**
+     * Atomically updates pipeline metadata (version, lastUpdated) using a Check-and-Set
+     * operation based on the expected ModifyIndex of the version key.
+     * Optionally updates other pipeline keys within the same transaction.
+     * <br/>
+     * For new pipelines (where expectedVersionModifyIndex is 0), this method will use a simple
+     * transaction without a CHECK_INDEX operation.
+     * <br/>
+     * @param pipelineName              The name of the pipeline.
+     * @param newVersion                The new version number to set.
+     * @param newLastUpdated            The new timestamp to set.
+     * @param expectedVersionModifyIndex The ModifyIndex of the version key read just before attempting this update.
+     * The transaction will fail if the index has changed. Use 0 for new pipelines.
+     * @param otherKeysToSet            An optional map of other full key paths -> values to set atomically. Can be null or empty.
+     * @return A Mono emitting true if the CAS transaction succeeded, false otherwise (e.g., CAS check failed or other error).
+     */
+    public Mono<Boolean> savePipelineUpdateWithCas(
+            String pipelineName,
+            long newVersion,
+            LocalDateTime newLastUpdated,
+            long expectedVersionModifyIndex,
+            @jakarta.annotation.Nullable Map<String, String> otherKeysToSet) {
+
+        String versionKey = "pipeline.configs." + pipelineName + ".version";
+        String lastUpdatedKey = "pipeline.configs." + pipelineName + ".lastUpdated";
+        String versionKeyFullPath = getFullPath(versionKey);
+        String lastUpdatedKeyFullPath = getFullPath(lastUpdatedKey);
+
+        LOG.debug("Attempting CAS update for pipeline '{}'. Expected index for key '{}': {}",
+                pipelineName, versionKeyFullPath, expectedVersionModifyIndex);
+
+        return Mono.fromCallable(() -> {
+            try {
+                // --- Build Operations ---
+                List<Operation> operationList = new ArrayList<>();
+
+                // For new pipelines (expectedVersionModifyIndex == 0), skip the CHECK_INDEX operation
+                boolean isNewPipeline = expectedVersionModifyIndex == 0;
+
+                if (!isNewPipeline) {
+                    // 1. CHECK_INDEX operation (must be first for CAS) - only for existing pipelines
+                    Operation checkOperation = ImmutableOperation.builder()
+                            .verb(Verb.CHECK_INDEX.toValue())
+                            .key(encodeKey(versionKeyFullPath))
+                            .index(BigInteger.valueOf(expectedVersionModifyIndex))
+                            .build();
+                    operationList.add(checkOperation);
+                } else {
+                    LOG.debug("Creating new pipeline '{}', skipping CHECK_INDEX operation", pipelineName);
+                }
+
+                // 2. SET new version
+                Operation setVersionOperation = ImmutableOperation.builder()
+                        .verb(Verb.SET.toValue())
+                        .key(encodeKey(versionKeyFullPath))
+                        .value(String.valueOf(newVersion))
+                        .build();
+                operationList.add(setVersionOperation);
+
+                // 3. SET new lastUpdated timestamp
+                Operation setLastUpdatedOperation = ImmutableOperation.builder()
+                        .verb(Verb.SET.toValue())
+                        .key(encodeKey(lastUpdatedKeyFullPath))
+                        .value(newLastUpdated.toString()) // Convert LocalDateTime to String
+                        .build();
+                operationList.add(setLastUpdatedOperation);
+
+                // 4. SET other keys if provided
+                List<String> otherKeysLog = new ArrayList<>();
+                if (otherKeysToSet != null && !otherKeysToSet.isEmpty()) {
+                    for (Map.Entry<String, String> entry : otherKeysToSet.entrySet()) {
+                        // Assuming keys in the map are already full paths
+                        String encodedKey = encodeKey(entry.getKey());
+                        operationList.add(ImmutableOperation.builder()
+                                .verb(Verb.SET.toValue())
+                                .key(encodedKey)
+                                .value(entry.getValue())
+                                .build());
+                        otherKeysLog.add(entry.getKey()); // Log the original key
+                    }
+                    LOG.debug("Adding {} other keys to {} transaction: {}", 
+                            otherKeysToSet.size(), 
+                            isNewPipeline ? "new pipeline" : "CAS", 
+                            otherKeysLog);
+                }
+
+                Operation[] operations = operationList.toArray(new Operation[0]);
+
+                // --- Perform Transaction ---
+                LOG.debug("Executing {} transaction with {} operations for pipeline '{}'", 
+                        isNewPipeline ? "new pipeline" : "CAS",
+                        operations.length, 
+                        pipelineName);
+                ConsulResponse<TxResponse> response = keyValueClient.performTransaction(operations);
+
+                // --- Check Result ---
+                // Transaction succeeds if response exists and errors list is null or empty
+                boolean success = response != null && response.getResponse() != null &&
+                        (response.getResponse().errors() == null || response.getResponse().errors().isEmpty());
+
+                if (success) {
+                    LOG.info("Successfully {} pipeline via transaction for: {}", 
+                            isNewPipeline ? "created" : "updated", 
+                            pipelineName);
+                    return true;
+                } else {
+                    // Log specific errors if available
+                    String errors = (response != null && response.getResponse() != null && response.getResponse().errors() != null)
+                            ? response.getResponse().errors().toString() : "Unknown reason";
+
+                    if (!isNewPipeline && errors.contains("invalid index") || 
+                        (response != null && response.getResponse() != null && 
+                         response.getResponse().errors() != null && 
+                         !response.getResponse().errors().isEmpty() && 
+                         response.getResponse().errors().getFirst().opIndex().get().intValue() == 0)) {
+                        // This is a CAS check failure for an existing pipeline
+                        LOG.warn("CAS check failed for pipeline update '{}'. Expected index: {}. Errors: {}", 
+                                pipelineName, expectedVersionModifyIndex, errors);
+                    } else {
+                        // Other transaction failure
+                        LOG.error("Consul transaction failed for pipeline {}. Errors: {}", 
+                                isNewPipeline ? "creation" : "update", 
+                                errors);
+                    }
+                    return false; // Transaction failed
+                }
+            } catch (Exception e) {
+                LOG.error("Error performing {} transaction for pipeline: {}", 
+                        expectedVersionModifyIndex == 0 ? "new pipeline" : "CAS update", 
+                        pipelineName, e);
+                return false; // General error during transaction attempt
+            }
+        });
     }
 }
