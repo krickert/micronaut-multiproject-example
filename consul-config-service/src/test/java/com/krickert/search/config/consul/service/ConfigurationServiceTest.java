@@ -75,8 +75,6 @@ public class ConfigurationServiceTest implements TestPropertyProvider {
     void testLoadPipelineServicesNoServices() {
         // Create a test pipeline
         String pipelineName = "test-pipeline-no-services";
-        PipelineConfigDto pipeline = new PipelineConfigDto(pipelineName);
-
         // Set up pipeline metadata in Consul
         String versionKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".version");
         String lastUpdatedKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".lastUpdated");
@@ -110,6 +108,7 @@ public class ConfigurationServiceTest implements TestPropertyProvider {
         try {
             java.lang.reflect.Method method = ConfigurationService.class.getDeclaredMethod("loadPipelineConfiguration", String.class);
             method.setAccessible(true);
+            //noinspection unchecked
             return (Mono<Boolean>) method.invoke(configurationService, pipelineName);
         } catch (Exception e) {
             LOG.error("Error invoking loadPipelineConfiguration", e);
@@ -124,6 +123,7 @@ public class ConfigurationServiceTest implements TestPropertyProvider {
         try {
             java.lang.reflect.Method method = ConfigurationService.class.getDeclaredMethod("loadServiceConfiguration", String.class, String.class, PipelineConfigDto.class);
             method.setAccessible(true);
+            //noinspection unchecked
             return (Mono<Boolean>) method.invoke(configurationService, pipelineName, serviceName, pipeline);
         } catch (Exception e) {
             LOG.error("Error invoking loadServiceConfiguration", e);
@@ -188,9 +188,8 @@ public class ConfigurationServiceTest implements TestPropertyProvider {
         LOG.info("Config params: {}", serviceConfig.getConfigParams());
 
         // Print all keys in the config params
-        serviceConfig.getConfigParams().forEach((key, value) -> {
-            LOG.info("Config param key: '{}', value: '{}'", key, value);
-        });
+        serviceConfig.getConfigParams().forEach((key, value) ->
+                LOG.info("Config param key: '{}', value: '{}'", key, value));
 
         // The key might be different than what we expect, so let's check all keys
         String configParamValue = null;
