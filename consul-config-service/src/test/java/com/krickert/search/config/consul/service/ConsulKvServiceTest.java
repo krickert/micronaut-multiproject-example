@@ -220,12 +220,7 @@ public class ConsulKvServiceTest implements TestPropertyProvider {
 
         // Then get the value and verify it
         StepVerifier.create(consulKvService.getValue(fullPath))
-            .expectNextMatches(optional -> {
-                if (optional.isPresent()) {
-                    return value.equals(optional.get());
-                }
-                return false;
-            })
+            .expectNextMatches(optional -> optional.filter(value::equals).isPresent())
             .verifyComplete();
     }
 
@@ -307,10 +302,7 @@ public class ConsulKvServiceTest implements TestPropertyProvider {
         // Then get the value and verify it
         StepVerifier.create(consulKvService.getValue(fullPath))
             .expectNextMatches(optional -> {
-                if (optional.isPresent()) {
-                    return value.equals(optional.get());
-                }
-                return false;
+                return optional.filter(value::equals).isPresent();
             })
             .verifyComplete();
     }

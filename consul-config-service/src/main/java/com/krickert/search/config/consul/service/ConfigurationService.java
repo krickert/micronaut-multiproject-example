@@ -4,6 +4,8 @@ import com.krickert.search.config.consul.event.ConfigChangeEvent;
 import com.krickert.search.config.consul.model.ApplicationConfig;
 import com.krickert.search.config.consul.model.PipelineConfig;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
+import com.krickert.search.config.consul.model.ServiceConfigurationDto;
+import com.krickert.search.config.consul.model.PipestepConfigOptions;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.event.ApplicationEventListener;
 import io.micronaut.context.event.StartupEvent;
@@ -14,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -136,7 +140,7 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
                                 int firstSlash = subKey.indexOf('/');
                                 return (firstSlash > 0) ? subKey.substring(0, firstSlash) : subKey;
                             })
-                            .filter(name -> !name.isEmpty() && !name.contains("/")) // Ensure it's just the name part
+                            .filter(name -> !name.contains("/")) // Ensure it's just the name part
                             .collect(Collectors.toSet());
                     // --- *** END CORRECTION *** ---
 
@@ -232,11 +236,232 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
 
     /**
      * Loads services for a pipeline from Consul KV store.
-     * // --- NEEDS IMPLEMENTATION ---
+     * 
+     * @param pipelineName the name of the pipeline
+     * @param pipeline the pipeline configuration to populate with services
+     * @return a Mono that emits true if all services were loaded successfully, false otherwise
      */
     private Mono<Boolean> loadPipelineServices(String pipelineName, PipelineConfigDto pipeline) {
-        LOG.warn("loadPipelineServices is not fully implemented yet for pipeline: {}", pipelineName);
-        // TODO: Implement service loading logic here
-        return Mono.just(true); // Placeholder: Assume success for now
+        LOG.debug("Loading services for pipeline: {}", pipelineName);
+
+        String serviceConfigPrefix = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".service");
+
+        return consulKvService.getKeysWithPrefix(serviceConfigPrefix)
+            .flatMap(keys -> {
+                if (keys.isEmpty()) {
+                    LOG.warn("No service configuration keys found for pipeline: {}", pipelineName);
+                    return Mono.just(true); // No services is considered a success
+                }
+
+                // Extract service names from keys
+                Set<String> serviceNames = keys.stream()
+                    .filter(key -> key.startsWith(serviceConfigPrefix))
+                    .map(key -> {
+                        // Extract service name from key path
+                        String relativePath = key.substring(serviceConfigPrefix.length());
+                        if (relativePath.startsWith("/")) {
+                            relativePath = relativePath.substring(1);
+                        }
+                        int nextSlash = relativePath.indexOf('/');
+                        return (nextSlash > 0) ? relativePath.substring(0, nextSlash) : relativePath;
+                    })
+                    .filter(name -> !name.isEmpty() && !name.contains("/"))
+                    .collect(Collectors.toSet());
+
+                LOG.info("Discovered service names for pipeline {}: {}", pipelineName, serviceNames);
+
+                if (serviceNames.isEmpty()) {
+                    LOG.warn("No valid service names extracted from keys for pipeline: {}", pipelineName);
+                    return Mono.just(true); // No valid services is considered success
+                }
+
+                // Load each discovered service configuration
+                List<Mono<Boolean>> loadMonos = serviceNames.stream()
+                    .map(serviceName -> loadServiceConfiguration(pipelineName, serviceName, pipeline))
+                    .collect(Collectors.toList());
+
+                // Use Mono.zip to wait for all services to load
+                return Mono.zip(loadMonos, results -> {
+                    boolean allSucceeded = true;
+                    for (Object result : results) {
+                        if (!(Boolean) result) {
+                            allSucceeded = false;
+                            break;
+                        }
+                    }
+                    LOG.info("Result of loading all services for pipeline {}. All succeeded: {}", pipelineName, allSucceeded);
+                    return allSucceeded;
+                });
+            })
+            .defaultIfEmpty(true)
+            .onErrorResume(e -> {
+                LOG.error("Error loading services for pipeline: {}", pipelineName, e);
+                return Mono.just(false);
+            });
+    }
+
+    /**
+     * Loads configuration for a specific service in a pipeline.
+     * 
+     * @param pipelineName the name of the pipeline
+     * @param serviceName the name of the service
+     * @param pipeline the pipeline configuration to add the service to
+     * @return a Mono that emits true if the service was loaded successfully, false otherwise
+     */
+    private Mono<Boolean> loadServiceConfiguration(String pipelineName, String serviceName, PipelineConfigDto pipeline) {
+        LOG.debug("Loading configuration for service {} in pipeline {}", serviceName, pipelineName);
+
+        ServiceConfigurationDto serviceConfig = new ServiceConfigurationDto();
+        serviceConfig.setName(serviceName);
+
+        String baseKeyPrefix = "pipeline.configs." + pipelineName + ".service." + serviceName;
+
+        // Keys to load
+        String kafkaListenTopicsKey = consulKvService.getFullPath(baseKeyPrefix + ".kafka-listen-topics");
+        String kafkaPublishTopicsKey = consulKvService.getFullPath(baseKeyPrefix + ".kafka-publish-topics");
+        String grpcForwardToKey = consulKvService.getFullPath(baseKeyPrefix + ".grpc-forward-to");
+        String serviceImplKey = consulKvService.getFullPath(baseKeyPrefix + ".service-implementation");
+        String configParamsPrefix = consulKvService.getFullPath(baseKeyPrefix + ".config-params");
+
+        // Load kafka listen topics
+        Mono<Optional<String>> kafkaListenTopicsMono = consulKvService.getValue(kafkaListenTopicsKey)
+            .defaultIfEmpty(Optional.empty());
+
+        // Load kafka publish topics
+        Mono<Optional<String>> kafkaPublishTopicsMono = consulKvService.getValue(kafkaPublishTopicsKey)
+            .defaultIfEmpty(Optional.empty());
+
+        // Load grpc forward to
+        Mono<Optional<String>> grpcForwardToMono = consulKvService.getValue(grpcForwardToKey)
+            .defaultIfEmpty(Optional.empty());
+
+        // Load service implementation
+        Mono<Optional<String>> serviceImplMono = consulKvService.getValue(serviceImplKey)
+            .defaultIfEmpty(Optional.empty());
+
+        // Load config params
+        Mono<PipestepConfigOptions> configParamsMono = consulKvService.getKeysWithPrefix(configParamsPrefix)
+            .flatMap(configKeys -> {
+                if (configKeys.isEmpty()) {
+                    return Mono.just(new PipestepConfigOptions());
+                }
+
+                PipestepConfigOptions configParams = new PipestepConfigOptions();
+                List<Mono<Boolean>> configLoadMonos = new ArrayList<>();
+
+                for (String configKey : configKeys) {
+                    String paramName = configKey.substring(configParamsPrefix.length());
+                    if (paramName.startsWith("/")) {
+                        paramName = paramName.substring(1);
+                    }
+
+                    if (paramName.contains("/")) {
+                        continue; // Skip nested keys
+                    }
+
+                    // Create a final copy of paramName for use in the lambda
+                    final String finalParamName = paramName;
+
+                    Mono<Boolean> loadMono = consulKvService.getValue(configKey)
+                        .map(valueOpt -> {
+                            if (valueOpt.isPresent()) {
+                                configParams.put(finalParamName, valueOpt.get());
+                                return true;
+                            }
+                            return false;
+                        })
+                        .defaultIfEmpty(false);
+
+                    configLoadMonos.add(loadMono);
+                }
+
+                if (configLoadMonos.isEmpty()) {
+                    return Mono.just(configParams);
+                }
+
+                return Mono.zip(configLoadMonos, results -> configParams);
+            })
+            .defaultIfEmpty(new PipestepConfigOptions());
+
+        // Combine all the loaded data
+        return Mono.zip(
+                kafkaListenTopicsMono,
+                kafkaPublishTopicsMono,
+                grpcForwardToMono,
+                serviceImplMono,
+                configParamsMono
+            )
+            .flatMap(tuple -> {
+                Optional<String> kafkaListenTopicsOpt = tuple.getT1();
+                Optional<String> kafkaPublishTopicsOpt = tuple.getT2();
+                Optional<String> grpcForwardToOpt = tuple.getT3();
+                Optional<String> serviceImplOpt = tuple.getT4();
+                PipestepConfigOptions configParams = tuple.getT5();
+
+                // Parse kafka listen topics
+                if (kafkaListenTopicsOpt.isPresent() && !kafkaListenTopicsOpt.get().isEmpty()) {
+                    List<String> topics = parseCommaSeparatedList(kafkaListenTopicsOpt.get());
+                    serviceConfig.setKafkaListenTopics(topics);
+                    LOG.debug("Loaded kafka listen topics for service {}: {}", serviceName, topics);
+                }
+
+                // Parse kafka publish topics
+                if (kafkaPublishTopicsOpt.isPresent() && !kafkaPublishTopicsOpt.get().isEmpty()) {
+                    List<String> topics = parseCommaSeparatedList(kafkaPublishTopicsOpt.get());
+                    serviceConfig.setKafkaPublishTopics(topics);
+                    LOG.debug("Loaded kafka publish topics for service {}: {}", serviceName, topics);
+                }
+
+                // Parse grpc forward to
+                if (grpcForwardToOpt.isPresent() && !grpcForwardToOpt.get().isEmpty()) {
+                    List<String> forwardTo = parseCommaSeparatedList(grpcForwardToOpt.get());
+                    serviceConfig.setGrpcForwardTo(forwardTo);
+                    LOG.debug("Loaded grpc forward to for service {}: {}", serviceName, forwardTo);
+                }
+
+                // Set service implementation
+                if (serviceImplOpt.isPresent() && !serviceImplOpt.get().isEmpty()) {
+                    serviceConfig.setServiceImplementation(serviceImplOpt.get());
+                    LOG.debug("Loaded service implementation for service {}: {}", serviceName, serviceImplOpt.get());
+                }
+
+                // Set config params
+                if (!configParams.isEmpty()) {
+                    serviceConfig.setConfigParams(configParams);
+                    LOG.debug("Loaded {} config parameters for service {}", configParams.size(), serviceName);
+                }
+
+                try {
+                    // Add the service to the pipeline
+                    pipeline.addOrUpdateService(serviceConfig);
+                    LOG.info("Successfully loaded and added service {} to pipeline {}", serviceName, pipelineName);
+                    return Mono.just(true);
+                } catch (Exception e) {
+                    LOG.error("Error adding service {} to pipeline {}: {}", serviceName, pipelineName, e.getMessage());
+                    return Mono.just(false);
+                }
+            })
+            .defaultIfEmpty(false)
+            .onErrorResume(e -> {
+                LOG.error("Error loading configuration for service {} in pipeline {}", serviceName, pipelineName, e);
+                return Mono.just(false);
+            });
+    }
+
+    /**
+     * Parses a comma-separated list string into a list of strings.
+     * 
+     * @param commaSeparatedList the comma-separated list string
+     * @return a list of strings
+     */
+    private List<String> parseCommaSeparatedList(String commaSeparatedList) {
+        if (commaSeparatedList == null || commaSeparatedList.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        return Arrays.stream(commaSeparatedList.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .collect(Collectors.toList());
     }
 }
