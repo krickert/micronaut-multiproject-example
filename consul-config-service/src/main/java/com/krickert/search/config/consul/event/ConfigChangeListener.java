@@ -25,6 +25,8 @@ public class ConfigChangeListener implements ApplicationEventListener<ConfigChan
         this.configurationService = configurationService;
         LOG.info("ConfigChangeListener initialized");
     }
+
+
     
     /**
      * Handles ConfigChangeEvent by delegating to ConfigurationService.

@@ -1,45 +1,40 @@
-# Taming Dependencies: A Step-by-Step Guide to Building a Custom Micronaut BOM with Gradle Kotlin DSL
+# RagSearch: a pipeline indexer made for vector search
 
-This repository generates the documentation to create this project.  The link below is a step-by-step guild to setting up a 
-multi-project build for micronaut applications.
+## Abstract
+This is a full featured application that implements a dynamic pipeline for creating multiple indexes through a scabale container-based 
+microservice architecture.
 
-To make it more hands-on, this will be an actual open source application we're building: a search engine indexer powered by kafka.
+The goal is to have a low cost, free, enterprise-grade secure document index.
 
-**What We're Building:**
+The overall pipeline approach is decentralized - information is shared between one another in a control plane and configuration changes 
+happen in near real time.
 
-Imagine a system designed for processing data pipelines. This system consists of several parts:
+The idea here is that each pipeline step acts independent of one another.  
 
-* **Shared Libraries:** A core library containing the main pipeline logic (`pipeline-service-core`), data models defined using Protocol Buffers (`protobuf-models`), and common helper functions (`util`).
-* **Testing Utilities:** A dedicated library (`pipeline-service-test-utils`) to assist in testing the pipeline components.
-* **Microservices:** Specific implementations of pipelines as runnable Micronaut applications (e.g., `pipeline-instance-A`).
+Here's an example chart of the pipeline:
 
-**The Goal:**
 
-Our goal is to manage this system effectively within a single repository (monorepo) using Gradle. We'll focus on:
 
-1.  **Centralized Dependency Management:** Creating a custom Bill of Materials (BOM) and using Gradle's version catalog (`libs.versions.toml`) to ensure all modules use consistent library versions.
-2.  **Consistent Build Environment:** Using Gradle Kotlin DSL and configuring for JDK 21.
-3.  **Modular Structure:** Defining clear dependencies between the different project modules.
-4.  **Efficient CI/CD:** Discussing strategies to build and deploy only the parts of the system that have changed.
 
-Let's begin!
+## What it is not
 
-The tutorial can me found [here](docs/tutorial.html)
+The functionality is similar to a lot of other pipeline approaches, but the pipelines forward in
 
-## Development Environment
+### Apache NiFi
 
-A Docker-based development environment is available in the `docker-dev` directory. This environment includes:
+* Apache Hop
+* Apache Fink
+* 
 
-- **Kafka** (in Kraft mode) - Message broker
-- **Apicurio Registry** - Schema registry
-- **Solr** (in cloud mode) - Search platform
-- **Kafka UI** - Web UI for Kafka management
+## Mission
 
-To start the development environment:
-
-```bash
-cd docker-dev
-docker-compose up -d
-```
-
-For more details, see the [docker-dev README](docker-dev/README.md).
+The mission goals:
+1. Easy to install - the ecosystem is deployable to either a cloud environment or a localized laptop for development
+2. Free - built with 100% open source projects
+3. Streaming orchestration - documents are indexed through a network of pipelines either synchronously or asynchronously.
+4. gRPC services + Kafka - all services are built on a common gRPC platform 
+5. Admin interface - administration of the pipelines are done through a graph
+6. Rapid pipeline development in any language - a user only needs to implement a single function and can deploy a service in minutes
+7. Standardized monitoring - 
+8. Secure - utilizes multiple configurable security standards
+9. 

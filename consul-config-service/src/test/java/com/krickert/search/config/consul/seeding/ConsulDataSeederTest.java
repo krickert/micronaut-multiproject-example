@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 public class ConsulDataSeederTest implements TestPropertyProvider {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConsulDataSeederTest.class);
-    private static final String TEST_SEED_FILE = "classpath:test-seed-data.yaml";
+    private static final String TEST_SEED_FILE = "classpath:dev-seed-data.yaml";
 
     private static final ConsulTestContainer consulContainer = ConsulTestContainer.getInstance();
     @Inject private ConsulDataSeeder consulDataSeeder;

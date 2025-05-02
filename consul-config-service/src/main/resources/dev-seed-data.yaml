@@ -1,0 +1,97 @@
+# ========== TEST CONFIGURATION ==========
+# This is a test seed data file for the Consul Configuration Service tests.
+# These properties will be loaded into Consul KV store when the test starts.
+
+# ========== APPLICATION CONFIGURATION ==========
+# Application-specific settings
+consul-config-service-test:
+  config:
+    # Application settings
+    server:
+      port: 8080
+    logging:
+      level: DEBUG
+    kafka:
+      enabled: true
+      bootstrap-servers: localhost:9092
+    consul:
+      host: localhost
+      port: 8500
+
+# ========== PIPELINE CONFIGURATION ==========
+# Pipeline-specific settings
+pipeline:
+  configs:
+    pipeline1:
+      service:
+        importer:
+          kafka-publish-topics: input-documents
+          serviceImplementation: com.krickert.search.pipeline.service.ImporterService
+
+        chunker:
+          kafka-listen-topics:
+            - input-documents
+            - tika-documents
+          kafka-publish-topics: chunker-results
+          serviceImplementation: com.krickert.search.pipeline.service.ChunkerService
+          configParams:
+            chunk-size: 1000
+            overlap: 200
+
+        embedder:
+          kafka-listen-topics: chunker-results
+          kafka-publish-topics: enhanced-documents
+          serviceImplementation: com.krickert.search.pipeline.service.EmbedderService
+          configParams:
+            model: all-MiniLM-L6-v2
+            dimension: 384
+
+        solr-indexer:
+          kafka-listen-topics: enhanced-documents
+          serviceImplementation: com.krickert.search.pipeline.service.SolrIndexerService
+          configParams:
+            solr-url: http://solr:8983/solr
+            collection: pipeline1
+
+    pipeline2:
+      service:
+        chunker:
+          kafka-listen-topics: input-documents2
+          kafka-publish-topics: chunker-results2
+          serviceImplementation: com.krickert.search.pipeline.service.ChunkerService
+          configParams:
+            chunk-size: 500
+            overlap: 100
+
+        embedder:
+          kafka-listen-topics: chunker-results2
+          kafka-publish-topics: enhanced-documents2
+          serviceImplementation: com.krickert.search.pipeline.service.EmbedderService
+          configParams:
+            model: paraphrase-multilingual-MiniLM-L12-v2
+            dimension: 384
+
+        solr-indexer:
+          kafka-listen-topics: enhanced-documents2
+          serviceImplementation: com.krickert.search.pipeline.service.SolrIndexerService
+          configParams:
+            solr-url: http://solr:8983/solr
+            collection: pipeline2
+
+    test-pipeline:
+      service:
+        test-service:
+          kafka-listen-topics: test-input
+          kafka-publish-topics: test-output
+          serviceImplementation: com.krickert.search.pipeline.service.TestService
+          configParams:
+            param1: value1
+            param2: value2
+
+        chunker:
+          kafka-listen-topics: test-input
+          kafka-publish-topics: test-chunks
+          serviceImplementation: com.krickert.search.pipeline.service.ChunkerService
+          configParams:
+            chunk-size: 500
+            overlap: 100
