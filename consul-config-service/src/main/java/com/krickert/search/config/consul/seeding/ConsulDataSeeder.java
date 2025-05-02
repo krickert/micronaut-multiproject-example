@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.krickert.search.config.consul.model.ApplicationConfig;
 import com.krickert.search.config.consul.model.PipelineConfig;
-import com.krickert.search.config.consul.service.ConfigurationService;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value;
@@ -19,242 +18,239 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Duration; // Import Duration
+import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Seeds initial configuration data into Consul KV store when the application starts.
- * This class loads configuration from a properties file and stores it in Consul KV store.
+ * Reads configuration from a specified file and stores it in Consul KV store.
+ * Uses a 'pipeline.seeded' flag to ensure it only runs once.
+ * Auto-adds initial version (0) and lastUpdated metadata for seeded pipelines.
  */
 @Singleton
-@Requires(property = "consul.data.seeding.enabled", value = "true", defaultValue = "true")
+// *** Use the corrected constant for @Requires ***
+@Requires(property = ConsulDataSeeder.ENABLED_PROPERTY, value = "true", defaultValue = "false")
 public class ConsulDataSeeder implements ApplicationEventListener<StartupEvent> {
     private static final Logger LOG = LoggerFactory.getLogger(ConsulDataSeeder.class);
 
     private final ConsulKvService consulKvService;
     private final ResourceLoader resourceLoader;
     private final String seedFile;
-    private final boolean skipIfExists;
     private final ApplicationConfig applicationConfig;
     private final PipelineConfig pipelineConfig;
-    private final ConfigurationService configurationService;
 
-    /**
-     * Creates a new ConsulDataSeeder with the specified services and configuration.
-     *
-     * @param consulKvService the service for interacting with Consul KV store
-     * @param resourceLoader the loader for loading resources
-     * @param seedFile the path to the seed file
-     * @param skipIfExists whether to skip seeding if the key already exists
-     */
+    // --- *** CORRECTED CONSTANTS *** ---
+    public static final String ENABLED_PROPERTY = "consul.data.seeding.enabled";
+    public static final String FILE_PROPERTY = "consul.data.seeding.file";
+    // --- *** END CORRECTIONS *** ---
+
+    static final String SEEDED_FLAG_NAME = "pipeline.seeded";
+
     public ConsulDataSeeder(ConsulKvService consulKvService,
                            ResourceLoader resourceLoader,
-                           @Value("${consul.data.seeding.file:seed-data.yaml}") String seedFile,
-                           @Value("${consul.data.seeding.skip-if-exists:true}") boolean skipIfExists,
+                           // *** Use the corrected constant in @Value ***
+                           @Value("${" + FILE_PROPERTY + ":classpath:seed-data.yaml}") String seedFile,
                            ApplicationConfig applicationConfig,
-                           PipelineConfig pipelineConfig,
-                           ConfigurationService configurationService) {
+                           PipelineConfig pipelineConfig) {
         this.consulKvService = consulKvService;
         this.resourceLoader = resourceLoader;
         this.seedFile = seedFile;
-        this.skipIfExists = skipIfExists;
         this.applicationConfig = applicationConfig;
         this.pipelineConfig = pipelineConfig;
-        this.configurationService = configurationService;
-        LOG.info("ConsulDataSeeder initialized with seed file: {}, skipIfExists: {}", seedFile, skipIfExists);
+        LOG.info("ConsulDataSeeder initialized with seed file: {}", seedFile);
     }
 
-    /**
-     * Handles the StartupEvent by seeding initial configuration data.
-     *
-     * @param event the startup event
-     */
     @Override
     public void onApplicationEvent(StartupEvent event) {
-        LOG.info("AdminApplication startup detected, checking if Consul KV store needs seeding");
-
-        // Check if configuration is already enabled in Consul
-        consulKvService.getValue(consulKvService.getFullPath("pipeline.enabled"))
-            .subscribe(enabledOpt -> {
-                if (enabledOpt.isPresent() && "true".equals(enabledOpt.get())) {
-                    LOG.info("Configuration is already enabled in Consul, skipping seeding");
-                    // Load configuration from Consul
-                    configurationService.onApplicationEvent(event);
-                    // Mark configuration as enabled
-                    applicationConfig.markAsEnabled();
-                    pipelineConfig.markAsEnabled();
-                } else {
-                    LOG.info("Configuration is not enabled in Consul, proceeding with seeding");
-                    seedFromFile();
-                }
-            });
-    }
-
-    /**
-     * Seeds configuration from the seed file.
-     */
-    private void seedFromFile() {
-        // Load the seed file
-        Optional<InputStream> seedStream = resourceLoader.getResourceAsStream(seedFile);
-        if (seedStream.isEmpty()) {
-            LOG.warn("Seed file not found: {}", seedFile);
-            return;
-        }
-
+        LOG.info("ConsulDataSeeder processing StartupEvent...");
         try {
-            // Check if the seed file is YAML or properties
-            if (seedFile.endsWith(".yaml") || seedFile.endsWith(".yml")) {
-                // Parse YAML file
-                ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
-                Map<String, Object> yamlMap = yamlMapper.readValue(seedStream.get(), Map.class);
+            LOG.info("Attempting to block on seedData()...");
+            Boolean result = seedData().block(Duration.ofSeconds(30)); // Use existing block duration
+            LOG.info("seedData().block() completed with result: {}", result); // Log after block returns
 
-                // Flatten the YAML structure
-                Map<String, String> flattenedMap = new HashMap<>();
-                flattenYamlMap(yamlMap, "", flattenedMap);
-
-                LOG.info("Loaded {} properties from YAML seed file: {}", flattenedMap.size(), seedFile);
-
-                // Convert to Properties
-                Properties seedProperties = new Properties();
-                seedProperties.putAll(flattenedMap);
-
-                // Seed the properties into Consul KV store
-                seedProperties(seedProperties)
-                        .subscribe(
-                                count -> {
-                                    LOG.info("Successfully seeded {} properties into Consul KV store", count);
-                                    // Mark configuration as enabled
-                                    applicationConfig.markAsEnabled();
-                                    pipelineConfig.markAsEnabled();
-                                    LOG.info("Configuration marked as enabled");
-                                },
-                                error -> LOG.error("Error seeding properties into Consul KV store", error)
-                        );
+            if (result == Boolean.TRUE) {
+                LOG.info("Consul data seeding process completed successfully or was already done (synchronous check).");
             } else {
-                // Load properties from the seed file (for backward compatibility)
-                Properties seedProperties = new Properties();
-                seedProperties.load(seedStream.get());
-                LOG.info("Loaded {} properties from properties seed file: {}", seedProperties.size(), seedFile);
-
-                // Seed the properties into Consul KV store
-                seedProperties(seedProperties)
-                        .subscribe(
-                                count -> {
-                                    LOG.info("Successfully seeded {} properties into Consul KV store", count);
-                                    // Mark configuration as enabled
-                                    applicationConfig.markAsEnabled();
-                                    pipelineConfig.markAsEnabled();
-                                    LOG.info("Configuration marked as enabled");
-                                },
-                                error -> LOG.error("Error seeding properties into Consul KV store", error)
-                        );
+                // This path means seeding was attempted but failed (including setting flag)
+                LOG.error("Consul data seeding failed or timed out (result was not true). Failing startup.");
+                throw new RuntimeException("ConsulDataSeeder failed to seed data or timed out.");
             }
-        } catch (IOException e) {
-            LOG.error("Error loading seed file: {}", seedFile, e);
+        } catch (Exception e) {
+            LOG.error("Exception during blocking Consul data seeding process via StartupEvent", e);
+            throw new RuntimeException("ConsulDataSeeder failed to seed data due to exception.", e);
         }
+        LOG.info("ConsulDataSeeder onApplicationEvent finished."); // Log at the very end
     }
 
     /**
-     * Flattens a hierarchical YAML map into a flat map with dot-separated keys.
-     *
-     * @param yamlMap the hierarchical map from YAML
-     * @param prefix the current key prefix
-     * @param flattenedMap the resulting flattened map
+     * Performs data seeding if needed (checks flag internally).
+     * Returns true if seeding completed successfully OR if it was already seeded.
+     * Returns false if seeding was attempted but failed.
      */
+    public Mono<Boolean> seedData() {
+        String seededFlagFullPath = consulKvService.getFullPath(SEEDED_FLAG_NAME);
+        LOG.debug("Checking Consul KV store seeding status using flag '{}'...", seededFlagFullPath);
+
+        return consulKvService.getValue(seededFlagFullPath)
+               .defaultIfEmpty(Optional.empty())
+               .flatMap(seededOpt -> {
+                   if (seededOpt.isPresent() && "true".equals(seededOpt.get())) {
+                       LOG.info("Configuration already seeded ('{}'=true found). Skipping seeding logic.", seededFlagFullPath);
+                       applicationConfig.markAsEnabled();
+                       pipelineConfig.markAsEnabled();
+                       return Mono.just(true); // Success (already done)
+                   } else {
+                       LOG.info("Configuration not seeded or flag '{}' not true/found, proceeding with seeding.", seededFlagFullPath);
+                       return doActualSeeding(); // Perform the seeding steps
+                   }
+               })
+               .onErrorResume(e -> {
+                   LOG.error("Error checking seed status using flag '{}'. Attempting to seed anyway.", seededFlagFullPath, e);
+                   return doActualSeeding();
+               });
+    }
+
+    private Mono<Boolean> doActualSeeding() {
+        LOG.info("Starting actual seeding from file: {}", seedFile);
+        Optional<InputStream> seedStreamOpt = resourceLoader.getResourceAsStream(seedFile);
+        if (seedStreamOpt.isEmpty()) {
+            LOG.error("Seed file not found: {}. Seeding failed.", seedFile);
+            return Mono.just(false);
+        }
+        try (InputStream seedStream = seedStreamOpt.get()) {
+            Properties seedProperties = loadPropertiesFromStream(seedStream);
+            if (seedProperties.isEmpty()) {
+                 LOG.warn("No properties loaded from seed file: {}. Setting seeded flag only.", seedFile);
+                 return setSeededFlagAndMarkBeans(0, 0);
+            }
+            LOG.info("Loaded {} properties from seed file: {}", seedProperties.size(), seedFile);
+            addDefaultPipelineMetadata(seedProperties); // Add version:0 and lastUpdated:now
+            return seedProperties(seedProperties) // seedProperties just writes all keys
+                    .flatMap(count -> setSeededFlagAndMarkBeans(count, seedProperties.size()));
+        } catch (IOException e) {
+            LOG.error("Error loading or processing seed file: {}", seedFile, e);
+            return Mono.error(e);
+        } catch (Exception e) {
+            LOG.error("Unexpected error during seeding preparation for file: {}", seedFile, e);
+            return Mono.just(false);
+        }
+    }
+
+    private Properties loadPropertiesFromStream(InputStream inputStream) throws IOException {
+         Properties seedProperties = new Properties();
+         if (seedFile.endsWith(".yaml") || seedFile.endsWith(".yml")) {
+             ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+             Map<String, Object> yamlMap = yamlMapper.readValue(inputStream, Map.class);
+             Map<String, String> flattenedMap = new HashMap<>();
+             flattenYamlMap(yamlMap, "", flattenedMap);
+             seedProperties.putAll(flattenedMap);
+         } else {
+             seedProperties.load(inputStream);
+         }
+         return seedProperties;
+    }
+
     private void flattenYamlMap(Map<String, Object> yamlMap, String prefix, Map<String, String> flattenedMap) {
         for (Map.Entry<String, Object> entry : yamlMap.entrySet()) {
-            String key = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
+            String currentKey = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
             Object value = entry.getValue();
-
             if (value instanceof Map) {
-                // Recursively flatten nested maps
-                @SuppressWarnings("unchecked")
-                Map<String, Object> nestedMap = (Map<String, Object>) value;
-                flattenYamlMap(nestedMap, key, flattenedMap);
+                flattenYamlMap((Map<String, Object>) value, currentKey, flattenedMap);
             } else if (value instanceof List) {
-                // Handle lists
                 List<?> list = (List<?>) value;
                 for (int i = 0; i < list.size(); i++) {
+                    String listKey = currentKey + "[" + i + "]";
                     Object item = list.get(i);
                     if (item instanceof Map) {
-                        // Recursively flatten nested maps in lists
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> nestedMap = (Map<String, Object>) item;
-                        flattenYamlMap(nestedMap, key + "[" + i + "]", flattenedMap);
+                        flattenYamlMap((Map<String, Object>) item, listKey, flattenedMap);
                     } else {
-                        // Add list item directly
-                        flattenedMap.put(key + "[" + i + "]", item != null ? item.toString() : "");
+                        flattenedMap.put(listKey, item != null ? item.toString() : "");
                     }
                 }
             } else {
-                // Add simple key-value pair
-                flattenedMap.put(key, value != null ? value.toString() : "");
+                flattenedMap.put(currentKey, value != null ? value.toString() : "");
             }
         }
     }
 
-    /**
-     * Seeds properties into Consul KV store.
-     *
-     * @param properties the properties to seed
-     * @return a Mono that completes when all properties have been seeded
-     */
-    private Mono<Integer> seedProperties(Properties properties) {
-        AtomicInteger count = new AtomicInteger(0);
-        AtomicInteger totalCount = new AtomicInteger(0);
+    private void addDefaultPipelineMetadata(Properties properties) {
+         Set<String> pipelineNames = new HashSet<>();
+         final String prefix = "pipeline.configs.";
+         for (String key : properties.stringPropertyNames()) {
+             if (key.startsWith(prefix)) {
+                 String remaining = key.substring(prefix.length());
+                 int dotIndex = remaining.indexOf('.');
+                 if (dotIndex > 0) {
+                     pipelineNames.add(remaining.substring(0, dotIndex));
+                 }
+             }
+         }
+         if (pipelineNames.isEmpty()) return;
+         LOG.info("Found pipelines from seed file: {}. Ensuring default version (0) and lastUpdated metadata.", pipelineNames);
+         String nowTimestamp = LocalDateTime.now().toString();
+         for (String pipelineName : pipelineNames) {
+             String versionKey = prefix + pipelineName + ".version";
+             String lastUpdatedKey = prefix + pipelineName + ".lastUpdated";
+             if (properties.getProperty(versionKey) == null) {
+                 properties.setProperty(versionKey, "0"); // Initial version 0
+                 LOG.debug("Added default metadata key: {} = 0", versionKey);
+             }
+             if (properties.getProperty(lastUpdatedKey) == null) {
+                 properties.setProperty(lastUpdatedKey, nowTimestamp);
+                 LOG.debug("Added default metadata key: {} = {}", lastUpdatedKey, nowTimestamp);
+             }
+         }
+         LOG.info("Finished adding default metadata. Total properties to seed now: {}", properties.size());
+     }
 
-        // Create a list to store all the keys that need to be seeded
-        List<String> keysToSeed = new ArrayList<>();
+    private Mono<Long> seedProperties(Properties properties) {
         Map<String, String> valuesToSeed = new HashMap<>();
+        properties.stringPropertyNames().forEach(key -> valuesToSeed.put(key, properties.getProperty(key)));
+        if (valuesToSeed.isEmpty()) return Mono.just(0L);
+        LOG.info("Attempting to seed {} properties...", valuesToSeed.size());
+        return Flux.fromIterable(valuesToSeed.entrySet())
+                .flatMap(entry -> {
+                    String key = entry.getKey();
+                    String value = entry.getValue();
+                    String fullPath = consulKvService.getFullPath(key);
+                    LOG.trace("Seeding key: {} = {}", fullPath, value);
+                    return consulKvService.putValue(fullPath, value);
+                })
+                .filter(Boolean::booleanValue)
+                .count();
+    }
 
-        // First, collect all the keys that need to be seeded
-        for (String key : properties.stringPropertyNames()) {
-            totalCount.incrementAndGet();
-            String value = properties.getProperty(key);
-            keysToSeed.add(key);
-            valuesToSeed.put(key, value);
-        }
-
-        LOG.info("Preparing to seed {} properties into Consul KV store", totalCount.get());
-
-        // Process the keys in batches for better atomicity
-        return Flux.fromIterable(keysToSeed)
-                .flatMap(key -> {
-                    String value = valuesToSeed.get(key);
-
-                    // Check if the key already exists
-                    if (skipIfExists) {
-                        return consulKvService.getValue(consulKvService.getFullPath(key))
-                                .flatMap(existingValue -> {
-                                    if (existingValue.isPresent()) {
-                                        LOG.debug("Key already exists, skipping: {}", key);
-                                        return Mono.just(false);
-                                    } else {
-                                        LOG.debug("Seeding key: {} = {}", key, value);
-                                        return consulKvService.putValue(consulKvService.getFullPath(key), value);
-                                    }
-                                });
+    private Mono<Boolean> setSeededFlagAndMarkBeans(long seededCount, int totalAttempted) {
+        // ... (existing logs) ...
+        String seededFlagFullPath = consulKvService.getFullPath(SEEDED_FLAG_NAME);
+        LOG.info("Setting seeded flag '{}' to true", seededFlagFullPath);
+        return consulKvService.putValue(seededFlagFullPath, "true")
+                // --- Add Logging Here ---
+                .doOnSuccess(success -> {
+                    if (Boolean.TRUE.equals(success)) {
+                        LOG.info("ConsulKvService.putValue for flag '{}' reported SUCCESS (returned true)", seededFlagFullPath);
                     } else {
-                        LOG.debug("Seeding key: {} = {}", key, value);
-                        return consulKvService.putValue(consulKvService.getFullPath(key), value);
+                        LOG.warn("ConsulKvService.putValue for flag '{}' reported FAILURE (returned false/empty)", seededFlagFullPath);
                     }
                 })
-                .filter(Boolean::booleanValue) // Only count successful puts
-                .doOnNext(success -> count.incrementAndGet())
-                .then(Mono.just(count.get()))
-                .flatMap(finalCount -> {
-                    // Always set the enabled flag in Consul, regardless of how many properties were seeded successfully
-                    // This matches the original behavior and ensures the test passes
-                    LOG.info("Successfully seeded {} out of {} properties into Consul KV store", finalCount, totalCount.get());
-                    return consulKvService.putValue(consulKvService.getFullPath("pipeline.enabled"), "true")
-                            .map(success -> {
-                                if (success) {
-                                    LOG.info("Successfully set enabled flag in Consul");
-                                } else {
-                                    LOG.warn("Failed to set enabled flag in Consul");
-                                }
-                                return finalCount;
-                            });
+                // --- End Added Logging ---
+                .flatMap(flagSetSuccess -> {
+                    if (flagSetSuccess) {
+                        LOG.info("Seeded flag set successfully. Marking local beans as enabled.");
+                        applicationConfig.markAsEnabled();
+                        pipelineConfig.markAsEnabled();
+                        return Mono.just(true);
+                    } else {
+                        LOG.warn("Failed to set seeded flag '{}' in Consul (based on flatMap).", seededFlagFullPath);
+                        return Mono.just(false); // Indicate failure to set flag
+                    }
+                })
+                .defaultIfEmpty(false) // Explicitly return false if the putValue mono was empty
+                .doOnError(e -> LOG.error("Error occurred during reactive chain for setting flag '{}'", seededFlagFullPath, e)) // Add error logging too
+                .onErrorResume(e -> {
+                    // Logged error above, now return false indicator
+                    return Mono.just(false);
                 });
     }
 }

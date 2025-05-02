@@ -57,4 +57,8 @@ public class ApplicationConfig {
     public boolean isEnabled() {
         return enabled;
     }
+
+    public void reset() {
+        this.enabled = false;
+    }
 }

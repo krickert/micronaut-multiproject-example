@@ -19,11 +19,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * Service for managing configuration.
- * This service loads configuration from Consul KV store and populates the configuration POJOs.
- * It also handles syncing changes back to Consul.
- */
 @Singleton
 @Refreshable
 public class ConfigurationService implements ApplicationEventListener<StartupEvent> {
@@ -34,14 +29,6 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
     private final PipelineConfig pipelineConfig;
     private final String applicationName;
 
-    /**
-     * Constructor with dependencies.
-     *
-     * @param consulKvService the service for interacting with Consul KV store
-     * @param applicationConfig the application configuration POJO
-     * @param pipelineConfig the pipeline configuration POJO
-     * @param applicationName the name of the application
-     */
     public ConfigurationService(
             ConsulKvService consulKvService,
             ApplicationConfig applicationConfig,
@@ -54,239 +41,189 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
         LOG.info("ConfigurationService initialized for application: {}", applicationName);
     }
 
-    /**
-     * Handles the StartupEvent by loading configuration from Consul KV store.
-     *
-     * @param event the startup event
-     */
     @Override
     public void onApplicationEvent(StartupEvent event) {
-        LOG.info("Loading configuration from Consul KV store");
-
-        // Load application configuration
-        loadApplicationConfig()
-            .doOnSuccess(success -> {
-                if (success) {
-                    LOG.info("Application configuration loaded successfully");
-                    applicationConfig.markAsEnabled();
-                } else {
-                    LOG.warn("Failed to load application configuration");
-                }
-            })
-            .subscribe();
-
-        // Load pipeline configuration
-        loadPipelineConfig()
-            .doOnSuccess(success -> {
-                if (success) {
-                    LOG.info("Pipeline configuration loaded successfully");
-                    pipelineConfig.markAsEnabled();
-                } else {
-                    LOG.warn("Failed to load pipeline configuration");
-                }
-            })
-            .subscribe();
+        LOG.info("Loading configuration from Consul KV store on StartupEvent");
+        // Consider removing this listener if Seeder triggers refresh, to avoid race conditions
+        loadConfiguration();
     }
 
-    /**
-     * Handles ConfigChangeEvent by reloading the affected configuration.
-     *
-     * @param event the configuration change event
-     */
     public void onConfigChange(ConfigChangeEvent event) {
-        String keyPrefix = event.getKeyPrefix();
-        LOG.info("Configuration change detected for key prefix: {}", keyPrefix);
-
-        if (keyPrefix.startsWith(applicationName)) {
-            // Reload application configuration
-            loadApplicationConfig()
-                .doOnSuccess(success -> {
-                    if (success) {
-                        LOG.info("Application configuration reloaded successfully");
-                    } else {
-                        LOG.warn("Failed to reload application configuration");
-                    }
-                })
-                .subscribe();
-        } else if (keyPrefix.startsWith("pipeline")) {
-            // Reload pipeline configuration
-            loadPipelineConfig()
-                .doOnSuccess(success -> {
-                    if (success) {
-                        LOG.info("Pipeline configuration reloaded successfully");
-                    } else {
-                        LOG.warn("Failed to reload pipeline configuration");
-                    }
-                })
-                .subscribe();
-        }
+        LOG.info("Configuration change detected for key prefix: {}. Reloading.", event.getKeyPrefix());
+        loadConfiguration(); // Reload all on any relevant change
     }
 
-    /**
-     * Loads application configuration from Consul KV store.
-     *
-     * @return a Mono that emits true if the operation was successful, false otherwise
-     */
+    // Central method to load all configs
+    private void loadConfiguration() {
+        LOG.debug("Starting full configuration load.");
+        // Run sequentially or parallel? Let's run sequentially for now.
+        loadApplicationConfig()
+            .flatMap(appSuccess -> loadPipelineConfig()) // Load pipelines after app config
+            .subscribe(
+                success -> LOG.info("Full configuration load attempt completed. Success: {}", success),
+                error -> LOG.error("Error during full configuration load", error)
+            );
+    }
+
+
     private Mono<Boolean> loadApplicationConfig() {
-        // Set the application name
         applicationConfig.setApplicationName(applicationName);
-
-        // Load application configuration from Consul KV store
-        // The path is ${micronaut.application.name}/config
         String configPath = applicationName + "/config";
-
         LOG.info("Loading application configuration from path: {}", configPath);
-
-        // In a real-world scenario, you would load more configuration from Consul
-        // For now, we'll just return true
+        // Actual loading logic would go here...
+        // For now, just mark as enabled
+        applicationConfig.markAsEnabled();
+        LOG.info("Application configuration marked as enabled (loading simulated).");
         return Mono.just(true);
     }
 
-    /**
-     * Loads pipeline configuration from Consul KV store.
-     *
-     * @return a Mono that emits true if the operation was successful, false otherwise
-     */
     private Mono<Boolean> loadPipelineConfig() {
-        // Load active pipeline
-        return consulKvService.getValue(consulKvService.getFullPath("pipeline.active"))
-            .flatMap(activePipelineOpt -> {
-                if (activePipelineOpt.isPresent()) {
-                    String activePipeline = activePipelineOpt.get();
-                    LOG.info("Active pipeline set to: {}", activePipeline);
-                } else {
-                    LOG.warn("No active pipeline found in Consul KV store");
-                }
+        pipelineConfig.getPipelines().clear(); // Clear before loading
+        pipelineConfig.setEnabled(false); // Mark as not enabled until load succeeds
 
-                // Load pipeline configurations
-                return loadPipelineConfigurations();
+        String pipelineConfigsPrefix = consulKvService.getFullPath("pipeline.configs") + "/";
+        LOG.info("Loading pipeline configurations from prefix: {}", pipelineConfigsPrefix);
+
+        return loadPipelineConfigurations(pipelineConfigsPrefix)
+            .doOnSuccess(success -> {
+                if (success) {
+                    LOG.info("Pipeline configuration loaded successfully.");
+                    pipelineConfig.markAsEnabled(); // Mark enabled only if loading succeeded
+                } else {
+                    LOG.warn("Failed to load pipeline configuration fully.");
+                    // Keep pipelineConfig disabled
+                }
+            })
+            .onErrorResume(e -> {
+                 LOG.error("Error during pipeline configuration loading", e);
+                 return Mono.just(false); // Ensure failure is signalled
             });
     }
 
     /**
      * Loads pipeline configurations from Consul KV store dynamically.
-     * Uses parallel execution to load multiple pipelines simultaneously.
      *
-     * @return a Mono that emits true if all discovered pipelines were loaded successfully, false otherwise
+     * @param pipelineConfigsPrefix The prefix for pipeline configs in Consul.
+     * @return a Mono that emits true if ALL discovered pipelines were loaded successfully, false otherwise.
      */
-    private Mono<Boolean> loadPipelineConfigurations() {
-        // Clear existing pipelines
-        pipelineConfig.getPipelines().clear();
-
-        // Define the base path for pipeline configs
-        String pipelineConfigsPrefix = consulKvService.getFullPath("pipeline.configs") + "/"; // Ensure trailing slash
-
-        LOG.info("Dynamically loading pipeline configurations from prefix: {}", pipelineConfigsPrefix);
+    private Mono<Boolean> loadPipelineConfigurations(String pipelineConfigsPrefix) {
 
         return consulKvService.getKeysWithPrefix(pipelineConfigsPrefix)
                 .flatMap(keys -> {
                     if (keys.isEmpty()) {
                         LOG.warn("No pipeline configuration keys found under prefix: {}", pipelineConfigsPrefix);
-                        return Mono.just(true); // No pipelines to load, operation is successful
+                        return Mono.just(true); // No pipelines is considered a success
                     }
 
-                    // Extract unique pipeline names from the keys
-                    // Example key: config/pipeline/pipeline.configs/my-pipeline/version
-                    // We want to extract "my-pipeline"
+                    // --- *** CORRECTED NAME DISCOVERY *** ---
                     Set<String> pipelineNames = keys.stream()
-                            .map(key -> key.substring(pipelineConfigsPrefix.length())) // Remove prefix -> "my-pipeline/version"
-                            .map(subKey -> subKey.split("/")[0]) // Get first part -> "my-pipeline"
+                            .filter(key -> key.startsWith(pipelineConfigsPrefix) && key.length() > pipelineConfigsPrefix.length())
+                            .map(key -> key.substring(pipelineConfigsPrefix.length()))
+                            .map(subKey -> {
+                                int firstSlash = subKey.indexOf('/');
+                                return (firstSlash > 0) ? subKey.substring(0, firstSlash) : subKey;
+                            })
+                            .filter(name -> !name.isEmpty() && !name.contains("/")) // Ensure it's just the name part
                             .collect(Collectors.toSet());
+                    // --- *** END CORRECTION *** ---
 
-                    LOG.info("Discovered pipeline names: {}", pipelineNames);
+                    LOG.info("Correctly discovered pipeline names: {}", pipelineNames);
 
                     if (pipelineNames.isEmpty()) {
-                        return Mono.just(true); // Should not happen if keys were found, but handle defensively
+                        LOG.warn("No valid pipeline names extracted from keys under prefix: {}", pipelineConfigsPrefix);
+                        return Mono.just(true); // No valid pipelines is considered success
                     }
 
-                    // Create a list of Monos, one for loading each discovered pipeline
+                    // Load each discovered pipeline configuration
                     List<Mono<Boolean>> loadMonos = pipelineNames.stream()
-                            .map(this::loadPipelineConfiguration)
+                            .map(this::loadPipelineConfiguration) // Use method reference
                             .collect(Collectors.toList());
 
-                    // Use Mono.zip to execute all loads in parallel and combine results
-                    // Ensure all operations return true
+                    // Use Mono.zip to wait for all pipelines to load attempt
+                    // Return true only if ALL attempts succeeded (or skipped gracefully)
                     return Mono.zip(loadMonos, results -> {
+                        boolean allSucceeded = true;
                         for (Object result : results) {
                             if (!(Boolean) result) {
-                                return false; // If any load failed, return false
+                                allSucceeded = false;
+                                break; // If one failed, the overall result is false
                             }
                         }
-                        return true; // All loads succeeded
+                        LOG.info("Result of loading all discovered pipelines. All succeeded: {}", allSucceeded);
+                        return allSucceeded;
                     });
                 })
-                .defaultIfEmpty(true) // If getKeysWithPrefix returns empty or error, consider it success (no pipelines loaded)
-        .onErrorResume(e -> { // Handle potential errors during key fetching or processing
-            LOG.error("Error loading dynamic pipeline configurations from prefix: {}", pipelineConfigsPrefix, e);
-            return Mono.just(false); // Indicate failure
-        });
+                .defaultIfEmpty(true) // If getKeysWithPrefix is empty or returns empty list after filtering.
+                .onErrorResume(e -> {
+                    LOG.error("Error loading dynamic pipeline configurations from prefix: {}", pipelineConfigsPrefix, e);
+                    return Mono.just(false);
+                });
     }
 
     /**
-     * Loads a pipeline configuration from Consul KV store.
+     * Loads a specific pipeline configuration, requiring version and lastUpdated.
      *
      * @param pipelineName the name of the pipeline
-     * @return a Mono that emits true if the operation was successful, false otherwise
+     * @return a Mono emitting true if loaded successfully, false if required keys are missing or load fails.
      */
     private Mono<Boolean> loadPipelineConfiguration(String pipelineName) {
+        LOG.debug("Attempting to load configuration for pipeline: {}", pipelineName);
         PipelineConfigDto pipeline = new PipelineConfigDto(pipelineName);
 
-        // Load pipeline version
         String versionKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".version");
-        Mono<Optional<String>> versionMono = consulKvService.getValue(versionKey);
-
-        // Load pipeline last updated timestamp
         String lastUpdatedKey = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".lastUpdated");
-        Mono<Optional<String>> lastUpdatedMono = consulKvService.getValue(lastUpdatedKey);
 
-        // Combine the results
+        Mono<Optional<String>> versionMono = consulKvService.getValue(versionKey).defaultIfEmpty(Optional.empty());
+        Mono<Optional<String>> lastUpdatedMono = consulKvService.getValue(lastUpdatedKey).defaultIfEmpty(Optional.empty());
+
         return Mono.zip(versionMono, lastUpdatedMono)
             .flatMap(tuple -> {
                 Optional<String> versionOpt = tuple.getT1();
                 Optional<String> lastUpdatedOpt = tuple.getT2();
 
-                // If either version or lastUpdated is missing, skip this pipeline
+                // --- Strict Check: Require BOTH version and lastUpdated ---
                 if (versionOpt.isEmpty() || lastUpdatedOpt.isEmpty()) {
-                    return Mono.just(true); // Skip this pipeline but don't fail
+                    LOG.warn("Skipping load for pipeline '{}' because required key '{}' or '{}' is missing in Consul.",
+                             pipelineName, versionKey, lastUpdatedKey);
+                    return Mono.just(false); // Indicate failure for THIS pipeline load
                 }
 
-                // Set the version and last updated timestamp
                 try {
                     pipeline.setPipelineVersion(Long.parseLong(versionOpt.get()));
                     pipeline.setPipelineLastUpdated(LocalDateTime.parse(lastUpdatedOpt.get()));
+                     LOG.debug("Successfully parsed metadata for pipeline '{}'", pipelineName);
                 } catch (Exception e) {
-                    LOG.error("Error parsing pipeline version or last updated timestamp for pipeline: {}", pipelineName, e);
-                    return Mono.just(false);
+                    LOG.error("Error parsing required metadata (version/lastUpdated) for pipeline: {}. Skipping.", pipelineName, e);
+                    return Mono.just(false); // Indicate failure for THIS pipeline load
                 }
 
-                // Load services for the pipeline
+                // --- Proceed to load services ONLY if metadata was valid ---
                 return loadPipelineServices(pipelineName, pipeline)
-                    .flatMap(success -> {
-                        if (success) {
+                    .flatMap(servicesLoadedSuccess -> {
+                        if (servicesLoadedSuccess) {
                             pipelineConfig.getPipelines().put(pipelineName, pipeline);
-                            LOG.info("Pipeline configuration loaded for: {}", pipelineName);
-                            return Mono.just(true);
+                            LOG.info("Pipeline configuration successfully loaded for: {}", pipelineName);
+                            return Mono.just(true); // Success for this pipeline
                         } else {
-                            LOG.warn("Failed to load services for pipeline: {}", pipelineName);
-                            return Mono.just(false);
+                            LOG.warn("Failed to load services for pipeline: {}. Pipeline load failed.", pipelineName);
+                            return Mono.just(false); // Failure for this pipeline
                         }
                     });
             })
-            .defaultIfEmpty(true); // If the pipeline doesn't exist, don't fail
+            .defaultIfEmpty(false) // If version/lastUpdated don't exist at all, treat as failure for this pipeline
+            .onErrorResume(e -> {
+                 LOG.error("Error loading configuration for pipeline: {}", pipelineName, e);
+                 return Mono.just(false); // Failure on error
+            });
     }
 
     /**
      * Loads services for a pipeline from Consul KV store.
-     *
-     * @param pipelineName the name of the pipeline
-     * @param pipeline the pipeline configuration to populate
-     * @return a Mono that emits true if the operation was successful, false otherwise
+     * // --- NEEDS IMPLEMENTATION ---
      */
     private Mono<Boolean> loadPipelineServices(String pipelineName, PipelineConfigDto pipeline) {
-        // This is a simplified implementation. In a real-world scenario,
-        // you would need to handle more complex loading logic.
-
-        // For now, we'll just return true
-        return Mono.just(true);
+        LOG.warn("loadPipelineServices is not fully implemented yet for pipeline: {}", pipelineName);
+        // TODO: Implement service loading logic here
+        return Mono.just(true); // Placeholder: Assume success for now
     }
 }

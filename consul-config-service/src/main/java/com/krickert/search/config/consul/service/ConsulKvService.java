@@ -90,6 +90,10 @@ public class ConsulKvService {
                 if (valueOpt.isPresent()) {
                     org.kiwiproject.consul.model.kv.Value value = valueOpt.get();
                     return value.getValueAsString();
+                } else if (key.equals("config/pipeline/pipeline.seeded")) {
+                    LOG.debug("No value found for key PIPELINE SEEDED, so returning EMPTY because WHY would it be here if it were " +
+                            "anything else?: {}", key);
+                    return Optional.empty();
                 } else {
                     LOG.debug("No value found for key: {}", key);
                     return Optional.empty();

@@ -6,21 +6,32 @@ import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.kiwiproject.consul.option.ConsistencyMode;
+import org.kiwiproject.consul.option.ImmutableQueryOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.test.StepVerifier;
+import org.kiwiproject.consul.option.ConsistencyMode;
+import org.kiwiproject.consul.option.QueryOptions; // Correct import
+import org.kiwiproject.consul.KeyValueClient;
+import org.kiwiproject.consul.model.kv.Value; // May need this if using getValue
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @MicronautTest(rebuildContext = true)
 @Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ConsulKvServiceTest implements TestPropertyProvider {
     private static final Logger LOG = LoggerFactory.getLogger(ConsulKvServiceTest.class);
+
+    // Inside ConsulKvServiceTest class:
+    @Inject KeyValueClient keyValueClient;
 
     @Inject
     private ConsulKvService consulKvService;
@@ -142,5 +153,62 @@ public class ConsulKvServiceTest implements TestPropertyProvider {
                 return false;
             })
             .verifyComplete();
+    }
+
+    @Test
+    void testImmediateReadAfterWriteConsistency() {
+        String key = "consistency-test-key";
+        String value = "consistent-value";
+        String fullPath = consulKvService.getFullPath(key);
+        LOG.info("Testing immediate read-after-write for key: {}", fullPath);
+
+        // 1. Put the value using the service
+        LOG.info("Putting value...");
+        StepVerifier.create(consulKvService.putValue(fullPath, value))
+                .expectNext(true)
+                .verifyComplete();
+        LOG.info("Put complete.");
+
+        // --- Verification ---
+        // 2a. Try reading IMMEDIATELY using the service (default consistency)
+        LOG.info("Reading immediately via service (default consistency)...");
+        StepVerifier.create(consulKvService.getValue(fullPath))
+                .expectNextMatches(opt -> {
+                    LOG.info("Service getValue returned: {}", opt.orElse("empty"));
+                    // This might still fail here if the issue is timing/eventual consistency
+                    return opt.isPresent() && value.equals(opt.get());
+                })
+                .as("Immediate read via service")
+                .expectComplete()
+                // Use verify() with timeout for potentially failing async checks in tests
+                .verify(Duration.ofSeconds(2));
+
+        // 2b. Try reading IMMEDIATELY using the raw client with STRONG consistency
+        LOG.info("Reading immediately via raw client (CONSISTENT)...");
+        // *** Use ImmutableQueryOptions builder ***
+        QueryOptions consistentQueryOptions = ImmutableQueryOptions.builder()
+                .consistencyMode(ConsistencyMode.CONSISTENT)
+                .build();
+        // *** Call getValue which returns Optional<Value> and accepts QueryOptions ***
+        Optional<Value> consistentReadRaw = keyValueClient.getValue(fullPath, consistentQueryOptions);
+        // *** Extract the String value ***
+        Optional<String> consistentReadOpt = consistentReadRaw.flatMap(Value::getValueAsString);
+
+        LOG.info("Raw client CONSISTENT read returned: {}", consistentReadOpt.orElse("empty"));
+        assertTrue(consistentReadOpt.isPresent() && value.equals(consistentReadOpt.get()),
+                "Immediate CONSISTENT read via raw client should succeed. Got: " + consistentReadOpt.orElse("empty"));
+
+        // 3. Optional: Add a small delay and read again via service
+        try {
+            LOG.info("Waiting 200ms...");
+            Thread.sleep(200);
+        } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+
+        LOG.info("Reading via service after delay...");
+        StepVerifier.create(consulKvService.getValue(fullPath))
+                .expectNextMatches(opt -> opt.isPresent() && value.equals(opt.get()))
+                .as("Read via service after delay")
+                .verifyComplete(); // verifyComplete() is fine if you expect it to pass reliably after delay
+        LOG.info("Read via service after delay succeeded.");
     }
 }
