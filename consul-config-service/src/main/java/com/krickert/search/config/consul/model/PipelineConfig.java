@@ -97,7 +97,7 @@ public class PipelineConfig {
      */
     public void loadServicesFromConsul(PipelineConfigDto pipeline) {
         String pipelineName = pipeline.getName();
-        String servicesPrefix = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".services.");
+        String servicesPrefix = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".service.");
 
         // Get all keys with the services prefix
         List<String> serviceKeys = consulKvService.getKeysWithPrefix(servicesPrefix).block();
@@ -112,7 +112,7 @@ public class PipelineConfig {
 
         for (String key : serviceKeys) {
             // Extract service name from key
-            // Format: prefix/pipeline.configs.{pipelineName}.services.{serviceName}.{property}
+            // Format: prefix/pipeline.configs.{pipelineName}.service.{serviceName}.{property}
             String[] parts = key.split("\\.");
             if (parts.length < 6) {
                 LOG.warn("Invalid service key format: {}", key);
@@ -145,13 +145,22 @@ public class PipelineConfig {
                     case "name":
                         serviceConfig.setName(value);
                         break;
-                    case "kafkaListenTopics":
+                    case "kafka-listen-topics":
                         serviceConfig.setKafkaListenTopics(Arrays.asList(value.split(",")));
                         break;
-                    case "kafkaPublishTopics":
+                    case "kafkaListenTopics": // Keep for backward compatibility
+                        serviceConfig.setKafkaListenTopics(Arrays.asList(value.split(",")));
+                        break;
+                    case "kafka-publish-topics":
                         serviceConfig.setKafkaPublishTopics(Arrays.asList(value.split(",")));
                         break;
-                    case "grpcForwardTo":
+                    case "kafkaPublishTopics": // Keep for backward compatibility
+                        serviceConfig.setKafkaPublishTopics(Arrays.asList(value.split(",")));
+                        break;
+                    case "grpc-forward-to":
+                        serviceConfig.setGrpcForwardTo(Arrays.asList(value.split(",")));
+                        break;
+                    case "grpcForwardTo": // Keep for backward compatibility
                         serviceConfig.setGrpcForwardTo(Arrays.asList(value.split(",")));
                         break;
                     case "serviceImplementation":
