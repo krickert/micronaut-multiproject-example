@@ -18,7 +18,7 @@ micronaut:
 # Consul client configuration
 consul:
   client:
-    enabled: false
+    enabled: true
 
 grpc:
   server:
