@@ -283,6 +283,103 @@ When registering a service, you need to specify the following properties:
 | `grpcForwardTo` | List of service names to forward messages to via gRPC | No |
 | `configParams` | Map of configuration parameters specific to your service | No |
 
+## Dynamic Service Discovery
+
+The system now supports automatic service discovery, allowing services to register themselves with the pipeline configuration system during startup. This section explains how the service discovery mechanism works and how to configure your services to use it.
+
+### How Service Registration Works
+
+When a service starts up, it automatically registers itself with the pipeline configuration system through the following process:
+
+1. The service listens for a `ServiceReadyEvent` from Micronaut
+2. When the event is received, the service checks if it's already registered with the specified pipeline
+3. If the pipeline doesn't exist, it creates the pipeline first
+4. If the service is not already registered, it registers itself with the pipeline
+5. The service configuration is stored in Consul's Key-Value store
+
+This automatic registration process eliminates the need for manual registration of services, making deployment and scaling of services much easier.
+
+### Configuration Properties for Service Registration
+
+To enable automatic service registration, configure the following properties in your service's `application.properties` or `application.yml` file:
+
+| Property | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `pipeline.service.name` | Name of the service instance | Yes | None |
+| `pipeline.name` | Name of the pipeline to register with | Yes | None |
+| `pipeline.service.implementation` | Fully qualified class name of the service implementation | No | None |
+| `pipeline.listen.topics` | Comma-separated list of Kafka topics to listen to | No | None |
+| `pipeline.publish.topics` | Comma-separated list of Kafka topics to publish to | No | None |
+| `pipeline.grpc.forward.to` | Comma-separated list of services to forward to via gRPC | No | None |
+| `pipeline.service.json.config` | JSON configuration string | No | `{}` |
+| `pipeline.service.json.schema` | JSON schema string | No | `{}` |
+| `pipeline.service.registration.enabled` | Whether to enable automatic registration | No | `true` |
+
+Example configuration:
+
+```properties
+# Service registration configuration
+pipeline.service.name=my-custom-processor
+pipeline.name=my-pipeline
+pipeline.service.implementation=com.example.MyCustomProcessor
+pipeline.listen.topics=input-topic-1, input-topic-2
+pipeline.publish.topics=output-topic
+pipeline.grpc.forward.to=next-service-name
+pipeline.service.registration.enabled=true
+```
+
+### How Services Discover Each Other
+
+Services can discover each other through the following mechanisms:
+
+1. **Consul Service Discovery**: Services registered with Consul can be discovered using Consul's service discovery API
+2. **Pipeline Configuration**: Services can look up other services in the pipeline configuration
+3. **REST API**: The system provides a REST API for querying available services
+
+#### Using the Service Discovery API
+
+The system provides a REST API endpoint for discovering services:
+
+```bash
+# Get all PipeService gRPC services
+curl -X GET http://localhost:8080/api/services
+```
+
+This returns a JSON response with information about all registered services, including:
+- Service name
+- Running status
+- Address and port
+- Tags
+
+Example response:
+
+```json
+{
+  "services": [
+    {
+      "name": "my-custom-processor",
+      "running": true,
+      "address": "10.0.0.1",
+      "port": 50051,
+      "tags": ["grpc-pipeservice", "pipeline-processor"]
+    },
+    {
+      "name": "another-service",
+      "running": true,
+      "address": "10.0.0.2",
+      "port": 50051,
+      "tags": ["grpc-pipeservice"]
+    }
+  ]
+}
+```
+
+### Integration with Kafka
+
+In the future, the system will integrate with Kafka to provide real-time updates when services register or deregister. This will allow all services in the cluster to be immediately notified of changes to the service registry.
+
+Until this feature is implemented, services can periodically query the service discovery API to get the latest information about available services.
+
 ## Creating a New Cluster
 
 A cluster in the context of this system refers to a complete pipeline configuration that can process data independently. This section explains how to create a new cluster from scratch.
@@ -439,9 +536,9 @@ While the current system provides a solid foundation for configuring and managin
 
 ### Dynamic Service Discovery
 
-**Current State**: Services need to be manually registered and configured.
+**Current State**: Automatic service discovery is now implemented. Services can register themselves with the system during startup.
 
-**Enhancement**: Implement automatic service discovery where new services can register themselves with the system.
+**Enhancement**: Further enhance the service discovery mechanism with health checks and automatic recovery.
 
 ### Pipeline Visualization
 
