@@ -1,266 +1,285 @@
-# Consul Configuration Service
-
-A centralized configuration management service for distributed systems using Consul KV store.
+# YAPPY (Yet Another Pipeline Processor <sub>yawn</sub>)
 
 ## Overview
 
-The Consul Configuration Service provides a RESTful API for managing configuration stored in Consul's Key/Value store. It enables centralized configuration management for distributed microservices, with features for reading, writing, and deleting configuration values, as well as dynamic configuration updates.
+YAPPY is a decentralized, self-discoverable pipeline platform designed for flexible text mining and search indexing workflows. Built using the Micronaut framework, it leverages Kafka for asynchronous message passing, gRPC for synchronous inter-service communication (enabling potential polyglot services), and HashiCorp Consul for dynamic configuration management and service discovery.
 
-## Features
+The core purpose of YAPPY is to act as a robust, scalable, and adaptable streaming platform, particularly suited for A/B testing different text processing strategies and building indexing pipelines for various search engines like Solr, OpenSearch, Pinecone, and PostgreSQL datasources. Unlike traditional centralized processing engines, YAPPY services operate as a decentralized cluster, discovering each other and fetching configuration dynamically, allowing for near real-time updates and flexible pipeline modifications.
 
-- **RESTful API** for managing configuration in Consul KV store
-- **Dynamic configuration updates** with event-based notification
-- **Support for complex nested structures** with JSON/YAML serialization
-- **Initial data seeding** from properties files
-- **Comprehensive test coverage** using Testcontainers
+An Out-of-the-Box (OOTB) Search API is included, enabling hybrid search capabilities (BM25 keyword and vector/semantic search) against configured search backends (initially Solr). Future plans include adding a comprehensive analytics package.
+
+## Core Concepts
+
+* **Decentralized Architecture:** Services register themselves with Consul and discover other services through it. There is no central pipeline server; services operate independently based on shared configuration.
+* **Dynamic Configuration:** Pipeline definitions and service parameters are managed centrally via the `consul-config-service` backed by Consul's Key/Value store. Services built with `pipeline-service-core` can automatically listen for and react to configuration changes.
+* **Communication:**
+    * **Asynchronous (Kafka):** The primary data flow between pipeline steps uses Kafka topics. Services consume messages (typically `PipeStream` protobuf messages containing `PipeDoc`), process them, and publish results to output topics. Kafka's features enable pausing and rewinding pipelines for reprocessing.
+    * **Synchronous (gRPC):** Services can communicate directly using gRPC for specific tasks or control plane operations. This also opens the door for creating pipeline services in languages other than Java (like Python) via gRPC proxies.
+* **Extensibility (SDK):** The `pipeline-service-core` module acts as an SDK, providing base classes and handling boilerplate for Kafka, gRPC, Consul configuration, and service registration. Developers can create custom pipeline steps by implementing the `PipelineServiceProcessor` interface and defining their configuration schema.
+* **`PipeDoc`:** The central data structure, defined using Protocol Buffers (`protobuf-models`), which carries document content, metadata (like IDs, timestamps, keywords), extracted text, chunks, embeddings (`SemanticDoc`), and custom data (`Struct`) through the various pipeline stages.
+
+## Architecture
+
+### High-Level Component Interaction
+
+This diagram shows the main components and how they interact:
+
+```mermaid
+graph TD
+    subgraph "Infrastructure"
+        Consul[Consul Discovery + KV Store]
+        Kafka[Kafka Message Bus]
+    end
+    subgraph "Core Platform"
+        ConfigService[consul-config-service API] -- Reads/Writes --> Consul
+        PipelineServiceCore[pipeline-service-core Library] -- Uses --> Consul
+        PipelineServiceCore -- Uses --> Kafka
+        PipelineServiceCore -- Uses --> gRPC
+    end
+    subgraph "Pipeline Services (Examples)"
+        ServiceA[Pipeline Service A] -- Built using --> PipelineServiceCore
+        ServiceB[Pipeline Service B] -- Built using --> PipelineServiceCore
+        ServiceC[Pipeline Service C] -- Built using --> PipelineServiceCore
+    end
+    ServiceA -- Pub/Sub --> Kafka
+    ServiceB -- Pub/Sub --> Kafka
+    ServiceC -- Pub/Sub --> Kafka
+    ServiceA -- Gets Config --> ConfigService
+    ServiceB -- Gets Config --> ConfigService
+    ServiceC -- Gets Config --> ConfigService
+    ServiceA -- Discovers/Registers --> Consul
+    ServiceB -- Discovers/Registers --> Consul
+    ServiceC -- Discovers/Registers --> Consul
+    ServiceA -- gRPC Call --> ServiceB
+```
+
+### Pipeline Configuration
+
+Pipeline structures are defined in the `consul-config-service` (typically seeded from a YAML file like `test-seed-data.yaml`) and stored in Consul KV under `config/pipeline/pipeline.configs`. Each pipeline defines a series of services and how they connect via Kafka topics or gRPC calls.
+
+**Example Configuration Snippet (`test-seed-data.yaml` structure):**
+
+```yaml
+# Example structure found in consul-config-service/src/test/resources/test-seed-data.yaml
+pipeline:
+  configs:
+    # Pipeline Definition: pipeline1
+    pipeline1:
+      service:
+        # Service: importer (Entry point)
+        importer:
+          kafka-publish-topics: input-documents # Publishes PipeDocs to this topic
+          serviceImplementation: com.krickert.pipeline.importer.ImporterService # Java class implementing the service logic
+          # configParams: # Optional service-specific parameters
+          #   source-type: jdbc
+          #   db-url: ...
+        # Service: tika-parser
+        tika-parser:
+          kafka-listen-topics: input-documents # Listens to importer's output
+          kafka-publish-topics: tika-documents # Publishes parsed docs
+          serviceImplementation: com.krickert.pipeline.parser.TikaParserService
+        # Service: chunker
+        chunker:
+          kafka-listen-topics: tika-documents  # Listens to tika's output
+          kafka-publish-topics: chunked-documents # Publishes chunked docs
+          # grpc-forward-to: embedder-service # Alternative: Forward via gRPC instead of Kafka
+          serviceImplementation: com.krickert.pipeline.chunker.ChunkerService
+          configParams:
+            chunkSize: 512
+            overlapSize: 50
+            chunk-field: body # Field within PipeDoc to chunk (defaults to 'body')
+        # Service: embedder
+        embedder:
+          kafka-listen-topics: chunked-documents # Listens to chunker's output
+          kafka-publish-topics: embedded-documents # Publishes docs with embeddings
+          serviceImplementation: com.krickert.pipeline.embedder.EmbedderService
+          configParams:
+            model: "text-embedding-ada-002"
+            dimension: 1536
+        # Service: solr-indexer (Sink)
+        solr-indexer:
+          kafka-listen-topics: embedded-documents # Listens to embedder's output
+          serviceImplementation: com.krickert.pipeline.indexer.SolrIndexerService
+          configParams:
+            solr-url: "http://localhost:8983/solr"
+            collection: "yappy_index"
+# ... other pipelines (pipeline2, test-pipeline) ...
+```
+
+**Explanation of Fields:**
+
+* `pipeline.configs.<pipeline-name>`: Defines a pipeline block.
+* `service.<service-name>`: Defines a service within the pipeline.
+* `kafka-listen-topics`: Comma-separated list of Kafka topics the service consumes `PipeStream` messages from.
+* `kafka-publish-topics`: Comma-separated list of Kafka topics the service publishes resulting `PipeStream` messages to.
+* `grpc-forward-to`: (Optional) A service ID (registered in Consul) to forward the `PipeStream` to via gRPC instead of Kafka. A service typically uses either Kafka publish topics *or* gRPC forwarding.
+* `serviceImplementation`: The fully qualified class name of the Java class implementing the `PipelineServiceProcessor` logic for this service step.
+* `configParams`: An optional map of key-value pairs providing specific configuration to the service implementation (e.g., chunk size, model name, connection URLs).
+
+## Project Structure
+
+* `bom/`: Bill of Materials - Manages shared dependency versions across the project using Gradle platforms.
+* `consul-config-service/`: Micronaut service providing a REST API to manage pipeline configurations stored in Consul KV. Includes data seeding and dynamic update capabilities.
+* `docker-dev/`: Contains Docker Compose files for setting up a local development environment (Kafka, Consul, Solr, etc.).
+* `pipeline-examples/`: Example pipeline service implementations (e.g., `pipeline-echo-service`). Useful as templates.
+* `pipeline-service-core/`: The core SDK library. Provides base classes, gRPC/Kafka integration, configuration management (`PipelineConfigManager`, `PipelineConfigService`), and the `PipelineServiceProcessor` interface that custom services implement.
+* `pipeline-service-test-utils/`: Shared testing utilities.
+    * `pipeline-test-platform/`: A framework using Testcontainers to simplify integration testing of pipeline services with Kafka, Consul, and Schema Registries (Apicurio, Moto for AWS Glue).
+* `pipeline-services/`: Implementations of common, reusable pipeline services (Connectors, Parsers, Chunkers, Embedders, Indexers).
+    * `chunker/`: Example implementation of a text chunking service.
+* `protobuf-models/`: Defines the core data structures (`PipeDoc`, `SemanticDoc`, `Embedding`, etc.) using Protocol Buffers and includes mapping utilities (`ProtoMapper`).
+* `util/`: Simple shared utility code.
+
+## Core Services (Included & Planned)
+
+*(Note: Services marked with \* are typically embedded within `pipeline-service-core` or other services)*
+
+| Name                 | Purpose                                                                  | Status        |
+| :------------------- | :----------------------------------------------------------------------- | :------------ |
+| Mapper\* | Maps fields within/between PipeDocs based on rules (`protobuf-models`)     | Included      |
+| Chunker\* | Splits document text into chunks (`pipeline-services/chunker`)           | Included      |
+| Administration\* | Core service lifecycle management (`pipeline-service-core`)              | Included      |
+| **Connectors** |                                                                          |               |
+| S3 Crawler           | Reads documents and metadata from AWS S3 buckets.                          | Planned       |
+| JDBC Crawler         | Reads documents from database tables via JDBC.                           | Planned       |
+| Solr Crawler         | Reads documents from a Solr index.                                       | Planned       |
+| **Parsers** |                                                                          |               |
+| Tika Parser          | Extracts text and metadata from various file formats using Apache Tika.  | Planned       |
+| JDBC Parser          | Parses JDBC result sets into PipeDocs, potentially handling BLOBs.       | Planned       |
+| **Processing Steps** |                                                                          |               |
+| Semantic Chunker     | Chunks text based on semantic meaning (advanced chunking).               | Planned       |
+| Embedder             | Generates vector embeddings for text using a configured LLM/model.       | Planned       |
+| NLP NER              | Performs Named Entity Recognition on text.                               | Planned       |
+| Summarizer           | Generates summaries of document text.                                    | Planned       |
+| **Sinks** |                                                                          |               |
+| Solr Indexer         | Indexes PipeDocs into Apache Solr.                                       | Planned       |
+| S3 Indexer           | (Purpose TBD - perhaps stores processed PipeDocs back to S3?)            | Planned       |
+| JDBC Indexer         | Writes data from PipeDocs back to a database via JDBC.                   | Planned       |
+| **Other** |                                                                          |               |
+| Search API           | Provides BM25 & Vector search endpoints (requires an indexer like Solr). | Planned (OOTB) |
+
+*(Many more services are planned)*
+
+## Pipeline Service SDK
+
+Creating a custom pipeline service primarily involves:
+
+1.  Implementing the `com.krickert.search.pipeline.service.PipelineServiceProcessor` interface in your chosen language (Java is directly supported).
+2.  Defining the service's configuration needs (if any) which can be accessed via the `PipeStream` request's config map.
+3.  Packaging the service as a Micronaut application.
+4.  Configuring the service within a pipeline definition managed by the `consul-config-service`.
+
+The `pipeline-service-core` library handles much of the boilerplate:
+
+* Setting up Kafka consumers (`DynamicKafkaConsumerManager`) based on `kafka-listen-topics`.
+* Providing a Kafka producer (`KafkaForwarder`) for `kafka-publish-topics`.
+* Setting up a gRPC server (`PipelineServiceImpl`) to receive `PipeStream` messages.
+* Providing a gRPC client (`GrpcForwarder`) for `grpc-forward-to` destinations.
+* Loading service-specific configuration from Consul via `PipelineConfigService`.
+* Registering the service with Consul for discovery.
+
+For languages other than Java, a gRPC proxy can be created to interface with the core platform.
+
+## Use Case Example: Knowledge Repository
+
+This use case processes documents from a database (JDBC) and an S3 bucket into a searchable Solr index.
+
+**Flow:**
+
+1.  **JDBC Crawler:** Reads rows from a database. Each row becomes a `PipeDoc`. If a row contains a BLOB in a specific field, it sends the `PipeStream` to the `Tika Parser` service via Kafka. Otherwise, it sends the `PipeStream` directly to the `Chunker` service's input topic.
+2.  **S3 Crawler:** Reads files from an S3 bucket. It extracts metadata and content. It sends the `PipeStream` containing the file content (as a blob) and metadata to the `Tika Parser` service via Kafka. *(Assumed flow based on context)*.
+3.  **Tika Parser:** Consumes messages from its input topic. Parses text content and metadata from blobs using Apache Tika. Publishes the updated `PipeDoc` (with extracted text in the `body` field or other mapped fields) to the `Chunker` service's input topic.
+4.  **Chunker Service:** Consumes messages from its input topic. Reads configuration (`chunkSize`, `overlapSize`, `chunk-field`) managed by `consul-config-service`. Chunks the specified text field(s) from the `PipeDoc`. Stores the chunks within the `PipeDoc`'s `chunk_embeddings` field (as `SemanticChunk` messages). Publishes the modified `PipeDoc` to the `Embedder` service's input topic.
+5.  **Embedder Service:** Consumes messages from the chunker. Reads configuration (e.g., model name, dimension). Calculates vector embeddings for the text chunks using the configured LLM. Stores the embeddings within the corresponding `ChunkEmbedding` messages inside the `PipeDoc`. Publishes the updated `PipeDoc` to the `Solr Indexer`'s input topic.
+6.  **Solr Indexer:** Consumes messages from the embedder. Reads configuration (Solr URL, collection name). Indexes the `PipeDoc` content, metadata, and vector embeddings into the configured Solr collection.
+7.  **Search API:** Connects to the Solr collection. Provides REST endpoints for users to perform keyword (BM25), semantic (vector), or hybrid searches.
+
+**Mermaid Diagram:**
+
+```mermaid
+ graph TD
+    subgraph "Crawlers"
+        JDBC[JDBC Crawler]
+        S3[S3 Crawler]
+    end
+    subgraph "Processing Pipeline"
+        InputTopic(Kafka: Importer Output)
+        Tika[Tika Parser]
+        ChunkerTopic(Kafka: Parser Output)
+        Chunker[Chunker Service]
+        EmbedderTopic(Kafka: Chunker Output)
+        Embedder[Embedder Service]
+        IndexerTopic(Kafka: Embedder Output)
+        Indexer[Solr Indexer]
+    end
+    subgraph "Storage & Search"
+            Solr[(Solr)]
+            SearchAPI[Search API]
+        end
+
+    JDBC -- PipeDoc w/o Blob --> ChunkerTopic
+    JDBC -- PipeDoc w/ Blob --> InputTopic
+    S3 -- PipeDoc w/ Blob --> InputTopic
+
+    InputTopic --> Tika
+    Tika -- Parsed PipeDoc --> ChunkerTopic
+    ChunkerTopic --> Chunker
+    Chunker -- Chunked PipeDoc --> EmbedderTopic
+    EmbedderTopic --> Embedder
+    Embedder -- Embedded PipeDoc --> IndexerTopic
+    IndexerTopic --> Indexer
+    Indexer -- Updates --> Solr
+    SearchAPI -- Queries --> Solr
+```
 
 ## Getting Started
 
 ### Prerequisites
 
-- Java 21 or later
-- Gradle 8.0 or later
-- Consul server (or use Docker)
+* JDK 21
+* Gradle 8+
+* Docker & Docker Compose (for running dependencies locally using `docker-dev`)
 
-### Running the Service
+### Building
 
-```bash
-./gradlew :consul-config-service:run
-```
-
-Or with Docker:
+Build the entire project and run tests:
 
 ```bash
-docker run -d -p 8500:8500 hashicorp/consul:latest
-./gradlew :consul-config-service:run
+./gradlew build
 ```
 
-## API Endpoints
-
-### Configuration Management
-
-#### Get Configuration
-
-```
-GET /config/{keyPath}
-```
-
-Retrieves the configuration value for the specified key path.
-
-#### Update Configuration (Plain Text)
-
-```
-PUT /config/{keyPath}
-Content-Type: text/plain
-
-value
-```
-
-Updates the configuration value for the specified key path with a plain text value.
-
-#### Update Configuration (JSON)
-
-```
-PUT /config/{keyPath}
-Content-Type: application/json
-
-{
-  "key1": "value1",
-  "key2": "value2"
-}
-```
-
-Updates the configuration value for the specified key path with a JSON value.
-
-#### Delete Configuration
-
-```
-DELETE /config/{keyPath}
-```
-
-Deletes the configuration value for the specified key path.
-
-#### Refresh Configuration
-
-```
-POST /config/refresh
-```
-
-Triggers a refresh of all @Refreshable beans.
-
-### Pipeline Management
-
-#### List Pipelines
-
-```
-GET /api/pipelines
-```
-
-Retrieves a list of names for all configured pipelines.
-
-#### Create Pipeline
-
-```
-POST /api/pipelines
-Content-Type: application/json
-
-{
-  "name": "new-pipeline-name"
-}
-```
-
-Creates a new pipeline configuration with the given name. Initializes version to 1 and sets the creation/update timestamp.
-
-#### Get Pipeline Configuration
-
-```
-GET /api/pipelines/{pipelineName}
-```
-
-Retrieves the complete configuration for a specific pipeline.
-
-#### Delete Pipeline
-
-```
-DELETE /api/pipelines/{pipelineName}
-```
-
-Deletes the entire configuration for the specified pipeline.
-
-#### Update Pipeline Configuration
-
-```
-PUT /api/pipelines/{pipelineName}
-Content-Type: application/json
-
-{
-  "name": "pipeline-name",
-  "services": { ... },
-  "pipelineVersion": 5,
-  "pipelineLastUpdated": "..."
-}
-```
-
-Replaces the entire configuration for a given pipeline. Uses optimistic locking based on the provided `pipelineVersion`. The `pipelineVersion` in the request must match the current version in Consul, otherwise a 409 Conflict response will be returned.
-
-### API Documentation
-
-The service provides OpenAPI documentation that can be accessed at:
-
-```
-/swagger/consul-config-service-1.0.0.yml
-```
-
-A Swagger UI is also available at:
-
-```
-/swagger-ui/
-```
-
-This provides an interactive interface to explore and test the API endpoints.
-
-## Configuration
-
-The service can be configured using the following properties:
-
-```yaml
-consul:
-  client:
-    host: localhost
-    port: 8500
-    config:
-      path: config/pipeline
-  data:
-    seeding:
-      enabled: true
-      file: seed-data.yaml
-      skip-if-exists: true
-```
-
-## Initial Data Seeding
-
-The service can seed initial configuration data from a YAML file. The default file is `seed-data.yaml` in the classpath. The format is:
-
-```yaml
-pipeline:
-  configs:
-    pipeline1:
-      service:
-        chunker:
-          kafka-listen-topics:
-            - input-documents
-          kafka-publish-topics: chunker-results
-
-    pipeline2:
-      service:
-        chunker:
-          kafka-listen-topics: input-documents2
-          kafka-publish-topics: chunker-results2
-```
-
-For backward compatibility, the service can also load configuration from properties files.
-
-## Pipeline Configuration Graph Structure
-
-The pipeline configuration forms a directed graph where services are nodes and connections (via Kafka topics or gRPC) are edges. This structure allows for complex data processing pipelines with multiple stages.
-
-### Service Configuration Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | String | The name of the service |
-| `kafkaListenTopics` | List<String> | The list of Kafka topics this service listens to |
-| `kafkaPublishTopics` | List<String> | The list of Kafka topics this service publishes to |
-| `grpcForwardTo` | List<String> | The list of services this service forwards to via gRPC |
-| `serviceImplementation` | String | The name of the service implementation class |
-| `configParams` | Map<String, String> | Service-specific configuration parameters |
-
-### Loop Detection
-
-The service automatically detects and prevents loops in the pipeline configuration. A loop would occur if a service indirectly listens to a topic it publishes to, or if there's a circular reference in gRPC forwarding. For example:
-
-1. Service A publishes to topic1
-2. Service B listens to topic1 and publishes to topic2
-3. Service C listens to topic2 and publishes to topic3
-4. If Service A were to listen to topic3, it would create a loop
-
-When adding or updating a service, the system validates that it won't create a loop in the pipeline.
-
-### Service Dependencies
-
-Services can depend on each other in two ways:
-1. **Kafka Topic Dependency**: Service B depends on Service A if B listens to a topic that A publishes to
-2. **gRPC Dependency**: Service B depends on Service A if A forwards to B via gRPC
-
-When removing a service, you can choose to also remove all services that depend on it, recursively. This ensures that the pipeline remains consistent and prevents orphaned services.
-
-## Dynamic Configuration Updates
-
-When configuration is updated via the API, the service publishes events to notify consumers of the changes. Consumers can listen for these events and refresh their configuration accordingly.
-
-## Testing
-
-The service includes comprehensive tests using Testcontainers to run Consul in a Docker container during tests.
+Build a specific module (e.g., consul-config-service):
 
 ```bash
-./gradlew :consul-config-service:test
+./gradlew :consul-config-service:build
 ```
 
-## License
+### Running Services Locally
 
-This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
+1.  **Start Dependencies:** Navigate to the `docker-dev` directory and start the required infrastructure (Kafka, Consul, Solr):
+    ```bash
+    cd docker-dev
+    docker-compose up -d
+    ./test-docker-setup.sh # Optional: Verify services are running
+    ```
+2.  **Run the Configuration Service:**
+    ```bash
+    ./gradlew :consul-config-service:run
+    ```
+3.  **Run a Pipeline Service** (e.g., the Chunker service, assuming dev properties are set):
+    ```bash
+    ./gradlew :pipeline-services:chunker:run
+    ```
+    *(Repeat for other services needed for your pipeline)*
 
+### Creating Custom Services
 
-# Roadmap
-1. (done) Concurrency edit exception checks
-2. (done) Edit mode which will allow for validation before saving
-3. Integration with pipeline-core 
-4. Kafka/protobuf update triggers for NRT config updates (even on the front end)
-5. Front end editor
-6. Service editor
-7. Service specific configuration
-8. Marmaid form graph representation via an API call
-9. UML Diagram generation
-10. Front end to have Kafka status, pause, continue functionality 
-11. Rewind / fast forward offset
-12. (done) Implement transactions for atomic updates
+Refer to the `pipeline-service-core` README and the examples in `pipeline-examples` for guidance on implementing the `PipelineServiceProcessor` and configuring your service.
+
+## Future Work
+
+* Implement the planned core services (Tika, Embedder, Indexers, Crawlers, Search API).
+* Develop the Analytics package.
+* Create a visual front-end for pipeline design and monitoring.
+* Add support for other search backends (OpenSearch, Pinecone, PostgreSQL).
+* Expand language support via gRPC proxies.
