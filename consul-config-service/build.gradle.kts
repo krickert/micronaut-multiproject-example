@@ -43,11 +43,11 @@ dependencies {
     annotationProcessor(platform(project(":bom")))
     testImplementation(platform(project(":bom")))
     testAnnotationProcessor(platform(project(":bom")))
-    
+
     // Annotation processors
     annotationProcessor(libs.bundles.micronaut.annotation.processors)
     annotationProcessor(mn.micronaut.openapi.common)
-    
+
     // API dependencies - these are exposed to consumers of the library
     api(mn.micronaut.inject)
     api(mn.micronaut.serde.api)
@@ -62,7 +62,7 @@ dependencies {
     api(mn.micronaut.discovery.core)
     api(libs.slf4j.api)
     api(libs.logback.classic)
-    
+
     // Implementation dependencies
     implementation(mn.micronaut.reactor)
     implementation(mn.micronaut.reactor.http.client)
@@ -76,11 +76,11 @@ dependencies {
 
     // Compile-only dependencies
     compileOnly(mn.lombok)
-    
+
     // Runtime dependencies
     runtimeOnly(mn.micronaut.openapi.common)
     runtimeOnly(mn.snakeyaml)
-    
+
     // Test dependencies
     testAnnotationProcessor(mn.micronaut.inject.java)
     testImplementation(mn.junit.jupiter.api)
@@ -103,6 +103,14 @@ dependencies {
     // https://mvnrepository.com/artifact/com.networknt/json-schema-validator
     implementation("com.networknt:json-schema-validator:1.5.6")
     testImplementation(mn.hamcrest)
+
+    // Add protobuf-models dependency for gRPC service
+    implementation(project(":protobuf-models"))
+
+    // Add gRPC dependencies
+    implementation(mn.micronaut.grpc.runtime)
+    implementation(mn.micronaut.grpc.server.runtime)
+    testImplementation(mn.micronaut.grpc.client.runtime)
 }
 
 // Publishing configuration
