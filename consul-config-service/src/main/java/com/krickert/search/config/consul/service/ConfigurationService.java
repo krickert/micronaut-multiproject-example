@@ -1,11 +1,7 @@
 package com.krickert.search.config.consul.service;
 
 import com.krickert.search.config.consul.event.ConfigChangeEvent;
-import com.krickert.search.config.consul.model.ApplicationConfig;
-import com.krickert.search.config.consul.model.PipelineConfig;
-import com.krickert.search.config.consul.model.PipelineConfigDto;
-import com.krickert.search.config.consul.model.ServiceConfigurationDto;
-import com.krickert.search.config.consul.model.PipestepConfigOptions;
+import com.krickert.search.config.consul.model.*;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.event.ApplicationEventListener;
 import io.micronaut.context.event.StartupEvent;
@@ -16,11 +12,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Singleton
@@ -322,6 +314,8 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
         String grpcForwardToKey = consulKvService.getFullPath(baseKeyPrefix + ".grpc-forward-to");
         String serviceImplKey = consulKvService.getFullPath(baseKeyPrefix + ".service-implementation");
         String configParamsPrefix = consulKvService.getFullPath(baseKeyPrefix + ".config-params");
+        String jsonConfigKey = consulKvService.getFullPath(baseKeyPrefix + ".json-config");
+        String jsonSchemaKey = consulKvService.getFullPath(baseKeyPrefix + ".json-schema");
 
         // Load kafka listen topics
         Mono<Optional<String>> kafkaListenTopicsMono = consulKvService.getValue(kafkaListenTopicsKey)
@@ -339,14 +333,22 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
         Mono<Optional<String>> serviceImplMono = consulKvService.getValue(serviceImplKey)
             .defaultIfEmpty(Optional.empty());
 
+        // Load JSON configuration
+        Mono<Optional<String>> jsonConfigMono = consulKvService.getValue(jsonConfigKey)
+            .defaultIfEmpty(Optional.empty());
+
+        // Load JSON schema
+        Mono<Optional<String>> jsonSchemaMono = consulKvService.getValue(jsonSchemaKey)
+            .defaultIfEmpty(Optional.empty());
+
         // Load config params
-        Mono<PipestepConfigOptions> configParamsMono = consulKvService.getKeysWithPrefix(configParamsPrefix)
+        Mono<Map<String,String>> configParamsMono = consulKvService.getKeysWithPrefix(configParamsPrefix)
             .flatMap(configKeys -> {
                 if (configKeys.isEmpty()) {
-                    return Mono.just(new PipestepConfigOptions());
+                    return Mono.just(new HashMap<String,String>());
                 }
 
-                PipestepConfigOptions configParams = new PipestepConfigOptions();
+                Map<String,String> configParams = new HashMap<>();
                 List<Mono<Boolean>> configLoadMonos = new ArrayList<>();
 
                 for (String configKey : configKeys) {
@@ -381,7 +383,7 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
 
                 return Mono.zip(configLoadMonos, results -> configParams);
             })
-            .defaultIfEmpty(new PipestepConfigOptions());
+            .defaultIfEmpty(new HashMap<>());
 
         // Combine all the loaded data
         return Mono.zip(
@@ -389,14 +391,18 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
                 kafkaPublishTopicsMono,
                 grpcForwardToMono,
                 serviceImplMono,
-                configParamsMono
+                configParamsMono,
+                jsonConfigMono,
+                jsonSchemaMono
             )
             .flatMap(tuple -> {
                 Optional<String> kafkaListenTopicsOpt = tuple.getT1();
                 Optional<String> kafkaPublishTopicsOpt = tuple.getT2();
                 Optional<String> grpcForwardToOpt = tuple.getT3();
                 Optional<String> serviceImplOpt = tuple.getT4();
-                PipestepConfigOptions configParams = tuple.getT5();
+                Map<String,String> configParams = tuple.getT5();
+                Optional<String> jsonConfigOpt = tuple.getT6();
+                Optional<String> jsonSchemaOpt = tuple.getT7();
 
                 // Parse kafka listen topics
                 if (kafkaListenTopicsOpt.isPresent() && !kafkaListenTopicsOpt.get().isEmpty()) {
@@ -429,6 +435,32 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
                 if (!configParams.isEmpty()) {
                     serviceConfig.setConfigParams(configParams);
                     LOG.debug("Loaded {} config parameters for service {}", configParams.size(), serviceName);
+                }
+
+                // Set JSON configuration and schema
+                if (jsonConfigOpt.isPresent() || jsonSchemaOpt.isPresent()) {
+                    JsonConfigOptions jsonConfigOptions = serviceConfig.getJsonConfig();
+
+                    if (jsonConfigOpt.isPresent() && !jsonConfigOpt.get().isEmpty()) {
+                        jsonConfigOptions.setJsonConfig(jsonConfigOpt.get());
+                        LOG.debug("Loaded JSON configuration for service {}", serviceName);
+                    }
+
+                    if (jsonSchemaOpt.isPresent() && !jsonSchemaOpt.get().isEmpty()) {
+                        jsonConfigOptions.setJsonSchema(jsonSchemaOpt.get());
+                        LOG.debug("Loaded JSON schema for service {}", serviceName);
+                    }
+
+                    // Validate the configuration against the schema
+                    if (jsonConfigOpt.isPresent() && jsonSchemaOpt.isPresent() && 
+                        !jsonConfigOpt.get().isEmpty() && !jsonSchemaOpt.get().isEmpty()) {
+                        if (!jsonConfigOptions.validateConfig()) {
+                            LOG.warn("JSON configuration for service {} failed validation: {}", 
+                                serviceName, jsonConfigOptions.getValidationErrors());
+                        } else {
+                            LOG.debug("JSON configuration for service {} passed validation", serviceName);
+                        }
+                    }
                 }
 
                 try {

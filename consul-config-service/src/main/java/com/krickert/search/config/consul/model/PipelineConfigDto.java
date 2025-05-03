@@ -7,6 +7,7 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.HashMap;
 
 /**
  * Data Transfer Object for pipeline configuration.
@@ -80,9 +81,18 @@ public class PipelineConfigDto {
 
             // Copy config params if present
             if (entry.getValue().getConfigParams() != null) {
-                PipestepConfigOptions configParamsCopy = new PipestepConfigOptions();
+                Map<String, String> configParamsCopy = new HashMap<>();
                 configParamsCopy.putAll(entry.getValue().getConfigParams());
                 serviceCopy.setConfigParams(configParamsCopy);
+            }
+
+            // Copy JSON config if present
+            if (entry.getValue().getJsonConfig() != null) {
+                JsonConfigOptions jsonConfigCopy = new JsonConfigOptions(
+                    entry.getValue().getJsonConfig().getJsonConfig(),
+                    entry.getValue().getJsonConfig().getJsonSchema()
+                );
+                serviceCopy.setJsonConfig(jsonConfigCopy);
             }
 
             this.services.put(entry.getKey(), serviceCopy);

@@ -1,11 +1,12 @@
 package com.krickert.search.config.consul.validation;
 
 import com.krickert.search.config.consul.model.PipelineConfigDto;
-import com.krickert.search.config.consul.model.PipestepConfigOptions;
 import com.krickert.search.config.consul.model.ServiceConfigurationDto;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -236,7 +237,7 @@ public class PipelineValidatorTest {
         service.setName(name);
         service.setKafkaListenTopics(listenTopics);
         service.setKafkaPublishTopics(publishTopics);
-        service.setConfigParams(new PipestepConfigOptions());
+        service.setConfigParams(new HashMap<String,String>());
         return service;
     }
 

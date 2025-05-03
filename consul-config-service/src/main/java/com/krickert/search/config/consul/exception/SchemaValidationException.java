@@ -6,7 +6,7 @@ import java.util.stream.Collectors;
 /**
  * Exception thrown when configParams fail validation against the registered schema.
  */
-public class SchemaValidationException extends RuntimeException {
+public class SchemaValidationException extends SchemaException {
     private final Set<String> validationMessages;
 
     public SchemaValidationException(String serviceImplementationName, Set<String> validationMessages) {

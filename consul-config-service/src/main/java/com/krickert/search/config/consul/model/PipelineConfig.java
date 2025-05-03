@@ -170,7 +170,7 @@ public class PipelineConfig {
                         if (propertyName.startsWith("configParams.")) {
                             String paramName = propertyName.substring("configParams.".length());
                             if (serviceConfig.getConfigParams() == null) {
-                                serviceConfig.setConfigParams(new PipestepConfigOptions());
+                                serviceConfig.setConfigParams(new HashMap<String,String>());
                             }
                             serviceConfig.getConfigParams().put(paramName, value);
                         }
