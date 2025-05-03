@@ -20,6 +20,10 @@ consul:
   client:
     enabled: false
 
+grpc:
+  server:
+    enabled: false
+
 # Logging configuration
 logger:
   levels:

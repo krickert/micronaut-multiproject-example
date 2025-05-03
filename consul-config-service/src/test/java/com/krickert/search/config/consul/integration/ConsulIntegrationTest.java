@@ -43,6 +43,13 @@ public class ConsulIntegrationTest implements TestPropertyProvider {
         }
     }
 
+    // Add a delay after each test to allow any pending operations to complete
+    @org.junit.jupiter.api.AfterEach
+    void tearDown() throws InterruptedException {
+        // Add a short delay to allow any pending operations to complete
+        Thread.sleep(500);
+    }
+
     @Factory
     static class TestBeanFactory {
         @Bean
