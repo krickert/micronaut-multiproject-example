@@ -60,7 +60,8 @@ docker-compose up -d
    - Use property files for test-specific configuration
    - Use `TestPropertySource` for test-specific configuration, but container properties must first be loaded statically before anything 
      is loaded because Micronaut starts up components too early in the lifecycle.
-   - Do not use JUnit static beforeall, instead manage this through a static initializer.  Afterall is ok
+   - Do not use JUnit static beforeall, instead manage this through a static initializer.  Afterall is ok.  This specifically goes to 
+     container managed properties.
 
 
 3. **Test Verification**:
