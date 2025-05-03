@@ -95,11 +95,12 @@ public class PipelineConfig {
      *
      * @param pipeline the pipeline to load services for
      */
+    // Inside PipelineConfig.java -> loadServicesFromConsul method
     public void loadServicesFromConsul(PipelineConfigDto pipeline) {
         String pipelineName = pipeline.getName();
-        String servicesPrefix = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".service.");
+        // Corrected prefix from previous step
+        String servicesPrefix = consulKvService.getFullPath("pipeline.configs." + pipelineName + ".services.");
 
-        // Get all keys with the services prefix
         List<String> serviceKeys = consulKvService.getKeysWithPrefix(servicesPrefix).block();
 
         if (serviceKeys == null || serviceKeys.isEmpty()) {
@@ -107,114 +108,76 @@ public class PipelineConfig {
             return;
         }
 
-        // Group keys by service name
-        Map<String, List<String>> serviceKeyGroups = new HashMap<>();
+        Map<String, ServiceConfigurationDto> loadedServices = new HashMap<>();
 
         for (String key : serviceKeys) {
-            // Extract service name from key
-            // Format: prefix/pipeline.configs.{pipelineName}.service.{serviceName}.{property}
-            String[] parts = key.split("\\.");
-            if (parts.length < 6) {
-                LOG.warn("Invalid service key format: {}", key);
+            // Get the service name part (e.g., "myCustomServiceInstance")
+            String keyRelativeToPipeline = key.substring(consulKvService.getFullPath("pipeline.configs." + pipelineName + ".services.").length());
+            String[] keyParts = keyRelativeToPipeline.split("\\.", 2); // Split only on the first dot after service name
+            if (keyParts.length < 2) {
+                LOG.warn("Cannot determine service name or property from key: {}", key);
                 continue;
             }
+            String serviceName = keyParts[0];
+            String propertyPath = keyParts[1]; // e.g., "name", "configParams.timeout", "jsonConfig.jsonConfig"
 
-            String serviceName = parts[parts.length - 2];
-            serviceKeyGroups.computeIfAbsent(serviceName, k -> new ArrayList<>()).add(key);
-        }
+            // Get or create the DTO for this service
+            ServiceConfigurationDto serviceConfig = loadedServices.computeIfAbsent(serviceName, name -> {
+                ServiceConfigurationDto dto = new ServiceConfigurationDto();
+                dto.setName(name);
+                return dto;
+            });
 
-        // Inside PipelineConfig.java -> loadServicesFromConsul method
+            Optional<String> valueOpt = consulKvService.getValue(key).block();
+            if (valueOpt.isEmpty()) {
+                continue;
+            }
+            String value = valueOpt.get();
 
-        for (Map.Entry<String, List<String>> entry : serviceKeyGroups.entrySet()) {
-            String serviceName = entry.getKey();
-            List<String> keys = entry.getValue();
-
-            ServiceConfigurationDto serviceConfig = new ServiceConfigurationDto();
-            serviceConfig.setName(serviceName);
-
-            // --- Temporary variables for JsonConfigOptions ---
-            String loadedJsonConfigStr = null;
-            String loadedJsonSchemaStr = null;
-
-            // --- Temporary map for configParams ---
-            Map<String, String> loadedConfigParams = new HashMap<>();
-
-
-            // Load service properties (existing loop)
-            for (String key : keys) {
-                Optional<String> valueOpt = consulKvService.getValue(key).block();
-                if (valueOpt == null || valueOpt.isEmpty()) {
-                    continue;
+            // --- NEW: Handle properties based on path ---
+            if (propertyPath.equals("name")) {
+                // Already set when creating/getting DTO
+            } else if (propertyPath.equals("serviceImplementation")) {
+                serviceConfig.setServiceImplementation(value);
+            } else if (propertyPath.equals("kafkaListenTopics") || propertyPath.equals("kafka-listen-topics")) {
+                serviceConfig.setKafkaListenTopics(Arrays.asList(value.split(",")));
+            } else if (propertyPath.equals("kafkaPublishTopics") || propertyPath.equals("kafka-publish-topics")) {
+                serviceConfig.setKafkaPublishTopics(Arrays.asList(value.split(",")));
+            } else if (propertyPath.equals("grpcForwardTo") || propertyPath.equals("grpc-forward-to")) {
+                serviceConfig.setGrpcForwardTo(Arrays.asList(value.split(",")));
+            } else if (propertyPath.startsWith("configParams.")) {
+                String paramName = propertyPath.substring("configParams.".length());
+                if (serviceConfig.getConfigParams() == null) {
+                    serviceConfig.setConfigParams(new HashMap<>());
                 }
-
-                String value = valueOpt.get();
-                // Determine the actual property name relative to the service base key
-                String fullPropertyName = key.startsWith(servicesPrefix) ? key.substring(servicesPrefix.length() + serviceName.length() + 1) : key;
-
-                // Handle different property types based on the relative key structure
-                if (fullPropertyName.startsWith("configParams.")) {
-                    String paramName = fullPropertyName.substring("configParams.".length());
-                    loadedConfigParams.put(paramName, value); // Store in temp map first
-                } else if (fullPropertyName.startsWith("jsonConfig.")) { // Check for jsonConfig prefix
-                    String jsonConfProp = fullPropertyName.substring("jsonConfig.".length());
-                    if ("jsonConfig".equals(jsonConfProp)) {
-                        loadedJsonConfigStr = value;
-                        LOG.trace("Loaded jsonConfig string for {}: (string)", serviceName);
-                    } else if ("jsonSchema".equals(jsonConfProp)) {
-                        loadedJsonSchemaStr = value;
-                        LOG.trace("Loaded jsonSchema string for {}: (string)", serviceName);
-                    } else {
-                        LOG.warn("Unknown pipeline service jsonConfig property key structure: {}", key);
-                    }
+                serviceConfig.getConfigParams().put(paramName, value);
+            } else if (propertyPath.startsWith("jsonConfig.")) {
+                // Ensure JsonConfigOptions object exists
+                if (serviceConfig.getJsonConfig() == null) {
+                    serviceConfig.setJsonConfig(new JsonConfigOptions("{}", "{}")); // Initialize with defaults
+                }
+                String jsonConfProp = propertyPath.substring("jsonConfig.".length());
+                if ("jsonConfig".equals(jsonConfProp)) {
+                    serviceConfig.getJsonConfig().setJsonConfig(value);
+                    LOG.trace("Loaded jsonConfig string for {}: (string)", serviceName);
+                } else if ("jsonSchema".equals(jsonConfProp)) {
+                    serviceConfig.getJsonConfig().setJsonSchema(value);
+                    LOG.trace("Loaded jsonSchema string for {}: (string)", serviceName);
                 } else {
-                    // Handle top-level properties
-                    switch (fullPropertyName) {
-                        case "name":
-                            // Name already set from key group
-                            break;
-                        case "kafkaListenTopics":
-                        case "kafka-listen-topics": // Handle potential legacy key name
-                            serviceConfig.setKafkaListenTopics(Arrays.asList(value.split(",")));
-                            break;
-                        case "kafkaPublishTopics":
-                        case "kafka-publish-topics": // Handle potential legacy key name
-                            serviceConfig.setKafkaPublishTopics(Arrays.asList(value.split(",")));
-                            break;
-                        case "grpcForwardTo":
-                        case "grpc-forward-to": // Handle potential legacy key name
-                            serviceConfig.setGrpcForwardTo(Arrays.asList(value.split(",")));
-                            break;
-                        case "serviceImplementation":
-                            serviceConfig.setServiceImplementation(value);
-                            break;
-                        default:
-                            LOG.warn("Unknown top-level pipeline service property key structure: {}", key);
-                            break;
-                    }
+                    LOG.warn("Unknown pipeline service jsonConfig property key structure: {}", key);
                 }
-            } // End loop through keys for one service
-
-            // --- Set configParams if any were found ---
-            if (!loadedConfigParams.isEmpty()) {
-                serviceConfig.setConfigParams(loadedConfigParams);
+            } else {
+                LOG.warn("Unknown pipeline service property key structure: {}", key);
             }
+            // --- END NEW HANDLING ---
 
-            // --- >>> RECONSTRUCT JsonConfigOptions if data was loaded <<< ---
-            if (loadedJsonConfigStr != null || loadedJsonSchemaStr != null) {
-                // Create new JsonConfigOptions only if we found data for it
-                JsonConfigOptions jsonOptions = new JsonConfigOptions(
-                        loadedJsonConfigStr != null ? loadedJsonConfigStr : "{}", // Default if null
-                        loadedJsonSchemaStr != null ? loadedJsonSchemaStr : "{}"  // Default if null
-                );
-                serviceConfig.setJsonConfig(jsonOptions); // Set on the DTO
-                LOG.debug("Reconstructed JsonConfigOptions for service {}", serviceName);
-            }
-            // --- >>> END RECONSTRUCT <<< ---
+        } // End loop through all service keys
 
-            // Add the fully loaded service to the pipeline
-            pipeline.addOrUpdateService(serviceConfig);
-            LOG.debug("Loaded service {} for pipeline {}", serviceName, pipelineName);
-        } // End of service group loop
+        // Add all fully loaded services to the pipeline DTO
+        pipeline.setServices(loadedServices);
+        if (!loadedServices.isEmpty()) {
+            LOG.debug("Loaded {} services for pipeline {}", loadedServices.size(), pipelineName);
+        }
     }
 
     /**

@@ -236,7 +236,7 @@ public class PipelineService {
                                  pipelineName, updatedPipeline.getName());
                          updatedPipeline.setName(pipelineName);
                      }
-                    // --- >>> ADD SERVICE CONFIGURATION VALIDATION <<< ---
+                     // --- >>> SERVICE CONFIGURATION VALIDATION <<< ---
                      for (Map.Entry<String, ServiceConfigurationDto> entry : updatedPipeline.getServices().entrySet()) {
                          String serviceName = entry.getKey();
                          ServiceConfigurationDto serviceConfig = entry.getValue();
@@ -244,36 +244,34 @@ public class PipelineService {
                          if (serviceConfig.getJsonConfig() != null) {
                              JsonConfigOptions jsonOptions = serviceConfig.getJsonConfig();
                              LOG.debug("Validating JsonConfigOptions for service: {}", serviceName);
-                             try { // <-- ADD try block
-                                 if (!jsonOptions.validateConfig()) {
-                                     String validationErrors = jsonOptions.getValidationErrors();
-                                     LOG.warn("Schema validation failed for service {} in pipeline {}: {}",
-                                             serviceName, pipelineName, validationErrors);
-                                     throw new SchemaValidationException(
-                                             "Validation failed for service " + serviceName + ": " + validationErrors,
-                                             Set.of(validationErrors != null ? validationErrors : "Validation failed.")
-                                     );
-                                 }
-                                 LOG.debug("JsonConfigOptions validation passed for service: {}", serviceName);
-                             } catch (Exception e) { // <-- CATCH potential parsing/validation exceptions
-                                 LOG.warn("Error during validation/parsing for service {} in pipeline {}: {}",
-                                         serviceName, pipelineName, e.getMessage());
-                                 // Throw the specific exception your handler expects for validation errors
+                             // Call validateConfig. It might throw JsonProcessingException internally if JSON is malformed,
+                             // or return false if schema validation fails.
+                             // Let DefaultSchemaServiceConfig handle logging the specific errors.
+                             if (!jsonOptions.validateConfig()) {
+                                 String validationErrors = jsonOptions.getValidationErrors(); // Get the specific error message(s)
+                                 LOG.warn("Schema validation failed for service {} in pipeline {}: {}",
+                                         serviceName, pipelineName, validationErrors);
+                                 // Throw exception with the specific error message from the validator
                                  throw new SchemaValidationException(
-                                         "Validation/Parsing failed for service " + serviceName + ": " + e.getMessage(),
-                                         Set.of("Invalid configuration format or schema error.")
+                                         "Validation failed for service " + serviceName + ": " + validationErrors,
+                                         // Pass the detailed message in the Set as well if desired, or keep it simple
+                                         Set.of(validationErrors != null ? validationErrors : "Validation failed.")
                                  );
                              }
+                             // If validateConfig throws an internal parsing exception (like JsonParseException),
+                             // it should ideally be caught and handled within DefaultSchemaServiceConfig or allowed
+                             // to propagate up to be caught by a more general handler (like CombinedSchemaExceptionHandler's base case).
+                             // Removing the broad catch block here allows the specific SchemaValidationException to propagate cleanly.
+
+                             LOG.debug("JsonConfigOptions validation passed for service: {}", serviceName);
                          }
-                         // --- >>> END SERVICE CONFIGURATION VALIDATION <<< ---
-                         // TODO: Add validation for other config types if necessary (e.g., configParams rules)
+                         // TODO: Add validation for other config types if necessary
                      }
+                     // --- >>> END SERVICE CONFIGURATION VALIDATION <<< ---
 
                      // --- Attempt Update ---
-                     // This call handles the version check and throws PipelineVersionConflictException synchronously if needed.
-                     // It returns a Mono<Boolean> for the persistence result.
                      return pipelineConfigManager.addOrUpdatePipeline(updatedPipeline)
-                         .flatMap(success -> {
+                             .flatMap(success -> {
                              if (success) {
                                  LOG.info("Successfully updated and persisted pipeline: {}", pipelineName);
                                  String configKeyPrefix = consulKvService.getFullPath("pipeline.configs." + pipelineName);

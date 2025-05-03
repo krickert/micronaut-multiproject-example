@@ -102,6 +102,7 @@ dependencies {
     testImplementation("org.awaitility:awaitility:4.3.0")
     // https://mvnrepository.com/artifact/com.networknt/json-schema-validator
     implementation("com.networknt:json-schema-validator:1.5.6")
+    testImplementation(mn.hamcrest)
 }
 
 // Publishing configuration

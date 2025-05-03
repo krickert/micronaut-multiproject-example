@@ -24,6 +24,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
+import static org.hamcrest.CoreMatchers.allOf;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.core.StringContains.containsString;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -249,24 +252,20 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
                 .contentType(MediaType.APPLICATION_JSON);
 
         // Inside testAddServiceWithInvalidCustomConfig_MissingRequired()
-
         HttpClientResponseException exception = assertThrows(HttpClientResponseException.class, () -> {
-            client.toBlocking().exchange(updateRequest, PipelineConfigDto.class); // Expect exception
+            client.toBlocking().exchange(updateRequest, PipelineConfigDto.class);
         }, "Update with invalid config (missing required) should fail");
-
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus(), "Status should be 400 Bad Request");
 
-        // --- NEW: Assert on the raw response body string ---
         Optional<String> bodyOpt = exception.getResponse().getBody(String.class);
         assertTrue(bodyOpt.isPresent(), "Error response body should be present as string");
         String errorBodyString = bodyOpt.get();
         log.debug("Raw error response body for MissingRequired: {}", errorBodyString);
 
-        // Check if the raw string contains the key parts of the expected message
-        assertTrue(errorBodyString.contains("Validation failed for service") && // Generic part from exception
-                        errorBodyString.contains("required property 'host' not found"), // Specific validator message
+        // Check raw string contains specific error (restoring this check)
+        assertTrue(errorBodyString.contains("\"valid\":false") &&
+                        errorBodyString.contains("required property 'host' not found"),
                 "Error body string should contain validation failure details for missing host. Actual: " + errorBodyString);
-        // --- END NEW ASSERTION ---
     }
 
      @Test @Order(3)
@@ -302,9 +301,9 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
          log.debug("Raw error response body for WrongType: {}", errorBodyString);
 
          // Check if the raw string contains the key parts of the expected message
-         assertTrue(errorBodyString.contains("Validation failed for service") && // Generic part from exception
-                         errorBodyString.contains("string found, integer expected"), // Specific validator message
-                 "Error body string should contain validation failure details for wrong type. Actual: " + errorBodyString);
+         assertTrue(errorBodyString.contains("\"valid\":false") &&
+                         errorBodyString.contains("\"$.port: string found, integer expected\""),
+                 "Error body string should contain validation failure details for missing host. Actual: " + errorBodyString);
          // --- END NEW ASSERTION ---
      }
 
@@ -344,10 +343,21 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
 
          // Check if the raw string contains the key parts of the expected message
          // The message comes from the catch block we added in PipelineService
-         assertTrue(errorBodyString.contains("Validation/Parsing failed for service") &&
-                         errorBodyString.contains("Unexpected end-of-input"), // Specific parser message
-                 "Error body string should contain validation/parsing failure details for malformed JSON. Actual: " + errorBodyString);
-         // --- END NEW ASSERTION ---
+         //{"valid":false,"messages":["Invalid JSON: Unexpected end-of-input within/between Object entries\n at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 34]"]}
+         assertThat(
+                 "Error body string validation failed", // Optional reason message
+                 errorBodyString,
+                 allOf(
+                         //{"valid":false,"messages":["Invalid JSON: Unexpected end-of-input within/between Object entries\n at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 34]"]}
+                         containsString("\"valid\":false"),
+                         containsString("Invalid JSON: Unexpected end-of-input within/between Object entries"),
+                         containsString("Source: REDACTED"),
+                         containsString("INCLUDE_SOURCE_IN_LOCATION"),
+                         containsString("line: 1, column: 34")
+                         // Add more containsString(...) matchers here if needed
+                 )
+         );
+// --- END NEW ASSERTION ---
     }
 
      @Test @Order(5)
