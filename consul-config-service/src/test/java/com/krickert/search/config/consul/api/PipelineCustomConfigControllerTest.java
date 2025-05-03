@@ -36,7 +36,6 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @MicronautTest(transactional = false)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-// @Testcontainers // Not needed if using the singleton ConsulTestContainer pattern
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class PipelineCustomConfigControllerTest implements TestPropertyProvider {
 
