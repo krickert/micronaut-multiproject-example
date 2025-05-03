@@ -4,9 +4,8 @@ package com.krickert.search.config.consul.service;
 import com.krickert.search.config.consul.event.ConfigChangeNotifier;
 import com.krickert.search.config.consul.exception.PipelineNotFoundException;
 import com.krickert.search.config.consul.exception.PipelineVersionConflictException;
-import com.krickert.search.config.consul.model.CreatePipelineRequest;
-import com.krickert.search.config.consul.model.PipelineConfig;
-import com.krickert.search.config.consul.model.PipelineConfigDto;
+import com.krickert.search.config.consul.exception.SchemaValidationException;
+import com.krickert.search.config.consul.model.*;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
@@ -16,6 +15,7 @@ import reactor.core.publisher.Mono;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -235,7 +235,38 @@ public class PipelineService {
                          LOG.warn("Pipeline name in path ({}) doesn't match name in body ({}). Using name from path.",
                                  pipelineName, updatedPipeline.getName());
                          updatedPipeline.setName(pipelineName);
-                         // Or: throw new IllegalArgumentException("Pipeline name mismatch");
+                     }
+                    // --- >>> ADD SERVICE CONFIGURATION VALIDATION <<< ---
+                     for (Map.Entry<String, ServiceConfigurationDto> entry : updatedPipeline.getServices().entrySet()) {
+                         String serviceName = entry.getKey();
+                         ServiceConfigurationDto serviceConfig = entry.getValue();
+
+                         if (serviceConfig.getJsonConfig() != null) {
+                             JsonConfigOptions jsonOptions = serviceConfig.getJsonConfig();
+                             LOG.debug("Validating JsonConfigOptions for service: {}", serviceName);
+                             try { // <-- ADD try block
+                                 if (!jsonOptions.validateConfig()) {
+                                     String validationErrors = jsonOptions.getValidationErrors();
+                                     LOG.warn("Schema validation failed for service {} in pipeline {}: {}",
+                                             serviceName, pipelineName, validationErrors);
+                                     throw new SchemaValidationException(
+                                             "Validation failed for service " + serviceName + ": " + validationErrors,
+                                             Set.of(validationErrors != null ? validationErrors : "Validation failed.")
+                                     );
+                                 }
+                                 LOG.debug("JsonConfigOptions validation passed for service: {}", serviceName);
+                             } catch (Exception e) { // <-- CATCH potential parsing/validation exceptions
+                                 LOG.warn("Error during validation/parsing for service {} in pipeline {}: {}",
+                                         serviceName, pipelineName, e.getMessage());
+                                 // Throw the specific exception your handler expects for validation errors
+                                 throw new SchemaValidationException(
+                                         "Validation/Parsing failed for service " + serviceName + ": " + e.getMessage(),
+                                         Set.of("Invalid configuration format or schema error.")
+                                 );
+                             }
+                         }
+                         // --- >>> END SERVICE CONFIGURATION VALIDATION <<< ---
+                         // TODO: Add validation for other config types if necessary (e.g., configParams rules)
                      }
 
                      // --- Attempt Update ---

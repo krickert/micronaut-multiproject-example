@@ -3,24 +3,17 @@ package com.krickert.search.config.consul.exception;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
-import io.micronaut.http.HttpStatus; // Import HttpStatus
+import io.micronaut.http.HttpStatus;
 import io.micronaut.http.annotation.Produces;
 import io.micronaut.http.server.exceptions.ExceptionHandler;
 import jakarta.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC; // Import MDC if you use it
+import org.slf4j.MDC;
 
 import java.util.Map;
 
-// Import static method from your actual util class
-// Make sure ErrorBodyUtil.java contains:
-// public static Map<String, Object> createErrorBody(HttpStatus status, String message, String path)
 import static com.krickert.search.config.consul.exception.ErrorBodyUtil.createErrorBody;
 
-/**
- * Combined Exception Handler for various Schema-related exceptions.
- * This replaces SchemaValidationExceptionHandler, SchemaNotFoundExceptionHandler, and SchemaExceptionHandler.
- */
 @Produces
 @Singleton
 @Requires(classes = {SchemaException.class, SchemaValidationException.class, SchemaNotFoundException.class, ExceptionHandler.class})
@@ -29,33 +22,34 @@ public class CombinedSchemaExceptionHandler implements ExceptionHandler<SchemaEx
 
     @Override
     public HttpResponse<?> handle(HttpRequest request, SchemaException exception) {
-        // String traceId = MDC.get("traceId"); // Your ErrorBodyUtil doesn't seem to use traceId, so we omit it here
         String path = request.getPath();
-        String message = exception.getMessage(); // Get the exception message
+        String message = exception.getMessage();
+        // String traceId = MDC.get("traceId"); // Your ErrorBodyUtil doesn't use traceId
 
-        // Check for the specific exception types using instanceof
         if (exception instanceof SchemaValidationException) {
             log.warn("Handling SchemaValidationException for path [{}]: {}", path, message);
-            // 1. Create the error body Map using your utility
             Map<String, Object> errorBody = createErrorBody(HttpStatus.BAD_REQUEST, message, path);
-            // 2. Pass the Map as the body to the HttpResponse factory method
-            return HttpResponse.badRequest(errorBody);
+            HttpResponse<?> response = HttpResponse.badRequest(errorBody);
+            // --- ADD LOGGING ---
+            log.debug("Returning response from CombinedSchemaExceptionHandler (Validation): Status={}, Body={}", response.getStatus(), errorBody);
+            return response;
 
         } else if (exception instanceof SchemaNotFoundException) {
             log.warn("Handling SchemaNotFoundException for path [{}]: {}", path, message);
-            // 1. Create the error body Map using your utility
             Map<String, Object> errorBody = createErrorBody(HttpStatus.NOT_FOUND, message, path);
-            // 2. Pass the Map as the body to the HttpResponse factory method
-            return HttpResponse.notFound(errorBody);
+            HttpResponse<?> response = HttpResponse.notFound(errorBody);
+             // --- ADD LOGGING ---
+            log.debug("Returning response from CombinedSchemaExceptionHandler (NotFound): Status={}, Body={}", response.getStatus(), errorBody);
+           return response;
 
         } else {
-            // Handle generic SchemaException or any other subtype
             log.error("Handling generic SchemaException for path [{}]: {}", path, message, exception);
             String genericMessage = "An internal schema processing error occurred.";
-            // 1. Create the error body Map using your utility
             Map<String, Object> errorBody = createErrorBody(HttpStatus.INTERNAL_SERVER_ERROR, genericMessage, path);
-            // 2. Pass the Map as the body to the HttpResponse factory method
-            return HttpResponse.serverError(errorBody);
+            HttpResponse<?> response = HttpResponse.serverError(errorBody);
+             // --- ADD LOGGING ---
+            log.debug("Returning response from CombinedSchemaExceptionHandler (Generic): Status={}, Body={}", response.getStatus(), errorBody);
+            return response;
         }
     }
 }
