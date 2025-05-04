@@ -280,7 +280,15 @@ public class PipelineService {
                                  return resultDto != null ? Mono.just(resultDto) : Mono.error(new RuntimeException("Updated pipeline disappeared unexpectedly"));
                              } else {
                                  LOG.error("Update persistence attempt for pipeline '{}' returned false.", pipelineName);
-                                 return Mono.error(new RuntimeException("Failed to persist pipeline update"));
+                                 // When CAS operation fails, it's likely due to a version conflict
+                                 // Get the latest version from Consul to include in the exception
+                                 PipelineConfigDto latestPipeline = pipelineConfigManager.getPipeline(pipelineName);
+                                 return Mono.error(new PipelineVersionConflictException(
+                                     pipelineName,
+                                     updatedPipeline.getPipelineVersion(),
+                                     latestPipeline != null ? latestPipeline.getPipelineVersion() : updatedPipeline.getPipelineVersion() + 1,
+                                     latestPipeline != null ? latestPipeline.getPipelineLastUpdated() : LocalDateTime.now()
+                                 ));
                              }
                          });
                  })

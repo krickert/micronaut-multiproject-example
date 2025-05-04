@@ -3,14 +3,46 @@ package com.krickert.search.config.consul.exception;
 import java.time.LocalDateTime;
 
 /**
- * Exception thrown when there is a version conflict when updating a pipeline.
- * This happens when a pipeline has been updated by another process since it was loaded.
+ * Exception thrown when there is a version conflict during pipeline operations.
+ * This exception indicates that the version of the pipeline in the system has
+ * changed since it was originally loaded or accessed, which creates a conflict.
  */
 public class PipelineVersionConflictException extends RuntimeException {
+    /**
+     * Represents the name of the pipeline involved in the version conflict.
+     * This field stores the name of the pipeline where the version mismatch occurred,
+     * providing context for the conflict.
+     */
     private final String pipelineName;
+    /**
+     * Represents the version of a pipeline that was expected during an operation.
+     * This value is compared against the actual version in the system to determine
+     * if a conflict has occurred. A mismatch between the expected and actual
+     * versions typically indicates that the pipeline was updated by another process
+     * or user, resulting in a potential version conflict.
+     */
     private final long expectedVersion;
+    /**
+     * Represents the actual version of a pipeline in the system.
+     * This value indicates the current state/version of the pipeline
+     * and is compared against the expected version to determine if
+     * a conflict exists.
+     */
     private final long actualVersion;
+    /**
+     * The timestamp indicating when the pipeline was last updated.
+     * It provides a reference to the most recent modification or update
+     * made to the pipeline.
+     *<br/>
+     * This field is immutable and primarily used in exception handling
+     * to specify the last update time of the pipeline during a version conflict.
+     */
     private final LocalDateTime lastUpdated;
+    /**
+     * A JSON representation of the changes between the expected and actual versions of the pipeline.
+     * This field holds the serialized JSON string that describes the differences.
+     * It is primarily used to provide detailed context in version conflict scenarios.
+     */
     private final String deltaJson;
 
     /**

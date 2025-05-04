@@ -2,6 +2,7 @@ package com.krickert.search.model.mapper;
 
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.*;
+import com.krickert.search.model.*;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 

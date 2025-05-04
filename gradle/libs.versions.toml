@@ -6,7 +6,7 @@ micronautPlugins = "4.5.1"   # For the Micronaut Gradle plugins
 kotlin = "1.9.25"
 gradleProtobufPlugin = "0.9.5"
 gradleReleasePlugin = "3.1.0"
-protobuf = "3.25.3"
+protobuf = "3.25.7"
 proto-common = "2.55.2"
 grpc = "1.72.0"
 junit = "5.10.0"
@@ -27,6 +27,7 @@ grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
 grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
 grpc-protocGen = { module = "io.grpc:protoc-gen-grpc-java", version.ref = "grpc" }
 protobufcommon = { module = "com.google.api.grpc:proto-google-common-protos", version.ref="proto-common" }
+protobuf-util = { module = "com.google.protobuf:protobuf-java-util", version.ref="protobuf" }
 
 # Testing with explicit versions
 junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit" }

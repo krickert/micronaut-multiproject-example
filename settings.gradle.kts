@@ -17,7 +17,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "my-pipeline-system"
+rootProject.name = "yappy-platform-build"
 
 // Include all the subprojects
 include(

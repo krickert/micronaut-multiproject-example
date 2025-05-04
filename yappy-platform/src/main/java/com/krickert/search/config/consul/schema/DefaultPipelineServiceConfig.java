@@ -17,7 +17,7 @@ import java.util.Set;
 
 /**
  * Default implementation of PipelineServiceConfig for services without a specific
- * registered JSON schema. It wraps a standard Map<String, Object>, uses an internal
+ * registered JSON schema. It wraps a standard Map &lt;String, Object&rt;, uses an internal
  * ObjectMapper, provides default pass-through validation, and handles a special "_json"
  * key in fromMap for merging JSON string data.
  */

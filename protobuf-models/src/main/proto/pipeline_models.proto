@@ -60,12 +60,11 @@ message PipeRequest {
   map<string, string> config = 2;
 }
 
-message ProcessRepsonse {
+message ServiceProcessRepsonse {
   bool success = 1;
-  oneof reply {
-    PipeDoc outputDoc = 2;
-    ErrorData errorData = 3;
-  }
+  PipeDoc outputDoc = 2;
+  string logs = 3;
+  optional ErrorData errorData = 4;
 }
 
 message ErrorData {
@@ -76,7 +75,7 @@ message ErrorData {
 
 message PipeResponse {
   bool success = 1;
-  optional ErrorData errorDate = 2;
+  optional ErrorData errorData = 2;
 }
 
 message PipeStream {
@@ -103,5 +102,5 @@ message ServiceProcessRequest {
 
 service PipelineService {
   rpc forward(PipeStream) returns (google.protobuf.Empty);
-  rpc process(ServiceProcessRequest) returns (OutputResponse);
+  rpc process(ServiceProcessRequest) returns (ServiceProcessRepsonse);
 }

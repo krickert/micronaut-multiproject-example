@@ -3,6 +3,7 @@ package com.krickert.search.config.consul.api;
 import com.krickert.search.config.consul.model.CreatePipelineRequest;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
 import com.krickert.search.config.consul.service.ConsulKvService;
+import com.krickert.search.config.consul.util.ConsulTestUtils;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
@@ -13,6 +14,7 @@ import io.micronaut.http.client.exceptions.HttpClientResponseException;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -28,8 +30,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@MicronautTest
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@MicronautTest(rebuildContext = true)
+@TestInstance(TestInstance.Lifecycle.PER_METHOD)
 public class PipelineConcurrencyTest implements TestPropertyProvider {
 
     @Inject
@@ -41,6 +43,9 @@ public class PipelineConcurrencyTest implements TestPropertyProvider {
 
     @Inject
     KeyValueClient keyValueClient;
+
+    @Inject
+    ConsulTestUtils consulTestUtils;
 
     @Override
     public Map<String, String> getProperties() {
@@ -55,11 +60,52 @@ public class PipelineConcurrencyTest implements TestPropertyProvider {
         return properties;
     }
 
+    private String configPath;
+
     @BeforeEach
     void setUp() {
         // Clear any existing pipeline configurations
-        String configPath = consulKvService.getFullPath("pipeline.configs");
+        configPath = consulKvService.getFullPath("pipeline.configs");
+        System.out.println("[DEBUG_LOG] Setting up test - clearing Consul state at: " + configPath);
         keyValueClient.deleteKeys(configPath);
+
+        // Verify that keys were actually deleted
+        try {
+            java.util.List<String> remainingKeys = keyValueClient.getKeys(configPath);
+            if (remainingKeys != null && !remainingKeys.isEmpty()) {
+                System.out.println("[DEBUG_LOG] WARNING: Keys still exist after initial cleanup: " + remainingKeys);
+                // Try one more time
+                keyValueClient.deleteKeys(configPath);
+            } else {
+                System.out.println("[DEBUG_LOG] Verified no keys exist before test starts");
+            }
+        } catch (Exception e) {
+            System.err.println("[DEBUG_LOG] Error checking keys before test: " + e.getMessage());
+        }
+    }
+
+    @AfterEach
+    void tearDown() {
+        // Clean up after the test to ensure a clean state for the next run
+        if (configPath != null) {
+            System.out.println("[DEBUG_LOG] Cleaning up Consul state after test");
+            boolean success = consulTestUtils.resetConsulState(configPath);
+            System.out.println("[DEBUG_LOG] Consul cleanup success: " + success);
+
+            // Double-check that cleanup was successful
+            try {
+                java.util.List<String> remainingKeys = keyValueClient.getKeys(configPath);
+                if (remainingKeys != null && !remainingKeys.isEmpty()) {
+                    System.out.println("[DEBUG_LOG] WARNING: Keys still exist after cleanup: " + remainingKeys);
+                    // Force delete one more time
+                    keyValueClient.deleteKeys(configPath);
+                } else {
+                    System.out.println("[DEBUG_LOG] Verified no keys remain after cleanup");
+                }
+            } catch (Exception e) {
+                System.err.println("[DEBUG_LOG] Error checking remaining keys: " + e.getMessage());
+            }
+        }
     }
 
     @Test
@@ -100,13 +146,13 @@ public class PipelineConcurrencyTest implements TestPropertyProvider {
                 try {
                     // Each thread tries to update the pipeline with the same version
                     PipelineConfigDto threadPipeline = new PipelineConfigDto(latestPipeline);
-                    
+
                     try {
                         HttpResponse<PipelineConfigDto> updateResponse = client.toBlocking().exchange(
                                 HttpRequest.PUT("/api/pipelines/concurrent-test-pipeline", threadPipeline)
                                         .contentType(MediaType.APPLICATION_JSON),
                                 PipelineConfigDto.class);
-                        
+
                         // If we get here, the update was successful
                         successCount.incrementAndGet();
                         System.out.println("[DEBUG_LOG] Thread " + threadNum + " successfully updated pipeline");
@@ -132,6 +178,7 @@ public class PipelineConcurrencyTest implements TestPropertyProvider {
         executorService.shutdown();
 
         // Verify that only one thread succeeded and the rest got conflicts
+        System.out.println("[DEBUG_LOG] Test summary: " + successCount.get() + " successful updates, " + conflictCount.get() + " version conflicts");
         assertEquals(1, successCount.get(), "Expected exactly one successful update");
         assertEquals(numThreads - 1, conflictCount.get(), "Expected " + (numThreads - 1) + " version conflicts");
 
@@ -143,6 +190,21 @@ public class PipelineConcurrencyTest implements TestPropertyProvider {
         assertEquals(HttpStatus.OK, finalResponse.status());
         PipelineConfigDto finalPipeline = finalResponse.body();
         assertNotNull(finalPipeline);
+
+        System.out.println("[DEBUG_LOG] Final pipeline state: name=" + finalPipeline.getName() + 
+                           ", version=" + finalPipeline.getPipelineVersion() + 
+                           ", lastUpdated=" + finalPipeline.getPipelineLastUpdated());
+
+        // Check Consul directly to verify state
+        try {
+            String versionKey = consulKvService.getFullPath("pipeline.configs.concurrent-test-pipeline.version");
+            java.util.Optional<String> versionValue = consulKvService.getValue(versionKey).block();
+            System.out.println("[DEBUG_LOG] Direct Consul check - version key: " + versionKey + 
+                               ", value: " + (versionValue.isPresent() ? versionValue.get() : "not found"));
+        } catch (Exception e) {
+            System.err.println("[DEBUG_LOG] Error checking version in Consul: " + e.getMessage());
+        }
+
         assertEquals(2, finalPipeline.getPipelineVersion(), "Pipeline version should be incremented exactly once");
     }
 }
