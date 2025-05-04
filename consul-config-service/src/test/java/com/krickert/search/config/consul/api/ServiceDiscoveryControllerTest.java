@@ -1,18 +1,12 @@
 package com.krickert.search.config.consul.api;
 
-import com.krickert.search.config.consul.service.ConsulKvService;
-import io.micronaut.context.annotation.Bean;
-import io.micronaut.context.annotation.Replaces;
+import io.micronaut.core.annotation.Nullable;
 import io.micronaut.http.HttpRequest;
-import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
 import io.micronaut.http.client.HttpClient;
 import io.micronaut.http.client.annotation.Client;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
-import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
-import jakarta.inject.Named;
-import jakarta.inject.Singleton;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -21,7 +15,6 @@ import org.kiwiproject.consul.model.agent.ImmutableRegistration;
 import org.kiwiproject.consul.model.agent.Registration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.List;
 import java.util.Map;
@@ -76,7 +69,7 @@ public class ServiceDiscoveryControllerTest {
 
             consulClient.agentClient().register(otherService);
         } catch (Exception e) {
-            System.err.println("Error registering test services: " + e.getMessage());
+            fail("Error registering test services: " + e.getMessage());
         }
     }
 
@@ -93,13 +86,13 @@ public class ServiceDiscoveryControllerTest {
     public void testGetServices() {
         // When
         HttpRequest<?> request = HttpRequest.GET("/api/services");
-        HttpResponse<Map> response = client.toBlocking().exchange(request, Map.class);
+        var response = client.toBlocking().exchange(request, Map.class);
 
         // Then
         assertEquals(HttpStatus.OK, response.status());
         assertNotNull(response.body());
 
-        Map<String, Object> body = response.body();
+        @SuppressWarnings("rawtypes") @Nullable Map body = response.body();
         assertNotNull(body.get("services"));
 
         List<?> services = (List<?>) body.get("services");
@@ -108,8 +101,7 @@ public class ServiceDiscoveryControllerTest {
         // Verify that the pipe service is in the list
         boolean foundPipeService = false;
         for (Object serviceObj : services) {
-            if (serviceObj instanceof Map) {
-                Map<?, ?> service = (Map<?, ?>) serviceObj;
+            if (serviceObj instanceof Map<?, ?> service) {
                 if ("test-pipe-service".equals(service.get("name"))) {
                     foundPipeService = true;
                     assertNotNull(service.get("running"), "Running status should be present");
@@ -135,13 +127,13 @@ public class ServiceDiscoveryControllerTest {
 
         // When
         HttpRequest<?> request = HttpRequest.GET("/api/services");
-        HttpResponse<Map> response = client.toBlocking().exchange(request, Map.class);
+        var response = client.toBlocking().exchange(request, Map.class);
 
         // Then
         assertEquals(HttpStatus.OK, response.status());
         assertNotNull(response.body());
 
-        Map<String, Object> body = response.body();
+        @SuppressWarnings("unchecked") Map<String, Object> body = response.body();
         assertNotNull(body.get("services"));
 
         List<?> services = (List<?>) body.get("services");
@@ -150,9 +142,8 @@ public class ServiceDiscoveryControllerTest {
 
         boolean foundTestService = false;
         for (Object serviceObj : services) {
-            if (serviceObj instanceof Map) {
-                Map<?, ?> service = (Map<?, ?>) serviceObj;
-                if ("test-pipe-service".equals(service.get("name")) || 
+            if (serviceObj instanceof Map<?, ?> service) {
+                if ("test-pipe-service".equals(service.get("name")) ||
                     "test-other-service".equals(service.get("name"))) {
                     foundTestService = true;
                     break;
