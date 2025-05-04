@@ -2,7 +2,6 @@ package com.krickert.search.config.consul.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
@@ -25,9 +24,6 @@ import static org.junit.jupiter.api.Assertions.*;
 @MicronautTest(rebuildContext = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ConfigControllerTest implements TestPropertyProvider {
-
-    @Inject
-    private ConsulKvService consulKvService;
 
     @Inject
     @Client("/")
