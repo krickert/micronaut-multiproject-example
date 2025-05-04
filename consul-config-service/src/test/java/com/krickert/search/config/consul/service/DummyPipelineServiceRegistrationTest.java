@@ -20,12 +20,13 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @MicronautTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-@Property(name = "pipeline.pipe.name", value = "dummy-grpc-service")
+@Property(name = "pipeline.step.name", value = "dummy-grpc-service")
 @Property(name = "pipeline.name", value = "test-pipeline")
-@Property(name = "pipeline.pipe.implementation", value = "com.krickert.search.config.consul.service.DummyPipelineServiceImpl")
+@Property(name = "pipeline.step.implementation", value = "com.krickert.search.config.consul.service.DummyPipelineServiceImpl")
 @Property(name = "pipeline.listen.topics", value = "input-topic-1,input-topic-2")
 @Property(name = "pipeline.publish.topics", value = "output-topic")
 @Property(name = "pipeline.grpc.forward.to", value = "forward-service")
+@Property(name = "pipeline.step.registration.enabled", value = "true")
 public class DummyPipelineServiceRegistrationTest implements TestPropertyProvider {
 
     private static final Logger LOG = LoggerFactory.getLogger(DummyPipelineServiceRegistrationTest.class);

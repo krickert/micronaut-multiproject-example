@@ -22,6 +22,17 @@ import static org.junit.jupiter.api.Assertions.*;
 @MicronautTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@Property(name = "pipeline.step.name", value = "test-service")
+@Property(name = "pipeline.name", value = "test-pipeline")
+@Property(name = "pipeline.step.implementation", value = "com.example.TestService")
+@Property(name = "pipeline.listen.topics", value = "input-topic-1, input-topic-2")
+@Property(name = "pipeline.publish.topics", value = "output-topic")
+@Property(name = "pipeline.grpc.forward.to", value = "forward-service")
+@Property(name = "pipeline.step.registration.enabled", value = "true")
+/**
+ * Tests for PipeStepRegistrationManager with registration enabled.
+ * Tests that require different property values are in PipeStepRegistrationManagerDisabledTest.
+ */
 class PipeStepRegistrationManagerTest implements TestPropertyProvider {
 
     private static final Logger LOG = LoggerFactory.getLogger(PipeStepRegistrationManagerTest.class);
@@ -148,10 +159,19 @@ class PipeStepRegistrationManagerTest implements TestPropertyProvider {
             pipelineService.getPipeline("test-pipeline").block();
             // If we get here, the pipeline exists, so delete it
             pipelineService.deletePipeline("test-pipeline").block();
-            fail("Exception should have been thrown");
+            LOG.info("Deleted existing pipeline for test");
         } catch (Exception e) {
-            // Pipeline doesn't exist, which is what we want
+            // Pipeline doesn't exist, which is also fine
             LOG.info("Pipeline not found as expected: {}", e.getMessage());
+        }
+
+        // Verify pipeline doesn't exist after deletion
+        try {
+            pipelineService.getPipeline("test-pipeline").block();
+            fail("Pipeline should not exist at this point");
+        } catch (Exception e) {
+            // Expected exception
+            LOG.info("Confirmed pipeline does not exist: {}", e.getMessage());
         }
 
         // Act - Trigger service registration
@@ -169,70 +189,17 @@ class PipeStepRegistrationManagerTest implements TestPropertyProvider {
         assertEquals("com.example.TestService", serviceConfig.getServiceImplementation());
     }
 
-    @Test
-    @Order(4)
-    @DisplayName("Service registration is skipped when disabled")
-    @Property(name = "pipeline.step.registration.enabled", value = "false")
-    void testServiceRegistrationSkippedWhenDisabled() {
-        // Arrange - Ensure pipeline doesn't exist
-        try {
-            pipelineService.getPipeline("test-pipeline").block();
-            // If we get here, the pipeline exists, so delete it
-            pipelineService.deletePipeline("test-pipeline").block();
-        } catch (Exception e) {
-            // Pipeline doesn't exist, which is what we want
-            LOG.info("Pipeline not found as expected: {}", e.getMessage());
-        }
-
-        // Act - Trigger service registration
-        pipeStepRegistrationManager.onApplicationEvent(null);
-
-        // Assert - Verify the pipeline was not created
-        Mono<PipelineConfigDto> checkPipeline = pipelineService.getPipeline("test-pipeline");
-        assertThrows(Exception.class, () -> checkPipeline.block(), "Pipeline should not be created when registration is disabled");
-    }
-
-    @Test
-    @Order(5)
-    @DisplayName("Service can run without pipeline configuration")
-    @Property(name = "pipeline.name", value = "")
-    void testServiceCanRunWithoutPipelineConfiguration() {
-        // Act - Trigger service registration with empty pipeline name
-        pipeStepRegistrationManager.onApplicationEvent(null);
-
-        // No assertions needed - we're just verifying that the service doesn't throw an exception
-        // and can run without being registered to a pipeline
-
-        // Try to get all pipelines to verify no new pipeline was created
-        List<String> pipelines = pipelineService.listPipelines().block();
-        assertNotNull(pipelines, "Pipeline list should not be null");
-
-        // If any pipelines exist, verify none of them contain our service
-        for (String pipelineName : pipelines) {
-            try {
-                PipelineConfigDto pipeline = pipelineService.getPipeline(pipelineName).block();
-                if (pipeline != null && pipeline.getServices() != null) {
-                    assertFalse(pipeline.getServices().containsKey("test-service"), 
-                        "Service should not be registered to any pipeline when pipeline name is empty");
-                }
-            } catch (Exception e) {
-                // Ignore exceptions when getting pipelines
-                LOG.info("Error getting pipeline {}: {}", pipelineName, e.getMessage());
-            }
-        }
-    }
+    // Tests for disabled registration and empty pipeline name have been moved to PipeStepRegistrationManagerDisabledTest
 
     @Override
     public Map<String, String> getProperties() {
         Map<String,String> properties = new HashMap<>();
-        properties.put("pipeline.step.name", "test-service");
-        properties.put("pipeline.name", "test-pipeline");
-        properties.put("pipeline.step.implementation", "com.example.TestService");
-        properties.put("pipeline.listen.topics", "input-topic-1, input-topic-2");
-        properties.put("pipeline.publish.topics", "output-topic");
-        properties.put("pipeline.grpc.forward.to", "forward-service");
+        properties.put("micronaut.config-client.enabled", "false");
+        properties.put("consul.client.registration.enabled", "true");
+        properties.put("consul.client.config.enabled", "true");
+        properties.put("consul.client.discovery.enabled", "true");
+        properties.put("consul.client.watch.enabled", "false");
         properties.put("consul.data.seeding.enabled", "false");
-        properties.put("pipeline.step.registration.enabled", "false");
         return properties;
     }
 
