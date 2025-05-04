@@ -2,6 +2,7 @@ package com.krickert.search.config.consul.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
@@ -31,34 +32,9 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 @MicronautTest(rebuildContext = true)
-@Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ConfigControllerTest implements TestPropertyProvider {
-
-    @Factory
-    static class TestBeanFactory {
-        @Bean
-        @Singleton
-        @jakarta.inject.Named("configControllerTest")
-        public Consul consulClient() {
-            // Ensure the container is started before creating the client
-            if (!consulContainer.isRunning()) {
-                consulContainer.start();
-            }
-            return Consul.builder()
-                    .withUrl("http://" + consulContainer.getHost() + ":" + consulContainer.getMappedPort(8500))
-                    .build();
-        }
-    }
-
-    @Container
-    public static ConsulContainer consulContainer = new ConsulContainer("hashicorp/consul:latest")
-            .withExposedPorts(8500);
-    static {
-        if (!consulContainer.isRunning()) {
-            consulContainer.start();
-        }
-    }
+    ConsulTestContainer consulTestContainer =  ConsulTestContainer.getInstance();
 
     @Inject
     private ConsulKvService consulKvService;
@@ -71,12 +47,10 @@ public class ConfigControllerTest implements TestPropertyProvider {
 
     @Override
     public Map<String, String> getProperties() {
-        Map<String, String> properties = new HashMap<>();
+        ConsulContainer consulContainer = consulTestContainer.getContainer();
+        Map<String, String> properties = new HashMap<>(consulTestContainer.getProperties());
 
-        // Ensure the container is started before getting host and port
-        if (!consulContainer.isRunning()) {
-            consulContainer.start();
-        }
+
         properties.put("consul.host", consulContainer.getHost());
         properties.put("consul.port", consulContainer.getMappedPort(8500).toString());
 
@@ -100,7 +74,7 @@ public class ConfigControllerTest implements TestPropertyProvider {
         // Clean up any existing test keys before each test
         String testKeyPrefix = consulKvService.getFullPath("test-");
         try {
-            consulContainer.execInContainer("consul", "kv", "delete", "-recurse", testKeyPrefix);
+            ConsulTestContainer.getInstance().getContainer().execInContainer("consul", "kv", "delete", "-recurse", testKeyPrefix);
         } catch (Exception e) {
             // If interrupted, restore the interrupt status
             if (e instanceof InterruptedException) {

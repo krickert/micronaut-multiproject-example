@@ -22,11 +22,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * Test class to verify that the dummy gRPC service can be registered with Consul.
  */
 @MicronautTest
-@Testcontainers
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-@Property(name = "pipeline.service.name", value = "dummy-grpc-service")
+@Property(name = "pipeline.pipe.name", value = "dummy-grpc-service")
 @Property(name = "pipeline.name", value = "test-pipeline")
-@Property(name = "pipeline.service.implementation", value = "com.krickert.search.config.consul.service.DummyPipelineServiceImpl")
+@Property(name = "pipeline.pipe.implementation", value = "com.krickert.search.config.consul.service.DummyPipelineServiceImpl")
 @Property(name = "pipeline.listen.topics", value = "input-topic-1,input-topic-2")
 @Property(name = "pipeline.publish.topics", value = "output-topic")
 @Property(name = "pipeline.grpc.forward.to", value = "forward-service")
@@ -44,13 +43,7 @@ public class DummyPipelineServiceRegistrationTest implements TestPropertyProvide
     private ConsulKvService consulKvService;
 
     // Use the singleton TestContainer instance
-    ConsulTestContainer consulContainer = ConsulTestContainer.getInstance();
-
-    @BeforeAll
-    static void setupAll() {
-        // This is just to ensure the container is started before tests
-        ConsulTestContainer.getInstance();
-    }
+    static ConsulTestContainer consulContainer = ConsulTestContainer.getInstance();
 
     @BeforeEach
     void setUp() {
@@ -153,6 +146,7 @@ public class DummyPipelineServiceRegistrationTest implements TestPropertyProvide
         properties.put("consul.client.config.enabled", "true");
         properties.put("consul.client.watch.enabled", "false");
         properties.put("pipeline.service.registration.enabled", "true");
+        properties.put("grpc.server.enabled", "true");
         return properties;
     }
 }

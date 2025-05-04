@@ -28,7 +28,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @MicronautTest(transactional = false)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-// @Testcontainers // May not be needed if ConsulTestContainer handles lifecycle
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class SchemaControllerTest implements TestPropertyProvider {
     private static final Logger log = LoggerFactory.getLogger(SchemaControllerTest.class);

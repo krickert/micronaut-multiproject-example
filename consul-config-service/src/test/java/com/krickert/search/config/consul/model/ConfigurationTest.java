@@ -16,8 +16,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-@MicronautTest(rebuildContext = true)
-@Testcontainers
+@MicronautTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ConfigurationTest implements TestPropertyProvider {
     private static final Logger LOG = LoggerFactory.getLogger(ConfigurationTest.class);

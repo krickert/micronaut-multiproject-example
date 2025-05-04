@@ -1,5 +1,6 @@
 package com.krickert.search.config.consul.integration;
 
+import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Bean;
@@ -29,42 +30,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * This test verifies that the application starts correctly with Consul enabled
  * and loads properties from Consul.
  */
-@MicronautTest(environments = {"consul"}, transactional = false, rebuildContext = true)
-@Testcontainers
+@MicronautTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ConsulIntegrationTest implements TestPropertyProvider {
 
-    @Container
-    public static ConsulContainer consulContainer = new ConsulContainer("hashicorp/consul:latest")
-            .withExposedPorts(8500);
-    static {
-        if (!consulContainer.isRunning()) {
-            consulContainer.start();
-        }
-    }
-
-    // Add a delay after each test to allow any pending operations to complete
-    @org.junit.jupiter.api.AfterEach
-    void tearDown() throws InterruptedException {
-        // Add a short delay to allow any pending operations to complete
-        Thread.sleep(500);
-    }
-
-    @Factory
-    static class TestBeanFactory {
-        @Bean
-        @Singleton
-        @jakarta.inject.Named("consulIntegrationTest")
-        public Consul consulClient() {
-            // Ensure the container is started before creating the client
-            if (!consulContainer.isRunning()) {
-                consulContainer.start();
-            }
-            return Consul.builder()
-                    .withUrl("http://" + consulContainer.getHost() + ":" + consulContainer.getMappedPort(8500))
-                    .build();
-        }
-    }
+    ConsulTestContainer consulTestContainer = ConsulTestContainer.getInstance();
 
     @Inject
     private ConsulKvService consulKvService;
@@ -80,7 +50,9 @@ public class ConsulIntegrationTest implements TestPropertyProvider {
 
     @Override
     public Map<String, String> getProperties() {
-        Map<String, String> properties = new HashMap<>();
+        ConsulContainer consulContainer = consulTestContainer.getContainer();
+        Map<String, String> properties = new HashMap<>(consulTestContainer.getProperties());
+        properties.put("grpc.server.enabled", "false");
 
         // Ensure the container is started before getting host and port
         if (!consulContainer.isRunning()) {

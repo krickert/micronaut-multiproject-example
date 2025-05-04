@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.*;
  * Tests for the pipeline versioning functionality.
  */
 @MicronautTest(rebuildContext = true)
-@Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class PipelineVersioningTest implements TestPropertyProvider {
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(PipelineVersioningTest.class);

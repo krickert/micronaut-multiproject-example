@@ -28,6 +28,9 @@ public class ConsulTestClientFactory {
     public Consul consulClient() {
         LOG.debug("Creating default Consul client");
         ConsulTestContainer container = ConsulTestContainer.getInstance();
+        if (!container.getContainer().isRunning()) {
+            container.getContainer().start();
+        }
         return Consul.builder()
                 .withUrl(container.getContainerUrl())
                 .build();

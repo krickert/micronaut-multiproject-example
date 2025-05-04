@@ -100,7 +100,7 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
 
 
     // Use the singleton TestContainer instance
-    ConsulTestContainer consulContainer = ConsulTestContainer.getInstance();
+    static ConsulTestContainer consulContainer = ConsulTestContainer.getInstance();
 
     @Inject @Client("/") HttpClient client;
     @Inject ObjectMapper objectMapper; // Micronaut provides a configured ObjectMapper bean
@@ -111,7 +111,6 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
      */
     @BeforeAll
     void setupAll() {
-        assertTrue(consulContainer.getContainer().isRunning(), "Consul container should be running for tests");
         cleanupConsul();
     }
 
@@ -400,14 +399,6 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
     // Provides Consul connection properties based on the Testcontainer
     @Override @NonNull
     public Map<String, String> getProperties() {
-        if (consulContainer == null) {
-            log.error("ConsulTestContainer is null in getProperties!");
-            return Collections.emptyMap();
-        }
-        if (!consulContainer.getContainer().isRunning()) {
-            log.warn("Consul container was not running in getProperties, starting it...");
-            consulContainer.getContainer().start();
-        }
         // Get base properties from the singleton container helper method
         Map<String, String> properties = new HashMap<>(consulContainer.getProperties());
 

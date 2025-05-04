@@ -50,6 +50,8 @@ public class ConsulTestContainer {
         props.put("consul.client.config.format", "yaml");
         props.put("consul.client.config.path", "config/pipeline");
         props.put("micronaut.config-client.enabled", "false");
+        props.put("consul.client.defaultZone", consulContainer.getHost() + ":" + consulContainer.getMappedPort(8500));
+        props.put("consul.client.enabled", "true");
 
         // Make properties unmodifiable
         properties = Collections.unmodifiableMap(props);

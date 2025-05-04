@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @MicronautTest(rebuildContext = true)
-@Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ConsulKvServiceTest implements TestPropertyProvider {
     private static final Logger LOG = LoggerFactory.getLogger(ConsulKvServiceTest.class);

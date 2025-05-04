@@ -23,7 +23,7 @@ consul-config-service-test:
 pipeline:
   configs:
     pipeline1:
-      service:
+      step:
         importer:
           kafka-publish-topics: input-documents
           serviceImplementation: com.krickert.search.pipeline.service.ImporterService
@@ -54,7 +54,7 @@ pipeline:
             collection: pipeline1
 
     pipeline2:
-      service:
+      step:
         chunker:
           kafka-listen-topics: input-documents2
           kafka-publish-topics: chunker-results2

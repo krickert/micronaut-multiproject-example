@@ -1,6 +1,7 @@
 package com.krickert.search.config.consul.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.model.CreatePipelineRequest;
 import com.krickert.search.config.consul.model.PipelineConfig;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
@@ -34,35 +35,8 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 @MicronautTest
-@Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@Property(name = "test.consul.unavailable", value = "false")
 public class PipelineControllerTest implements TestPropertyProvider {
-
-    @Factory
-    static class TestBeanFactory {
-        @Bean
-        @Singleton
-        @jakarta.inject.Named("pipelineControllerTest")
-        public Consul consulClient() {
-            // Ensure the container is started before creating the client
-            if (!consulContainer.isRunning()) {
-                consulContainer.start();
-            }
-            return Consul.builder()
-                    .withUrl("http://" + consulContainer.getHost() + ":" + consulContainer.getMappedPort(8500))
-                    .build();
-        }
-    }
-
-    @Container
-    public static ConsulContainer consulContainer = new ConsulContainer("hashicorp/consul:latest")
-            .withExposedPorts(8500);
-    static {
-        if (!consulContainer.isRunning()) {
-            consulContainer.start();
-        }
-    }
 
     @Inject
     @Client("/")
@@ -81,18 +55,8 @@ public class PipelineControllerTest implements TestPropertyProvider {
 
     @Override
     public Map<String, String> getProperties() {
-        Map<String, String> properties = new HashMap<>();
-
-        // Ensure the container is started before getting host and port
-        if (!consulContainer.isRunning()) {
-            consulContainer.start();
-        }
-        properties.put("consul.host", consulContainer.getHost());
-        properties.put("consul.port", consulContainer.getMappedPort(8500).toString());
-
-        properties.put("consul.client.host", consulContainer.getHost());
-        properties.put("consul.client.port", consulContainer.getMappedPort(8500).toString());
-        properties.put("consul.client.config.path", "config/pipeline");
+        ConsulContainer consulContainer = ConsulTestContainer.getInstance().getContainer();
+        Map<String, String> properties = new HashMap<>(ConsulTestContainer.getInstance().getProperties());
 
         // Disable the Consul config client to prevent Micronaut from trying to connect to Consul for configuration
         properties.put("micronaut.config-client.enabled", "false");

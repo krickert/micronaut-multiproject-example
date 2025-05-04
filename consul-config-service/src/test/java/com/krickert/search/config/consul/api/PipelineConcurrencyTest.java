@@ -1,5 +1,6 @@
 package com.krickert.search.config.consul.api;
 
+import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.model.CreatePipelineRequest;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
 import com.krickert.search.config.consul.service.ConsulKvService;
@@ -36,9 +37,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 @MicronautTest
-@Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class PipelineConcurrencyTest implements TestPropertyProvider {
+
+    final static ConsulTestContainer consulTestContainer = ConsulTestContainer.getInstance();
 
     @Factory
     static class TestBeanFactory {
@@ -47,23 +49,15 @@ public class PipelineConcurrencyTest implements TestPropertyProvider {
         @jakarta.inject.Named("pipelineConcurrencyTest")
         public Consul consulClient() {
             // Ensure the container is started before creating the client
-            if (!consulContainer.isRunning()) {
-                consulContainer.start();
+            if (!consulTestContainer.getContainer().isRunning()) {
+                consulTestContainer.getContainer().start();
             }
             return Consul.builder()
-                    .withUrl("http://" + consulContainer.getHost() + ":" + consulContainer.getMappedPort(8500))
+                    .withUrl(consulTestContainer.getContainerUrl())
                     .build();
         }
     }
 
-    @Container
-    public static ConsulContainer consulContainer = new ConsulContainer("hashicorp/consul:latest")
-            .withExposedPorts(8500);
-    static {
-        if (!consulContainer.isRunning()) {
-            consulContainer.start();
-        }
-    }
 
     @Inject
     @Client("/")
@@ -77,25 +71,14 @@ public class PipelineConcurrencyTest implements TestPropertyProvider {
 
     @Override
     public Map<String, String> getProperties() {
-        Map<String, String> properties = new HashMap<>();
-
-        // Ensure the container is started before getting host and port
-        if (!consulContainer.isRunning()) {
-            consulContainer.start();
-        }
-        properties.put("consul.host", consulContainer.getHost());
-        properties.put("consul.port", consulContainer.getMappedPort(8500).toString());
-
-        properties.put("consul.client.host", consulContainer.getHost());
-        properties.put("consul.client.port", consulContainer.getMappedPort(8500).toString());
-        properties.put("consul.client.config.path", "config/pipeline");
+        Map<String, String> properties = new HashMap<>(consulTestContainer.getProperties());
 
         // Disable the Consul config client to prevent Micronaut from trying to connect to Consul for configuration
         properties.put("micronaut.config-client.enabled", "false");
 
+        properties.put("consul.client.registration.enabled", "true");
         // Disable data seeding for tests
         properties.put("consul.data.seeding.enabled", "false");
-        properties.put("consul.client.registration.enabled", "false");
         properties.put("consul.client.watch.enabled", "false");
 
         return properties;
