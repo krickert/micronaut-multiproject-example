@@ -250,7 +250,7 @@ public class ConsulKvServiceTest {
     @Test
     public void testGetFullPath() {
         // Given
-        String configPath = "config/test";
+        String configPath = "config/pipeline";
         String key = "test-key";
 
         // When
@@ -263,7 +263,7 @@ public class ConsulKvServiceTest {
     @Test
     public void testGetFullPathWithExistingPrefix() {
         // Given
-        String configPath = "config/test";
+        String configPath = "config/pipeline/config/test";
         String key = configPath + "/test-key";
 
         // When
@@ -276,7 +276,7 @@ public class ConsulKvServiceTest {
     @Test
     public void testPutAndGetValueWithSpecialCharacters() {
         // Given
-        String key = "test/pipeline.configs.pipeline1.service.chunker.kafka-listen-topics[0]";
+        String key = "config/pipeline/test/pipeline.configs.pipeline1.service.chunker.kafka-listen-topics[0]";
         String value = "test-topic";
         String fullPath = consulKvService.getFullPath(key);
 

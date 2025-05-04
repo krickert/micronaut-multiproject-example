@@ -148,6 +148,7 @@ class PipeStepRegistrationManagerTest implements TestPropertyProvider {
             pipelineService.getPipeline("test-pipeline").block();
             // If we get here, the pipeline exists, so delete it
             pipelineService.deletePipeline("test-pipeline").block();
+            fail("Exception should have been thrown");
         } catch (Exception e) {
             // Pipeline doesn't exist, which is what we want
             LOG.info("Pipeline not found as expected: {}", e.getMessage());
@@ -231,6 +232,7 @@ class PipeStepRegistrationManagerTest implements TestPropertyProvider {
         properties.put("pipeline.publish.topics", "output-topic");
         properties.put("pipeline.grpc.forward.to", "forward-service");
         properties.put("consul.data.seeding.enabled", "false");
+        properties.put("pipeline.step.registration.enabled", "false");
         return properties;
     }
 

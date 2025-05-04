@@ -138,6 +138,7 @@ public class DummyPipelineServiceRegistrationTest implements TestPropertyProvide
         properties.put("micronaut.config-client.enabled", "false");
         properties.put("consul.client.registration.enabled", "true");
         properties.put("consul.client.config.enabled", "true");
+        properties.put("consul.client.discovery.enabled", "true");
         properties.put("consul.client.watch.enabled", "false");
         properties.put("pipeline.service.registration.enabled", "true");
         properties.put("grpc.server.enabled", "true");
