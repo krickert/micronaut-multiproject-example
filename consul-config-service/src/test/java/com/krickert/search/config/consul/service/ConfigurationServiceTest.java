@@ -1,12 +1,10 @@
 package com.krickert.search.config.consul.service;
 
-import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.model.ApplicationConfig;
 import com.krickert.search.config.consul.model.PipelineConfig;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
 import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
-import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,7 +12,6 @@ import org.junit.jupiter.api.TestInstance;
 import org.kiwiproject.consul.KeyValueClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -25,9 +22,9 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@MicronautTest(rebuildContext = true)
+@MicronautTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class ConfigurationServiceTest implements TestPropertyProvider {
+public class ConfigurationServiceTest {
     private static final Logger LOG = LoggerFactory.getLogger(ConfigurationServiceTest.class);
 
     @Inject
@@ -43,13 +40,6 @@ public class ConfigurationServiceTest implements TestPropertyProvider {
     private PipelineConfig pipelineConfig;
 
     private ConfigurationService configurationService;
-
-    @Override
-    public Map<String, String> getProperties() {
-        ConsulTestContainer container = ConsulTestContainer.getInstance();
-        LOG.info("Using shared Consul container");
-        return container.getPropertiesWithTestConfigPath();
-    }
 
     @BeforeEach
     void setUp() {

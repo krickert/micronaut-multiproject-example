@@ -1,11 +1,8 @@
 package com.krickert.search.config.consul.api;
 
-import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.model.CreatePipelineRequest;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
 import com.krickert.search.config.consul.service.ConsulKvService;
-import io.micronaut.context.annotation.Bean;
-import io.micronaut.context.annotation.Factory;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
@@ -16,15 +13,10 @@ import io.micronaut.http.client.exceptions.HttpClientResponseException;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.kiwiproject.consul.Consul;
 import org.kiwiproject.consul.KeyValueClient;
-import org.testcontainers.consul.ConsulContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -40,25 +32,6 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class PipelineConcurrencyTest implements TestPropertyProvider {
 
-    final static ConsulTestContainer consulTestContainer = ConsulTestContainer.getInstance();
-
-    @Factory
-    static class TestBeanFactory {
-        @Bean
-        @Singleton
-        @jakarta.inject.Named("pipelineConcurrencyTest")
-        public Consul consulClient() {
-            // Ensure the container is started before creating the client
-            if (!consulTestContainer.getContainer().isRunning()) {
-                consulTestContainer.getContainer().start();
-            }
-            return Consul.builder()
-                    .withUrl(consulTestContainer.getContainerUrl())
-                    .build();
-        }
-    }
-
-
     @Inject
     @Client("/")
     HttpClient client;
@@ -71,16 +44,14 @@ public class PipelineConcurrencyTest implements TestPropertyProvider {
 
     @Override
     public Map<String, String> getProperties() {
-        Map<String, String> properties = new HashMap<>(consulTestContainer.getProperties());
+        Map<String, String> properties = new HashMap<>();
 
         // Disable the Consul config client to prevent Micronaut from trying to connect to Consul for configuration
         properties.put("micronaut.config-client.enabled", "false");
-
         properties.put("consul.client.registration.enabled", "true");
         // Disable data seeding for tests
         properties.put("consul.data.seeding.enabled", "false");
         properties.put("consul.client.watch.enabled", "false");
-
         return properties;
     }
 

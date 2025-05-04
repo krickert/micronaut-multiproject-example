@@ -1,6 +1,5 @@
 package com.krickert.search.config.consul.seeding;
 
-import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.model.ApplicationConfig;
 import com.krickert.search.config.consul.model.PipelineConfig;
 import com.krickert.search.config.consul.service.ConsulKvService;
@@ -36,7 +35,6 @@ public class ConsulDataSeederTest implements TestPropertyProvider {
     private static final Logger LOG = LoggerFactory.getLogger(ConsulDataSeederTest.class);
     private static final String TEST_SEED_FILE = "classpath:dev-seed-data.yaml";
 
-    private static final ConsulTestContainer consulContainer = ConsulTestContainer.getInstance();
     @Inject private ConsulDataSeeder consulDataSeeder;
     @Inject private ConsulKvService consulKvService;
     @Inject private ApplicationConfig applicationConfig;
@@ -93,7 +91,7 @@ public class ConsulDataSeederTest implements TestPropertyProvider {
 
     @Override
     public Map<String, String> getProperties() {
-        Map<String, String> props = new HashMap<>(consulContainer.getProperties());
+        Map<String, String> props = new HashMap<>();
         // Use constants from ConsulDataSeeder for consistency
         props.put(ConsulDataSeeder.ENABLED_PROPERTY, "true"); // "consul.data.seeding.enabled"
         props.put(ConsulDataSeeder.FILE_PROPERTY, TEST_SEED_FILE); // "consul.data.seeding.file"

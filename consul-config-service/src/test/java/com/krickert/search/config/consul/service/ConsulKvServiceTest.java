@@ -1,8 +1,6 @@
 package com.krickert.search.config.consul.service;
 
-import com.krickert.search.config.consul.container.ConsulTestContainer;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
-import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -13,7 +11,6 @@ import org.kiwiproject.consul.option.ImmutableQueryOptions;
 import org.kiwiproject.consul.option.QueryOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.test.StepVerifier;
 
 import java.time.Duration;
@@ -27,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @MicronautTest(rebuildContext = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class ConsulKvServiceTest implements TestPropertyProvider {
+public class ConsulKvServiceTest {
     private static final Logger LOG = LoggerFactory.getLogger(ConsulKvServiceTest.class);
 
     // Inside ConsulKvServiceTest class:
@@ -35,15 +32,6 @@ public class ConsulKvServiceTest implements TestPropertyProvider {
 
     @Inject
     private ConsulKvService consulKvService;
-
-    @Override
-    public Map<String, String> getProperties() {
-        ConsulTestContainer container = ConsulTestContainer.getInstance();
-        LOG.info("Using shared Consul container");
-
-        // Use centralized property management
-        return container.getPropertiesWithTestConfigPath();
-    }
 
     // Helper method to get ModifyIndex reliably after a write
     private long getModifyIndex(String keyFullPath) {

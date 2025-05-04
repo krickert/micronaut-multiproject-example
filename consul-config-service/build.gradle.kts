@@ -1,7 +1,10 @@
+import io.micronaut.testresources.buildtools.KnownModules
+
 // File: consul-config-service/build.gradle.kts
 plugins {
     `java-library`
     `maven-publish`
+    id("io.micronaut.test-resources") version "4.5.3"
     id("io.micronaut.application") version "4.5.3"
     id("com.gradleup.shadow") version "8.3.6"
     id("io.micronaut.aot") version "4.5.3"
@@ -24,6 +27,13 @@ micronaut {
     processing {
         incremental(true)
         annotations("com.krickert.search.config.consul.*")
+    }
+    testResources {
+        enabled.set(true) // true by default
+        inferClasspath.set(true) // true by default
+        additionalModules.add(KnownModules.HASHICORP_CONSUL)
+        clientTimeout.set(60) // in seconds, maximum time to wait for resources to be available, 60s by default
+        sharedServer.set(true) // false by default
     }
     aot {
         optimizeServiceLoading = false
@@ -73,7 +83,6 @@ dependencies {
     implementation(mn.micronaut.micrometer.registry.jmx)
     implementation(mn.micronaut.views.fieldset)
     implementation(mn.micronaut.views.thymeleaf)
-
     // Compile-only dependencies
     compileOnly(mn.lombok)
 
@@ -86,10 +95,8 @@ dependencies {
     testImplementation(mn.junit.jupiter.api)
     testImplementation(mn.junit.jupiter.engine)
     testImplementation(mn.micronaut.test.junit5)
-    testImplementation(mn.testcontainers.consul)
     testImplementation(libs.junit.jupiter.engine)
     testImplementation(mn.testcontainers.kafka)
-    testImplementation(mn.testcontainers.consul)
     testImplementation(mn.reactor.test)
     testImplementation(mn.micronaut.http.server.netty)
     testImplementation("org.junit.platform:junit-platform-suite-engine")
@@ -98,6 +105,9 @@ dependencies {
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.19.0")
     // https://mvnrepository.com/artifact/org.kiwiproject/consul-client
     implementation("org.kiwiproject:consul-client:1.5.1")
+
+    // https://mvnrepository.com/artifact/org.testcontainers/consul
+    testResourcesImplementation("org.testcontainers:consul:1.21.0")
     // https://mvnrepository.com/artifact/org.awaitility/awaitility
     testImplementation("org.awaitility:awaitility:4.3.0")
     // https://mvnrepository.com/artifact/com.networknt/json-schema-validator
@@ -106,7 +116,6 @@ dependencies {
 
     // Add protobuf-models dependency for gRPC service
     implementation(project(":protobuf-models"))
-
     // Add gRPC dependencies
     implementation(mn.micronaut.grpc.runtime)
     implementation(mn.micronaut.grpc.server.runtime)
@@ -142,4 +151,8 @@ graalvmNative.toolchainDetection = false
 
 tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative") {
     jdkVersion = "21"
+}
+
+tasks.withType<io.micronaut.gradle.testresources.StartTestResourcesService>().configureEach {
+    useClassDataSharing.set(false)
 }

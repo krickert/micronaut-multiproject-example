@@ -2,10 +2,7 @@ package com.krickert.search.config.consul.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.service.ConsulKvService;
-import io.micronaut.context.annotation.Bean;
-import io.micronaut.context.annotation.Factory;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
@@ -16,14 +13,8 @@ import io.micronaut.http.client.exceptions.HttpClientResponseException;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.kiwiproject.consul.Consul;
-import org.testcontainers.consul.ConsulContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -34,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.*;
 @MicronautTest(rebuildContext = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ConfigControllerTest implements TestPropertyProvider {
-    ConsulTestContainer consulTestContainer =  ConsulTestContainer.getInstance();
 
     @Inject
     private ConsulKvService consulKvService;
@@ -47,43 +37,17 @@ public class ConfigControllerTest implements TestPropertyProvider {
 
     @Override
     public Map<String, String> getProperties() {
-        ConsulContainer consulContainer = consulTestContainer.getContainer();
-        Map<String, String> properties = new HashMap<>(consulTestContainer.getProperties());
-
-
-        properties.put("consul.host", consulContainer.getHost());
-        properties.put("consul.port", consulContainer.getMappedPort(8500).toString());
-
-        properties.put("consul.client.host", consulContainer.getHost());
-        properties.put("consul.client.port", consulContainer.getMappedPort(8500).toString());
+        Map<String, String> properties = new HashMap<>();
         properties.put("consul.client.config.path", "config/test");
-
         // Disable the Consul config client to prevent Micronaut from trying to connect to Consul for configuration
         properties.put("micronaut.config-client.enabled", "false");
-
         // Enable data seeding for tests with a custom seed file
         properties.put("consul.data.seeding.enabled", "true");
         properties.put("consul.data.seeding.file", "test-seed-data.yaml");
         properties.put("consul.data.seeding.skip-if-exists", "false");
-
         return properties;
     }
 
-    @BeforeEach
-    public void setUp() {
-        // Clean up any existing test keys before each test
-        String testKeyPrefix = consulKvService.getFullPath("test-");
-        try {
-            ConsulTestContainer.getInstance().getContainer().execInContainer("consul", "kv", "delete", "-recurse", testKeyPrefix);
-        } catch (Exception e) {
-            // If interrupted, restore the interrupt status
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
-            // Log the error but continue with the test
-            System.err.println("Error cleaning up test keys: " + e.getMessage());
-        }
-    }
 
     @Test
     public void testCreateAndGetConfig() {

@@ -1,6 +1,5 @@
 package com.krickert.search.config.consul.api;
 
-import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Replaces;
@@ -32,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @MicronautTest(rebuildContext = true)
 @Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class ServiceDiscoveryControllerTest implements TestPropertyProvider {
+public class ServiceDiscoveryControllerTest {
     private static final Logger LOG = LoggerFactory.getLogger(ServiceDiscoveryControllerTest.class);
 
     @Bean
@@ -43,21 +42,12 @@ public class ServiceDiscoveryControllerTest implements TestPropertyProvider {
     }
 
     @Inject
-    @Named("serviceDiscoveryControllerTest")
     private Consul consulClient;
 
     @Inject
     @Client("/")
     private HttpClient client;
 
-    @Override
-    public Map<String, String> getProperties() {
-        ConsulTestContainer container = ConsulTestContainer.getInstance();
-        LOG.info("Using shared Consul container");
-
-        // Use centralized property management
-        return container.getPropertiesWithTestConfigPathWithoutDataSeeding();
-    }
 
     @BeforeEach
     public void setUp() {

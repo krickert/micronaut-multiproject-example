@@ -2,7 +2,6 @@ package com.krickert.search.config.consul.api;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.model.*; // Import relevant models
 import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.core.annotation.NonNull;
@@ -98,9 +97,6 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
     // Malformed JSON string
     private static final String MALFORMED_CONFIG_JSON = "{ \"host\": \"service.example.com\", ";
 
-
-    // Use the singleton TestContainer instance
-    static ConsulTestContainer consulContainer = ConsulTestContainer.getInstance();
 
     @Inject @Client("/") HttpClient client;
     @Inject ObjectMapper objectMapper; // Micronaut provides a configured ObjectMapper bean
@@ -400,13 +396,12 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
     @Override @NonNull
     public Map<String, String> getProperties() {
         // Get base properties from the singleton container helper method
-        Map<String, String> properties = new HashMap<>(consulContainer.getProperties());
-
+        Map<String,String> properties = new HashMap<>();
         // Ensure properties needed for this test context are set (can override defaults from container if needed)
-        properties.putIfAbsent("micronaut.config-client.enabled", "false");
-        properties.putIfAbsent("consul.data.seeding.enabled", "false"); // Important: Disable seeding for predictable test state
-        properties.putIfAbsent("consul.client.registration.enabled", "false"); // Disable service registration for tests
-        properties.putIfAbsent("consul.client.watch.enabled", "false"); // Disable config watching for tests
+        properties.put("micronaut.config-client.enabled", "false");
+        properties.put("consul.data.seeding.enabled", "false"); // Important: Disable seeding for predictable test state
+        properties.put("consul.client.registration.enabled", "false"); // Disable service registration for tests
+        properties.put("consul.client.watch.enabled", "false"); // Disable config watching for tests
 
         log.debug("Providing test properties: {}", properties);
         return properties;

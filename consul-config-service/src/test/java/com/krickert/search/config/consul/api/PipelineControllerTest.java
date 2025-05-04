@@ -1,14 +1,10 @@
 package com.krickert.search.config.consul.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.model.CreatePipelineRequest;
 import com.krickert.search.config.consul.model.PipelineConfig;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
 import com.krickert.search.config.consul.service.ConsulKvService;
-import io.micronaut.context.annotation.Bean;
-import io.micronaut.context.annotation.Factory;
-import io.micronaut.context.annotation.Property;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
@@ -19,15 +15,10 @@ import io.micronaut.http.client.exceptions.HttpClientResponseException;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.kiwiproject.consul.Consul;
 import org.kiwiproject.consul.KeyValueClient;
-import org.testcontainers.consul.ConsulContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -55,8 +46,7 @@ public class PipelineControllerTest implements TestPropertyProvider {
 
     @Override
     public Map<String, String> getProperties() {
-        ConsulContainer consulContainer = ConsulTestContainer.getInstance().getContainer();
-        Map<String, String> properties = new HashMap<>(ConsulTestContainer.getInstance().getProperties());
+        Map<String, String> properties = new HashMap<>();
 
         // Disable the Consul config client to prevent Micronaut from trying to connect to Consul for configuration
         properties.put("micronaut.config-client.enabled", "false");

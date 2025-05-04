@@ -1,23 +1,15 @@
 package com.krickert.search.config.consul.integration;
 
-import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.context.ApplicationContext;
-import io.micronaut.context.annotation.Bean;
-import io.micronaut.context.annotation.Factory;
 import io.micronaut.context.env.Environment;
 import io.micronaut.runtime.server.EmbeddedServer;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.kiwiproject.consul.Consul;
-import org.testcontainers.consul.ConsulContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.test.StepVerifier;
 
 import java.util.HashMap;
@@ -34,8 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ConsulIntegrationTest implements TestPropertyProvider {
 
-    ConsulTestContainer consulTestContainer = ConsulTestContainer.getInstance();
-
     @Inject
     private ConsulKvService consulKvService;
 
@@ -50,22 +40,8 @@ public class ConsulIntegrationTest implements TestPropertyProvider {
 
     @Override
     public Map<String, String> getProperties() {
-        ConsulContainer consulContainer = consulTestContainer.getContainer();
-        Map<String, String> properties = new HashMap<>(consulTestContainer.getProperties());
+        Map<String, String> properties = new HashMap<>();
         properties.put("grpc.server.enabled", "false");
-
-        // Ensure the container is started before getting host and port
-        if (!consulContainer.isRunning()) {
-            consulContainer.start();
-        }
-
-        // Configure Consul connection
-        properties.put("consul.host", consulContainer.getHost());
-        properties.put("consul.port", consulContainer.getMappedPort(8500).toString());
-        properties.put("consul.client.host", consulContainer.getHost());
-        properties.put("consul.client.port", consulContainer.getMappedPort(8500).toString());
-        //defaultZone: "${CONSUL_HOST:localhost}:${CONSUL_PORT:8501}"
-        properties.put("consul.client.defaultZone", consulContainer.getHost() + ":" + consulContainer.getMappedPort(8500));
         // Enable Consul client and config client
         properties.put("consul.client.enabled", "true");
         properties.put("micronaut.config-client.enabled", "true");

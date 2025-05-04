@@ -1,6 +1,5 @@
 package com.krickert.search.config.consul.service;
 
-import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
 import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
 import io.micronaut.context.annotation.Property;
@@ -10,8 +9,6 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.junit.jupiter.Testcontainers;
-
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -41,9 +38,6 @@ public class DummyPipelineServiceRegistrationTest implements TestPropertyProvide
 
     @Inject
     private ConsulKvService consulKvService;
-
-    // Use the singleton TestContainer instance
-    static ConsulTestContainer consulContainer = ConsulTestContainer.getInstance();
 
     @BeforeEach
     void setUp() {
@@ -140,7 +134,7 @@ public class DummyPipelineServiceRegistrationTest implements TestPropertyProvide
 
     @Override
     public Map<String, String> getProperties() {
-        Map<String, String> properties = new HashMap<>(consulContainer.getProperties());
+        Map<String, String> properties = new HashMap<>();
         properties.put("micronaut.config-client.enabled", "false");
         properties.put("consul.client.registration.enabled", "true");
         properties.put("consul.client.config.enabled", "true");

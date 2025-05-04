@@ -1,16 +1,15 @@
 package com.krickert.search.config.consul.service;
 
-import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
 import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
 import io.micronaut.context.annotation.Property;
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
@@ -23,18 +22,9 @@ import static org.junit.jupiter.api.Assertions.*;
 @MicronautTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-@Property(name = "pipeline.step.name", value = "test-service")
-@Property(name = "pipeline.name", value = "test-pipeline")
-@Property(name = "pipeline.step.implementation", value = "com.example.TestService")
-@Property(name = "pipeline.listen.topics", value = "input-topic-1, input-topic-2")
-@Property(name = "pipeline.publish.topics", value = "output-topic")
-@Property(name = "pipeline.grpc.forward.to", value = "forward-service")
 class PipeStepRegistrationManagerTest implements TestPropertyProvider {
 
     private static final Logger LOG = LoggerFactory.getLogger(PipeStepRegistrationManagerTest.class);
-
-    // Use the singleton TestContainer instance
-    ConsulTestContainer consulContainer = ConsulTestContainer.getInstance();
 
     @Inject
     private PipeStepRegistrationManager pipeStepRegistrationManager;
@@ -44,18 +34,6 @@ class PipeStepRegistrationManagerTest implements TestPropertyProvider {
 
     @Inject
     private ConsulKvService consulKvService;
-
-    @BeforeAll
-    void setupAll() {
-        assertTrue(consulContainer.getContainer().isRunning(), "Consul container should be running for tests");
-    }
-
-    @BeforeEach
-    void setUp() {
-        // Clear any existing pipeline configurations
-        String configPath = consulKvService.getFullPath("pipeline.configs");
-        consulKvService.deleteKeysWithPrefix(configPath).block();
-    }
 
     @Test
     @Order(1)
@@ -245,10 +223,14 @@ class PipeStepRegistrationManagerTest implements TestPropertyProvider {
 
     @Override
     public Map<String, String> getProperties() {
-        Map<String, String> properties = new HashMap<>(consulContainer.getProperties());
-        properties.put("micronaut.config-client.enabled", "false");
-        properties.put("consul.client.registration.enabled", "false");
-        properties.put("consul.client.watch.enabled", "false");
+        Map<String,String> properties = new HashMap<>();
+        properties.put("pipeline.step.name", "test-service");
+        properties.put("pipeline.name", "test-pipeline");
+        properties.put("pipeline.step.implementation", "com.example.TestService");
+        properties.put("pipeline.listen.topics", "input-topic-1, input-topic-2");
+        properties.put("pipeline.publish.topics", "output-topic");
+        properties.put("pipeline.grpc.forward.to", "forward-service");
+        properties.put("consul.data.seeding.enabled", "false");
         return properties;
     }
 

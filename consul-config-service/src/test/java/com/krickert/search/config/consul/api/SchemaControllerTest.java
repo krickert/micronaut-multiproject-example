@@ -3,9 +3,7 @@ package com.krickert.search.config.consul.api;
 // Keep imports...
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.service.ConsulKvService;
-import io.micronaut.core.annotation.NonNull;
 import io.micronaut.core.type.Argument;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
@@ -29,10 +27,9 @@ import static org.junit.jupiter.api.Assertions.*;
 @MicronautTest(transactional = false)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-class SchemaControllerTest implements TestPropertyProvider {
+class SchemaControllerTest {
     private static final Logger log = LoggerFactory.getLogger(SchemaControllerTest.class);
     private static final String API_BASE_PATH = "/api/schemas";
-    ConsulTestContainer consulContainer = ConsulTestContainer.getInstance();
     @Inject @Client("/") HttpClient client;
     @Inject ObjectMapper objectMapper;
     @Inject ConsulKvService consulKvService;
@@ -67,10 +64,6 @@ class SchemaControllerTest implements TestPropertyProvider {
 
     @BeforeAll
     void setupAll() {
-        if (consulContainer == null || !consulContainer.getContainer().isRunning()) {
-            System.err.println("Warning: Consul container might not be running for tests.");
-        }
-        assertTrue(consulContainer.getContainer().isRunning(), "Consul container should be running");
         clearConsulSchemas();
     }
 
@@ -373,16 +366,4 @@ class SchemaControllerTest implements TestPropertyProvider {
         assertTrue(((String) errorBody.get("message")).contains("Schema not found for service implementation: " + nonExistent));
     }
 
-
-    @Override @NonNull
-    public Map<String, String> getProperties() {
-        if (consulContainer == null) {
-            System.err.println("ConsulTestContainer is null in getProperties");
-            return Collections.emptyMap();
-        }
-        if (!consulContainer.getContainer().isRunning()) {
-            consulContainer.getContainer().start();
-        }
-        return consulContainer.getProperties();
-    }
 }

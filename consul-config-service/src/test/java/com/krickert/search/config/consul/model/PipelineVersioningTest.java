@@ -1,6 +1,5 @@
 package com.krickert.search.config.consul.model;
 
-import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.exception.PipelineVersionConflictException;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
@@ -9,7 +8,6 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -177,12 +175,12 @@ public class PipelineVersioningTest implements TestPropertyProvider {
      *
      * @return A map of properties
      */
+    @Override
     public Map<String, String> getProperties() {
-        ConsulTestContainer container = ConsulTestContainer.getInstance();
         LOG.info("Using shared Consul container");
 
         // Get base properties from the container
-        Map<String, String> properties = new HashMap<>(container.getProperties());
+        Map<String, String> properties = new HashMap<>();
 
         // Add test-specific properties
         properties.put("consul.data.seeding.enabled", "true");

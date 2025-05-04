@@ -1,5 +1,6 @@
 package com.krickert.search.config.consul.service;
 
+import com.google.common.net.HostAndPort;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.context.annotation.Primary;
@@ -13,20 +14,16 @@ import org.kiwiproject.consul.KeyValueClient;
 public class ConsulClientFactory {
 
     @Bean
-    @Primary
-    @Singleton
-    @Named("primaryConsulClient")
-    Consul consulClient(@Value("${consul.host}") String host, @Value("${consul.port}") int port) {
+    public Consul createConsulClient(
+            @Value("${consul.client.host}") String host,
+            @Value("${consul.client.port}") Integer port) {
         return Consul.builder()
-                .withUrl("http://" + host + ":" + port)
+                .withHostAndPort(HostAndPort.fromParts(host,port))
                 .build();
     }
 
     @Bean
-    @Primary
-    @Singleton
-    @Named("primaryKeyValueClient")
-    KeyValueClient keyValueClient(@Named("primaryConsulClient") Consul consulClient) {
+    public KeyValueClient keyValueClient(Consul consulClient) {
         return consulClient.keyValueClient();
     }
 }
