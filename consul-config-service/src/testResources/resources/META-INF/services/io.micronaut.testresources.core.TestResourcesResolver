@@ -1,1 +1,4 @@
 io.micronaut.testcontainers.consul.ConsulTestResourceProvider
+io.micronaut.testcontainers.kafka.KafkaTestResourceProvider
+io.micronaut.testcontainers.moto.MotoTestResourceProvider
+io.micronaut.testcontainers.apicurio.ApicurioTestResourceProvider

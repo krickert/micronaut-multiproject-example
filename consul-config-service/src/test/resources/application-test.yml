@@ -31,4 +31,12 @@ logger:
     io.micronaut.discovery: DEBUG
 
 kafka:
-  enabled: false
+  enabled: true
+
+
+testcontainers:
+  enabled: true
+  kafka: true
+  moto: false
+  consul: true
+  apicurio: true

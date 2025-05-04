@@ -32,6 +32,7 @@ micronaut {
         enabled.set(true) // true by default
         inferClasspath.set(true) // true by default
         additionalModules.add(KnownModules.HASHICORP_CONSUL)
+        additionalModules.add(KnownModules.KAFKA)
         clientTimeout.set(60) // in seconds, maximum time to wait for resources to be available, 60s by default
         sharedServer.set(true) // false by default
     }
@@ -108,12 +109,14 @@ dependencies {
 
     // https://mvnrepository.com/artifact/org.testcontainers/consul
     testResourcesImplementation("org.testcontainers:consul:1.21.0")
+    testResourcesImplementation("org.testcontainers:kafka:1.21.0")
     // https://mvnrepository.com/artifact/org.awaitility/awaitility
     testImplementation("org.awaitility:awaitility:4.3.0")
     // https://mvnrepository.com/artifact/com.networknt/json-schema-validator
     implementation("com.networknt:json-schema-validator:1.5.6")
     testImplementation(mn.hamcrest)
     testImplementation("org.testcontainers:consul:1.21.0")
+    testImplementation("org.testcontainers:kafka:1.21.0")
     // Add protobuf-models dependency for gRPC service
     implementation(project(":protobuf-models"))
     // Add gRPC dependencies
