@@ -25,7 +25,7 @@
         /**
          * Map of service configurations, keyed by service name.
          */
-        private Map<String, ServiceConfigurationDto> services = new HashMap<>();
+        private Map<String, PipeStepConfigurationDto> services = new HashMap<>();
 
         /**
          * The version of the pipeline configuration.
@@ -68,8 +68,8 @@
 
             // Deep copy the services map
             this.services = new HashMap<>();
-            for (Map.Entry<String, ServiceConfigurationDto> entry : other.services.entrySet()) {
-                ServiceConfigurationDto serviceCopy = new ServiceConfigurationDto();
+            for (Map.Entry<String, PipeStepConfigurationDto> entry : other.services.entrySet()) {
+                PipeStepConfigurationDto serviceCopy = new PipeStepConfigurationDto();
                 serviceCopy.setName(entry.getValue().getName());
                 serviceCopy.setKafkaListenTopics(entry.getValue().getKafkaListenTopics() != null ?
                     new ArrayList<>(entry.getValue().getKafkaListenTopics()) : null);
@@ -124,7 +124,7 @@
          * @param serviceConfig the service configuration to add or update
          * @throws IllegalArgumentException if adding or updating the service would create a loop in the pipeline
          */
-        public void addOrUpdateService(ServiceConfigurationDto serviceConfig) {
+        public void addOrUpdateService(PipeStepConfigurationDto serviceConfig) {
             // Validate that no topic ends with "-dlq"
             if (serviceConfig.getKafkaListenTopics() != null) {
                 for (String topic : serviceConfig.getKafkaListenTopics()) {
@@ -157,7 +157,7 @@
          * @param serviceName the name of the service to remove
          * @return the removed service configuration, or null if not found
          */
-        public ServiceConfigurationDto removeService(String serviceName) {
+        public PipeStepConfigurationDto removeService(String serviceName) {
             return services.remove(serviceName);
         }
 

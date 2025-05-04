@@ -4,7 +4,7 @@ import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.model.ApplicationConfig;
 import com.krickert.search.config.consul.model.PipelineConfig;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
-import com.krickert.search.config.consul.model.ServiceConfigurationDto;
+import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
@@ -165,7 +165,7 @@ public class ConfigurationServiceTest implements TestPropertyProvider {
         assertTrue(pipeline.containsService(serviceName));
 
         // Verify the service configuration
-        ServiceConfigurationDto serviceConfig = pipeline.getServices().get(serviceName);
+        PipeStepConfigurationDto serviceConfig = pipeline.getServices().get(serviceName);
         assertEquals(serviceName, serviceConfig.getName());
 
         // Verify kafka listen topics

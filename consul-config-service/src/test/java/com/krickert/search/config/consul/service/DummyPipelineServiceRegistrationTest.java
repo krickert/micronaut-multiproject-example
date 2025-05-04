@@ -2,9 +2,8 @@ package com.krickert.search.config.consul.service;
 
 import com.krickert.search.config.consul.container.ConsulTestContainer;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
-import com.krickert.search.config.consul.model.ServiceConfigurationDto;
+import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
 import io.micronaut.context.annotation.Property;
-import io.micronaut.discovery.event.ServiceReadyEvent;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
@@ -36,7 +35,7 @@ public class DummyPipelineServiceRegistrationTest implements TestPropertyProvide
     private static final Logger LOG = LoggerFactory.getLogger(DummyPipelineServiceRegistrationTest.class);
 
     @Inject
-    private ServiceRegistrationManager serviceRegistrationManager;
+    private PipeStepRegistrationManager pipeStepRegistrationManager;
 
     @Inject
     private PipelineService pipelineService;
@@ -81,7 +80,7 @@ public class DummyPipelineServiceRegistrationTest implements TestPropertyProvide
         consulKvService.putValue(lastUpdatedKey, LocalDateTime.now().toString()).block();
 
         // Act - Trigger service registration
-        serviceRegistrationManager.onApplicationEvent(null);
+        pipeStepRegistrationManager.onApplicationEvent(null);
 
         // Wait a bit for async operations to complete
         try {
@@ -98,7 +97,7 @@ public class DummyPipelineServiceRegistrationTest implements TestPropertyProvide
             assertTrue(updatedPipeline.getServices().containsKey("dummy-grpc-service"), 
                     "Pipeline should contain the dummy gRPC service");
 
-            ServiceConfigurationDto serviceConfig = updatedPipeline.getServices().get("dummy-grpc-service");
+            PipeStepConfigurationDto serviceConfig = updatedPipeline.getServices().get("dummy-grpc-service");
             assertEquals("dummy-grpc-service", serviceConfig.getName());
             assertEquals("com.krickert.search.config.consul.service.DummyPipelineServiceImpl", 
                     serviceConfig.getServiceImplementation());
@@ -125,7 +124,7 @@ public class DummyPipelineServiceRegistrationTest implements TestPropertyProvide
         }
 
         // Act - Trigger service registration
-        serviceRegistrationManager.onApplicationEvent(null);
+        pipeStepRegistrationManager.onApplicationEvent(null);
 
         // Wait a bit for async operations to complete
         try {

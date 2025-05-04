@@ -8,46 +8,46 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Data Transfer Object for service configuration.
- * This class represents the configuration for a single service in a pipeline.
+ * Data Transfer Object for pipe step configuration.
+ * This class represents the configuration for a single pipe step in a pipeline.
  */
 @Getter
 @Setter
 @Serdeable
-public class ServiceConfigurationDto {
+public class PipeStepConfigurationDto {
     /**
-     * The name of the service.
+     * The name of the pipe step.
      */
     private String name;
 
     /**
-     * The list of Kafka topics this service listens to.
+     * The list of Kafka topics this pipe step listens to.
      */
     private List<String> kafkaListenTopics;
 
     /**
-     * The list of Kafka topics this service publishes to.
+     * The list of Kafka topics this pipe step publishes to.
      */
     private List<String> kafkaPublishTopics;
 
     /**
-     * The list of services this service forwards to via gRPC.
+     * The list of pipe steps this pipe step forwards to via gRPC.
      */
     private List<String> grpcForwardTo;
 
     /**
-     * The name of the service implementation class.
+     * The name of the pipe step implementation class.
      */
     private String serviceImplementation;
 
     /**
-     * Service-specific configuration parameters.
+     * Pipe step-specific configuration parameters.
      * This can be a simple Map<String, String> for backward compatibility.
      */
     private Map<String, String> configParams;
 
     /**
-     * JSON configuration options for the service.
+     * JSON configuration options for the pipe step.
      * This provides schema validation and serialization capabilities.
      */
     private JsonConfigOptions jsonConfig;

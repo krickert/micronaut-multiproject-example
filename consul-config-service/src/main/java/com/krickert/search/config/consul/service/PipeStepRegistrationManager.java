@@ -2,7 +2,7 @@ package com.krickert.search.config.consul.service;
 
 import com.krickert.search.config.consul.model.CreatePipelineRequest;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
-import com.krickert.search.config.consul.model.ServiceConfigurationDto;
+import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
 import com.krickert.search.config.consul.model.JsonConfigOptions;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.event.ApplicationEventListener;
@@ -14,34 +14,32 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * Manages the automatic registration of services with the pipeline configuration system.
- * This component listens for service startup events and registers the service with Consul
+ * Manages the automatic registration of pipe steps with the pipeline configuration system.
+ * This component listens for service startup events and registers the pipe step with Consul
  * if it's not already registered.
  * 
- * Note: A service does not need to have pipeline configuration to run. The pipelines are
- * dynamically built. The service will have config built into it and the default config props
+ * Note: A pipe step does not need to have pipeline configuration to run. The pipelines are
+ * dynamically built. The pipe step will have config built into it and the default config props
  * are already there, and it can have custom config added that is validated by a schema.
  */
 @Singleton
-public class ServiceRegistrationManager implements ApplicationEventListener<ServiceReadyEvent> {
+public class PipeStepRegistrationManager implements ApplicationEventListener<ServiceReadyEvent> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ServiceRegistrationManager.class);
+    private static final Logger LOG = LoggerFactory.getLogger(PipeStepRegistrationManager.class);
 
     private final PipelineService pipelineService;
 
-    @Value("${pipeline.service.name:}")
-    private String serviceName;
+    @Value("${pipeline.step.name:}")
+    private String pipeStepName;
 
     @Value("${pipeline.name:}")
     private String pipelineName;
 
-    @Value("${pipeline.service.implementation:}")
-    private String serviceImplementation;
+    @Value("${pipeline.step.implementation:}")
+    private String stepImplementation;
 
     @Value("${pipeline.listen.topics:}")
     private String listenTopics;
@@ -52,123 +50,124 @@ public class ServiceRegistrationManager implements ApplicationEventListener<Serv
     @Value("${pipeline.grpc.forward.to:}")
     private String grpcForwardTo;
 
-    @Value("${pipeline.service.json.config:{}}")
+    @Value("${pipeline.step.json.config:{}}")
     private String jsonConfig;
 
-    @Value("${pipeline.service.json.schema:{}}")
+    @Value("${pipeline.step.json.schema:{}}")
     private String jsonSchema;
 
-    @Value("${pipeline.service.registration.enabled:true}")
+    @Value("${pipeline.step.registration.enabled:true}")
     private boolean registrationEnabled;
 
     @Inject
-    public ServiceRegistrationManager(PipelineService pipelineService) {
+    public PipeStepRegistrationManager(PipelineService pipelineService) {
         this.pipelineService = pipelineService;
-        LOG.info("ServiceRegistrationManager initialized");
+        LOG.info("PipeStepRegistrationManager initialized");
     }
 
     @Override
     public void onApplicationEvent(ServiceReadyEvent event) {
         // Allow null event for testing purposes
         if (!registrationEnabled) {
-            LOG.info("Service registration is disabled. Skipping auto-registration.");
+            LOG.info("Pipe step registration is disabled. Skipping auto-registration.");
             return;
         }
 
-        if (serviceName == null || serviceName.trim().isEmpty()) {
-            LOG.warn("No service name configured. Skipping auto-registration.");
+        if (pipeStepName == null || pipeStepName.trim().isEmpty()) {
+            LOG.warn("No pipe step name configured. Skipping auto-registration.");
             return;
         }
 
-        // A service can run without being registered to a pipeline
+        // A pipe step can run without being registered to a pipeline
         if (pipelineName == null || pipelineName.trim().isEmpty()) {
-            LOG.info("No pipeline name configured. Service '{}' will run with default configuration.", serviceName);
+            LOG.info("No pipeline name configured. Pipe step '{}' will run with default configuration.", pipeStepName);
             return;
         }
 
-        LOG.info("Service ready event received. Checking if service '{}' needs to be registered with pipeline '{}'", 
-                serviceName, pipelineName);
+        LOG.info("Service ready event received. Checking if pipe step '{}' needs to be registered with pipeline '{}'", 
+                pipeStepName, pipelineName);
 
-        registerServiceIfNeeded();
+        registerPipeStepIfNeeded();
     }
 
     /**
-     * Checks if the service is already registered with the pipeline, and registers it if not.
+     * Checks if the pipe step is already registered with the pipeline, and registers it if not.
      */
-    private void registerServiceIfNeeded() {
+    private void registerPipeStepIfNeeded() {
         pipelineService.getPipeline(pipelineName)
-            .flatMap(this::checkAndRegisterService)
+            .flatMap(this::checkAndRegisterPipeStep)
             .onErrorResume(e -> {
                 // Pipeline doesn't exist yet, create it first
                 LOG.info("Pipeline '{}' not found. Creating it first.", pipelineName);
                 return pipelineService.createPipeline(new CreatePipelineRequest(pipelineName))
-                    .flatMap(this::registerService);
+                    .flatMap(this::registerPipeStep);
             })
             .subscribe(
-                result -> LOG.info("Service registration process completed with result: {}", result),
-                error -> LOG.error("Error during service registration", error)
+                result -> LOG.info("Pipe step registration process completed with result: {}", result),
+                error -> LOG.error("Error during pipe step registration", error)
             );
     }
 
     /**
-     * Checks if the service is already registered with the pipeline, and registers it if not.
+     * Checks if the pipe step is already registered with the pipeline, and registers it if not.
      * 
      * @param pipeline the pipeline configuration
-     * @return a Mono that completes with true if the service was registered, false if it was already registered
+     * @return a Mono that completes with true if the pipe step was registered, false if it was already registered
      */
-    private Mono<Boolean> checkAndRegisterService(PipelineConfigDto pipeline) {
-        if (pipeline.getServices().containsKey(serviceName)) {
-            LOG.info("Service '{}' is already registered with pipeline '{}'", serviceName, pipelineName);
+    private Mono<Boolean> checkAndRegisterPipeStep(PipelineConfigDto pipeline) {
+        if (pipeline.getServices().containsKey(pipeStepName)) {
+            LOG.info("Pipe step '{}' is already registered with pipeline '{}'", pipeStepName, pipelineName);
             return Mono.just(false);
         }
 
-        LOG.info("Service '{}' is not registered with pipeline '{}'. Registering it now.", serviceName, pipelineName);
-        return registerService(pipeline);
+        LOG.info("Pipe step '{}' is not registered with pipeline '{}'. Registering it now.", pipeStepName, pipelineName);
+        return registerPipeStep(pipeline);
     }
 
     /**
-     * Registers the service with the pipeline.
+     * Registers the pipe step with the pipeline.
      * 
      * @param pipeline the pipeline configuration
      * @return a Mono that completes with true if the registration was successful
      */
-    private Mono<Boolean> registerService(PipelineConfigDto pipeline) {
-        // Create a service configuration DTO
-        ServiceConfigurationDto serviceConfig = createServiceConfigDto();
+    private Mono<Boolean> registerPipeStep(PipelineConfigDto pipeline) {
+        // Create a pipe step configuration DTO
+        PipeStepConfigurationDto pipeStepConfig = createPipeStepConfigDto();
 
-        // Add the service to the pipeline
-        pipeline.getServices().put(serviceName, serviceConfig);
+        // Add the pipe step to the pipeline
+        pipeline.getServices().put(pipeStepName, pipeStepConfig);
 
         // Update the pipeline
         return pipelineService.updatePipeline(pipelineName, pipeline)
             .map(updatedPipeline -> {
-                LOG.info("Successfully registered service '{}' with pipeline '{}'", serviceName, pipelineName);
+                LOG.info("Successfully registered pipe step '{}' with pipeline '{}'", pipeStepName, pipelineName);
                 return true;
             })
             .onErrorResume(e -> {
-                LOG.error("Failed to register service '{}' with pipeline '{}'", serviceName, pipelineName, e);
+                LOG.error("Failed to register pipe step '{}' with pipeline '{}'", pipeStepName, pipelineName, e);
                 return Mono.just(false);
             });
     }
 
     /**
-     * Creates a service configuration DTO based on the configured properties.
+     * Creates a pipe step configuration DTO based on the configured properties.
      * 
-     * @return the service configuration DTO
+     * @return the pipe step configuration DTO
      */
-    private ServiceConfigurationDto createServiceConfigDto() {
-        ServiceConfigurationDto serviceConfig = new ServiceConfigurationDto();
-        serviceConfig.setName(serviceName);
+    private PipeStepConfigurationDto createPipeStepConfigDto() {
+        PipeStepConfigurationDto pipeStepConfig = new PipeStepConfigurationDto();
+        pipeStepConfig.setName(pipeStepName);
 
-        if (serviceImplementation != null && !serviceImplementation.trim().isEmpty()) {
-            serviceConfig.setServiceImplementation(serviceImplementation);
+        if (stepImplementation != null && !stepImplementation.trim().isEmpty()) {
+            // Using setServiceImplementation for compatibility with the rest of the codebase
+            pipeStepConfig.setServiceImplementation(stepImplementation);
         }
 
         // Parse listen topics
         if (listenTopics != null && !listenTopics.trim().isEmpty()) {
             List<String> topics = parseCommaSeparatedList(listenTopics);
             if (!topics.isEmpty()) {
-                serviceConfig.setKafkaListenTopics(topics);
+                pipeStepConfig.setKafkaListenTopics(topics);
             }
         }
 
@@ -176,7 +175,7 @@ public class ServiceRegistrationManager implements ApplicationEventListener<Serv
         if (publishTopics != null && !publishTopics.trim().isEmpty()) {
             List<String> topics = parseCommaSeparatedList(publishTopics);
             if (!topics.isEmpty()) {
-                serviceConfig.setKafkaPublishTopics(topics);
+                pipeStepConfig.setKafkaPublishTopics(topics);
             }
         }
 
@@ -184,7 +183,7 @@ public class ServiceRegistrationManager implements ApplicationEventListener<Serv
         if (grpcForwardTo != null && !grpcForwardTo.trim().isEmpty()) {
             List<String> targets = parseCommaSeparatedList(grpcForwardTo);
             if (!targets.isEmpty()) {
-                serviceConfig.setGrpcForwardTo(targets);
+                pipeStepConfig.setGrpcForwardTo(targets);
             }
         }
 
@@ -192,10 +191,10 @@ public class ServiceRegistrationManager implements ApplicationEventListener<Serv
         if (jsonConfig != null && !jsonConfig.equals("{}") && 
             jsonSchema != null && !jsonSchema.equals("{}")) {
             JsonConfigOptions jsonConfigOptions = new JsonConfigOptions(jsonConfig, jsonSchema);
-            serviceConfig.setJsonConfig(jsonConfigOptions);
+            pipeStepConfig.setJsonConfig(jsonConfigOptions);
         }
 
-        return serviceConfig;
+        return pipeStepConfig;
     }
 
     /**

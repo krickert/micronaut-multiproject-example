@@ -108,7 +108,7 @@ public class PipelineConfig {
             return;
         }
 
-        Map<String, ServiceConfigurationDto> loadedServices = new HashMap<>();
+        Map<String, PipeStepConfigurationDto> loadedServices = new HashMap<>();
 
         for (String key : serviceKeys) {
             // Get the service name part (e.g., "myCustomServiceInstance")
@@ -122,8 +122,8 @@ public class PipelineConfig {
             String propertyPath = keyParts[1]; // e.g., "name", "configParams.timeout", "jsonConfig.jsonConfig"
 
             // Get or create the DTO for this service
-            ServiceConfigurationDto serviceConfig = loadedServices.computeIfAbsent(serviceName, name -> {
-                ServiceConfigurationDto dto = new ServiceConfigurationDto();
+            PipeStepConfigurationDto serviceConfig = loadedServices.computeIfAbsent(serviceName, name -> {
+                PipeStepConfigurationDto dto = new PipeStepConfigurationDto();
                 dto.setName(name);
                 return dto;
             });
@@ -243,9 +243,9 @@ public class PipelineConfig {
             Map<String, String> otherKeysMap = new HashMap<>();
 
             // Sync pipeline services
-            for (Map.Entry<String, ServiceConfigurationDto> entry : pipeline.getServices().entrySet()) {
+            for (Map.Entry<String, PipeStepConfigurationDto> entry : pipeline.getServices().entrySet()) {
                 String serviceName = entry.getKey();
-                ServiceConfigurationDto serviceConfig = entry.getValue();
+                PipeStepConfigurationDto serviceConfig = entry.getValue();
 
                 // Set the service name if not already set
                 if (serviceConfig.getName() == null) {

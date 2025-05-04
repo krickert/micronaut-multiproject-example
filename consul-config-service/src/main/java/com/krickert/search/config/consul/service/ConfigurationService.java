@@ -303,7 +303,7 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
     private Mono<Boolean> loadServiceConfiguration(String pipelineName, String serviceName, PipelineConfigDto pipeline) {
         LOG.debug("Loading configuration for service {} in pipeline {}", serviceName, pipelineName);
 
-        ServiceConfigurationDto serviceConfig = new ServiceConfigurationDto();
+        PipeStepConfigurationDto serviceConfig = new PipeStepConfigurationDto();
         serviceConfig.setName(serviceName);
 
         String baseKeyPrefix = "pipeline.configs." + pipelineName + ".service." + serviceName;

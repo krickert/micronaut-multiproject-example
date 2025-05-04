@@ -1,7 +1,7 @@
 package com.krickert.search.config.consul.validation;
 
 import com.krickert.search.config.consul.model.PipelineConfigDto;
-import com.krickert.search.config.consul.model.ServiceConfigurationDto;
+import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +24,7 @@ public class PipelineValidator {
      * @param serviceConfig the service configuration to add or update
      * @return true if adding or updating the service would create a loop, false otherwise
      */
-    public static boolean hasLoop(PipelineConfigDto pipeline, ServiceConfigurationDto serviceConfig) {
+    public static boolean hasLoop(PipelineConfigDto pipeline, PipeStepConfigurationDto serviceConfig) {
         // Build a graph of service dependencies
         Map<String, Set<String>> graph = buildDependencyGraph(pipeline, serviceConfig);
         
@@ -51,14 +51,14 @@ public class PipelineValidator {
      * @param newServiceConfig the service configuration to add or update
      * @return a map representing the dependency graph
      */
-    private static Map<String, Set<String>> buildDependencyGraph(PipelineConfigDto pipeline, ServiceConfigurationDto newServiceConfig) {
+    private static Map<String, Set<String>> buildDependencyGraph(PipelineConfigDto pipeline, PipeStepConfigurationDto newServiceConfig) {
         Map<String, Set<String>> graph = new HashMap<>();
         
         // Create a map of topics to services that publish to them
         Map<String, Set<String>> topicPublishers = new HashMap<>();
         
         // Add existing services to the graph
-        for (ServiceConfigurationDto service : pipeline.getServices().values()) {
+        for (PipeStepConfigurationDto service : pipeline.getServices().values()) {
             String serviceName = service.getName();
             if (serviceName == null) {
                 continue;
@@ -89,7 +89,7 @@ public class PipelineValidator {
         }
         
         // Add dependencies based on Kafka topics
-        for (ServiceConfigurationDto service : pipeline.getServices().values()) {
+        for (PipeStepConfigurationDto service : pipeline.getServices().values()) {
             String serviceName = service.getName();
             if (serviceName == null) {
                 continue;
@@ -117,7 +117,7 @@ public class PipelineValidator {
         }
         
         // Add dependencies based on gRPC forwarding
-        for (ServiceConfigurationDto service : pipeline.getServices().values()) {
+        for (PipeStepConfigurationDto service : pipeline.getServices().values()) {
             String serviceName = service.getName();
             if (serviceName == null) {
                 continue;
@@ -189,7 +189,7 @@ public class PipelineValidator {
      */
     public static Set<String> getDependentServices(PipelineConfigDto pipeline, String serviceName) {
         Set<String> dependentServices = new HashSet<>();
-        ServiceConfigurationDto service = pipeline.getServices().get(serviceName);
+        PipeStepConfigurationDto service = pipeline.getServices().get(serviceName);
         
         if (service == null) {
             return dependentServices;
@@ -198,7 +198,7 @@ public class PipelineValidator {
         // Find services that listen to topics this service publishes to
         if (service.getKafkaPublishTopics() != null) {
             for (String topic : service.getKafkaPublishTopics()) {
-                for (ServiceConfigurationDto otherService : pipeline.getServices().values()) {
+                for (PipeStepConfigurationDto otherService : pipeline.getServices().values()) {
                     if (otherService.getKafkaListenTopics() != null && 
                         otherService.getKafkaListenTopics().contains(topic) &&
                         !otherService.getName().equals(serviceName)) {

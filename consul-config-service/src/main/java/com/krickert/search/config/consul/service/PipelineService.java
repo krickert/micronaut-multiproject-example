@@ -237,9 +237,9 @@ public class PipelineService {
                          updatedPipeline.setName(pipelineName);
                      }
                      // --- >>> SERVICE CONFIGURATION VALIDATION <<< ---
-                     for (Map.Entry<String, ServiceConfigurationDto> entry : updatedPipeline.getServices().entrySet()) {
+                     for (Map.Entry<String, PipeStepConfigurationDto> entry : updatedPipeline.getServices().entrySet()) {
                          String serviceName = entry.getKey();
-                         ServiceConfigurationDto serviceConfig = entry.getValue();
+                         PipeStepConfigurationDto serviceConfig = entry.getValue();
 
                          if (serviceConfig.getJsonConfig() != null) {
                              JsonConfigOptions jsonOptions = serviceConfig.getJsonConfig();

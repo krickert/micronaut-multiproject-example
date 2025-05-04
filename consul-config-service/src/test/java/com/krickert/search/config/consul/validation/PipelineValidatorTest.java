@@ -1,12 +1,11 @@
 package com.krickert.search.config.consul.validation;
 
 import com.krickert.search.config.consul.model.PipelineConfigDto;
-import com.krickert.search.config.consul.model.ServiceConfigurationDto;
+import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -25,15 +24,15 @@ public class PipelineValidatorTest {
         PipelineConfigDto pipeline = new PipelineConfigDto("test-pipeline");
 
         // Service A publishes to topic1
-        ServiceConfigurationDto serviceA = createService("serviceA", null, Collections.singletonList("topic1"));
+        PipeStepConfigurationDto serviceA = createService("serviceA", null, Collections.singletonList("topic1"));
         pipeline.addOrUpdateService(serviceA);
 
         // Service B listens to topic1 and publishes to topic2
-        ServiceConfigurationDto serviceB = createService("serviceB", Collections.singletonList("topic1"), Collections.singletonList("topic2"));
+        PipeStepConfigurationDto serviceB = createService("serviceB", Collections.singletonList("topic1"), Collections.singletonList("topic2"));
         pipeline.addOrUpdateService(serviceB);
 
         // Service C listens to topic2
-        ServiceConfigurationDto serviceC = createService("serviceC", Collections.singletonList("topic2"), null);
+        PipeStepConfigurationDto serviceC = createService("serviceC", Collections.singletonList("topic2"), null);
         pipeline.addOrUpdateService(serviceC);
 
         // Verify that there is no loop
@@ -49,15 +48,15 @@ public class PipelineValidatorTest {
         PipelineConfigDto pipeline = new PipelineConfigDto("test-pipeline");
 
         // Service A publishes to topic1
-        ServiceConfigurationDto serviceA = createService("serviceA", Collections.singletonList("topic3"), Collections.singletonList("topic1"));
+        PipeStepConfigurationDto serviceA = createService("serviceA", Collections.singletonList("topic3"), Collections.singletonList("topic1"));
         pipeline.addOrUpdateService(serviceA);
 
         // Service B listens to topic1 and publishes to topic2
-        ServiceConfigurationDto serviceB = createService("serviceB", Collections.singletonList("topic1"), Collections.singletonList("topic2"));
+        PipeStepConfigurationDto serviceB = createService("serviceB", Collections.singletonList("topic1"), Collections.singletonList("topic2"));
         pipeline.addOrUpdateService(serviceB);
 
         // Service C listens to topic2 and publishes to topic3, creating a loop
-        ServiceConfigurationDto serviceC = createService("serviceC", Collections.singletonList("topic2"), Collections.singletonList("topic3"));
+        PipeStepConfigurationDto serviceC = createService("serviceC", Collections.singletonList("topic2"), Collections.singletonList("topic3"));
 
         // Verify that a loop is detected
         assertTrue(PipelineValidator.hasLoop(pipeline, serviceC));
@@ -79,15 +78,15 @@ public class PipelineValidatorTest {
         PipelineConfigDto pipeline = new PipelineConfigDto("test-pipeline");
 
         // Service A forwards to Service B via gRPC
-        ServiceConfigurationDto serviceA = createServiceWithGrpc("serviceA", null, null, Collections.singletonList("serviceB"));
+        PipeStepConfigurationDto serviceA = createServiceWithGrpc("serviceA", null, null, Collections.singletonList("serviceB"));
         pipeline.addOrUpdateService(serviceA);
 
         // Service B forwards to Service C via gRPC
-        ServiceConfigurationDto serviceB = createServiceWithGrpc("serviceB", null, null, Collections.singletonList("serviceC"));
+        PipeStepConfigurationDto serviceB = createServiceWithGrpc("serviceB", null, null, Collections.singletonList("serviceC"));
         pipeline.addOrUpdateService(serviceB);
 
         // Service C forwards to Service A via gRPC, creating a loop
-        ServiceConfigurationDto serviceC = createServiceWithGrpc("serviceC", null, null, Collections.singletonList("serviceA"));
+        PipeStepConfigurationDto serviceC = createServiceWithGrpc("serviceC", null, null, Collections.singletonList("serviceA"));
 
         // Verify that a loop is detected
         assertTrue(PipelineValidator.hasLoop(pipeline, serviceC));
@@ -109,23 +108,23 @@ public class PipelineValidatorTest {
         PipelineConfigDto pipeline = new PipelineConfigDto("test-pipeline");
 
         // Service A publishes to topic1
-        ServiceConfigurationDto serviceA = createService("serviceA", null, Collections.singletonList("topic1"));
+        PipeStepConfigurationDto serviceA = createService("serviceA", null, Collections.singletonList("topic1"));
         pipeline.addOrUpdateService(serviceA);
 
         // Service B listens to topic1 and publishes to topic2
-        ServiceConfigurationDto serviceB = createService("serviceB", Collections.singletonList("topic1"), Collections.singletonList("topic2"));
+        PipeStepConfigurationDto serviceB = createService("serviceB", Collections.singletonList("topic1"), Collections.singletonList("topic2"));
         pipeline.addOrUpdateService(serviceB);
 
         // Service C listens to topic2
-        ServiceConfigurationDto serviceC = createService("serviceC", Collections.singletonList("topic2"), null);
+        PipeStepConfigurationDto serviceC = createService("serviceC", Collections.singletonList("topic2"), null);
         pipeline.addOrUpdateService(serviceC);
 
         // Service D forwards to Service E via gRPC
-        ServiceConfigurationDto serviceD = createServiceWithGrpc("serviceD", null, null, Collections.singletonList("serviceE"));
+        PipeStepConfigurationDto serviceD = createServiceWithGrpc("serviceD", null, null, Collections.singletonList("serviceE"));
         pipeline.addOrUpdateService(serviceD);
 
         // Service E
-        ServiceConfigurationDto serviceE = createService("serviceE", null, null);
+        PipeStepConfigurationDto serviceE = createService("serviceE", null, null);
         pipeline.addOrUpdateService(serviceE);
 
         // Verify that Service B depends on Service A
@@ -157,15 +156,15 @@ public class PipelineValidatorTest {
         PipelineConfigDto pipeline = new PipelineConfigDto("test-pipeline");
 
         // Service A publishes to topic1
-        ServiceConfigurationDto serviceA = createService("serviceA", null, Collections.singletonList("topic1"));
+        PipeStepConfigurationDto serviceA = createService("serviceA", null, Collections.singletonList("topic1"));
         pipeline.addOrUpdateService(serviceA);
 
         // Service B listens to topic1 and publishes to topic2
-        ServiceConfigurationDto serviceB = createService("serviceB", Collections.singletonList("topic1"), Collections.singletonList("topic2"));
+        PipeStepConfigurationDto serviceB = createService("serviceB", Collections.singletonList("topic1"), Collections.singletonList("topic2"));
         pipeline.addOrUpdateService(serviceB);
 
         // Service C listens to topic2
-        ServiceConfigurationDto serviceC = createService("serviceC", Collections.singletonList("topic2"), null);
+        PipeStepConfigurationDto serviceC = createService("serviceC", Collections.singletonList("topic2"), null);
         pipeline.addOrUpdateService(serviceC);
 
         // Verify that all services are in the pipeline
@@ -196,15 +195,15 @@ public class PipelineValidatorTest {
         PipelineConfigDto pipeline = new PipelineConfigDto("test-pipeline");
 
         // Service A publishes to topic1
-        ServiceConfigurationDto serviceA = createService("serviceA", null, Collections.singletonList("topic1"));
+        PipeStepConfigurationDto serviceA = createService("serviceA", null, Collections.singletonList("topic1"));
         pipeline.addOrUpdateService(serviceA);
 
         // Service B listens to topic1 and publishes to topic2
-        ServiceConfigurationDto serviceB = createService("serviceB", Collections.singletonList("topic1"), Collections.singletonList("topic2"));
+        PipeStepConfigurationDto serviceB = createService("serviceB", Collections.singletonList("topic1"), Collections.singletonList("topic2"));
         pipeline.addOrUpdateService(serviceB);
 
         // Service C listens to topic2
-        ServiceConfigurationDto serviceC = createService("serviceC", Collections.singletonList("topic2"), null);
+        PipeStepConfigurationDto serviceC = createService("serviceC", Collections.singletonList("topic2"), null);
         pipeline.addOrUpdateService(serviceC);
 
         // Verify that all services are in the pipeline
@@ -230,10 +229,10 @@ public class PipelineValidatorTest {
     /**
      * Helper method to create a service configuration.
      */
-    private ServiceConfigurationDto createService(String name, 
-                                                 java.util.List<String> listenTopics, 
-                                                 java.util.List<String> publishTopics) {
-        ServiceConfigurationDto service = new ServiceConfigurationDto();
+    private PipeStepConfigurationDto createService(String name,
+                                                   java.util.List<String> listenTopics,
+                                                   java.util.List<String> publishTopics) {
+        PipeStepConfigurationDto service = new PipeStepConfigurationDto();
         service.setName(name);
         service.setKafkaListenTopics(listenTopics);
         service.setKafkaPublishTopics(publishTopics);
@@ -244,11 +243,11 @@ public class PipelineValidatorTest {
     /**
      * Helper method to create a service configuration with gRPC forwarding.
      */
-    private ServiceConfigurationDto createServiceWithGrpc(String name, 
-                                                        java.util.List<String> listenTopics, 
-                                                        java.util.List<String> publishTopics,
-                                                        java.util.List<String> grpcForwardTo) {
-        ServiceConfigurationDto service = createService(name, listenTopics, publishTopics);
+    private PipeStepConfigurationDto createServiceWithGrpc(String name,
+                                                           java.util.List<String> listenTopics,
+                                                           java.util.List<String> publishTopics,
+                                                           java.util.List<String> grpcForwardTo) {
+        PipeStepConfigurationDto service = createService(name, listenTopics, publishTopics);
         service.setGrpcForwardTo(grpcForwardTo);
         return service;
     }

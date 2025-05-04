@@ -189,7 +189,7 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
 
         // 2. Act: Prepare the update request DTO
         // Create the service configuration DTO
-        ServiceConfigurationDto customService = new ServiceConfigurationDto();
+        PipeStepConfigurationDto customService = new PipeStepConfigurationDto();
         customService.setServiceImplementation(TEST_SERVICE_IMPL);
         customService.setName(TEST_SERVICE_NAME);
         // Create JsonConfigOptions with the valid config and schema strings
@@ -219,7 +219,7 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
         assertEquals(1, updatedPipeline.getServices().size(), "Pipeline should contain one service");
         assertTrue(updatedPipeline.getServices().containsKey(TEST_SERVICE_NAME), "Pipeline should contain the added service");
 
-        ServiceConfigurationDto retrievedService = updatedPipeline.getServices().get(TEST_SERVICE_NAME);
+        PipeStepConfigurationDto retrievedService = updatedPipeline.getServices().get(TEST_SERVICE_NAME);
         assertEquals(TEST_SERVICE_IMPL, retrievedService.getServiceImplementation());
         assertEquals(TEST_SERVICE_NAME, retrievedService.getName());
         // Verify the JsonConfigOptions were stored and retrieved correctly
@@ -237,7 +237,7 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
         putSchema(TEST_SERVICE_IMPL, VALID_SERVICE_SCHEMA_JSON);
 
         // 2. Act: Prepare update DTO with a service having invalid JSON config
-        ServiceConfigurationDto customService = new ServiceConfigurationDto();
+        PipeStepConfigurationDto customService = new PipeStepConfigurationDto();
         customService.setServiceImplementation(TEST_SERVICE_IMPL);
         customService.setName(TEST_SERVICE_NAME);
         // Use the JSON config that violates the schema (missing 'host')
@@ -275,7 +275,7 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
          putSchema(TEST_SERVICE_IMPL, VALID_SERVICE_SCHEMA_JSON);
 
          // 2. Act: Prepare update DTO with service having JSON config with incorrect type
-         ServiceConfigurationDto customService = new ServiceConfigurationDto();
+         PipeStepConfigurationDto customService = new PipeStepConfigurationDto();
          customService.setServiceImplementation(TEST_SERVICE_IMPL);
          customService.setName(TEST_SERVICE_NAME);
          // Use the JSON config that violates the schema (port is string, not integer)
@@ -313,7 +313,7 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
          PipelineConfigDto initialPipeline = createTestPipeline(TEST_PIPELINE_NAME);
 
          // 2. Act: Prepare update DTO with service having a malformed JSON config string
-         ServiceConfigurationDto customService = new ServiceConfigurationDto();
+         PipeStepConfigurationDto customService = new PipeStepConfigurationDto();
          customService.setServiceImplementation(TEST_SERVICE_IMPL);
          customService.setName(TEST_SERVICE_NAME);
          // Use the malformed JSON string. Schema content is irrelevant here.
@@ -367,7 +367,7 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
          // DO NOT call putSchema for TEST_SERVICE_IMPL
 
          // 2. Act: Prepare update DTO with service using valid JSON, but schema is not registered
-         ServiceConfigurationDto customService = new ServiceConfigurationDto();
+         PipeStepConfigurationDto customService = new PipeStepConfigurationDto();
          customService.setServiceImplementation(TEST_SERVICE_IMPL);
          customService.setName(TEST_SERVICE_NAME);
          // Provide valid JSON config and a schema string (even though it's not in Consul)
@@ -389,7 +389,7 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
          PipelineConfigDto updatedPipeline = updateResponse.getBody().get();
          assertEquals(2, updatedPipeline.getPipelineVersion());
          assertTrue(updatedPipeline.getServices().containsKey(TEST_SERVICE_NAME));
-         ServiceConfigurationDto retrievedService = updatedPipeline.getServices().get(TEST_SERVICE_NAME);
+         PipeStepConfigurationDto retrievedService = updatedPipeline.getServices().get(TEST_SERVICE_NAME);
          assertNotNull(retrievedService.getJsonConfig());
          // Verify config was still stored correctly
          assertEquals(objectMapper.readTree(VALID_CONFIG_JSON), objectMapper.readTree(retrievedService.getJsonConfig().getJsonConfig()));

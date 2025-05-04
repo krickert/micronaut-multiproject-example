@@ -44,7 +44,7 @@ public class PipelineVersioningTest implements TestPropertyProvider {
         System.out.println("Initial pipeline version: " + pipeline.getPipelineVersion());
 
         // Add a service to the pipeline
-        ServiceConfigurationDto service = new ServiceConfigurationDto();
+        PipeStepConfigurationDto service = new PipeStepConfigurationDto();
         service.setName("test-service");
         pipeline.addOrUpdateService(service);
 
@@ -85,7 +85,7 @@ public class PipelineVersioningTest implements TestPropertyProvider {
         PipelineConfigDto pipeline = new PipelineConfigDto("test-pipeline");
 
         // Add a service to the pipeline
-        ServiceConfigurationDto service = new ServiceConfigurationDto();
+        PipeStepConfigurationDto service = new PipeStepConfigurationDto();
         service.setName("test-service");
         pipeline.addOrUpdateService(service);
 
@@ -130,12 +130,12 @@ public class PipelineVersioningTest implements TestPropertyProvider {
         PipelineConfigDto pipeline = new PipelineConfigDto("test-pipeline");
 
         // Add a service to the pipeline
-        ServiceConfigurationDto service1 = new ServiceConfigurationDto();
+        PipeStepConfigurationDto service1 = new PipeStepConfigurationDto();
         service1.setName("service1");
         pipeline.addOrUpdateService(service1);
 
         // Add another service to the pipeline
-        ServiceConfigurationDto service2 = new ServiceConfigurationDto();
+        PipeStepConfigurationDto service2 = new PipeStepConfigurationDto();
         service2.setName("service2");
         pipeline.addOrUpdateService(service2);
 
@@ -155,7 +155,7 @@ public class PipelineVersioningTest implements TestPropertyProvider {
         pipelineConfig.addOrUpdatePipeline(session1Pipeline).block();
 
         // Try to update service1 in Session 2
-        ServiceConfigurationDto updatedService1 = new ServiceConfigurationDto();
+        PipeStepConfigurationDto updatedService1 = new PipeStepConfigurationDto();
         updatedService1.setName("service1");
         session2Pipeline.addOrUpdateService(updatedService1);
 

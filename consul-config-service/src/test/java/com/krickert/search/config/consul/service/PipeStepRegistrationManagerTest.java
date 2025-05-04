@@ -1,12 +1,9 @@
 package com.krickert.search.config.consul.service;
 
 import com.krickert.search.config.consul.container.ConsulTestContainer;
-import com.krickert.search.config.consul.model.CreatePipelineRequest;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
-import com.krickert.search.config.consul.model.ServiceConfigurationDto;
+import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
 import io.micronaut.context.annotation.Property;
-import io.micronaut.discovery.ServiceInstance;
-import io.micronaut.discovery.event.ServiceReadyEvent;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
@@ -15,8 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.core.publisher.Mono;
-
-import java.net.URI;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -29,21 +24,21 @@ import static org.junit.jupiter.api.Assertions.*;
 @Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-@Property(name = "pipeline.service.name", value = "test-service")
+@Property(name = "pipeline.step.name", value = "test-service")
 @Property(name = "pipeline.name", value = "test-pipeline")
-@Property(name = "pipeline.service.implementation", value = "com.example.TestService")
+@Property(name = "pipeline.step.implementation", value = "com.example.TestService")
 @Property(name = "pipeline.listen.topics", value = "input-topic-1, input-topic-2")
 @Property(name = "pipeline.publish.topics", value = "output-topic")
 @Property(name = "pipeline.grpc.forward.to", value = "forward-service")
-class ServiceRegistrationManagerTest implements TestPropertyProvider {
+class PipeStepRegistrationManagerTest implements TestPropertyProvider {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ServiceRegistrationManagerTest.class);
+    private static final Logger LOG = LoggerFactory.getLogger(PipeStepRegistrationManagerTest.class);
 
     // Use the singleton TestContainer instance
     ConsulTestContainer consulContainer = ConsulTestContainer.getInstance();
 
     @Inject
-    private ServiceRegistrationManager serviceRegistrationManager;
+    private PipeStepRegistrationManager pipeStepRegistrationManager;
 
     @Inject
     private PipelineService pipelineService;
@@ -84,7 +79,7 @@ class ServiceRegistrationManagerTest implements TestPropertyProvider {
         consulKvService.putValue(lastUpdatedKey, LocalDateTime.now().toString()).block();
 
         // Act - Trigger service registration
-        serviceRegistrationManager.onApplicationEvent(null);
+        pipeStepRegistrationManager.onApplicationEvent(null);
 
         // Wait a bit for async operations to complete
         try {
@@ -100,7 +95,7 @@ class ServiceRegistrationManagerTest implements TestPropertyProvider {
             assertFalse(updatedPipeline.getServices().isEmpty(), "Pipeline should have services after registration");
             assertTrue(updatedPipeline.getServices().containsKey("test-service"), "Pipeline should contain the test service");
 
-            ServiceConfigurationDto serviceConfig = updatedPipeline.getServices().get("test-service");
+            PipeStepConfigurationDto serviceConfig = updatedPipeline.getServices().get("test-service");
             assertEquals("test-service", serviceConfig.getName());
             assertEquals("com.example.TestService", serviceConfig.getServiceImplementation());
             assertEquals(List.of("input-topic-1", "input-topic-2"), serviceConfig.getKafkaListenTopics());
@@ -143,7 +138,7 @@ class ServiceRegistrationManagerTest implements TestPropertyProvider {
         long versionBefore = beforePipeline.getPipelineVersion();
 
         // Act - Trigger service registration
-        serviceRegistrationManager.onApplicationEvent(null);
+        pipeStepRegistrationManager.onApplicationEvent(null);
 
         // Wait a bit for async operations to complete
         try {
@@ -159,7 +154,7 @@ class ServiceRegistrationManagerTest implements TestPropertyProvider {
             assertEquals(versionBefore, afterPipeline.getPipelineVersion(), "Pipeline version should not change");
 
             // Verify the service configuration was not changed
-            ServiceConfigurationDto serviceConfig = afterPipeline.getServices().get("test-service");
+            PipeStepConfigurationDto serviceConfig = afterPipeline.getServices().get("test-service");
             assertEquals("test-service", serviceConfig.getName());
             assertEquals("com.example.ExistingService", serviceConfig.getServiceImplementation());
         } catch (Exception e) {
@@ -182,7 +177,7 @@ class ServiceRegistrationManagerTest implements TestPropertyProvider {
         }
 
         // Act - Trigger service registration
-        serviceRegistrationManager.onApplicationEvent(null);
+        pipeStepRegistrationManager.onApplicationEvent(null);
 
         // Assert - Verify the pipeline was created and service was registered
         PipelineConfigDto createdPipeline = pipelineService.getPipeline("test-pipeline").block();
@@ -191,7 +186,7 @@ class ServiceRegistrationManagerTest implements TestPropertyProvider {
         assertFalse(createdPipeline.getServices().isEmpty(), "Pipeline should have services");
         assertTrue(createdPipeline.getServices().containsKey("test-service"), "Pipeline should contain the test service");
 
-        ServiceConfigurationDto serviceConfig = createdPipeline.getServices().get("test-service");
+        PipeStepConfigurationDto serviceConfig = createdPipeline.getServices().get("test-service");
         assertEquals("test-service", serviceConfig.getName());
         assertEquals("com.example.TestService", serviceConfig.getServiceImplementation());
     }
@@ -199,7 +194,7 @@ class ServiceRegistrationManagerTest implements TestPropertyProvider {
     @Test
     @Order(4)
     @DisplayName("Service registration is skipped when disabled")
-    @Property(name = "pipeline.service.registration.enabled", value = "false")
+    @Property(name = "pipeline.step.registration.enabled", value = "false")
     void testServiceRegistrationSkippedWhenDisabled() {
         // Arrange - Ensure pipeline doesn't exist
         try {
@@ -212,7 +207,7 @@ class ServiceRegistrationManagerTest implements TestPropertyProvider {
         }
 
         // Act - Trigger service registration
-        serviceRegistrationManager.onApplicationEvent(null);
+        pipeStepRegistrationManager.onApplicationEvent(null);
 
         // Assert - Verify the pipeline was not created
         Mono<PipelineConfigDto> checkPipeline = pipelineService.getPipeline("test-pipeline");
@@ -225,7 +220,7 @@ class ServiceRegistrationManagerTest implements TestPropertyProvider {
     @Property(name = "pipeline.name", value = "")
     void testServiceCanRunWithoutPipelineConfiguration() {
         // Act - Trigger service registration with empty pipeline name
-        serviceRegistrationManager.onApplicationEvent(null);
+        pipeStepRegistrationManager.onApplicationEvent(null);
 
         // No assertions needed - we're just verifying that the service doesn't throw an exception
         // and can run without being registered to a pipeline
