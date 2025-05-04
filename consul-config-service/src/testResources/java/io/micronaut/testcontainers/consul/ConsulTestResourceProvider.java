@@ -22,9 +22,9 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
     public static final String PROPERTY_CONSUL_DISCOVERY_HOST = DISCOVERY_PREFIX + ".host";
     public static final String PROPERTY_CONSUL_DISCOVERY_PORT = DISCOVERY_PREFIX + ".port";
     // Add registration properties if needed:
-     public static final String REGISTRATION_PREFIX = "consul.client.registration";
-     public static final String PROPERTY_CONSUL_REGISTRATION_HOST = REGISTRATION_PREFIX + ".host";
-     public static final String PROPERTY_CONSUL_REGISTRATION_PORT = REGISTRATION_PREFIX + ".port";
+    public static final String REGISTRATION_PREFIX = "consul.client.registration";
+    public static final String PROPERTY_CONSUL_REGISTRATION_HOST = REGISTRATION_PREFIX + ".host";
+    public static final String PROPERTY_CONSUL_REGISTRATION_PORT = REGISTRATION_PREFIX + ".port";
 
 
     // Combined list of properties this provider can resolve
