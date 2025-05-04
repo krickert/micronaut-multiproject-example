@@ -1,20 +1,4 @@
-/*
- * Copyright 2017-2021 original authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package io.micronaut.testcontainers.consul;
-
 import io.micronaut.testresources.testcontainers.AbstractTestContainersProvider;
 import org.testcontainers.consul.ConsulContainer;
 import org.testcontainers.utility.DockerImageName;
@@ -23,18 +7,36 @@ import java.util.*;
 
 /**
  * A test resource provider which will spawn a Consul test container.
+ * It provides properties for both the base Consul client and the discovery client.
  */
 public class ConsulTestResourceProvider extends AbstractTestContainersProvider<ConsulContainer> {
 
-    public static final String PREFIX = "consul.client";
-    public static final String PROPERTY_CONSUL_CLIENT_HOST = "consul.client.host";
-    public static final String PROPERTY_CONSUL_CLIENT_PORT = "consul.client.port";
-    public static final String PROPERTY_CONSUL_CLIENT_DEFAULT_ZONE = "consul.client.default-zone";
+    // Base Client Properties
+    public static final String CLIENT_PREFIX = "consul.client";
+    public static final String PROPERTY_CONSUL_CLIENT_HOST = CLIENT_PREFIX + ".host";
+    public static final String PROPERTY_CONSUL_CLIENT_PORT = CLIENT_PREFIX + ".port";
+    public static final String PROPERTY_CONSUL_CLIENT_DEFAULT_ZONE = CLIENT_PREFIX + ".default-zone"; // Kept for completeness
 
+    // Discovery Client Properties
+    public static final String DISCOVERY_PREFIX = "consul.client.discovery";
+    public static final String PROPERTY_CONSUL_DISCOVERY_HOST = DISCOVERY_PREFIX + ".host";
+    public static final String PROPERTY_CONSUL_DISCOVERY_PORT = DISCOVERY_PREFIX + ".port";
+    // Add registration properties if needed:
+     public static final String REGISTRATION_PREFIX = "consul.client.registration";
+     public static final String PROPERTY_CONSUL_REGISTRATION_HOST = REGISTRATION_PREFIX + ".host";
+     public static final String PROPERTY_CONSUL_REGISTRATION_PORT = REGISTRATION_PREFIX + ".port";
+
+
+    // Combined list of properties this provider can resolve
     public static final List<String> RESOLVABLE_PROPERTIES_LIST = Collections.unmodifiableList(Arrays.asList(
-        PROPERTY_CONSUL_CLIENT_HOST,
-        PROPERTY_CONSUL_CLIENT_PORT,
-        PROPERTY_CONSUL_CLIENT_DEFAULT_ZONE
+            PROPERTY_CONSUL_CLIENT_HOST,
+            PROPERTY_CONSUL_CLIENT_PORT,
+            PROPERTY_CONSUL_CLIENT_DEFAULT_ZONE,
+            PROPERTY_CONSUL_DISCOVERY_HOST,
+            PROPERTY_CONSUL_DISCOVERY_PORT,
+            // Add registration properties here if explicitly resolving them
+            PROPERTY_CONSUL_REGISTRATION_HOST,
+            PROPERTY_CONSUL_REGISTRATION_PORT
     ));
 
     public static final String HASHICORP_CONSUL_KV_PROPERTIES_KEY = "containers.hashicorp-consul.kv-properties";
@@ -46,6 +48,7 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
 
     @Override
     public List<String> getResolvableProperties(Map<String, Collection<String>> propertyEntries, Map<String, Object> testResourcesConfig) {
+        // Return all properties we can resolve
         return RESOLVABLE_PROPERTIES_LIST;
     }
 
@@ -68,8 +71,6 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
     protected ConsulContainer createContainer(DockerImageName imageName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
         ConsulContainer consulContainer = new ConsulContainer(imageName);
 
-        // We intentionally do NOT set port bindings here, allowing Testcontainers to assign a random port
-
         // Set startup properties
         if (testResourcesConfig.containsKey(HASHICORP_CONSUL_KV_PROPERTIES_KEY)) {
             @SuppressWarnings("unchecked")
@@ -83,25 +84,41 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
 
     @Override
     protected Optional<String> resolveProperty(String propertyName, ConsulContainer container) {
-        if (propertyName != null && propertyName.startsWith(PREFIX)) {
-            // Resolve the property
-            switch (propertyName) {
-                case PROPERTY_CONSUL_CLIENT_HOST -> {
-                    return Optional.of(container.getHost());
-                }
-                case PROPERTY_CONSUL_CLIENT_PORT -> {
-                    return Optional.of(container.getMappedPort(CONSUL_HTTP_PORT).toString());
-                }
-                case PROPERTY_CONSUL_CLIENT_DEFAULT_ZONE -> {
-                    return Optional.of(container.getHost() + ":" + container.getMappedPort(CONSUL_HTTP_PORT));
-                }
-            }
+        // Resolve base client properties
+        if (PROPERTY_CONSUL_CLIENT_HOST.equals(propertyName)) {
+            return Optional.of(container.getHost());
         }
-        return Optional.empty();
+        if (PROPERTY_CONSUL_CLIENT_PORT.equals(propertyName)) {
+            return Optional.of(container.getMappedPort(CONSUL_HTTP_PORT).toString());
+        }
+        if (PROPERTY_CONSUL_CLIENT_DEFAULT_ZONE.equals(propertyName)) {
+            return Optional.of(container.getHost() + ":" + container.getMappedPort(CONSUL_HTTP_PORT));
+        }
+
+        // Resolve discovery client properties explicitly to the same container
+        if (PROPERTY_CONSUL_DISCOVERY_HOST.equals(propertyName)) {
+            return Optional.of(container.getHost());
+        }
+        if (PROPERTY_CONSUL_DISCOVERY_PORT.equals(propertyName)) {
+            return Optional.of(container.getMappedPort(CONSUL_HTTP_PORT).toString());
+        }
+
+        // Add registration properties if needed
+        // if (PROPERTY_CONSUL_REGISTRATION_HOST.equals(propertyName)) {
+        //     return Optional.of(container.getHost());
+        // }
+        // if (PROPERTY_CONSUL_REGISTRATION_PORT.equals(propertyName)) {
+        //     return Optional.of(container.getMappedPort(CONSUL_HTTP_PORT).toString());
+        // }
+
+        return Optional.empty(); // Property not handled by this provider
     }
 
     @Override
     protected boolean shouldAnswer(String propertyName, Map<String, Object> properties, Map<String, Object> testResourcesConfig) {
-        return propertyName != null && propertyName.startsWith(PREFIX);
+        // Answer if the property is one we can resolve
+        return propertyName != null && RESOLVABLE_PROPERTIES_LIST.contains(propertyName);
+        // Or more broadly:
+        // return propertyName != null && (propertyName.startsWith(CLIENT_PREFIX) || propertyName.startsWith(DISCOVERY_PREFIX) /* || propertyName.startsWith(REGISTRATION_PREFIX) */);
     }
 }

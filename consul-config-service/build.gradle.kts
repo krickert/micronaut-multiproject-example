@@ -113,7 +113,7 @@ dependencies {
     // https://mvnrepository.com/artifact/com.networknt/json-schema-validator
     implementation("com.networknt:json-schema-validator:1.5.6")
     testImplementation(mn.hamcrest)
-
+    testImplementation("org.testcontainers:consul:1.21.0")
     // Add protobuf-models dependency for gRPC service
     implementation(project(":protobuf-models"))
     // Add gRPC dependencies

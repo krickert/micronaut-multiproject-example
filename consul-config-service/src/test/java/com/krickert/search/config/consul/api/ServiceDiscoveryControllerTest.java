@@ -29,17 +29,9 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 @MicronautTest(rebuildContext = true)
-@Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ServiceDiscoveryControllerTest {
     private static final Logger LOG = LoggerFactory.getLogger(ServiceDiscoveryControllerTest.class);
-
-    @Bean
-    @Singleton
-    @Replaces(bean = ConsulKvService.class)
-    public ConsulKvService consulKvService(@Named("serviceDiscoveryControllerTest") Consul consulClient) {
-        return new ConsulKvService(consulClient.keyValueClient(), "config/test");
-    }
 
     @Inject
     private Consul consulClient;

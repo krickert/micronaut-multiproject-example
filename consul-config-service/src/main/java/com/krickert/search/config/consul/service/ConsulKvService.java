@@ -39,7 +39,7 @@ public class ConsulKvService {
      * @param keyValueClient the KeyValueClient to use for KV operations
      * @param configPath the base path for configuration in Consul KV store
      */
-    public ConsulKvService(@jakarta.inject.Named("primaryKeyValueClient") KeyValueClient keyValueClient, 
+    public ConsulKvService(KeyValueClient keyValueClient,
                           @Value("${consul.client.config.path:config/pipeline}") String configPath) {
         this.keyValueClient = keyValueClient;
         this.configPath = configPath;

@@ -41,7 +41,7 @@ public class ServiceDiscoveryController {
      * @param consulClient the client for interacting with Consul
      */
     @Inject
-    public ServiceDiscoveryController(@jakarta.inject.Named("primaryConsulClient") Consul consulClient) {
+    public ServiceDiscoveryController(Consul consulClient) {
         this.consulClient = consulClient;
         LOG.info("ServiceDiscoveryController initialized");
     }
