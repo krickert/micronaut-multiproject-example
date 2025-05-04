@@ -17,6 +17,12 @@ Your suggestion of using a seed-config.xml file with Consul address in applicati
 1. **Service Self-Registration**:
     - Each service would have a bootstrap phase where it checks if it's registered in the pipeline
     - If not registered, it would register itself using the existing API endpoints
+    - Micronaut auto-registers itself as a grpc service, so for integration tests, we will use the DummyPipelineServiceImpl for testing 
+      the configuration service.
+    - The key to testing this is to ensure that the service gets registered as a grpc service and when that happens, the pipeline can 
+      get configured.
+    - A service can start and be registered without pipeline configuration, but would require being registered to consul as a grpc 
+      service (This is automatic in micronaut)
 
 2. **Implementation Components**:
    ```java
@@ -36,14 +42,16 @@ Your suggestion of using a seed-config.xml file with Consul address in applicati
 ## Technical Implementation Details
 
 1. **Service Identity**:
-    - Each service would need a unique identifier
-    - Service would provide its implementation class, required topics, etc.
+    - Each service would need a unique identifier, which is typically the application name (which can be a fallback if it's easy)
+    - Service would provide its implementation class, allowable topics, and default configuration parameters
+    - Each service could have it's own JSON-based configuration schema, and defaults as a map of JSON strings
 
 2. **Registration Process**:
     - Service connects to Consul using address from application.properties
-    - Checks if its configuration exists in the active pipeline
+    - Checks if its configuration exists in the service configuration (not pipeline config, but would load the full pipeline config too 
+      of course)
     - If not, registers itself with default configuration
-    - Periodically checks and updates its configuration if needed
+    - Periodically checks and updates its configuration if needed and kafka listener will take in refresh requests)
 
 3. **Configuration Template**:
     - XML/JSON template defining service capabilities

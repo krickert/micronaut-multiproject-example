@@ -159,7 +159,7 @@ Here's an example of what the service configuration in `pipeline.json` might loo
   "services": {
     "myCustomServiceInstance": {
       "name": "myCustomServiceInstance",
-      "serviceImplementation": "com.example.MyCustomService",
+      "serviceImplementation": "my-custom-service-grpc",
       "kafkaListenTopics": ["input-topic"],
       "kafkaPublishTopics": ["output-topic"],
       "jsonConfig": {
@@ -173,7 +173,9 @@ Here's an example of what the service configuration in `pipeline.json` might loo
 }
 ```
 
-## Pipeline Data Flow
+## Pipeline Data Flow and Structure
+
+A pipeline is a set of services that make up a non-cyclical graph where the nodes (services) connect to one another through gRPC or Kafka outputs (and Kafka inputs). Data is input and flows through these pipelines, being processed at each step.
 
 ```mermaid
 graph LR
@@ -184,9 +186,19 @@ graph LR
     B -.-> F[gRPC Service]
 ```
 
+### Pipeline Components
+
+- **Pipeline**: A complete data processing workflow defined as a non-cyclical graph of services
+- **Services**: Nodes in the pipeline graph that perform specific processing tasks
+- **Pipesteps**: Implementations of services within a pipeline, validated against the schema configuration
+- **Service Implementation**: A gRPC endpoint registered in Consul that provides the actual processing logic
+
+### Data Flow
+
 - Services can receive data from Kafka topics or gRPC calls
 - Services can send data to Kafka topics or forward to other services via gRPC
 - The pipeline configuration defines how data flows between services
+- Each pipestep processes the data according to its implementation and forwards it to the next step
 
 ## Configuration Storage
 
@@ -227,7 +239,7 @@ Create a JSON file that defines your service configuration:
 ```json
 {
   "name": "my-custom-processor",
-  "serviceImplementation": "com.example.MyCustomProcessor",
+  "serviceImplementation": "my-custom-processor-grpc",
   "kafkaListenTopics": ["input-topic-1", "input-topic-2"],
   "kafkaPublishTopics": ["output-topic"],
   "grpcForwardTo": ["next-service-name"],
@@ -277,11 +289,23 @@ When registering a service, you need to specify the following properties:
 | Property | Description | Required |
 |----------|-------------|----------|
 | `name` | Unique name for the service instance | Yes |
-| `serviceImplementation` | Fully qualified class name of your implementation | Yes |
+| `serviceImplementation` | Name of a gRPC endpoint registered in Consul that implements the service logic | Yes |
 | `kafkaListenTopics` | List of Kafka topics to consume messages from | No |
 | `kafkaPublishTopics` | List of Kafka topics to publish messages to | No |
 | `grpcForwardTo` | List of service names to forward messages to via gRPC | No |
 | `configParams` | Map of configuration parameters specific to your service | No |
+
+### Service Implementation Validation
+
+When creating or updating a pipeline, the system validates that the `serviceImplementation` field refers to a valid gRPC endpoint registered in Consul. This validation ensures that:
+
+1. The service exists in Consul's service registry
+2. The service is tagged as a gRPC service
+3. The service is available and healthy
+
+This validation prevents configuration of pipelines with non-existent or unavailable services, ensuring that pipelines can be properly executed when deployed.
+
+If the validation fails, the API will return an error message indicating that the specified service implementation could not be found or is not available as a gRPC endpoint in Consul.
 
 ## Dynamic Service Discovery
 
@@ -307,7 +331,7 @@ To enable automatic service registration, configure the following properties in 
 |----------|-------------|----------|---------|
 | `pipeline.service.name` | Name of the service instance | Yes | None |
 | `pipeline.name` | Name of the pipeline to register with | Yes | None |
-| `pipeline.service.implementation` | Fully qualified class name of the service implementation | No | None |
+| `pipeline.service.implementation` | Name of a gRPC endpoint registered in Consul that implements the service logic | No | None |
 | `pipeline.listen.topics` | Comma-separated list of Kafka topics to listen to | No | None |
 | `pipeline.publish.topics` | Comma-separated list of Kafka topics to publish to | No | None |
 | `pipeline.grpc.forward.to` | Comma-separated list of services to forward to via gRPC | No | None |
@@ -321,7 +345,7 @@ Example configuration:
 # Service registration configuration
 pipeline.service.name=my-custom-processor
 pipeline.name=my-pipeline
-pipeline.service.implementation=com.example.MyCustomProcessor
+pipeline.service.implementation=my-custom-processor-grpc
 pipeline.listen.topics=input-topic-1, input-topic-2
 pipeline.publish.topics=output-topic
 pipeline.grpc.forward.to=next-service-name
@@ -423,7 +447,7 @@ curl -X PUT http://localhost:8080/api/pipeline/config/my-new-pipeline/service \
   -H "Content-Type: application/json" \
   -d '{
     "name": "s3-crawler",
-    "serviceImplementation": "com.example.S3CrawlerService",
+    "serviceImplementation": "s3-crawler-grpc",
     "kafkaPublishTopics": ["s3-file-list"]
   }'
 
@@ -432,7 +456,7 @@ curl -X PUT http://localhost:8080/api/pipeline/config/my-new-pipeline/service \
   -H "Content-Type: application/json" \
   -d '{
     "name": "s3-connector",
-    "serviceImplementation": "com.example.S3ConnectorService",
+    "serviceImplementation": "s3-connector-grpc",
     "kafkaListenTopics": ["s3-file-list"],
     "kafkaPublishTopics": ["raw-documents"]
   }'
@@ -487,7 +511,7 @@ curl -X PUT http://localhost:8080/api/pipeline/config/my-pipeline/service \
   -H "Content-Type: application/json" \
   -d '{
     "name": "existing-service",
-    "serviceImplementation": "com.example.ExistingService",
+    "serviceImplementation": "existing-service-grpc",
     "kafkaListenTopics": ["new-input-topic"],
     "kafkaPublishTopics": ["new-output-topic"],
     "configParams": {
@@ -506,7 +530,7 @@ curl -X PUT http://localhost:8080/api/pipeline/config/my-pipeline/service \
   -H "Content-Type: application/json" \
   -d '{
     "name": "new-service",
-    "serviceImplementation": "com.example.NewService",
+    "serviceImplementation": "new-service-grpc",
     "kafkaListenTopics": ["input-topic"],
     "kafkaPublishTopics": ["output-topic"]
   }'

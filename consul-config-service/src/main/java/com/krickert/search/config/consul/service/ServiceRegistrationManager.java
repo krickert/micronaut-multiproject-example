@@ -22,6 +22,10 @@ import java.util.Map;
  * Manages the automatic registration of services with the pipeline configuration system.
  * This component listens for service startup events and registers the service with Consul
  * if it's not already registered.
+ * 
+ * Note: A service does not need to have pipeline configuration to run. The pipelines are
+ * dynamically built. The service will have config built into it and the default config props
+ * are already there, and it can have custom config added that is validated by a schema.
  */
 @Singleton
 public class ServiceRegistrationManager implements ApplicationEventListener<ServiceReadyEvent> {
@@ -71,13 +75,14 @@ public class ServiceRegistrationManager implements ApplicationEventListener<Serv
             return;
         }
 
-        if (pipelineName == null || pipelineName.trim().isEmpty()) {
-            LOG.warn("No pipeline name configured. Skipping auto-registration.");
+        if (serviceName == null || serviceName.trim().isEmpty()) {
+            LOG.warn("No service name configured. Skipping auto-registration.");
             return;
         }
 
-        if (serviceName == null || serviceName.trim().isEmpty()) {
-            LOG.warn("No service name configured. Skipping auto-registration.");
+        // A service can run without being registered to a pipeline
+        if (pipelineName == null || pipelineName.trim().isEmpty()) {
+            LOG.info("No pipeline name configured. Service '{}' will run with default configuration.", serviceName);
             return;
         }
 

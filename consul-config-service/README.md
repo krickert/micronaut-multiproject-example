@@ -113,7 +113,7 @@ pipeline:
 * `kafka-listen-topics`: Comma-separated list of Kafka topics the service consumes `PipeStream` messages from.
 * `kafka-publish-topics`: Comma-separated list of Kafka topics the service publishes resulting `PipeStream` messages to.
 * `grpc-forward-to`: (Optional) A service ID (registered in Consul) to forward the `PipeStream` to via gRPC instead of Kafka. A service typically uses either Kafka publish topics *or* gRPC forwarding.
-* `serviceImplementation`: The fully qualified class name of the Java class implementing the `PipelineServiceProcessor` logic for this service step.
+* `serviceImplementation`: The name of a gRPC endpoint registered in Consul. This identifies the service that will implement the processing logic for this pipeline step. When a new pipeline is created, this field is validated to ensure it refers to an existing service in Consul.
 * `configParams`: An optional map of key-value pairs providing specific configuration to the service implementation (e.g., chunk size, model name, connection URLs).
 
 ## Project Structure

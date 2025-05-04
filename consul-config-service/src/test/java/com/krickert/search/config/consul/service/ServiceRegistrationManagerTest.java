@@ -219,6 +219,36 @@ class ServiceRegistrationManagerTest implements TestPropertyProvider {
         assertThrows(Exception.class, () -> checkPipeline.block(), "Pipeline should not be created when registration is disabled");
     }
 
+    @Test
+    @Order(5)
+    @DisplayName("Service can run without pipeline configuration")
+    @Property(name = "pipeline.name", value = "")
+    void testServiceCanRunWithoutPipelineConfiguration() {
+        // Act - Trigger service registration with empty pipeline name
+        serviceRegistrationManager.onApplicationEvent(null);
+
+        // No assertions needed - we're just verifying that the service doesn't throw an exception
+        // and can run without being registered to a pipeline
+
+        // Try to get all pipelines to verify no new pipeline was created
+        List<String> pipelines = pipelineService.listPipelines().block();
+        assertNotNull(pipelines, "Pipeline list should not be null");
+
+        // If any pipelines exist, verify none of them contain our service
+        for (String pipelineName : pipelines) {
+            try {
+                PipelineConfigDto pipeline = pipelineService.getPipeline(pipelineName).block();
+                if (pipeline != null && pipeline.getServices() != null) {
+                    assertFalse(pipeline.getServices().containsKey("test-service"), 
+                        "Service should not be registered to any pipeline when pipeline name is empty");
+                }
+            } catch (Exception e) {
+                // Ignore exceptions when getting pipelines
+                LOG.info("Error getting pipeline {}: {}", pipelineName, e.getMessage());
+            }
+        }
+    }
+
     @Override
     public Map<String, String> getProperties() {
         Map<String, String> properties = new HashMap<>(consulContainer.getProperties());
