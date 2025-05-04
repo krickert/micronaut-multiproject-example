@@ -58,11 +58,9 @@ enum RouteType {
 message PipeRequest {
   PipeDoc doc = 1;
   map<string, string> config = 2;
-  repeated Route destinations = 3;
-  repeated string mapping_rules = 4;
 }
 
-message OutputResponse {
+message ProcessRepsonse {
   bool success = 1;
   oneof reply {
     PipeDoc outputDoc = 2;
@@ -92,12 +90,18 @@ message PipeStream {
 message ServiceConfig {
   // The name of the service implementation
   string service_implementation = 1;
-
   // Service-specific configuration parameters
   map<string, string> config_params = 2;
 }
 
+message ServiceProcessRequest {
+  PipeRequest request = 1;
+  ServiceConfig config = 2;
+  repeated Route destinations = 3;
+  repeated string mapping_rules = 4;
+}
+
 service PipelineService {
   rpc forward(PipeStream) returns (google.protobuf.Empty);
-  rpc getOutput(PipeRequest) returns (OutputResponse);
+  rpc process(ServiceProcessRequest) returns (OutputResponse);
 }

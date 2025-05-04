@@ -23,13 +23,13 @@ rootProject.name = "my-pipeline-system"
 include(
     "bom",
     "protobuf-models",
-    "pipeline-service-core",
-    "pipeline-service-test-utils",
-    "pipeline-service-test-utils:pipeline-test-platform",
-    "pipeline-examples",
-    "pipeline-examples:pipeline-echo-service",
-    "pipeline-services",
-    "pipeline-services:chunker",
+//    "pipeline-service-core",
+//    "pipeline-service-test-utils",
+//    "pipeline-service-test-utils:pipeline-test-platform",
+//    "pipeline-examples",
+//    "pipeline-examples:pipeline-echo-service",
+//    "pipeline-services",
+//    "pipeline-services:chunker",
     "util",
-    "consul-config-service"
+    "yappy-platform"
 )
