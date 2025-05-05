@@ -1,10 +1,14 @@
 syntax = "proto3";
-package com.krickert.search.model;
+package com.krickert.search.model; // Assuming this package from your file
+
 option java_multiple_files = true;
+
+// --- Imports from your original file ---
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/empty.proto";
 
+// --- Message definitions (PipeDoc, PipeStream, etc. - assumed from your file) ---
 message PipeDoc {
   string id = 1;
   string title = 2;
@@ -44,7 +48,6 @@ message ChunkEmbedding {
 
 message Route {
   RouteType routeType = 1;
-  // For Kafka: the topic name; for gRPC: the endpoint tag or destination identifier.
   string destination = 2;
 }
 
@@ -58,13 +61,7 @@ enum RouteType {
 message PipeRequest {
   PipeDoc doc = 1;
   map<string, string> config = 2;
-}
-
-message ServiceProcessRepsonse {
-  bool success = 1;
-  PipeDoc outputDoc = 2;
-  string logs = 3;
-  optional ErrorData errorData = 4;
+  // destinations field removed based on your latest proto
 }
 
 message ErrorData {
@@ -79,17 +76,15 @@ message PipeResponse {
 }
 
 message PipeStream {
-  PipeRequest request = 1;
-  repeated PipeResponse pipeReplies = 2;
-  repeated string streamLogs = 3;
-  string pipeline = 4;
+  PipeRequest request = 1;//the next request for processing
+  repeated PipeResponse pipeReplies = 2;//history of replies
+  repeated string streamLogs = 3;//the list of logs from previous streams
+  string pipeline = 4;//the name of the pipeline this stream belongs to
+  string streamId = 5;//this is likely going to be the pipedoc ID in UUID string format
 }
 
-// Service configuration that points to a service implementation and contains service-specific configuration
 message ServiceConfig {
-  // The name of the service implementation
   string service_implementation = 1;
-  // Service-specific configuration parameters
   map<string, string> config_params = 2;
 }
 
@@ -100,7 +95,21 @@ message ServiceProcessRequest {
   repeated string mapping_rules = 4;
 }
 
-service PipelineService {
+message ServiceProcessRepsonse { // Note: Typo in original message name "Repsonse"
+  bool success = 1;
+  PipeDoc outputDoc = 2;
+  string logs = 3;
+  optional ErrorData errorData = 4;
+}
+
+// --- Service Definition ---
+service PipeStreamEngine {
+  // Forwards a complete PipeStream, often used for inter-service communication.
+  // The receiving service determines the next step based on pipeline config.
   rpc forward(PipeStream) returns (google.protobuf.Empty);
+
+  // Processes a request with explicit configuration and destinations.
+  // Might be used for direct calls or testing specific steps.
+  // Note: Typo in original response message name "Repsonse"
   rpc process(ServiceProcessRequest) returns (ServiceProcessRepsonse);
 }

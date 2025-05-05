@@ -73,6 +73,12 @@ dependencies {
     api(mn.micronaut.discovery.core)
     api(libs.slf4j.api)
     api(libs.logback.classic)
+    api(mn.micronaut.grpc.server.runtime)
+    api(mn.micronaut.grpc.health)
+    api(mn.micronaut.grpc.runtime)
+    api(mn.micronaut.grpc.annotation)
+    api(mn.grpc.services)
+    api(mn.grpc.protobuf)
 
     // Implementation dependencies
     implementation(mn.micronaut.reactor)
@@ -123,6 +129,26 @@ dependencies {
     implementation(mn.micronaut.grpc.runtime)
     implementation(mn.micronaut.grpc.server.runtime)
     testImplementation(mn.micronaut.grpc.client.runtime)
+    //AWS SDK dependencies
+    api(mn.micronaut.aws.sdk.v2)
+    // AWS Glue Schema Registry dependencies
+    api(libs.amazon.glue) {
+        // Exclude transitive Wire dependencies to avoid conflicts
+        exclude(group = "com.squareup.wire")
+    }
+    api(libs.amazon.msk.iam)
+    api(libs.amazon.connection.client)
+
+    // Apicurio Registry dependencies
+    api(libs.apicurio.serde) {
+        // Exclude transitive Wire dependencies to avoid conflicts
+        exclude(group = "com.squareup.wire")
+    }
+
+    // Explicitly include Wire library to ensure consistent version
+    api("com.squareup.wire:wire-schema")
+    api("com.squareup.wire:wire-runtime")
+
 }
 
 // Publishing configuration
