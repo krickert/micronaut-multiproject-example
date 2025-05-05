@@ -12,10 +12,10 @@ message PipelineReloadResponse {
   bool success = 1;
   string message = 2;
 }
-message ServiceReloadRequest {
+message PipeStepReloadRequest {
   string service_name = 1;
 }
-message ServiceReloadResponse {
+message PipeStepReloadResponse {
   bool success = 1;
   string message = 2;
 }
@@ -29,6 +29,6 @@ message ApplicationChangeResponse {
 
 service ReloadService {
   rpc reloadPipeline(PipelineReloadRequest) returns (PipelineReloadResponse);
-  rpc reloadService(ServiceReloadRequest) returns (ServiceReloadResponse);
+  rpc reloadService(PipeStepReloadRequest) returns (PipeStepReloadResponse);
   rpc applicationChanged(ApplicationChangeEvent) returns (ApplicationChangeResponse);
 }

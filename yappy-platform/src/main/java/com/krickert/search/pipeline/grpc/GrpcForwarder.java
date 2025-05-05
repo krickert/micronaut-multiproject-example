@@ -2,7 +2,6 @@
 package com.krickert.search.pipeline.grpc;
 
 import com.krickert.search.model.PipeStream;
-import com.krickert.search.model.PipelineServiceGrpc;
 import com.krickert.search.model.Route;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -22,7 +21,6 @@ public class GrpcForwarder {
 
     // For demonstration we create a single stub.
     // In practice, you may want to select the stub based on route.getDestination().
-    private final PipelineServiceGrpc.PipelineServiceBlockingStub stub;
     private final ManagedChannel channel;
     private final boolean usePlaintext;
 
@@ -39,7 +37,8 @@ public class GrpcForwarder {
         }
 
         this.channel = builder.build();
-        this.stub = PipelineServiceGrpc.newBlockingStub(channel);
+        //TODO: use the micronaut managed channel factory here instead
+        //this.stub = PipelineServiceGrpc.newBlockingStub(channel);
     }
 
     public void forwardToGrpc(PipeStream pipe, Route route) {
@@ -47,7 +46,7 @@ public class GrpcForwarder {
         // Here we simply call the forward method and ignore the response.
         log.debug("Forwarding to gRPC service: {}", route.getDestination());
         //noinspection ResultOfMethodCallIgnored
-        stub.forward(pipe);
+        //stub.forward(pipe);
     }
 
     @PreDestroy

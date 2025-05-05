@@ -3,6 +3,9 @@ package com.krickert.search.config.consul.service;
 import com.google.protobuf.Empty;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
+import com.krickert.search.engine.EngineProcessRequest;
+import com.krickert.search.engine.EngineProcessResponse;
+import com.krickert.search.engine.PipeStreamEngineGrpc;
 import com.krickert.search.model.*;
 import io.grpc.stub.StreamObserver;
 import io.micronaut.context.annotation.Requires;
@@ -21,7 +24,7 @@ import java.util.*;
 @Singleton
 @GrpcService
 @Requires(env = Environment.TEST)
-public class DummyPipelineServiceImpl extends PipelineServiceGrpc.PipelineServiceImplBase {
+public class DummyPipelineServiceImpl extends PipeStreamEngineGrpc.PipeStreamEngineImplBase {
 
     private static final Logger LOG = LoggerFactory.getLogger(DummyPipelineServiceImpl.class);
 
@@ -34,7 +37,7 @@ public class DummyPipelineServiceImpl extends PipelineServiceGrpc.PipelineServic
      */
     @Override
     public void forward(PipeStream request, StreamObserver<Empty> responseObserver) {
-        LOG.info("Received forward request in dummy service: {}", request.getPipeline());
+        LOG.info("Received forward request in dummy service: {}", request.getPipelineName());
 
         // Return an empty response
         responseObserver.onNext(Empty.getDefaultInstance());
@@ -49,26 +52,26 @@ public class DummyPipelineServiceImpl extends PipelineServiceGrpc.PipelineServic
      * @param responseObserver The observer to send the response to
      */
     @Override
-    public void process(ServiceProcessRequest request, StreamObserver<ServiceProcessRepsonse> responseObserver) {
+    public void process(EngineProcessRequest request, StreamObserver<EngineProcessResponse> responseObserver) {
         LOG.info("Received process request in dummy service for doc: {}", 
-                request.hasRequest() && request.getRequest().hasDoc() ? 
-                request.getRequest().getDoc().getId() : "null");
+                request.hasInputStream() && request.getInputStream().hasCurrentDoc() ?
+                request.getInputStream().getCurrentDoc().getId() : "null");
 
         // Create a processed PipeDoc with realistic data
         PipeDoc processedDoc;
-        if (request.hasRequest() && request.getRequest().hasDoc()) {
+        if (request.hasInputStream() && request.getInputStream().hasCurrentDoc()) {
             // Use the input document as a base and enhance it
-            processedDoc = enhancePipeDoc(request.getRequest().getDoc());
+            processedDoc = enhancePipeDoc(request.getInputStream().getCurrentDoc());
         } else {
             // Create a completely new document
             processedDoc = createDummyPipeDoc();
         }
 
         // Build a success response with the processed document
-        ServiceProcessRepsonse response = ServiceProcessRepsonse.newBuilder()
-                .setSuccess(true)
-                .setOutputDoc(processedDoc)
-                .setLogs("Successfully processed document " + processedDoc.getId() + " with dummy service")
+        EngineProcessResponse response = EngineProcessResponse.newBuilder()
+                .setOverallSuccess(true)
+                .addEngineLogs("Completed pipeline step!")//TODO add more detail
+                .setFinalStream(PipeStream.newBuilder().setCurrentDoc(processedDoc).build())
                 .build();
 
         responseObserver.onNext(response);

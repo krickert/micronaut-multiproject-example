@@ -138,6 +138,7 @@ dependencies {
     }
     api(libs.amazon.msk.iam)
     api(libs.amazon.connection.client)
+    implementation("io.micronaut.cache:micronaut-cache-core")
 
     // Apicurio Registry dependencies
     api(libs.apicurio.serde) {

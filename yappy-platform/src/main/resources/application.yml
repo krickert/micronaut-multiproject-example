@@ -3,6 +3,13 @@ micronaut:
     name: consul-config-service
   server:
     port: 61100
+
+  # Caching configuration
+  caches:
+    pipeline-configs:
+      maximum-size: 50 # Smaller cache for testing potentially
+      expire-after-write: 30s # Shorter expiry for testing
+
   # Enable the management endpoints for health checks and refresh
   management:
     endpoints:
@@ -57,3 +64,11 @@ kafka:
   producer:
     dynamic:
       enabled: true
+
+# Define topic names using custom configuration properties
+app:
+  kafka:
+    topics:
+      pipeline-reload: ${PIPELINE_RELOAD_TOPIC:pipeline-reload-events}
+      service-reload: ${SERVICE_RELOAD_TOPIC:service-reload-events} # Or pipestep-reload-events
+      app-change: ${APP_CHANGE_TOPIC:app-change-events}

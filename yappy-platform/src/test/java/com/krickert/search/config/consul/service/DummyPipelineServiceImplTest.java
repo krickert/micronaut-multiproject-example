@@ -3,6 +3,7 @@ package com.krickert.search.config.consul.service;
 import com.google.protobuf.Empty;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
+import com.krickert.search.engine.EngineProcessResponse;
 import com.krickert.search.model.*;
 import io.grpc.stub.StreamObserver;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
@@ -93,11 +94,11 @@ public class DummyPipelineServiceImplTest {
 
         // Create a latch to wait for the response
         CountDownLatch latch = new CountDownLatch(1);
-        AtomicReference<ServiceProcessRepsonse> responseHolder = new AtomicReference<>();
+        AtomicReference<EngineProcessResponse> responseHolder = new AtomicReference<>();
         AtomicReference<Throwable> errorHolder = new AtomicReference<>();
 
         // Create a real StreamObserver to capture the response
-        StreamObserver<ServiceProcessRepsonse> responseObserver = new StreamObserver<>() {
+        StreamObserver<EngineProcessResponse> responseObserver = new StreamObserver<>() {
             @Override
             public void onNext(ServiceProcessRepsonse value) {
                 responseHolder.set(value);

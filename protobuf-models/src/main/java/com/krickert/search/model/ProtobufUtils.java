@@ -113,7 +113,7 @@ public class ProtobufUtils {
      * @return The generated UUID key.
      */
     public static UUID createKey(PipeStream pipeDocument) {
-        return createKey(pipeDocument.getRequest().getDoc().getId());
+        return createKey(pipeDocument.getStreamId());
     }
 
 

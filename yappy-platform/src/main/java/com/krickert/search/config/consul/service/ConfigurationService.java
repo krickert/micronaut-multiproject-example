@@ -2,6 +2,8 @@ package com.krickert.search.config.consul.service;
 
 import com.krickert.search.config.consul.event.ConfigChangeEvent;
 import com.krickert.search.config.consul.model.*;
+import io.micronaut.cache.annotation.CacheConfig;
+import io.micronaut.cache.annotation.CacheInvalidate;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.event.ApplicationEventListener;
 import io.micronaut.context.event.StartupEvent;
@@ -15,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@CacheConfig("pipeline-configs")
 @Singleton
 @Refreshable
 public class ConfigurationService implements ApplicationEventListener<StartupEvent> {
@@ -43,6 +46,21 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
         this.pipelineConfig = pipelineConfig;
         this.applicationName = applicationName;
         LOG.info("ConfigurationService initialized for application: {}", applicationName);
+    }
+
+    /**
+     * Invalidates the cache entry for a specific pipeline configuration.
+     * This method is typically called when an external event (like a Kafka message)
+     * indicates that the configuration for this pipeline has changed in Consul.
+     *
+     * @param pipelineName The name of the pipeline whose configuration should be removed from the cache.
+     */
+    @CacheInvalidate(parameters = "pipelineName") // Matches the parameter name
+    public void invalidatePipelineConfig(String pipelineName) {
+        // The @CacheInvalidate annotation handles the actual cache removal.
+        // This method body is primarily for logging or potential pre/post invalidation logic.
+        LOG.info("Invalidating cache for pipeline configuration: {}", pipelineName);
+        // No explicit cache interaction needed here if using annotations correctly.
     }
 
     /**

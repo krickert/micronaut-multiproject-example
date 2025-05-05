@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+// Defines the gRPC service interface that individual pipeline step
+// processors must implement.
+package com.krickert.search.processor;
+
+// --- Imports ---
+import "pipeline_models.proto";         // Core data structures (PipeDoc, Blob, ErrorData etc.)
+import "google/protobuf/struct.proto";    // For flexible JSON config and error details
+
+// --- Java Options ---
+option java_multiple_files = true;
+option java_package = "com.krickert.search.processor"; // Match package
+
+// =============================================================================
+// Service Definition: PipeStepProcessor
+// =============================================================================
+// This service MUST be implemented by each component that acts as a
+// processing step within a pipeline (e.g., chunker, embedder, parser).
+// The PipeStreamEngine calls the 'ProcessDocument' RPC on the appropriate
+// service instance based on the pipeline configuration.
+// =============================================================================
+
+service PipeStepProcessor {
+  // --- RPC: ProcessDocument ---
+  // Purpose: Executes the core logic of a single pipeline step.
+  // Usage:   Called by the PipeStreamEngine orchestrator. Takes the current
+  //          document state and step-specific configuration, performs processing,
+  //          and returns the outcome (modified doc or error).
+  // Request: ProcessPipeDocRequest - Contains the input document, configuration,
+  //          and execution context for the step.
+  // Response: ProcessPipeDocResponse - Contains the result of the step's execution,
+  //           including success status, output document (if any), logs, and errors.
+  rpc ProcessDocument(ProcessPipeDocRequest) returns (ProcessPipeDocResponse);
+}
+
+// =============================================================================
+// Messages for the ProcessDocument RPC
+// =============================================================================
+
+// --- Request Message: ProcessPipeDocRequest ---
+// Defines the input sent TO a PipeStepProcessor implementation by the engine.
+message ProcessPipeDocRequest {
+  // REQUIRED: The current state of the document to be processed by this step.
+  // This includes all metadata, text, embeddings etc. accumulated so far.
+  com.krickert.search.model.PipeDoc input_doc = 1;
+
+  // REQUIRED: Configuration parameters specific to this step instance,
+  // as defined in the central pipeline configuration (e.g., Consul).
+  map<string, string> config_params = 2;
+
+  // OPTIONAL: Custom JSON configuration specific to this step, parsed from
+  // the central pipeline configuration. Provides flexibility for complex settings.
+  optional google.protobuf.Struct custom_json_config = 3;
+
+  // --- Execution Context (Provided by the Engine) ---
+
+  // REQUIRED: Name of the overall pipeline this step belongs to.
+  string pipeline_name = 4;
+
+  // REQUIRED: The configured name of this specific step instance being executed.
+  string pipe_step_name = 5;
+
+  // REQUIRED: The current hop number in the pipeline execution flow.
+  int64 current_hop_number = 6;
+
+  // REQUIRED: The unique identifier of the stream being processed.
+  string stream_id = 7;
+
+  // OPTIONAL: Overall context parameters for the pipeline run (e.g., trace ID).
+  map<string, string> context_params = 8;
+
+  // OPTIONAL: Input blob data relevant to this step.
+  // The engine provides the blob from PipeStream.input_blob if it exists.
+  // Steps that consume blobs (e.g., parsers) should read from here.
+  // Steps that produce blobs should indicate this in their response (potentially
+  // by convention or a specific field in ProcessPipeDocResponse if needed later).
+  optional com.krickert.search.model.Blob input_blob = 9;
+}
+
+// --- Response Message: ProcessPipeDocResponse ---
+// Defines the output sent FROM a PipeStepProcessor implementation back to the engine.
+message ProcessPipeDocResponse {
+  // REQUIRED: Flag indicating if the processing *within this step* was successful.
+  // `false` means this step encountered an error.
+  bool success = 1;
+
+  // OPTIONAL: The potentially modified/enriched document resulting from this step.
+  // - REQUIRED on success if the document was modified or should proceed.
+  // - OMITTED on success if the document should be dropped/filtered from the pipeline.
+  // - OMITTED or unchanged on failure.
+  optional com.krickert.search.model.PipeDoc output_doc = 2;
+
+  // OPTIONAL: Structured error details if processing failed (`success` = false).
+  // Provides more information than just the boolean flag. Can be used by the
+  // engine to populate the HistoryEntry's error fields.
+  optional google.protobuf.Struct error_details = 3;
+  // Example keys: "errorCode", "errorMessage", "validationErrors"
+
+  // OPTIONAL: Logs generated specifically during this step's execution.
+  // These will be captured by the engine and added to the HistoryEntry.
+  repeated string processor_logs = 4;
+
+  // OPTIONAL: Output blob data generated by this step.
+  // If a step generates or modifies binary data (e.g., image thumbnailing),
+  // it returns the result here. The engine will update PipeStream.input_blob.
+  optional com.krickert.search.model.Blob output_blob = 5;
+}
