@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 
 /**
- * A dummy implementation of the PipelineService gRPC service for testing registration with Consul.
+ * A dummy implementation of the PipeStreamEngine gRPC service for testing registration with Consul.
  * This implementation provides minimal functionality and is intended only for testing purposes.
  */
 @Singleton
@@ -29,31 +29,16 @@ public class DummyPipelineServiceImpl extends PipeStreamEngineGrpc.PipeStreamEng
     private static final Logger LOG = LoggerFactory.getLogger(DummyPipelineServiceImpl.class);
 
     /**
-     * Processes a PipeStream and returns an Empty response.
-     * This is a dummy implementation that just logs the request and returns an empty response.
-     * 
-     * @param request The PipeStream to process
-     * @param responseObserver The observer to send the response to
-     */
-    @Override
-    public void forward(PipeStream request, StreamObserver<Empty> responseObserver) {
-        LOG.info("Received forward request in dummy service: {}", request.getPipelineName());
-
-        // Return an empty response
-        responseObserver.onNext(Empty.getDefaultInstance());
-        responseObserver.onCompleted();
-    }
-
-    /**
-     * Processes a ServiceProcessRequest and returns a ServiceProcessRepsonse.
+     * Processes an EngineProcessRequest and returns an EngineProcessResponse.
      * This is a dummy implementation that generates realistic dummy data.
      * 
-     * @param request The ServiceProcessRequest to process
+     * @param request The EngineProcessRequest to process
      * @param responseObserver The observer to send the response to
      */
     @Override
     public void process(EngineProcessRequest request, StreamObserver<EngineProcessResponse> responseObserver) {
-        LOG.info("Received process request in dummy service for doc: {}", 
+        LOG.info("Received process request in dummy service for pipeline: {}", request.getPipelineName());
+        LOG.info("Document ID: {}", 
                 request.hasInputStream() && request.getInputStream().hasCurrentDoc() ?
                 request.getInputStream().getCurrentDoc().getId() : "null");
 
@@ -67,14 +52,59 @@ public class DummyPipelineServiceImpl extends PipeStreamEngineGrpc.PipeStreamEng
             processedDoc = createDummyPipeDoc();
         }
 
+        // Create a PipeStream for the final state
+        PipeStream.Builder finalStreamBuilder = PipeStream.newBuilder();
+
+        // If input stream is provided, use it as a base
+        if (request.hasInputStream()) {
+            finalStreamBuilder.mergeFrom(request.getInputStream());
+        } else {
+            // Create a new stream with basic information
+            finalStreamBuilder.setStreamId(UUID.randomUUID().toString())
+                    .setPipelineName(request.getPipelineName())
+                    .setCurrentHopNumber(1);
+        }
+
+        // Set the current document to our processed document
+        finalStreamBuilder.setCurrentDoc(processedDoc);
+
+        // Add any context parameters from the request
+        for (Map.Entry<String, String> entry : request.getInitialContextParamsMap().entrySet()) {
+            finalStreamBuilder.putContextParams(entry.getKey(), entry.getValue());
+        }
+
         // Build a success response with the processed document
         EngineProcessResponse response = EngineProcessResponse.newBuilder()
                 .setOverallSuccess(true)
-                .addEngineLogs("Completed pipeline step!")//TODO add more detail
-                .setFinalStream(PipeStream.newBuilder().setCurrentDoc(processedDoc).build())
+                .addEngineLogs("Started pipeline execution")
+                .addEngineLogs("Processed document successfully")
+                .addEngineLogs("Completed pipeline execution")
+                .setFinalStream(finalStreamBuilder.build())
                 .build();
 
         responseObserver.onNext(response);
+        responseObserver.onCompleted();
+    }
+
+    /**
+     * Processes an EngineProcessRequest asynchronously and returns an Empty response.
+     * This is a dummy implementation that just logs the request and returns an empty response.
+     * 
+     * @param request The EngineProcessRequest to process
+     * @param responseObserver The observer to send the response to
+     */
+    @Override
+    public void processAsync(EngineProcessRequest request, StreamObserver<Empty> responseObserver) {
+        LOG.info("Received processAsync request in dummy service for pipeline: {}", request.getPipelineName());
+        LOG.info("Document ID: {}", 
+                request.hasInputStream() && request.getInputStream().hasCurrentDoc() ?
+                request.getInputStream().getCurrentDoc().getId() : "null");
+
+        // In a real implementation, we would start the pipeline processing in the background
+        // For this dummy implementation, we just acknowledge receipt
+
+        // Return an empty response to acknowledge the request
+        responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
     }
 
