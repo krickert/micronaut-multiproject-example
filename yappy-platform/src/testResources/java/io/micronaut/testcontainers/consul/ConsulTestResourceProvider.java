@@ -1,64 +1,52 @@
-package io.micronaut.testcontainers.consul;
+package io.micronaut.testcontainers.consul; // Adjust package if needed
+
 import io.micronaut.testresources.testcontainers.AbstractTestContainersProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.consul.ConsulContainer;
 import org.testcontainers.utility.DockerImageName;
+import org.testcontainers.containers.BindMode; // Import BindMode
 
 import java.util.*;
 
-/**
- * A test resource provider which will spawn a Consul test container.
- * It provides properties for both the base Consul client and the discovery client.
- */
+// ... (Keep other imports and class structure the same)
+
 public class ConsulTestResourceProvider extends AbstractTestContainersProvider<ConsulContainer> {
     private static final Logger LOG = LoggerFactory.getLogger(ConsulTestResourceProvider.class);
 
-    // TestContainers Properties
+    // ... (Keep constants like TESTCONTAINERS_PREFIX, CLIENT_PREFIX, etc.)
     public static final String TESTCONTAINERS_PREFIX = "testcontainers";
     public static final String PROPERTY_TESTCONTAINERS_ENABLED = TESTCONTAINERS_PREFIX + ".enabled";
     public static final String PROPERTY_TESTCONTAINERS_CONSUL_ENABLED = TESTCONTAINERS_PREFIX + ".consul";
-
-    // Base Client Properties
     public static final String CLIENT_PREFIX = "consul.client";
     public static final String PROPERTY_CONSUL_CLIENT_HOST = CLIENT_PREFIX + ".host";
     public static final String PROPERTY_CONSUL_CLIENT_PORT = CLIENT_PREFIX + ".port";
-    public static final String PROPERTY_CONSUL_CLIENT_DEFAULT_ZONE = CLIENT_PREFIX + ".default-zone"; // Kept for completeness
-
-    // Discovery Client Properties
+    public static final String PROPERTY_CONSUL_CLIENT_DEFAULT_ZONE = CLIENT_PREFIX + ".default-zone";
     public static final String DISCOVERY_PREFIX = "consul.client.discovery";
     public static final String PROPERTY_CONSUL_DISCOVERY_HOST = DISCOVERY_PREFIX + ".host";
     public static final String PROPERTY_CONSUL_DISCOVERY_PORT = DISCOVERY_PREFIX + ".port";
-    // Add registration properties if needed:
     public static final String REGISTRATION_PREFIX = "consul.client.registration";
     public static final String PROPERTY_CONSUL_REGISTRATION_HOST = REGISTRATION_PREFIX + ".host";
     public static final String PROPERTY_CONSUL_REGISTRATION_PORT = REGISTRATION_PREFIX + ".port";
 
-
-    // Combined list of properties this provider can resolve
     public static final List<String> RESOLVABLE_PROPERTIES_LIST = Collections.unmodifiableList(Arrays.asList(
             PROPERTY_CONSUL_CLIENT_HOST,
             PROPERTY_CONSUL_CLIENT_PORT,
             PROPERTY_CONSUL_CLIENT_DEFAULT_ZONE,
             PROPERTY_CONSUL_DISCOVERY_HOST,
             PROPERTY_CONSUL_DISCOVERY_PORT,
-            // Add registration properties here if explicitly resolving them
             PROPERTY_CONSUL_REGISTRATION_HOST,
             PROPERTY_CONSUL_REGISTRATION_PORT
     ));
 
     public static final String HASHICORP_CONSUL_KV_PROPERTIES_KEY = "containers.hashicorp-consul.kv-properties";
-    public static final String DEFAULT_IMAGE = "hashicorp/consul";
+    public static final String DEFAULT_IMAGE = "hashicorp/consul"; // Consider specifying a version, e.g., "hashicorp/consul:1.18"
     public static final int CONSUL_HTTP_PORT = 8500;
     public static final String SIMPLE_NAME = "hashicorp-consul";
     public static final String DISPLAY_NAME = "Consul";
 
-    /**
-     * Checks if this container is enabled based on configuration.
-     *
-     * @param testResourcesConfig the test resources configuration
-     * @return true if the container is enabled, false otherwise
-     */
+
+    // ... (Keep isContainerEnabled method as is) ...
     protected boolean isContainerEnabled(Map<String, Object> testResourcesConfig) {
         // Check if testcontainers are globally enabled
         Object globalEnabled = testResourcesConfig.get(PROPERTY_TESTCONTAINERS_ENABLED);
@@ -105,6 +93,7 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
     }
 
 
+    // ... (Keep getResolvableProperties, getDisplayName, getSimpleName, getDefaultImageName methods as is) ...
     @Override
     public List<String> getResolvableProperties(Map<String, Collection<String>> propertyEntries, Map<String, Object> testResourcesConfig) {
         // Check if this container is enabled
@@ -131,6 +120,8 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
         return DEFAULT_IMAGE;
     }
 
+
+    // --- UPDATED createContainer METHOD ---
     @Override
     protected ConsulContainer createContainer(DockerImageName imageName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
         // Check if this container is enabled
@@ -139,19 +130,63 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
             return null;
         }
 
-        ConsulContainer consulContainer = new ConsulContainer(imageName);
+        LOG.info("Creating Consul container with image: {}", imageName);
 
-        // Set startup properties
+        // Define paths for configuration file
+        String configFilePathInContainer = "/consul/config/custom-limits.json";
+        String configFileResourcePath = "consul-config.json"; // Relative path in src/test/resources
+
+        ConsulContainer consulContainer = new ConsulContainer(imageName)
+                // 1. Copy the custom rate limit config file from classpath into the container
+                .withClasspathResourceMapping(
+                        configFileResourcePath,
+                        configFilePathInContainer,
+                        BindMode.READ_ONLY // Ensures the container doesn't modify the config
+                )
+                // 2. Set the command to start the agent, including loading the config file
+                //    Ensure essential flags like -dev, -client, -bind are present.
+                .withCommand(
+                        "agent",                          // Base command for the agent
+                        "-dev",                           // Run in development mode (disables ACLs, etc. - common for tests)
+                        "-client=0.0.0.0",                // Listen on all network interfaces for client API traffic (HTTP, DNS)
+                        "-bind=0.0.0.0",                  // Listen on all network interfaces for agent communication (Gossip) - Use with caution or specify interface e.g. eth0 if known
+                        "-enable-script-checks=false",    // Often useful to disable script checks in tests
+                        "-config-file=" + configFilePathInContainer // *** Tell Consul agent to load our config file ***
+                );
+
+        // Set startup KV properties (keep existing logic)
+        // This uses `withConsulCommand` which executes AFTER the container starts
         if (testResourcesConfig.containsKey(HASHICORP_CONSUL_KV_PROPERTIES_KEY)) {
             @SuppressWarnings("unchecked")
             List<String> properties = (List<String>) testResourcesConfig.get(HASHICORP_CONSUL_KV_PROPERTIES_KEY);
-            if(null != properties && !properties.isEmpty()) {
-                properties.forEach((property) -> consulContainer.withConsulCommand("kv put " + property.replace("=", " ")));
+            if (properties != null && !properties.isEmpty()) {
+                LOG.info("Applying KV properties from configuration: {}", properties);
+                properties.forEach((property) -> {
+                    // Format for 'consul kv put key value' command line
+                    String[] parts = property.split("=", 2);
+                    if (parts.length == 2 && !parts[0].trim().isEmpty()) {
+                        // Note: withConsulCommand runs AFTER the container starts.
+                        // It executes 'consul kv put ...' using the consul CLI inside the running container.
+                        String key = parts[0].trim();
+                        String value = parts[1].trim();
+                        LOG.debug("Adding Consul KV: {} = {}", key, value);
+                        consulContainer.withConsulCommand("kv put " + key + " " + value);
+                    } else {
+                        LOG.warn("Skipping invalid KV property format (expected 'key=value'): {}", property);
+                    }
+                });
             }
+        } else {
+            LOG.debug("No KV properties found in configuration key '{}'", HASHICORP_CONSUL_KV_PROPERTIES_KEY);
         }
+
+        LOG.info("Consul container configured.");
         return consulContainer;
     }
+    // --- END OF UPDATED createContainer METHOD ---
 
+
+    // ... (Keep resolveProperty and shouldAnswer methods as is) ...
     @Override
     protected Optional<String> resolveProperty(String propertyName, ConsulContainer container) {
         // Resolve base client properties
@@ -162,6 +197,8 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
             return Optional.of(container.getMappedPort(CONSUL_HTTP_PORT).toString());
         }
         if (PROPERTY_CONSUL_CLIENT_DEFAULT_ZONE.equals(propertyName)) {
+            // Default zone format might depend on specific client library needs,
+            // adjust if necessary. This format is common.
             return Optional.of(container.getHost() + ":" + container.getMappedPort(CONSUL_HTTP_PORT));
         }
 
@@ -173,13 +210,13 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
             return Optional.of(container.getMappedPort(CONSUL_HTTP_PORT).toString());
         }
 
-        // Add registration properties if needed
-        // if (PROPERTY_CONSUL_REGISTRATION_HOST.equals(propertyName)) {
-        //     return Optional.of(container.getHost());
-        // }
-        // if (PROPERTY_CONSUL_REGISTRATION_PORT.equals(propertyName)) {
-        //     return Optional.of(container.getMappedPort(CONSUL_HTTP_PORT).toString());
-        // }
+        // Resolve registration properties if they explicitly point here
+        if (PROPERTY_CONSUL_REGISTRATION_HOST.equals(propertyName)) {
+            return Optional.of(container.getHost());
+        }
+        if (PROPERTY_CONSUL_REGISTRATION_PORT.equals(propertyName)) {
+            return Optional.of(container.getMappedPort(CONSUL_HTTP_PORT).toString());
+        }
 
         return Optional.empty(); // Property not handled by this provider
     }
@@ -188,7 +225,7 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
     protected boolean shouldAnswer(String propertyName, Map<String, Object> properties, Map<String, Object> testResourcesConfig) {
         // Check if this container is enabled
         if (!isContainerEnabled(testResourcesConfig)) {
-            LOG.debug("Consul container is disabled, not answering property {}", propertyName);
+            // LOG.debug("Consul container is disabled, not answering property {}", propertyName); // Optional: reduce logging noise
             return false;
         }
         // Answer if the property is one we can resolve

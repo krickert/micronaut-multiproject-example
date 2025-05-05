@@ -1,0 +1,6 @@
+{
+  "limits": {
+    "http_rate": -1,
+    "http_max_burst": 1000000
+  }
+}
