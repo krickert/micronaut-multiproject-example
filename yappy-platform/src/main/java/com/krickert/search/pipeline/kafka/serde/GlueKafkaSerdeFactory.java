@@ -39,14 +39,13 @@ public class GlueKafkaSerdeFactory implements KafkaSerdeFactory {
      * Get a key deserializer for the given pipeline configuration.
      * For Glue, we typically use StringDeserializer for keys.
      *
-     * @param pipelineName The name of the pipeline (often the groupId).
      * @param <K> The key type.
      * @return A configured key deserializer.
      */
     @Override
     @SuppressWarnings("unchecked")
-    public <K> Deserializer<K> getKeyDeserializer(String pipelineName) {
-        log.debug("Creating key deserializer for pipeline '{}' with Glue Schema Registry", pipelineName);
+    public <K> Deserializer<K> getKeyDeserializer() {
+        log.debug("Creating key deserializer for pipeline with Glue Schema Registry");
         // For keys, we typically use StringDeserializer
         return (Deserializer<K>) new UUIDDeserializer();
     }
@@ -55,14 +54,13 @@ public class GlueKafkaSerdeFactory implements KafkaSerdeFactory {
      * Get a value deserializer for the given pipeline configuration.
      * For Glue, we use GlueSchemaRegistryKafkaDeserializer configured with the appropriate settings.
      *
-     * @param pipelineName The name of the pipeline (often the groupId).
      * @param <V> The value type.
      * @return A configured value deserializer.
      */
     @Override
     @SuppressWarnings("unchecked")
-    public <V> Deserializer<V> getValueDeserializer(String pipelineName) {
-        log.debug("Creating value deserializer for pipeline '{}' with Glue Schema Registry", pipelineName);
+    public <V> Deserializer<V> getValueDeserializer() {
+        log.debug("Creating value deserializer for pipeline with Glue Schema Registry");
 
         // Get base configuration from Kafka config
         Map<String, Object> configs = new HashMap<>();
@@ -86,8 +84,8 @@ public class GlueKafkaSerdeFactory implements KafkaSerdeFactory {
         GlueSchemaRegistryKafkaDeserializer deserializer = new GlueSchemaRegistryKafkaDeserializer();
         deserializer.configure(configs, false); // false = value deserializer
 
-        log.info("Created Glue Schema Registry deserializer for pipeline '{}' with region={}, registry={}",
-                pipelineName, awsRegion, registryName);
+        log.info("Created Glue Schema Registry deserializer for with region={}, registry={}",
+                awsRegion, registryName);
 
         return (Deserializer<V>) deserializer;
     }
@@ -96,14 +94,13 @@ public class GlueKafkaSerdeFactory implements KafkaSerdeFactory {
      * Get a key serializer for the given pipeline configuration.
      * For Glue, we typically use StringSerializer for keys.
      *
-     * @param pipelineName The name of the pipeline (often the groupId).
      * @param <K> The key type.
      * @return A configured key serializer.
      */
     @Override
     @SuppressWarnings("unchecked")
-    public <K> Serializer<K> getKeySerializer(String pipelineName) {
-        log.debug("Creating key serializer for pipeline '{}' with Glue Schema Registry", pipelineName);
+    public <K> Serializer<K> getKeySerializer() {
+        log.debug("Creating key serializer for pipeline with Glue Schema Registry");
         // For keys, we typically use StringSerializer
         return (Serializer<K>) new StringSerializer();
     }
@@ -112,14 +109,13 @@ public class GlueKafkaSerdeFactory implements KafkaSerdeFactory {
      * Get a value serializer for the given pipeline configuration.
      * For Glue, we use GlueSchemaRegistryKafkaSerializer configured with the appropriate settings.
      *
-     * @param pipelineName The name of the pipeline (often the groupId).
      * @param <V> The value type.
      * @return A configured value serializer.
      */
     @Override
     @SuppressWarnings("unchecked")
-    public <V> Serializer<V> getValueSerializer(String pipelineName) {
-        log.debug("Creating value serializer for pipeline '{}' with Glue Schema Registry", pipelineName);
+    public <V> Serializer<V> getValueSerializer() {
+        log.debug("Creating value serializer for pipeline with Glue Schema Registry");
 
         // Get base configuration from Kafka config
         Map<String, Object> configs = new HashMap<>();
@@ -144,8 +140,8 @@ public class GlueKafkaSerdeFactory implements KafkaSerdeFactory {
         GlueSchemaRegistryKafkaSerializer serializer = new GlueSchemaRegistryKafkaSerializer();
         serializer.configure(configs, false); // false = value serializer
 
-        log.info("Created Glue Schema Registry serializer for pipeline '{}' with region={}, registry={}",
-                pipelineName, awsRegion, registryName);
+        log.info("Created Glue Schema Registry serializer for with region={}, registry={}",
+                 awsRegion, registryName);
 
         return (Serializer<V>) serializer;
     }

@@ -31,7 +31,6 @@ micronaut {
     testResources {
         enabled.set(true) // true by default
         inferClasspath.set(true) // true by default
-        additionalModules.add(KnownModules.HASHICORP_CONSUL)
         additionalModules.add(KnownModules.KAFKA)
         clientTimeout.set(60) // in seconds, maximum time to wait for resources to be available, 60s by default
         sharedServer.set(true) // false by default
@@ -106,6 +105,7 @@ dependencies {
     testImplementation(mn.testcontainers.kafka)
     testImplementation(mn.reactor.test)
     testImplementation(mn.micronaut.http.server.netty)
+    testImplementation(mn.assertj.core)
     testImplementation("org.junit.platform:junit-platform-suite-engine")
     testImplementation("org.testcontainers:junit-jupiter")
     // https://mvnrepository.com/artifact/com.fasterxml.jackson.dataformat/jackson-dataformat-yaml

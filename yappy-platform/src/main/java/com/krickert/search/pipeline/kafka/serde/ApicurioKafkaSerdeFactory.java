@@ -7,6 +7,7 @@ import io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer;
 import io.micronaut.configuration.kafka.config.AbstractKafkaConfiguration;
 import io.micronaut.configuration.kafka.config.KafkaConsumerConfiguration;
 import io.micronaut.context.annotation.Requires;
+import io.micronaut.context.annotation.Value;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.apache.kafka.common.serialization.*;
@@ -27,13 +28,16 @@ public class ApicurioKafkaSerdeFactory implements KafkaSerdeFactory {
     private static final Logger log = LoggerFactory.getLogger(ApicurioKafkaSerdeFactory.class);
 
     private static final String REGISTRY_TYPE = "apicurio";
-    private static final String DEFAULT_REGISTRY_URL = "http://localhost:8080/apis/registry/v3";
     private static final String DEFAULT_RETURN_CLASS = "com.krickert.search.model.PipeStream";
 
+    private final String DEFAULT_REGISTRY_URL;
     private final AbstractKafkaConfiguration<UUID,PipeStream> kafkaConfiguration;
 
     @Inject
-    public ApicurioKafkaSerdeFactory(KafkaConsumerConfiguration<UUID, PipeStream> kafkaConfiguration) {
+    public ApicurioKafkaSerdeFactory(
+            @Value("${apicurio.registry.url}")  String apicurioRegistryUrl,
+            KafkaConsumerConfiguration<UUID, PipeStream> kafkaConfiguration) {
+        DEFAULT_REGISTRY_URL = apicurioRegistryUrl;
         this.kafkaConfiguration = kafkaConfiguration;
         log.info("Initializing ApicurioKafkaSerdeFactory");
     }
@@ -42,14 +46,13 @@ public class ApicurioKafkaSerdeFactory implements KafkaSerdeFactory {
      * Get a key deserializer for the given pipeline configuration.
      * For Apicurio, we typically use StringDeserializer for keys.
      *
-     * @param pipelineName The name of the pipeline (often the groupId).
      * @param <K> The key type.
      * @return A configured key deserializer.
      */
     @SuppressWarnings("unchecked")
     @Override
-    public <K>Deserializer<K> getKeyDeserializer(String pipelineName) {
-        log.debug("Creating key deserializer for pipeline '{}' with Apicurio Registry", pipelineName);
+    public <K>Deserializer<K> getKeyDeserializer() {
+        log.debug("Creating key deserializer for pipeline with Apicurio Registry");
         // For keys, we typically use UUIDDeserializer
         return (Deserializer<K>) new UUIDDeserializer();
     }
@@ -57,24 +60,21 @@ public class ApicurioKafkaSerdeFactory implements KafkaSerdeFactory {
 
     /**
      * Get a key serializer for the given pipeline configuration.
-     *
-     * @param pipelineName The name of the pipeline (often the groupId).
      * @return A configured key serializer.
      */
     @Override
-    public <K>Serializer<K> getKeySerializer(String pipelineName) {
+    public <K>Serializer<K> getKeySerializer() {
         return (Serializer<K>) new UUIDSerializer();
     }
 
     /**
      * Get a value serializer for the given pipeline configuration.
      *
-     * @param pipelineName The name of the pipeline (often the groupId).
      * @return A configured value serializer.
      */
     @Override
-    public <V> Serializer<V> getValueSerializer(String pipelineName) {
-        log.debug("Creating value serializer for pipeline '{}' with Apicurio Registry", pipelineName);
+    public <V> Serializer<V> getValueSerializer() {
+        log.debug("Creating value serializer for pipeline with Apicurio Registry");
 
         // Get base configuration from Kafka config
         Map<String, Object> configs = new HashMap<>();
@@ -98,8 +98,8 @@ public class ApicurioKafkaSerdeFactory implements KafkaSerdeFactory {
         ProtobufKafkaSerializer<PipeStream> serializer = new ProtobufKafkaSerializer<>();
         serializer.configure(configs, false); // false = value serializer
 
-        log.info("Created Apicurio Registry serializer for pipeline '{}' with registry={}",
-                pipelineName, registryUrl);
+        log.info("Created Apicurio Registry serializer for pipeline with registry={}",
+                registryUrl);
 
         return (Serializer<V>) serializer;
     }
@@ -108,14 +108,13 @@ public class ApicurioKafkaSerdeFactory implements KafkaSerdeFactory {
      * Get a value deserializer for the given pipeline configuration.
      * For Apicurio, we use ProtobufKafkaDeserializer configured with the appropriate settings.
      *
-     * @param pipelineName The name of the pipeline (often the groupId).
      * @param <V> The value type.
      * @return A configured value deserializer.
      */
     @Override
     @SuppressWarnings("unchecked")
-    public <V> Deserializer<V> getValueDeserializer(String pipelineName) {
-        log.debug("Creating value deserializer for pipeline '{}' with Apicurio Registry", pipelineName);
+    public <V> Deserializer<V> getValueDeserializer() {
+        log.debug("Creating value deserializer for pipeline with Apicurio Registry");
 
         // Get base configuration from Kafka config
         Map<String, Object> configs = new HashMap<>();
@@ -141,8 +140,7 @@ public class ApicurioKafkaSerdeFactory implements KafkaSerdeFactory {
         ProtobufKafkaDeserializer<PipeStream> deserializer = new ProtobufKafkaDeserializer<>();
         deserializer.configure(configs, false); // false = value deserializer
 
-        log.info("Created Apicurio Registry deserializer for pipeline '{}' with registry={}, returnClass={}",
-                pipelineName, registryUrl, returnClass);
+        log.info("Created Apicurio Registry deserializer for pipeline with registry={}, returnClass={}", registryUrl, returnClass);
 
         return (Deserializer<V>) deserializer;
     }

@@ -1,6 +1,6 @@
 package com.krickert.search.config.consul.util;
 
-import com.krickert.search.config.consul.util.ConsulTestUtils;
+import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
@@ -30,22 +30,20 @@ public abstract class AbstractConsulIntegrationTest implements TestPropertyProvi
 
     private static final Logger LOG_ABSTRACT = LoggerFactory.getLogger(AbstractConsulIntegrationTest.class);
 
-    // Inject the utility bean responsible for Consul cleanup
+    // Inject the service responsible for Consul operations
     @Inject
-    protected ConsulTestUtils consulTestUtils;
+    protected ConsulKvService consulKvService;
 
     // Define the base Consul KV path used by your application/tests
     // It's often good practice to have tests use a dedicated root path.
-    // Fetching from ConsulKvService might be better if the path is configurable,
-    // but requires context to be fully up. A fixed path might be safer in @BeforeEach.
-    // @Inject ConsulKvService consulKvService; // Inject if needed to get path dynamically
+    // We can use consulKvService.getFullPath() if needed, but a fixed path might be safer in @BeforeEach.
     protected final String consulConfigBasePath = "config/pipeline"; // Or fetch dynamically
 
     @BeforeEach
     void setUpConsulState() {
         LOG_ABSTRACT.info("Executing @BeforeEach: Cleaning Consul state under prefix '{}'...", consulConfigBasePath);
         // Clean up Consul KV store before each test method
-        boolean cleaned = consulTestUtils.resetConsulState(consulConfigBasePath);
+        boolean cleaned = consulKvService.resetConsulState(consulConfigBasePath).block();
         assertTrue(cleaned, "Consul state should be reset successfully before test.");
         LOG_ABSTRACT.info("Consul state cleaned.");
 
@@ -56,7 +54,7 @@ public abstract class AbstractConsulIntegrationTest implements TestPropertyProvi
     void tearDownConsulState() {
         LOG_ABSTRACT.info("Executing @AfterEach: Cleaning Consul state under prefix '{}'...", consulConfigBasePath);
         // Clean up Consul KV store after each test method
-        boolean cleaned = consulTestUtils.resetConsulState(consulConfigBasePath);
+        boolean cleaned = consulKvService.resetConsulState(consulConfigBasePath).block();
         // Log a warning if cleanup fails, but don't fail the test itself during teardown
         if (!cleaned) {
             LOG_ABSTRACT.warn("Consul state cleanup might have failed after test.");

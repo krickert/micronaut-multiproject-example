@@ -20,9 +20,11 @@ consul:
   client:
     enabled: true
 
+
 grpc:
   server:
     enabled: false
+    port: ${random.port}
 
 # Logging configuration
 logger:
@@ -32,6 +34,9 @@ logger:
 
 kafka:
   enabled: true
+  schema:
+    registry:
+      type: apicurio
 
 
 testcontainers:
@@ -40,3 +45,4 @@ testcontainers:
   moto: false
   consul: true
   apicurio: true
+

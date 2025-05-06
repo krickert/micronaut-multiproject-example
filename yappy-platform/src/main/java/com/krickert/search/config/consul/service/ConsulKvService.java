@@ -283,6 +283,100 @@ public class ConsulKvService {
     }
 
     /**
+     * Resets Consul state by deleting all keys under the config path.
+     * This is useful for ensuring a clean state between tests or during application reset.
+     *
+     * @param path the base path for configuration in Consul KV store
+     * @return a Mono that emits true if the operation was successful, false otherwise
+     */
+    public Mono<Boolean> resetConsulState(String path) {
+        LOG.info("Resetting Consul state by deleting all keys under: {}", path);
+
+        // First attempt to delete keys
+        return deleteKeysWithPrefix(path)
+            .flatMap(result -> {
+                // Verify that keys were actually deleted
+                return getKeysWithPrefix(path)
+                    .flatMap(remainingKeys -> {
+                        if (remainingKeys != null && !remainingKeys.isEmpty()) {
+                            LOG.warn("Keys still exist after deletion attempt: {}", remainingKeys);
+                            // Try one more time with a small delay
+                            return Mono.delay(java.time.Duration.ofMillis(100))
+                                .then(Mono.fromCallable(() -> {
+                                    try {
+                                        String encodedPath = encodeKey(path);
+                                        keyValueClient.deleteKeys(encodedPath);
+                                        return true;
+                                    } catch (Exception e) {
+                                        LOG.error("Error in second attempt to delete keys: {}", path, e);
+                                        return false;
+                                    }
+                                }))
+                                .flatMap(secondResult -> {
+                                    // Check again
+                                    return getKeysWithPrefix(path)
+                                        .map(keysAfterRetry -> {
+                                            if (keysAfterRetry != null && !keysAfterRetry.isEmpty()) {
+                                                LOG.error("Failed to delete keys after second attempt: {}", keysAfterRetry);
+                                                return false;
+                                            }
+                                            return secondResult;
+                                        });
+                                });
+                        }
+                        return Mono.just(result);
+                    })
+                    .onErrorResume(e -> {
+                        LOG.error("Error verifying key deletion: {}", path, e);
+                        return Mono.just(false);
+                    });
+            });
+    }
+
+    /**
+     * Blocking version of resetConsulState.
+     * Resets Consul state by deleting all keys under the config path.
+     * This is useful for ensuring a clean state between tests or during application reset.
+     *
+     * @param path the base path for configuration in Consul KV store
+     * @return true if the operation was successful, false otherwise
+     */
+    public boolean resetConsulStateBlocking(String path) {
+        LOG.info("Resetting Consul state by deleting all keys under (blocking): {}", path);
+
+        try {
+            // First attempt to delete keys
+            String encodedPath = encodeKey(path);
+            keyValueClient.deleteKeys(encodedPath);
+
+            // Verify that keys were actually deleted
+            java.util.List<String> remainingKeys = keyValueClient.getKeys(encodedPath);
+            if (remainingKeys != null && !remainingKeys.isEmpty()) {
+                LOG.warn("Keys still exist after deletion attempt: {}", remainingKeys);
+                // Try one more time with a small delay
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                keyValueClient.deleteKeys(encodedPath);
+
+                // Check again
+                remainingKeys = keyValueClient.getKeys(encodedPath);
+                if (remainingKeys != null && !remainingKeys.isEmpty()) {
+                    LOG.error("Failed to delete keys after second attempt: {}", remainingKeys);
+                    return false;
+                }
+            }
+
+            return true;
+        } catch (Exception e) {
+            LOG.error("Error resetting Consul state: {}", path, e);
+            return false;
+        }
+    }
+
+    /**
      * Gets the ModifyIndex of a key in Consul KV store.
      * This is useful for Compare-And-Swap (CAS) operations.
      *

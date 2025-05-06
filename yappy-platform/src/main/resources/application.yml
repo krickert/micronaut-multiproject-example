@@ -5,10 +5,13 @@ micronaut:
     port: 61100
 
   # Caching configuration
-  caches:
-    pipeline-configs:
-      maximum-size: 50 # Smaller cache for testing potentially
-      expire-after-write: 30s # Shorter expiry for testing
+#  caches:
+#    pipeline-configs:
+#      maximum-size: 50 # Smaller cache for testing potentially
+#      expire-after-write: 30s # Shorter expiry for testing
+#    discovery-client:
+#      enabled: false
+
 
   # Enable the management endpoints for health checks and refresh
   management:

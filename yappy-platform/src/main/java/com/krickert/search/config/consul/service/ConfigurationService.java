@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
-@CacheConfig("pipeline-configs")
+//@CacheConfig("pipeline-configs")
 @Singleton
 @Refreshable
 public class ConfigurationService implements ApplicationEventListener<StartupEvent> {
@@ -55,11 +55,41 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
      *
      * @param pipelineName The name of the pipeline whose configuration should be removed from the cache.
      */
-    @CacheInvalidate(parameters = "pipelineName") // Matches the parameter name
+//    @CacheInvalidate(parameters = "pipelineName") // Matches the parameter name
     public void invalidatePipelineConfig(String pipelineName) {
         // The @CacheInvalidate annotation handles the actual cache removal.
         // This method body is primarily for logging or potential pre/post invalidation logic.
         LOG.info("Invalidating cache for pipeline configuration: {}", pipelineName);
+        // No explicit cache interaction needed here if using annotations correctly.
+    }
+
+    /**
+     * Invalidates the cache entry for a specific service configuration.
+     * This method is typically called when an external event (like a Kafka message)
+     * indicates that the configuration for this service has changed in Consul.
+     *
+     * @param serviceName The name of the service whose configuration should be removed from the cache.
+     */
+    @CacheInvalidate(parameters = "serviceName") // Matches the parameter name
+    public void invalidateServiceConfig(String serviceName) {
+        // The @CacheInvalidate annotation handles the actual cache removal.
+        // This method body is primarily for logging or potential pre/post invalidation logic.
+        LOG.info("Invalidating cache for service configuration: {}", serviceName);
+        // No explicit cache interaction needed here if using annotations correctly.
+    }
+
+    /**
+     * Invalidates the cache entry for a specific application configuration.
+     * This method is typically called when an external event (like a Kafka message)
+     * indicates that the configuration for this application has changed in Consul.
+     *
+     * @param applicationName The name of the application whose configuration should be removed from the cache.
+     */
+    @CacheInvalidate(parameters = "applicationName") // Matches the parameter name
+    public void invalidateApplicationConfig(String applicationName) {
+        // The @CacheInvalidate annotation handles the actual cache removal.
+        // This method body is primarily for logging or potential pre/post invalidation logic.
+        LOG.info("Invalidating cache for application configuration: {}", applicationName);
         // No explicit cache interaction needed here if using annotations correctly.
     }
 
