@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Test class to verify the functionality of the ReloadServiceEndpoint.
  * This test uses the Micronaut context and real gRPC calls.
  */
-@MicronautTest
+@MicronautTest(environments = "grpc-test")
 public class ReloadServiceEndpointTest implements TestPropertyProvider {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReloadServiceEndpointTest.class);
