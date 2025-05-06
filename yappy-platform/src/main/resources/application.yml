@@ -3,8 +3,10 @@ micronaut:
     name: consul-config-service
   server:
     port: 61100
-
-  # Caching configuration
+    netty:
+      worker:
+        shutdown-quiet-period: 100ms
+        shutdown-timeout: 1s
 #  caches:
 #    pipeline-configs:
 #      maximum-size: 50 # Smaller cache for testing potentially
@@ -72,6 +74,7 @@ kafka:
       request-timeout: 60s
       recreate-poll-timeout: 120s
       recreate-poll-interval: 5s
+
 
 # Define topic names using custom configuration properties
 app:

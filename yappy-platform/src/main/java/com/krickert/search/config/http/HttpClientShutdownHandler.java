@@ -59,7 +59,7 @@ public class HttpClientShutdownHandler {
         // Add a small delay to allow resources to be released
         try {
             LOG.debug("Waiting for HTTP clients to release resources");
-            TimeUnit.MILLISECONDS.sleep(200);
+            TimeUnit.MILLISECONDS.sleep(20);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             LOG.warn("Interrupted while waiting for HTTP clients to release resources", e);
