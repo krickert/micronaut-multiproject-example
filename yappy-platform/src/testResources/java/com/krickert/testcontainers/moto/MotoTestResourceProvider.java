@@ -20,9 +20,9 @@ public class MotoTestResourceProvider extends AbstractTestContainersProvider<Gen
     public static final String PROPERTY_TESTCONTAINERS_MOTO_ENABLED = TESTCONTAINERS_PREFIX + ".moto";
 
     // Moto Properties
-    public static final String MOTO_PREFIX = "moto";
-    public static final String PROPERTY_MOTO_REGISTRY_URL = MOTO_PREFIX + ".registry.url";
-    public static final String PROPERTY_MOTO_REGISTRY_NAME = MOTO_PREFIX + ".registry.name";
+    public static final String GLUE_PREFIX = "glue";
+    public static final String PROPERTY_MOTO_REGISTRY_URL = GLUE_PREFIX + ".registry.url";
+    public static final String PROPERTY_MOTO_REGISTRY_NAME = GLUE_PREFIX + ".registry.name";
 
     // AWS Properties
     public static final String PROPERTY_AWS_ACCESS_KEY = "aws.access-key-id";

@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.Collections;
 
 /**
- * Global exception handler for SchemaValidationException.
+ * Global exceptions handler for SchemaValidationException.
  * This handler will convert SchemaValidationException to a 400 Bad Request response
  * with a JSON body containing validation error details.
  */

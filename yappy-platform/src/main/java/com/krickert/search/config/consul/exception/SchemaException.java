@@ -1,4 +1,4 @@
-// src/main/java/com/krickert/search/config/consul/exception/SchemaException.java
+// src/main/java/com/krickert/search/config/consul/exceptions/SchemaException.java
 package com.krickert.search.config.consul.exception;
 
 // Simple base class (if it doesn't exist already)

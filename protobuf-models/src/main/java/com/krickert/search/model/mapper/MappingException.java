@@ -3,7 +3,7 @@
 package com.krickert.search.model.mapper;
 
 /**
- * Custom exception for errors during the mapping process.
+ * Custom exceptions for errors during the mapping process.
  */
 public class MappingException extends Exception {
     private final String failedRule;

@@ -119,7 +119,7 @@ public class ConsulPipelineConfigControllerTest {
             assertNotNull(body.get("pipelines"));
             assertTrue(body.get("pipelines").toString().contains("pipeline1"));
         } catch (HttpClientResponseException e) {
-            fail("Should not throw exception: " + e.getMessage());
+            fail("Should not throw exceptions: " + e.getMessage());
         }
     }
 
@@ -144,7 +144,7 @@ public class ConsulPipelineConfigControllerTest {
             // Just verify that the response contains a status field
             assertNotNull(body.get("status"));
         } catch (HttpClientResponseException e) {
-            fail("Should not throw exception: " + e.getMessage());
+            fail("Should not throw exceptions: " + e.getMessage());
         }
     }
 
@@ -178,7 +178,7 @@ public class ConsulPipelineConfigControllerTest {
                 assertNotNull(body.get("service"));
             }
         } catch (HttpClientResponseException e) {
-            fail("Should not throw exception: " + e.getMessage());
+            fail("Should not throw exceptions: " + e.getMessage());
         }
     }
 
@@ -194,10 +194,10 @@ public class ConsulPipelineConfigControllerTest {
             HttpRequest<?> request = HttpRequest.PUT("/api/pipeline/config/non-existent-pipeline/service", dto)
                 .accept(MediaType.APPLICATION_JSON_TYPE);
 
-            // This should throw an exception with a 404 status
+            // This should throw an exceptions with a 404 status
             client.toBlocking().exchange(request, Map.class);
 
-            fail("Should throw exception with 404 status");
+            fail("Should throw exceptions with 404 status");
         } catch (HttpClientResponseException e) {
             // Verify
             assertEquals(HttpStatus.NOT_FOUND, e.getStatus());
@@ -238,7 +238,7 @@ public class ConsulPipelineConfigControllerTest {
             // The implementation of the removeService method in PipelineConfigService
             // has been verified to correctly remove the service and its references.
         } catch (HttpClientResponseException e) {
-            fail("Should not throw exception: " + e.getMessage());
+            fail("Should not throw exceptions: " + e.getMessage());
         }
     }
 
@@ -249,10 +249,10 @@ public class ConsulPipelineConfigControllerTest {
             HttpRequest<?> request = HttpRequest.DELETE("/api/pipeline/config/non-existent-pipeline/service/chunker")
                 .accept(MediaType.APPLICATION_JSON_TYPE);
 
-            // This should throw an exception with a 404 status
+            // This should throw an exceptions with a 404 status
             client.toBlocking().exchange(request, Map.class);
 
-            fail("Should throw exception with 404 status");
+            fail("Should throw exceptions with 404 status");
         } catch (HttpClientResponseException e) {
             // Verify
             assertEquals(HttpStatus.NOT_FOUND, e.getStatus());
@@ -268,10 +268,10 @@ public class ConsulPipelineConfigControllerTest {
             HttpRequest<?> request = HttpRequest.DELETE("/api/pipeline/config/pipeline1/service/non-existent-service")
                 .accept(MediaType.APPLICATION_JSON_TYPE);
 
-            // This should throw an exception with a 404 status
+            // This should throw an exceptions with a 404 status
             client.toBlocking().exchange(request, Map.class);
 
-            fail("Should throw exception with 404 status");
+            fail("Should throw exceptions with 404 status");
         } catch (HttpClientResponseException e) {
             // Verify
             assertEquals(HttpStatus.NOT_FOUND, e.getStatus());

@@ -1,4 +1,4 @@
-// File: micronaut-multiproject-example-new/consul-config-service/src/main/java/com/krickert/search/config/consul/exception/PipelineNotFoundExceptionHandler.java
+// File: micronaut-multiproject-example-new/consul-config-service/src/main/java/com/krickert/search/config/consul/exceptions/PipelineNotFoundExceptionHandler.java
 package com.krickert.search.config.consul.exception;
 
 import io.micronaut.context.annotation.Requires;

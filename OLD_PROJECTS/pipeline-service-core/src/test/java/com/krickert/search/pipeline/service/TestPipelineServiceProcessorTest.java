@@ -57,10 +57,10 @@ public class TestPipelineServiceProcessorTest {
 
     @Test
     void testProcessWithException() {
-        // Create a null PipeStream to force an exception
+        // Create a null PipeStream to force an exceptions
         PipeStream nullStream = null;
 
-        // Process the null PipeStream (should throw an exception internally)
+        // Process the null PipeStream (should throw an exceptions internally)
         PipeServiceDto result = processor.process(nullStream);
 
         // Extract the response from the result

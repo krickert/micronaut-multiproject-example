@@ -14,7 +14,7 @@ import java.util.Map;
 // If it IS used, adjust accordingly.
 
 /**
- * Global exception handler for IllegalArgumentException.
+ * Global exceptions handler for IllegalArgumentException.
  * This handler will convert IllegalArgumentException to a 400 Bad Request response
  * with a JSON body containing the error message.
  */

@@ -206,7 +206,7 @@ class MappingExecutorTest {
          when(mockPathResolver.resolvePath(same(targetBuilder), eq("non_existent_field"), eq(true), eq(ruleStr)))
              .thenThrow(notFoundException);
 
-         // Execution should NOT throw an exception
+         // Execution should NOT throw an exceptions
          assertDoesNotThrow(() -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings));
 
          // Verify PathResolver was called
@@ -225,7 +225,7 @@ class MappingExecutorTest {
 
         MappingException e = assertThrows(MappingException.class, () -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings));
 
-        assertSame(parseException, e); // Should propagate the parser exception
+        assertSame(parseException, e); // Should propagate the parser exceptions
         verify(mockRuleParser).parseRules(ruleStrings);
         verifyNoInteractions(mockPathResolver, mockValueHandler);
     }
@@ -242,7 +242,7 @@ class MappingExecutorTest {
 
         MappingException e = assertThrows(MappingException.class, () -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings));
 
-        assertSame(valueException, e); // Should propagate the getValue exception
+        assertSame(valueException, e); // Should propagate the getValue exceptions
         verify(mockRuleParser).parseRules(ruleStrings);
         verify(mockValueHandler).getValue(any(), eq("source_error"), eq(ruleStr));
         verifyNoMoreInteractions(mockValueHandler); // setValue should not be called
@@ -262,7 +262,7 @@ class MappingExecutorTest {
 
         MappingException e = assertThrows(MappingException.class, () -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings));
 
-        assertSame(valueException, e); // Should propagate the setValue exception
+        assertSame(valueException, e); // Should propagate the setValue exceptions
         verify(mockRuleParser).parseRules(ruleStrings);
         verify(mockValueHandler).getValue(any(), eq("title"), eq(ruleStr));
         verify(mockValueHandler).setValue(any(), eq("error_target"), eq("Some Title"), eq("="), eq(ruleStr));
@@ -283,7 +283,7 @@ class MappingExecutorTest {
 
         MappingException e = assertThrows(MappingException.class, () -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings));
 
-        assertSame(pathException, e); // Should propagate the path exception
+        assertSame(pathException, e); // Should propagate the path exceptions
         verify(mockRuleParser).parseRules(ruleStrings);
         verify(mockPathResolver).resolvePath(same(targetBuilder), eq("error_path"), eq(true), eq(ruleStr));
         verifyNoInteractions(mockValueHandler);

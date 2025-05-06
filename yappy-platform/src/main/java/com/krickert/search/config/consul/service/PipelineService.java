@@ -151,7 +151,7 @@ public class PipelineService {
                      return Mono.just(pipeline);
                  } else {
                      LOG.debug("Pipeline '{}' not found in manager after checking cache and Consul.", pipelineName);
-                     // Throw the specific exception synchronously; defer will turn it into Mono.error
+                     // Throw the specific exceptions synchronously; defer will turn it into Mono.error
                      throw new PipelineNotFoundException("Pipeline not found: " + pipelineName);
                  }
              } catch (PipelineNotFoundException pnfe) {
@@ -251,14 +251,14 @@ public class PipelineService {
                                  String validationErrors = jsonOptions.getValidationErrors(); // Get the specific error message(s)
                                  LOG.warn("Schema validation failed for service {} in pipeline {}: {}",
                                          serviceName, pipelineName, validationErrors);
-                                 // Throw exception with the specific error message from the validator
+                                 // Throw exceptions with the specific error message from the validator
                                  throw new SchemaValidationException(
                                          "Validation failed for service " + serviceName + ": " + validationErrors,
                                          // Pass the detailed message in the Set as well if desired, or keep it simple
                                          Set.of(validationErrors != null ? validationErrors : "Validation failed.")
                                  );
                              }
-                             // If validateConfig throws an internal parsing exception (like JsonParseException),
+                             // If validateConfig throws an internal parsing exceptions (like JsonParseException),
                              // it should ideally be caught and handled within DefaultSchemaServiceConfig or allowed
                              // to propagate up to be caught by a more general handler (like CombinedSchemaExceptionHandler's base case).
                              // Removing the broad catch block here allows the specific SchemaValidationException to propagate cleanly.
@@ -281,7 +281,7 @@ public class PipelineService {
                              } else {
                                  LOG.error("Update persistence attempt for pipeline '{}' returned false.", pipelineName);
                                  // When CAS operation fails, it's likely due to a version conflict
-                                 // Get the latest version from Consul to include in the exception
+                                 // Get the latest version from Consul to include in the exceptions
                                  PipelineConfigDto latestPipeline = pipelineConfigManager.getPipeline(pipelineName);
                                  return Mono.error(new PipelineVersionConflictException(
                                      pipelineName,

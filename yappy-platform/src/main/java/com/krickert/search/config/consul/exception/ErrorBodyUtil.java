@@ -1,4 +1,4 @@
-// File: micronaut-multiproject-example-new/consul-config-service/src/main/java/com/krickert/search/config/consul/exception/ErrorBodyUtil.java
+// File: micronaut-multiproject-example-new/consul-config-service/src/main/java/com/krickert/search/config/consul/exceptions/ErrorBodyUtil.java
 package com.krickert.search.config.consul.exception;
 
 import io.micronaut.http.HttpStatus;

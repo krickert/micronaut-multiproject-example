@@ -106,7 +106,7 @@ public class SchemaController {
         log.debug("Controller: POST validate config for {}", serviceImplementationName);
         // Synchronous check for null body
         if (configParams == null) {
-            // Throw standard exception, let handler manage
+            // Throw standard exceptions, let handler manage
             throw new IllegalArgumentException("Request body (configParams) cannot be null");
         }
 

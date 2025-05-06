@@ -177,7 +177,7 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
 
     @Test @Order(1)
     @DisplayName("Update Pipeline: Add Service with Valid Custom JSON")
-    void testAddServiceWithValidCustomConfig() throws JsonProcessingException { // Add exception for objectMapper
+    void testAddServiceWithValidCustomConfig() throws JsonProcessingException { // Add exceptions for objectMapper
         // 1. Arrange: Create a pipeline and register the schema for the service
         PipelineConfigDto initialPipeline = createTestPipeline(TEST_PIPELINE_NAME);
         putSchema(TEST_SERVICE_IMPL, VALID_SERVICE_SCHEMA_JSON);
@@ -283,7 +283,7 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
          HttpRequest<?> updateRequest = HttpRequest.PUT(PIPELINE_API_BASE_PATH + "/" + TEST_PIPELINE_NAME, initialPipeline)
                  .contentType(MediaType.APPLICATION_JSON);
          HttpClientResponseException exception = assertThrows(HttpClientResponseException.class, () -> {
-             client.toBlocking().exchange(updateRequest, PipelineConfigDto.class); // Expect exception
+             client.toBlocking().exchange(updateRequest, PipelineConfigDto.class); // Expect exceptions
          }, "Update with invalid config (wrong type) should fail");
 
          assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus(), "Status should be 400 Bad Request");
@@ -324,7 +324,7 @@ class PipelineCustomConfigControllerTest implements TestPropertyProvider {
          // Inside testAddServiceWithMalformedCustomConfigJson()
 
          HttpClientResponseException exception = assertThrows(HttpClientResponseException.class, () -> {
-             client.toBlocking().exchange(updateRequest, PipelineConfigDto.class); // Expect exception
+             client.toBlocking().exchange(updateRequest, PipelineConfigDto.class); // Expect exceptions
          }, "Update with malformed JSON config should fail");
 
          assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus(), "Status should be 400 Bad Request");

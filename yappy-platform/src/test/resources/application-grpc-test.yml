@@ -3,10 +3,6 @@ micronaut:
     name: consul-config-service-test
   server:
     port: ${random.port}
-    netty:
-      worker:
-        shutdown-quiet-period: 2s
-        shutdown-timeout: 5s
   config-client:
     enabled: false
   # OpenAPI configuration

@@ -195,7 +195,7 @@ public class PipelineConfig {
         if (existingPipeline != null) {
             // Check if the versions match
             if (existingPipeline.getPipelineVersion() != pipeline.getPipelineVersion()) {
-                // Versions don't match, throw an exception
+                // Versions don't match, throw an exceptions
                 throw new PipelineVersionConflictException(
                     pipelineName,
                     pipeline.getPipelineVersion(),

@@ -153,7 +153,7 @@ public class PipelineConcurrencyTest implements TestPropertyProvider {
                             }
                         } catch (Exception e) {
                             otherErrorCount.incrementAndGet();
-                            log.error("[DEBUG_LOG] Thread " + threadNum + " got unexpected exception: " + e.getClass().getName() + " - " + e.getMessage(), e);
+                            log.error("[DEBUG_LOG] Thread " + threadNum + " got unexpected exceptions: " + e.getClass().getName() + " - " + e.getMessage(), e);
                         }
                     } finally {
                         log.debug("[DEBUG_LOG] Thread " + threadNum + " completed");

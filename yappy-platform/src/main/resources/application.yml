@@ -67,6 +67,11 @@ kafka:
   producer:
     dynamic:
       enabled: true
+  admin:
+    service:
+      request-timeout: 60s
+      recreate-poll-timeout: 120s
+      recreate-poll-interval: 5s
 
 # Define topic names using custom configuration properties
 app:

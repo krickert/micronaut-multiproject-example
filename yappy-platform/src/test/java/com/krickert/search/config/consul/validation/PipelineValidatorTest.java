@@ -61,7 +61,7 @@ public class PipelineValidatorTest {
         // Verify that a loop is detected
         assertTrue(PipelineValidator.hasLoop(pipeline, serviceC));
 
-        // Verify that adding the service throws an exception
+        // Verify that adding the service throws an exceptions
         Exception exception = assertThrows(IllegalArgumentException.class, () -> {
             pipeline.addOrUpdateService(serviceC);
         });
@@ -91,7 +91,7 @@ public class PipelineValidatorTest {
         // Verify that a loop is detected
         assertTrue(PipelineValidator.hasLoop(pipeline, serviceC));
 
-        // Verify that adding the service throws an exception
+        // Verify that adding the service throws an exceptions
         Exception exception = assertThrows(IllegalArgumentException.class, () -> {
             pipeline.addOrUpdateService(serviceC);
         });

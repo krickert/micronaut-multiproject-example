@@ -111,7 +111,7 @@ public class PipelineVersioningTest implements TestPropertyProvider {
             () -> pipelineConfig.addOrUpdatePipeline(session1Pipeline).block()
         );
 
-        // Verify the exception details
+        // Verify the exceptions details
         assertEquals("test-pipeline", exception.getPipelineName());
         assertEquals(1, exception.getExpectedVersion());
         assertEquals(2, exception.getActualVersion());
@@ -163,7 +163,7 @@ public class PipelineVersioningTest implements TestPropertyProvider {
             () -> pipelineConfig.addOrUpdatePipeline(session2Pipeline).block()
         );
 
-        // Verify the exception details
+        // Verify the exceptions details
         assertEquals("test-pipeline", exception.getPipelineName());
         assertEquals(1, exception.getExpectedVersion());
         assertEquals(2, exception.getActualVersion());

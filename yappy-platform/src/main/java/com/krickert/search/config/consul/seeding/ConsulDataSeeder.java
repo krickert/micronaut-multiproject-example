@@ -78,7 +78,7 @@ public class ConsulDataSeeder implements ApplicationEventListener<StartupEvent> 
             }
         } catch (Exception e) {
             LOG.error("Exception during blocking Consul data seeding process via StartupEvent", e);
-            throw new RuntimeException("ConsulDataSeeder failed to seed data due to exception.", e);
+            throw new RuntimeException("ConsulDataSeeder failed to seed data due to exceptions.", e);
         }
         LOG.info("ConsulDataSeeder onApplicationEvent finished."); // Log at the very end
     }

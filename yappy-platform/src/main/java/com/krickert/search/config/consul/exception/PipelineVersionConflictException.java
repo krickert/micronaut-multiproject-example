@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 
 /**
  * Exception thrown when there is a version conflict during pipeline operations.
- * This exception indicates that the version of the pipeline in the system has
+ * This exceptions indicates that the version of the pipeline in the system has
  * changed since it was originally loaded or accessed, which creates a conflict.
  */
 public class PipelineVersionConflictException extends RuntimeException {
@@ -34,7 +34,7 @@ public class PipelineVersionConflictException extends RuntimeException {
      * It provides a reference to the most recent modification or update
      * made to the pipeline.
      *<br/>
-     * This field is immutable and primarily used in exception handling
+     * This field is immutable and primarily used in exceptions handling
      * to specify the last update time of the pipeline during a version conflict.
      */
     private final LocalDateTime lastUpdated;

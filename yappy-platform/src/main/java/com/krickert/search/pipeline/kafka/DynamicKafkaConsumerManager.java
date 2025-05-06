@@ -305,9 +305,9 @@ package com.krickert.search.pipeline.kafka; // Assuming same package
 //                            try {
 //                                log.info("[{}] Processing record from topic {}: key={}", pipelineName, record.topic(), record.key());
 //                                pipelineService.processKafkaMessage(record.value());
-//                                consumer.commitAsync((offsets, exception) -> {
-//                                    if (exception!= null) {
-//                                        log.error("[{}] Failed to commit offset {} for group {}: {}", pipelineName, offsets, groupId, exception.getMessage(), exception);
+//                                consumer.commitAsync((offsets, exceptions) -> {
+//                                    if (exceptions!= null) {
+//                                        log.error("[{}] Failed to commit offset {} for group {}: {}", pipelineName, offsets, groupId, exceptions.getMessage(), exceptions);
 //                                        String dlqTopic = record.topic() + "-dlq"; // Consider making configurable
 //                                        try {
 //                                            log.info("[{}] Sending message with commit failure to DLQ topic: {}", pipelineName, dlqTopic);
@@ -331,10 +331,10 @@ package com.krickert.search.pipeline.kafka; // Assuming same package
 //                                    Route dlqRoute = Route.newBuilder().setDestination(dlqTopic).build();
 //                                    kafkaForwarder.forwardToKafka(record.value(), dlqRoute);
 //
-//                                    consumer.commitAsync((offsets, exception) -> {
-//                                        if (exception!= null) {
+//                                    consumer.commitAsync((offsets, exceptions) -> {
+//                                        if (exceptions!= null) {
 //                                            log.error("[{}] Failed to commit offset {} after DLQ for group {}: {}",
-//                                                    pipelineName, offsets, groupId, exception.getMessage(), exception);
+//                                                    pipelineName, offsets, groupId, exceptions.getMessage(), exceptions);
 //                                        } else {
 //                                            log.trace("[{}] Offset committed after DLQ: {}", pipelineName, offsets);
 //                                        }

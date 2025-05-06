@@ -70,7 +70,7 @@ public class PipeStepRegistrationManagerDisabledTest implements TestPropertyProv
         // Act - Trigger service registration with empty pipeline name
         pipeStepRegistrationManager.onApplicationEvent(null);
 
-        // No assertions needed - we're just verifying that the service doesn't throw an exception
+        // No assertions needed - we're just verifying that the service doesn't throw an exceptions
         // and can run without being registered to a pipeline
 
         // Try to get all pipelines to verify no new pipeline was created

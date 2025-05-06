@@ -34,3 +34,7 @@ out/
 
 docs/.asciidoctor
 .micronaut/
+
+OLD_PROJECTS
+
+.DS_Store

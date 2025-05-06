@@ -170,7 +170,7 @@ class PipeStepRegistrationManagerTest implements TestPropertyProvider {
             pipelineService.getPipeline("test-pipeline").block();
             fail("Pipeline should not exist at this point");
         } catch (Exception e) {
-            // Expected exception
+            // Expected exceptions
             LOG.info("Confirmed pipeline does not exist: {}", e.getMessage());
         }
 

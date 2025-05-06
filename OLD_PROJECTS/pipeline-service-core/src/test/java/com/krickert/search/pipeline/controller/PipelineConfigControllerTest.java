@@ -58,7 +58,7 @@ public class PipelineConfigControllerTest {
             assertNotNull(body.get("pipelines"));
             assertTrue(body.get("pipelines").toString().contains("test-pipeline"));
         } catch (HttpClientResponseException e) {
-            fail("Should not throw exception: " + e.getMessage());
+            fail("Should not throw exceptions: " + e.getMessage());
         }
     }
 
@@ -90,7 +90,7 @@ public class PipelineConfigControllerTest {
                     return;
                 }
             }
-            fail("Unexpected exception: " + e.getMessage());
+            fail("Unexpected exceptions: " + e.getMessage());
         }
     }
 
