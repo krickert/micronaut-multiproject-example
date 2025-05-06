@@ -1,16 +1,12 @@
 package com.krickert.search.config.consul.api;
 
 // Keep necessary imports: SchemaNotFoundException, SchemaValidationException, SchemaService, HttpResponse, MediaType, @Controller, @Get, @Put, @Post, @Delete, @PathVariable, @Body, Operation, etc., Mono, Map, Collections
-import com.krickert.search.config.consul.exception.SchemaNotFoundException;
-import com.krickert.search.config.consul.exception.SchemaValidationException;
+
 import com.krickert.search.config.consul.service.SchemaService;
 import io.micronaut.http.HttpResponse;
-import io.micronaut.http.HttpStatus; // Keep if needed for status codes, but maybe not directly
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.*;
-// *** REMOVE ExecuteOn imports and annotation ***
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;

@@ -7,7 +7,6 @@
 
     import java.time.LocalDateTime;
     import java.util.*;
-    import java.util.HashMap;
 
     /**
      * Data Transfer Object for pipeline configuration.

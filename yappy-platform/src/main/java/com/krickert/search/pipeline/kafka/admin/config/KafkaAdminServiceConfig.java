@@ -1,6 +1,7 @@
 package com.krickert.search.pipeline.kafka.admin.config;
 
 import io.micronaut.context.annotation.ConfigurationProperties;
+
 import java.time.Duration;
 
 @ConfigurationProperties("kafka.admin.service")

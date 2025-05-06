@@ -5,7 +5,6 @@ import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.context.annotation.Value;
 import jakarta.annotation.PreDestroy;
-import jakarta.inject.Singleton;
 import okhttp3.ConnectionPool;
 import org.kiwiproject.consul.Consul;
 import org.kiwiproject.consul.KeyValueClient;

@@ -1,18 +1,11 @@
 package com.krickert.search.pipeline.kafka.test;
 
-import io.micronaut.context.annotation.Value;
 import io.micronaut.core.annotation.NonNull;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.glue.GlueClient;
-import software.amazon.awssdk.services.glue.model.*;
 
-import java.net.URI;
 import java.util.Map;
 
 /**

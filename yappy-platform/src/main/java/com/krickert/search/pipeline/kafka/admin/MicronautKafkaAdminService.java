@@ -2,19 +2,15 @@ package com.krickert.search.pipeline.kafka.admin;
 
 import com.krickert.search.pipeline.kafka.admin.config.KafkaAdminServiceConfig;
 import com.krickert.search.pipeline.kafka.admin.exceptions.*;
-// Micronaut specific TaskScheduler
 import io.micronaut.scheduling.TaskScheduler;
 import jakarta.inject.Singleton;
 import org.apache.kafka.clients.admin.*;
 import org.apache.kafka.common.KafkaFuture;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.errors.GroupIdNotFoundException;
-// Using fully qualified name to avoid clash if you had a custom TimeoutException
-// import org.apache.kafka.common.errors.TimeoutExceptionఒ; // Kafka's TimeoutException - This was a placeholder, will use FQN
 import org.apache.kafka.common.errors.TopicExistsException;
 import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
-import org.apache.kafka.common.TopicPartition;
-
 
 import java.time.Duration;
 import java.util.*;
@@ -255,18 +251,22 @@ public class MicronautKafkaAdminService implements KafkaAdminService {
 
     // --- Synchronous Wrappers (for methods covered in Step 1) ---
 
+    @Override
     public void createTopic(TopicOpts topicOpts, String topicName) {
         waitFor(createTopicAsync(topicOpts, topicName), config.getRequestTimeout(), "createTopic: " + topicName);
     }
 
+    @Override
     public void deleteTopic(String topicName) {
         waitFor(deleteTopicAsync(topicName), config.getRequestTimeout(), "deleteTopic: " + topicName);
     }
-    
+
+    @Override
     public boolean doesTopicExist(String topicName) {
         return waitFor(doesTopicExistAsync(topicName), config.getRequestTimeout(), "doesTopicExist: " + topicName);
     }
 
+    @Override
     public void recreateTopic(TopicOpts topicOpts, String topicName) {
         // recreateTopicAsync has internal polling with its own timeout (recreatePollTimeout).
         // The requestTimeout for the synchronous wrapper should accommodate the entire operation.
@@ -274,19 +274,23 @@ public class MicronautKafkaAdminService implements KafkaAdminService {
         Duration combinedTimeout = config.getRequestTimeout().plus(config.getRecreatePollTimeout());
         waitFor(recreateTopicAsync(topicOpts, topicName), combinedTimeout, "recreateTopic: " + topicName);
     }
-    
+
+    @Override
     public TopicDescription describeTopic(String topicName) {
         return waitFor(describeTopicAsync(topicName), config.getRequestTimeout(), "describeTopic: " + topicName);
     }
 
+    @Override
     public Set<String> listTopics() {
         return waitFor(listTopicsAsync(), config.getRequestTimeout(), "listTopics");
     }
 
+    @Override
     public Config getTopicConfiguration(String topicName) {
         return waitFor(getTopicConfigurationAsync(topicName), config.getRequestTimeout(), "getTopicConfiguration: " + topicName);
     }
 
+    @Override
     public void updateTopicConfiguration(String topicName, Map<String, String> configsToUpdate) {
         waitFor(updateTopicConfigurationAsync(topicName, configsToUpdate), config.getRequestTimeout(), "updateTopicConfiguration: " + topicName);
     }

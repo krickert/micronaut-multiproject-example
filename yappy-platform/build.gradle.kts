@@ -149,7 +149,7 @@ dependencies {
     // Explicitly include Wire library to ensure consistent version
     api("com.squareup.wire:wire-schema")
     api("com.squareup.wire:wire-runtime")
-
+    testImplementation(mn.mockito.junit.jupiter)
 }
 
 // Publishing configuration

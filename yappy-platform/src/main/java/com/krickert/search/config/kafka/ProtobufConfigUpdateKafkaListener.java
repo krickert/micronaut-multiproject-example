@@ -1,13 +1,17 @@
 package com.krickert.search.config.kafka;
 
 // Import generated Protobuf classes
+
 import com.krickert.search.config.grpc.ReloadServiceEndpoint;
-import com.krickert.search.model.*;
-import io.micronaut.configuration.kafka.annotation.*;
+import com.krickert.search.model.ApplicationChangeEvent;
+import com.krickert.search.model.PipeStepReloadRequest;
+import com.krickert.search.model.PipelineReloadRequest;
+import io.micronaut.configuration.kafka.annotation.KafkaListener;
+import io.micronaut.configuration.kafka.annotation.Topic;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.env.Environment;
 import jakarta.inject.Inject;
-import org.apache.kafka.clients.consumer.ConsumerRecord; // To access key/headers if needed
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

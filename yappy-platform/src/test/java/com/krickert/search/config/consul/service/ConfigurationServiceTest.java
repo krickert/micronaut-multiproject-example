@@ -1,9 +1,9 @@
 package com.krickert.search.config.consul.service;
 
 import com.krickert.search.config.consul.model.ApplicationConfig;
+import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
 import com.krickert.search.config.consul.model.PipelineConfig;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
-import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;

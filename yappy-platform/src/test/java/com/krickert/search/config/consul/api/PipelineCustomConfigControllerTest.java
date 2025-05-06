@@ -2,7 +2,10 @@ package com.krickert.search.config.consul.api;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.krickert.search.config.consul.model.*; // Import relevant models
+import com.krickert.search.config.consul.model.CreatePipelineRequest;
+import com.krickert.search.config.consul.model.JsonConfigOptions;
+import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
+import com.krickert.search.config.consul.model.PipelineConfigDto;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.core.annotation.NonNull;
 import io.micronaut.core.type.Argument;
@@ -19,9 +22,10 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-// import org.testcontainers.junit.jupiter.Testcontainers; // Not needed if using singleton pattern
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.MatcherAssert.assertThat;

@@ -1,13 +1,11 @@
 package com.krickert.search.pipeline.kafka.serde;
 
-import com.krickert.search.config.grpc.ReloadServiceEndpoint; // Assuming needed
-// Import PipeStream instead of PipeDoc
 import com.krickert.search.model.PipeStream;
-import com.krickert.search.pipeline.protobuf.PipeDocExample; // Import the example generator
+import com.krickert.search.pipeline.protobuf.PipeDocExample;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.apache.kafka.common.serialization.Deserializer;
-import org.apache.kafka.common.serialization.Serializer; // Import Serializer
+import org.apache.kafka.common.serialization.Serializer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

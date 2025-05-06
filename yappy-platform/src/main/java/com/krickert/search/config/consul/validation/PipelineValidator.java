@@ -1,7 +1,7 @@
 package com.krickert.search.config.consul.validation;
 
-import com.krickert.search.config.consul.model.PipelineConfigDto;
 import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
+import com.krickert.search.config.consul.model.PipelineConfigDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -1,10 +1,11 @@
 package com.krickert.search.config.consul.model;
 
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.HashMap;
 import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for the DefaultSchemaServiceConfig class.

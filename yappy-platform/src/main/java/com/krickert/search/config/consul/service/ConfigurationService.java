@@ -2,7 +2,6 @@ package com.krickert.search.config.consul.service;
 
 import com.krickert.search.config.consul.event.ConfigChangeEvent;
 import com.krickert.search.config.consul.model.*;
-import io.micronaut.cache.annotation.CacheConfig;
 import io.micronaut.cache.annotation.CacheInvalidate;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.event.ApplicationEventListener;

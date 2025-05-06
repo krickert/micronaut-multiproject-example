@@ -1,7 +1,6 @@
 package com.krickert.search.config.grpc;
 
 import com.krickert.search.config.consul.service.ConfigurationService;
-// Import generated Protobuf classes
 import com.krickert.search.model.*;
 import io.grpc.stub.StreamObserver;
 import io.micronaut.grpc.annotation.GrpcService;

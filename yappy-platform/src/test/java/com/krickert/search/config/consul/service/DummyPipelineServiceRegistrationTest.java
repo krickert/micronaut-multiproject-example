@@ -1,7 +1,7 @@
 package com.krickert.search.config.consul.service;
 
-import com.krickert.search.config.consul.model.PipelineConfigDto;
 import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
+import com.krickert.search.config.consul.model.PipelineConfigDto;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
@@ -9,6 +9,7 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;

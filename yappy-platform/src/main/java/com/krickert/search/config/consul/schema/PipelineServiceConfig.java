@@ -1,8 +1,6 @@
 package com.krickert.search.config.consul.schema;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-// import com.fasterxml.jackson.databind.JsonNode; // Not strictly needed in interface now
-// import com.fasterxml.jackson.databind.ObjectMapper; // Removed as param
 
 import java.io.IOException;
 import java.util.Map;

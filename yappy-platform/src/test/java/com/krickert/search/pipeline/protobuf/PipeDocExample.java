@@ -1,18 +1,14 @@
 package com.krickert.search.pipeline.protobuf;
 
-import com.google.protobuf.ByteString; // Import ByteString
+import com.google.protobuf.ByteString;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Timestamp;
 import com.google.protobuf.Value;
 import com.krickert.search.model.*;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit; // For time manipulation
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID; // For generating unique IDs
+import java.time.temporal.ChronoUnit;
+import java.util.*;
 
 public class PipeDocExample {
 

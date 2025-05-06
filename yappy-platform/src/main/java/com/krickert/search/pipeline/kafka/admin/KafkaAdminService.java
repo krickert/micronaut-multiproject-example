@@ -4,7 +4,7 @@ import com.krickert.search.pipeline.kafka.admin.exceptions.*;
 import org.apache.kafka.clients.admin.Config;
 import org.apache.kafka.clients.admin.ConsumerGroupDescription;
 import org.apache.kafka.clients.admin.TopicDescription;
-import org.apache.kafka.common.TopicPartition; // Required for getConsumerLag return type
+import org.apache.kafka.common.TopicPartition;
 
 import java.util.Map;
 import java.util.Set;
@@ -148,6 +148,22 @@ public interface KafkaAdminService {
      * @return CompletableFuture<Long> the total lag.
      */
     CompletableFuture<Long> getTotalConsumerLagAsync(String groupId, String topicName);
+
+    void createTopic(TopicOpts topicOpts, String topicName);
+
+    void deleteTopic(String topicName);
+
+    boolean doesTopicExist(String topicName);
+
+    void recreateTopic(TopicOpts topicOpts, String topicName);
+
+    TopicDescription describeTopic(String topicName);
+
+    Set<String> listTopics();
+
+    Config getTopicConfiguration(String topicName);
+
+    void updateTopicConfiguration(String topicName, Map<String, String> configsToUpdate);
 
     // getStatusForGroup(String groupId, String topic) - This can be composed from describeConsumerGroup, getConsumerLag
     // getStatusForTopic(String topic) - This can be composed from describeTopic and iterating consumer groups

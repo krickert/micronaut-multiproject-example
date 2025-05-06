@@ -7,7 +7,10 @@ import io.micronaut.configuration.kafka.config.AbstractKafkaConfiguration;
 import io.micronaut.context.annotation.Requires;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import org.apache.kafka.common.serialization.*;
+import org.apache.kafka.common.serialization.Deserializer;
+import org.apache.kafka.common.serialization.Serializer;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.kafka.common.serialization.UUIDDeserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

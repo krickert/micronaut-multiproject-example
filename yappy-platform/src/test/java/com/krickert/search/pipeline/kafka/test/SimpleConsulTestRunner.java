@@ -3,7 +3,6 @@ package com.krickert.search.pipeline.kafka.test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.consul.ConsulContainer;
-import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.utility.DockerImageName;
 
 public class SimpleConsulTestRunner {

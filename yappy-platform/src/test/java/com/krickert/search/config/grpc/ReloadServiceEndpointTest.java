@@ -1,21 +1,14 @@
 package com.krickert.search.config.grpc;
 
-import com.krickert.search.config.consul.service.ConfigurationService;
 import com.krickert.search.model.*;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
-import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
-import io.micronaut.context.annotation.Property;
 import io.micronaut.grpc.annotation.GrpcChannel;
 import io.micronaut.grpc.server.GrpcServerChannel;
-import io.micronaut.runtime.server.EmbeddedServer;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -23,7 +16,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 

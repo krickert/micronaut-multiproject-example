@@ -3,8 +3,7 @@ package com.krickert.search.config.consul.exception;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
-// Removed HttpStatus import as it's not directly used here
-import io.micronaut.http.annotation.Produces; // Keep Produces import
+import io.micronaut.http.annotation.Produces;
 import io.micronaut.http.server.exceptions.ExceptionHandler;
 import jakarta.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;

@@ -9,7 +9,6 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.consul.ConsulContainer;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
