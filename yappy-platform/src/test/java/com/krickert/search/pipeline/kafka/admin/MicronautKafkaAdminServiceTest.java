@@ -1,23 +1,24 @@
 package com.krickert.search.pipeline.kafka.admin;
 
 import com.krickert.search.pipeline.kafka.admin.config.KafkaAdminServiceConfig;
-import com.krickert.search.pipeline.kafka.admin.exceptions.*;
+import com.krickert.search.pipeline.kafka.admin.exceptions.KafkaAdminServiceException;
+import com.krickert.search.pipeline.kafka.admin.exceptions.KafkaOperationTimeoutException;
+import com.krickert.search.pipeline.kafka.admin.exceptions.TopicAlreadyExistsException;
+import com.krickert.search.pipeline.kafka.admin.exceptions.TopicNotFoundException;
 import io.micronaut.scheduling.TaskScheduler;
 import org.apache.kafka.clients.admin.*;
 import org.apache.kafka.common.KafkaFuture;
-import org.apache.kafka.common.Node;
-import org.apache.kafka.common.Uuid; // Import for Uuid
-import org.apache.kafka.common.acl.AclOperation; // Import for AclOperation
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.config.ConfigResource;
-import org.apache.kafka.common.errors.TimeoutException; // Kafka's TimeoutException
+import org.apache.kafka.common.errors.TimeoutException;
 import org.apache.kafka.common.errors.TopicExistsException;
 import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
-import org.apache.kafka.common.internals.KafkaFutureImpl; // Common for testing
+import org.apache.kafka.common.internals.KafkaFutureImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.ArgumentMatchers; // Import for specific matchers
+import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -27,11 +28,10 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-// import java.util.stream.Collectors; // Not strictly needed in this version
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq; // For eq() matcher
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -187,7 +187,7 @@ class MicronautKafkaAdminServiceTest {
 
     // --- Test Recreate Topic ---
     @Test
-    void recreateTopicAsync_topicDoesNotExist_createsSuccessfully() throws Exception {
+    void recreateTopicAsync_topicDoesNotExist_createsSuccessfully() {
         String topicName = "new-recreated-topic";
         TopicOpts opts = new TopicOpts(1, (short) 1, List.of(CleanupPolicy.DELETE));
 
@@ -227,7 +227,7 @@ class MicronautKafkaAdminServiceTest {
     }
 
     @Test
-    void recreateTopicAsync_topicExists_deletesPollsAndCreatesSuccessfully() throws Exception {
+    void recreateTopicAsync_topicExists_deletesPollsAndCreatesSuccessfully() {
         String topicName = "existing-recreated-topic";
         TopicOpts opts = new TopicOpts(2, (short) 1, List.of(CleanupPolicy.COMPACT));
 
