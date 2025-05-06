@@ -32,13 +32,18 @@ public class ApicurioTestResourceProvider extends AbstractTestContainersProvider
     public static final String PROPERTY_PRODUCER_REGISTRY_URL = PRODUCER_PREFIX + ".registry.url";
     public static final String PROPERTY_PRODUCER_AUTO_REGISTER_ARTIFACT = PRODUCER_PREFIX + ".auto.register.artifact";
     public static final String PROPERTY_CONSUMER_REGISTRY_URL = CONSUMER_PREFIX + ".registry.url";
+    // Apicurio-specific producer property
+    public static final String PROPERTY_PRODUCER_APICURIO_REGISTRY_URL = PRODUCER_PREFIX + ".apicurio.registry.url";
+    public static final String PROPERTY_CONSUMER_APICURIO_REGISTRY_URL = CONSUMER_PREFIX + ".apicurio.registry.url";
 
     // Combined list of properties this provider can resolve
     public static final List<String> RESOLVABLE_PROPERTIES_LIST = Collections.unmodifiableList(Arrays.asList(
             PROPERTY_APICURIO_REGISTRY_URL,
             PROPERTY_PRODUCER_REGISTRY_URL,
             PROPERTY_PRODUCER_AUTO_REGISTER_ARTIFACT,
-            PROPERTY_CONSUMER_REGISTRY_URL
+            PROPERTY_CONSUMER_REGISTRY_URL,
+            PROPERTY_PRODUCER_APICURIO_REGISTRY_URL,
+            PROPERTY_CONSUMER_APICURIO_REGISTRY_URL
     ));
 
     public static final String DEFAULT_IMAGE = "apicurio/apicurio-registry:3.0.7";
@@ -147,7 +152,9 @@ public class ApicurioTestResourceProvider extends AbstractTestContainersProvider
         // Resolve Apicurio registry URL property
         if (PROPERTY_APICURIO_REGISTRY_URL.equals(propertyName) ||
             PROPERTY_PRODUCER_REGISTRY_URL.equals(propertyName) ||
-            PROPERTY_CONSUMER_REGISTRY_URL.equals(propertyName)) {
+            PROPERTY_CONSUMER_REGISTRY_URL.equals(propertyName) ||
+            PROPERTY_PRODUCER_APICURIO_REGISTRY_URL.equals(propertyName) ||
+            PROPERTY_CONSUMER_APICURIO_REGISTRY_URL.equals(propertyName)) {
             return Optional.of(registryUrl);
         }
 

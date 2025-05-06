@@ -39,6 +39,11 @@ kafka:
   schema:
     registry:
       type: apicurio
+  producers:
+    default:
+      apicurio:
+        registry:
+          url: ${apicurio.registry.url}
 
 grpc:
   server:

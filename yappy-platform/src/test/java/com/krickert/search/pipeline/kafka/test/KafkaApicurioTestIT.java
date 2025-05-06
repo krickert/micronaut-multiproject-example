@@ -6,7 +6,10 @@ import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.admin.CreateTopicsResult;
 import org.apache.kafka.clients.admin.ListTopicsResult;
+import org.apache.kafka.clients.admin.NewTopic;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +23,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
@@ -61,6 +65,74 @@ public class KafkaApicurioTestIT {
     // Helper to get property directly from context for verification
     private Optional<String> getBootstrapServersFromContext() {
         return applicationContext.getProperty("kafka.bootstrap.servers", String.class);
+    }
+
+    /**
+     * Create the required Kafka topics before running the test.
+     * This ensures that the topics exist when the test runs.
+     */
+    @BeforeEach
+    void createKafkaTopics() throws ExecutionException, InterruptedException, TimeoutException {
+        log.info("Creating Kafka topics for test...");
+
+        // Get the bootstrap servers from the context
+        Optional<String> contextKafkaServersOpt = getBootstrapServersFromContext();
+        if (!contextKafkaServersOpt.isPresent()) {
+            log.warn("Bootstrap servers not found in context, skipping topic creation");
+            return;
+        }
+
+        String kafkaServersWithPrefix = contextKafkaServersOpt.get();
+        String kafkaServers = kafkaServersWithPrefix.replace("PLAINTEXT://", "");
+        log.info("Using Kafka bootstrap servers: {}", kafkaServers);
+
+        // Create AdminClient configuration
+        Map<String, Object> adminProps = new HashMap<>();
+        adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaServers);
+        adminProps.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 30000);
+        adminProps.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, 60000);
+
+        try (AdminClient adminClient = AdminClient.create(adminProps)) {
+            // Check if topics already exist
+            Set<String> existingTopics = adminClient.listTopics().names().get(30, TimeUnit.SECONDS);
+            log.info("Existing topics: {}", existingTopics);
+
+            // Create list of topics to create (only those that don't already exist)
+            List<NewTopic> topicsToCreate = DEFAULT_TOPICS.stream()
+                    .filter(topic -> !existingTopics.contains(topic))
+                    .map(topic -> new NewTopic(topic, 1, (short) 1)) // 1 partition, 1 replica
+                    .collect(Collectors.toList());
+
+            if (topicsToCreate.isEmpty()) {
+                log.info("All required topics already exist, skipping topic creation");
+                return;
+            }
+
+            log.info("Creating topics: {}", topicsToCreate.stream().map(NewTopic::name).collect(Collectors.toList()));
+
+            // Create the topics
+            CreateTopicsResult result = adminClient.createTopics(topicsToCreate);
+
+            // Wait for topic creation to complete
+            result.all().get(30, TimeUnit.SECONDS);
+
+            // Verify topics were created
+            Set<String> updatedTopics = adminClient.listTopics().names().get(30, TimeUnit.SECONDS);
+            log.info("Updated topics list: {}", updatedTopics);
+
+            // Verify all required topics exist
+            for (String topic : DEFAULT_TOPICS) {
+                if (!updatedTopics.contains(topic)) {
+                    log.error("Failed to create topic: {}", topic);
+                    fail("Failed to create required topic: " + topic);
+                }
+            }
+
+            log.info("Successfully created all required Kafka topics");
+        } catch (Exception e) {
+            log.error("Error creating Kafka topics", e);
+            throw e;
+        }
     }
 
 
