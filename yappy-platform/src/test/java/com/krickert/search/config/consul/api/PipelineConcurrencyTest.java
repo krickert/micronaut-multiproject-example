@@ -64,21 +64,10 @@ public class PipelineConcurrencyTest implements TestPropertyProvider {
         // Clear any existing pipeline configurations
         configPath = consulKvService.getFullPath("pipeline.configs");
         log.debug("[DEBUG_LOG] Setting up test - clearing Consul state at: " + configPath);
-        consulKvService.deleteKeysWithPrefix(configPath).block();
 
-        // Verify that keys were actually deleted
-        try {
-            java.util.List<String> remainingKeys = consulKvService.getKeysWithPrefix(configPath).block();
-            if (remainingKeys != null && !remainingKeys.isEmpty()) {
-                log.debug("[DEBUG_LOG] WARNING: Keys still exist after initial cleanup: " + remainingKeys);
-                // Try one more time
-                consulKvService.deleteKeysWithPrefix(configPath).block();
-            } else {
-                log.debug("[DEBUG_LOG] Verified no keys exist before test starts");
-            }
-        } catch (Exception e) {
-            System.err.println("[DEBUG_LOG] Error checking keys before test: " + e.getMessage());
-        }
+        // Use the new ensureKeysDeleted method to clean up
+        boolean success = Boolean.TRUE.equals(consulKvService.ensureKeysDeleted(configPath).block());
+        log.debug("[DEBUG_LOG] Consul cleanup success: " + success);
     }
 
     @AfterEach
@@ -86,22 +75,10 @@ public class PipelineConcurrencyTest implements TestPropertyProvider {
         // Clean up after the test to ensure a clean state for the next run
         if (configPath != null) {
             log.debug("[DEBUG_LOG] Cleaning up Consul state after test");
-            boolean success = Boolean.TRUE.equals(consulKvService.resetConsulState(configPath).block());
-            log.debug("[DEBUG_LOG] Consul cleanup success: " + success);
 
-            // Double-check that cleanup was successful
-            try {
-                java.util.List<String> remainingKeys = consulKvService.getKeysWithPrefix(configPath).block();
-                if (remainingKeys != null && !remainingKeys.isEmpty()) {
-                    log.debug("[DEBUG_LOG] WARNING: Keys still exist after cleanup: " + remainingKeys);
-                    // Force delete one more time
-                    consulKvService.deleteKeysWithPrefix(configPath).block();
-                } else {
-                    log.debug("[DEBUG_LOG] Verified no keys remain after cleanup");
-                }
-            } catch (Exception e) {
-                System.err.println("[DEBUG_LOG] Error checking remaining keys: " + e.getMessage());
-            }
+            // Use the new ensureKeysDeleted method to clean up
+            boolean success = Boolean.TRUE.equals(consulKvService.ensureKeysDeleted(configPath).block());
+            log.debug("[DEBUG_LOG] Consul cleanup success: " + success);
         }
     }
 
@@ -234,14 +211,9 @@ public class PipelineConcurrencyTest implements TestPropertyProvider {
                            ", lastUpdated=" + finalPipeline.getPipelineLastUpdated());
 
         // Check Consul directly to verify state
-        try {
-            String versionKey = consulKvService.getFullPath("pipeline.configs.concurrent-test-pipeline.version");
-            java.util.Optional<String> versionValue = consulKvService.getValue(versionKey).block();
-            log.debug("[DEBUG_LOG] Direct Consul check - version key: " + versionKey +
-                               ", value: " + (versionValue.isPresent() ? versionValue.get() : "not found"));
-        } catch (Exception e) {
-            log.debug("[DEBUG_LOG] Error checking version in Consul: " + e.getMessage(), e);
-        }
+        java.util.Optional<String> versionValue = consulKvService.getPipelineVersion("concurrent-test-pipeline").block();
+        log.debug("[DEBUG_LOG] Direct Consul check - version value: " + 
+                  (versionValue.isPresent() ? versionValue.get() : "not found"));
         assertEquals(2, finalPipeline.getPipelineVersion(), "Pipeline version should be incremented exactly once");
     }
 }

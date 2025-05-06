@@ -547,4 +547,69 @@ public class ConsulKvService {
             }
         });
     }
+    /**
+     * Gets the version of a pipeline from Consul KV store.
+     * This is useful for verifying pipeline state directly in Consul.
+     *
+     * @param pipelineName the name of the pipeline
+     * @return a Mono containing an Optional with the version if found, or empty if not found
+     */
+    public Mono<Optional<String>> getPipelineVersion(String pipelineName) {
+        String versionKey = getFullPath("pipeline.configs." + pipelineName + ".version");
+        LOG.debug("Getting pipeline version for pipeline '{}' from key: {}", pipelineName, versionKey);
+        return getValue(versionKey)
+            .doOnSuccess(versionOpt -> {
+                if (versionOpt.isPresent()) {
+                    LOG.debug("Found version for pipeline '{}': {}", pipelineName, versionOpt.get());
+                } else {
+                    LOG.debug("No version found for pipeline '{}'", pipelineName);
+                }
+            })
+            .onErrorResume(e -> {
+                LOG.error("Error getting version for pipeline '{}': {}", pipelineName, e.getMessage(), e);
+                return Mono.just(Optional.empty());
+            });
+    }
+
+    /**
+     * Ensures that all keys with a given prefix are deleted from Consul KV store.
+     * This method will attempt to delete the keys, verify the deletion, and retry if necessary.
+     * It's particularly useful for test setup and teardown.
+     *
+     * @param prefix the prefix of the keys to delete
+     * @return a Mono that emits true if all keys were successfully deleted, false otherwise
+     */
+    public Mono<Boolean> ensureKeysDeleted(String prefix) {
+        LOG.debug("Ensuring all keys with prefix are deleted: {}", prefix);
+        return deleteKeysWithPrefix(prefix)
+            .flatMap(result -> {
+                // Verify that keys were actually deleted
+                return getKeysWithPrefix(prefix)
+                    .flatMap(remainingKeys -> {
+                        if (remainingKeys != null && !remainingKeys.isEmpty()) {
+                            LOG.debug("Keys still exist after initial cleanup: {}", remainingKeys);
+                            // Try one more time
+                            return deleteKeysWithPrefix(prefix)
+                                .flatMap(secondResult -> {
+                                    // Verify again
+                                    return getKeysWithPrefix(prefix)
+                                        .map(keysAfterRetry -> {
+                                            if (keysAfterRetry != null && !keysAfterRetry.isEmpty()) {
+                                                LOG.debug("Keys still exist after second cleanup attempt: {}", keysAfterRetry);
+                                                return false;
+                                            }
+                                            LOG.debug("Successfully deleted all keys with prefix: {}", prefix);
+                                            return true;
+                                        });
+                                });
+                        }
+                        LOG.debug("Verified no keys exist with prefix: {}", prefix);
+                        return Mono.just(true);
+                    })
+                    .onErrorResume(e -> {
+                        LOG.error("Error verifying key deletion: {}", prefix, e);
+                        return Mono.just(false);
+                    });
+            });
+    }
 }
