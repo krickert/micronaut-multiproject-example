@@ -1,9 +1,6 @@
 package com.krickert.search.config.consul.service;
 
-import com.krickert.search.config.consul.model.ApplicationConfig;
-import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
-import com.krickert.search.config.consul.model.PipelineConfig;
-import com.krickert.search.config.consul.model.PipelineConfigDto;
+import com.krickert.search.config.consul.model.*;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
@@ -140,7 +137,9 @@ public class ConfigurationServiceTest {
         String configParamKey = consulKvService.getFullPath(baseKeyPrefix + ".config-params.chunk-size");
 
         keyValueClient.putValue(kafkaListenTopicsKey, "topic1,topic2,topic3");
-        keyValueClient.putValue(kafkaPublishTopicsKey, "output-topic1,output-topic2");
+        keyValueClient.putValue(kafkaPublishTopicsKey,
+                "[{\"topic\":\"output-topic1\",\"targetPipeStepId\":\"cool-service-bro\"}," +
+                "{\"topic\":\"output-topic2\",\"targetPipeStepId\":\"cool-service-bro\"}]");
         keyValueClient.putValue(grpcForwardToKey, "service1,service2");
         keyValueClient.putValue(serviceImplKey, "com.example.TestServiceImpl");
         keyValueClient.putValue(configParamKey, "1000");
@@ -162,8 +161,10 @@ public class ConfigurationServiceTest {
         assertEquals(expectedListenTopics, serviceConfig.getKafkaListenTopics());
 
         // Verify kafka publish topics
-        List<String> expectedPublishTopics = Arrays.asList("output-topic1", "output-topic2");
-        assertEquals(expectedPublishTopics, serviceConfig.getKafkaPublishTopics());
+        KafkaRouteTarget target1 = new KafkaRouteTarget("output-topic1", "cool-service-bro");
+        KafkaRouteTarget target2 = new KafkaRouteTarget("output-topic2", "cool-service-bro");
+        List<KafkaRouteTarget> expectedPublishTargets = Arrays.asList(target1, target2);
+        assertEquals(expectedPublishTargets, serviceConfig.getKafkaPublishTopics());
 
         // Verify grpc forward to
         List<String> expectedForwardTo = Arrays.asList("service1", "service2");
@@ -194,6 +195,7 @@ public class ConfigurationServiceTest {
         assertEquals("1000", configParamValue);
     }
 
+
     /**
      * Test error handling when directly loading a service configuration.
      */
@@ -208,8 +210,10 @@ public class ConfigurationServiceTest {
         String baseKeyPrefix = "pipeline.configs." + pipelineName + ".service." + serviceName;
         String kafkaPublishTopicsKey = consulKvService.getFullPath(baseKeyPrefix + ".kafka-publish-topics");
 
-        // Set a topic name that ends with -dlq, which is not allowed
-        keyValueClient.putValue(kafkaPublishTopicsKey, "invalid-topic-dlq");
+        // Set a topic name that ends with -dlq, which is not allowed,
+        // but ensure the overall structure is a valid JSON array of KafkaRouteTarget objects.
+        String invalidKafkaPublishConfig = "[{\"topic\":\"invalid-topic-dlq\",\"targetPipeStepId\":\"any-step\"}]";
+        keyValueClient.putValue(kafkaPublishTopicsKey, invalidKafkaPublishConfig);
 
         // Call the loadServiceConfiguration method directly
         StepVerifier.create(invokeLoadServiceConfiguration(pipelineName, serviceName, pipeline))

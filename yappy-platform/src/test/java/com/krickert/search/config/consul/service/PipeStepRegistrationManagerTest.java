@@ -1,5 +1,6 @@
 package com.krickert.search.config.consul.service;
 
+import com.krickert.search.config.consul.model.KafkaRouteTarget;
 import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
 import io.micronaut.context.annotation.Property;
@@ -85,7 +86,7 @@ class PipeStepRegistrationManagerTest implements TestPropertyProvider {
             assertEquals("test-service", serviceConfig.getName());
             assertEquals("com.example.TestService", serviceConfig.getServiceImplementation());
             assertEquals(List.of("input-topic-1", "input-topic-2"), serviceConfig.getKafkaListenTopics());
-            assertEquals(List.of("output-topic"), serviceConfig.getKafkaPublishTopics());
+            assertEquals(List.of(new KafkaRouteTarget("output-topic", null)), serviceConfig.getKafkaPublishTopics());
             assertEquals(List.of("forward-service"), serviceConfig.getGrpcForwardTo());
         } catch (Exception e) {
             fail("Failed to get pipeline after registration: " + e.getMessage());
