@@ -1,9 +1,6 @@
 syntax = "proto3";
 package com.krickert.search.model;
 option java_multiple_files = true;
-import "google/protobuf/timestamp.proto";
-import "google/protobuf/struct.proto";
-import "google/protobuf/empty.proto";
 
 message PipelineReloadRequest {
   string pipeline_name = 1;

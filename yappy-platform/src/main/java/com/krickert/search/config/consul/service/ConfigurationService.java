@@ -1,5 +1,8 @@
 package com.krickert.search.config.consul.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.event.ConfigChangeEvent;
 import com.krickert.search.config.consul.model.*;
 import io.micronaut.cache.annotation.CacheInvalidate;
@@ -460,9 +463,20 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
 
                 // Parse kafka publish topics
                 if (kafkaPublishTopicsOpt.isPresent() && !kafkaPublishTopicsOpt.get().isEmpty()) {
-                    List<String> topics = parseCommaSeparatedList(kafkaPublishTopicsOpt.get());
-                    serviceConfig.setKafkaPublishTopics(topics);
-                    LOG.debug("Loaded kafka publish topics for service {}: {}", serviceName, topics);
+                    String jsonValue = kafkaPublishTopicsOpt.get();
+                    try {
+                        ObjectMapper objectMapper = new ObjectMapper(); // Or get injected instance
+                        List<KafkaRouteTarget> routes = objectMapper.readValue(jsonValue,
+                                new TypeReference<List<KafkaRouteTarget>>() {});
+                        serviceConfig.setKafkaPublishTopics(routes);
+                        LOG.debug("Loaded kafka publish routes for service {}: {}", serviceName, routes);
+                    } catch (JsonProcessingException e) {
+                        LOG.error("Pipeline [{}]: Failed to parse kafkaPublishRoutes JSON for step '{}'. Invalid JSON: [{}]. Error: {}",
+                                pipelineName, serviceName, jsonValue, e.getMessage());
+                        serviceConfig.setKafkaPublishTopics(java.util.Collections.emptyList());
+                    }
+                } else {
+                    serviceConfig.setKafkaPublishTopics(java.util.Collections.emptyList());
                 }
 
                 // Parse grpc forward to
@@ -542,5 +556,9 @@ public class ConfigurationService implements ApplicationEventListener<StartupEve
             .map(String::trim)
             .filter(s -> !s.isEmpty())
             .collect(Collectors.toList());
+    }
+
+    public PipelineConfigDto getPipeline(String pipelineName) {
+        return pipelineConfig.getPipeline(pipelineName);
     }
 }

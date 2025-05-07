@@ -72,8 +72,15 @@
                 serviceCopy.setName(entry.getValue().getName());
                 serviceCopy.setKafkaListenTopics(entry.getValue().getKafkaListenTopics() != null ?
                     new ArrayList<>(entry.getValue().getKafkaListenTopics()) : null);
-                serviceCopy.setKafkaPublishTopics(entry.getValue().getKafkaPublishTopics() != null ?
-                    new ArrayList<>(entry.getValue().getKafkaPublishTopics()) : null);
+                if (entry.getValue().getKafkaPublishTopics() != null) {
+                    // If KafkaRouteTarget is a record (immutable), direct add is fine
+                    // If it's a mutable class, you'd need to create a new instance:
+                    // copiedRoutes.add(new KafkaRouteTarget(originalRoute.getTopic(), originalRoute.getTargetPipeStepId()));
+                    List<KafkaRouteTarget> copiedRoutes = new ArrayList<>(entry.getValue().getKafkaPublishTopics());
+                    serviceCopy.setKafkaPublishTopics(copiedRoutes);
+                } else {
+                    serviceCopy.setKafkaPublishTopics(null);
+                }
                 serviceCopy.setGrpcForwardTo(entry.getValue().getGrpcForwardTo() != null ?
                     new ArrayList<>(entry.getValue().getGrpcForwardTo()) : null);
                 serviceCopy.setServiceImplementation(entry.getValue().getServiceImplementation());
@@ -134,8 +141,9 @@
             }
 
             if (serviceConfig.getKafkaPublishTopics() != null) {
-                for (String topic : serviceConfig.getKafkaPublishTopics()) {
-                    if (topic.endsWith("-dlq")) {
+                for (KafkaRouteTarget routeTarget : serviceConfig.getKafkaPublishTopics()) { // Iterate over KafkaRouteTarget
+                    String topic = routeTarget.topic(); // Access the topic name from the record
+                    if (topic != null && topic.endsWith("-dlq")) { // Add null check
                         throw new IllegalArgumentException("Topic names cannot end with '-dlq' as this suffix is reserved for Dead Letter Queues: " + topic);
                     }
                 }

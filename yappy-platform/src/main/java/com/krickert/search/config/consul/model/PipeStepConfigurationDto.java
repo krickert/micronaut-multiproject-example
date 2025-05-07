@@ -28,7 +28,7 @@ public class PipeStepConfigurationDto {
     /**
      * The list of Kafka topics this pipe step publishes to.
      */
-    private List<String> kafkaPublishTopics;
+    private List<KafkaRouteTarget> kafkaPublishTopics;
 
     /**
      * The list of pipe steps this pipe step forwards to via gRPC.

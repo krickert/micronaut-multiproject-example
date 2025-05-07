@@ -57,6 +57,13 @@ pipeline:
       step:
         chunker:
           kafka-listen-topics: input-documents2
+          kafka-publish-topics: input-documents3
+          serviceImplementation: com.krickert.search.pipeline.service.ChunkerService
+          configParams:
+            chunk-size: 500
+            overlap: 100
+        chunker2:
+          kafka-listen-topics: input-documents3
           kafka-publish-topics: chunker-results2
           serviceImplementation: com.krickert.search.pipeline.service.ChunkerService
           configParams:

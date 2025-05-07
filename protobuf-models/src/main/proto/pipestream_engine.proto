@@ -21,6 +21,7 @@ option java_package = "com.krickert.search.engine"; // Match package
 // and sequentially invokes the appropriate PipeStepProcessor services.
 // =============================================================================
 
+
 service PipeStreamEngine {
   // --- RPC: process ---
   // Purpose: Initiates and executes a complete pipeline run based on a named
@@ -30,7 +31,7 @@ service PipeStreamEngine {
   // Request: EngineProcessRequest - Specifies the pipeline name and initial data/state.
   // Response: EngineProcessResponse - Returns the final state of the PipeStream
   //            after the entire pipeline execution completes or fails.
-  rpc process(EngineProcessRequest) returns (EngineProcessResponse);
+  rpc process(com.krickert.search.model.PipeStream) returns (com.krickert.search.model.PipeStream);
 
   // --- RPC: processAsync ---
   // Purpose: Initiates a pipeline run based on a named configuration without
@@ -44,60 +45,6 @@ service PipeStreamEngine {
   //           run has been successfully initiated by the engine. Errors during
   //           initiation (e.g., config not found) may still be returned via
   //           gRPC status codes.
-  rpc processAsync(EngineProcessRequest) returns (google.protobuf.Empty);
+  rpc processAsync(com.krickert.search.model.PipeStream) returns (google.protobuf.Empty);
 }
 
-// =============================================================================
-// Messages for the PipeStreamEngine RPCs
-// =============================================================================
-
-// --- Request Message: EngineProcessRequest ---
-// Defines the input for initiating a pipeline run via the PipeStreamEngine.
-message EngineProcessRequest {
-  // REQUIRED: The name of the pipeline configuration to load from the central
-  // configuration store (e.g., Consul) and execute.
-  string pipeline_name = 1;
-
-  // OPTIONAL: The initial state of the stream.
-  // - If provided:
-  //   - The engine uses this as the starting point.
-  //   - `stream_id` should be unique if provided.
-  //   - Execution attempts to resume from `current_hop_number`.
-  //   - `current_doc` and `input_blob` provide the initial data.
-  // - If omitted:
-  //   - The engine creates a new PipeStream instance.
-  //   - A new unique `stream_id` is generated.
-  //   - `current_hop_number` starts at 0.
-  //   - An empty `PipeDoc` is typically created.
-  optional com.krickert.search.model.PipeStream input_stream = 2;
-
-  // OPTIONAL: Initial context parameters for the *overall* pipeline run.
-  // These are added to the PipeStream's `context_params` map.
-  // Examples: Trace ID, user ID, run priority, source system identifier.
-  // NOTE: These are NOT step-specific configuration overrides.
-  map<string, string> initial_context_params = 3;
-}
-
-// --- Response Message: EngineProcessResponse ---
-// Defines the output from the synchronous `process` RPC call, representing the
-// final outcome of the full pipeline execution orchestrated by the engine.
-message EngineProcessResponse {
-  // REQUIRED: Flag indicating if the *entire pipeline execution* completed
-  // successfully without any step failing.
-  bool overall_success = 1;
-
-  // REQUIRED: The final state of the PipeStream after execution finished or halted.
-  // - Includes the final document state (if not dropped/failed).
-  // - Includes the complete execution history (`PipeStream.history`).
-  com.krickert.search.model.PipeStream final_stream = 2;
-
-  // OPTIONAL: Structured error details if `overall_success` is false.
-  // This typically mirrors the error details from the specific HistoryEntry
-  // of the step that caused the pipeline to fail.
-  optional google.protobuf.Struct error_details = 3;
-
-  // OPTIONAL: Logs generated specifically by the PipeStreamEngine orchestrator
-  // itself during this execution run (e.g., about loading config, calling steps).
-  // Note: Logs from individual steps are found within `final_stream.history`.
-  repeated string engine_logs = 4;
-}

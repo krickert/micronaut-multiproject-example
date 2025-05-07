@@ -1,5 +1,8 @@
 package com.krickert.search.config.consul.model;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.exception.PipelineVersionConflictException;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import io.micronaut.runtime.context.scope.Refreshable;
@@ -142,7 +145,22 @@ public class PipelineConfig {
             } else if (propertyPath.equals("kafkaListenTopics") || propertyPath.equals("kafka-listen-topics")) {
                 serviceConfig.setKafkaListenTopics(Arrays.asList(value.split(",")));
             } else if (propertyPath.equals("kafkaPublishTopics") || propertyPath.equals("kafka-publish-topics")) {
-                serviceConfig.setKafkaPublishTopics(Arrays.asList(value.split(",")));
+                // Assuming the value stored in Consul is a JSON array string
+                if (!value.isBlank()) {
+                    try {
+                        ObjectMapper objectMapper = new ObjectMapper(); // Or get injected instance
+                        List<KafkaRouteTarget> routes = objectMapper.readValue(value,
+                                new TypeReference<List<KafkaRouteTarget>>() {});
+                        serviceConfig.setKafkaPublishTopics(routes); // Uses your updated setter
+                        LOG.trace("Loaded kafka publish routes for service {}: {}", serviceName, routes);
+                    } catch (JsonProcessingException e) {
+                        LOG.error("Pipeline [{}]: Failed to parse kafkaPublishRoutes JSON for step '{}'. Invalid JSON: [{}]. Error: {}",
+                                pipeline.getName(), serviceName, value, e.getMessage());
+                        serviceConfig.setKafkaPublishTopics(java.util.Collections.emptyList());
+                    }
+                } else {
+                    serviceConfig.setKafkaPublishTopics(java.util.Collections.emptyList());
+                }
             } else if (propertyPath.equals("grpcForwardTo") || propertyPath.equals("grpc-forward-to")) {
                 serviceConfig.setGrpcForwardTo(Arrays.asList(value.split(",")));
             } else if (propertyPath.startsWith("configParams.")) {
@@ -269,7 +287,18 @@ public class PipelineConfig {
                 }
 
                 if (serviceConfig.getKafkaPublishTopics() != null && !serviceConfig.getKafkaPublishTopics().isEmpty()) {
-                    otherKeysMap.put(servicePublishTopicsKey, String.join(",", serviceConfig.getKafkaPublishTopics()));
+                    try {
+                        // Use a consistent key name, e.g., kafkaPublishRoutes
+                        String kafkaRoutesKey = serviceBaseKey + ".kafkaPublishRoutes"; // Or keep kafkaPublishTopics
+                        ObjectMapper objectMapper = new ObjectMapper(); // Or get injected instance
+                        String kafkaRoutesJson = objectMapper.writeValueAsString(serviceConfig.getKafkaPublishTopics());
+                        otherKeysMap.put(kafkaRoutesKey, kafkaRoutesJson);
+                        LOG.trace("Preparing to save {} = (kafka routes JSON string)", kafkaRoutesKey);
+                    } catch (JsonProcessingException e) {
+                        LOG.error("Failed to serialize kafkaPublishRoutes for step '{}' in pipeline '{}': {}",
+                                serviceName, pipelineName, e.getMessage());
+                        // Decide how to handle serialization error - skip? error out? Maybe don't put the key.
+                    }
                 }
 
                 if (serviceConfig.getGrpcForwardTo() != null && !serviceConfig.getGrpcForwardTo().isEmpty()) {

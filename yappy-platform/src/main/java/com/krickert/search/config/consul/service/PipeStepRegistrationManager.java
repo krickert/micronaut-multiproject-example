@@ -1,9 +1,6 @@
 package com.krickert.search.config.consul.service;
 
-import com.krickert.search.config.consul.model.CreatePipelineRequest;
-import com.krickert.search.config.consul.model.JsonConfigOptions;
-import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
-import com.krickert.search.config.consul.model.PipelineConfigDto;
+import com.krickert.search.config.consul.model.*;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.event.ApplicationEventListener;
 import io.micronaut.discovery.event.ServiceReadyEvent;
@@ -15,12 +12,13 @@ import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Manages the automatic registration of pipe steps with the pipeline configuration system.
  * This component listens for service startup events and registers the pipe step with Consul
  * if it's not already registered.
- * 
+ * <br/>
  * Note: A pipe step does not need to have pipeline configuration to run. The pipelines are
  * dynamically built. The pipe step will have config built into it and the default config props
  * are already there, and it can have custom config added that is validated by a schema.
@@ -172,10 +170,21 @@ public class PipeStepRegistrationManager implements ApplicationEventListener<Ser
         }
 
         // Parse publish topics
+        //(assuming property only contains topic names for simple auto-registration):
         if (publishTopics != null && !publishTopics.trim().isEmpty()) {
-            List<String> topics = parseCommaSeparatedList(publishTopics);
-            if (!topics.isEmpty()) {
-                pipeStepConfig.setKafkaPublishTopics(topics);
+            List<String> topicNamesOnly = parseCommaSeparatedList(publishTopics);
+            if (!topicNamesOnly.isEmpty()) {
+                // We cannot create full KafkaRouteTarget here easily from just topic names.
+                // Option 1: Log a warning that targetPipeStepId needs to be set manually/via API.
+                LOG.warn("Auto-registration for step '{}': Setting kafkaPublishTopics with topic names only. Target pipe step IDs must be configured via API/UI.", pipeStepName);
+                // Option 2: Create targets with null/default targetPipeStepId (might cause issues later).
+                List<KafkaRouteTarget> incompleteRoutes = topicNamesOnly.stream()
+                        .map(topic -> new KafkaRouteTarget(topic, null)) // Or some default marker
+                        .collect(Collectors.toList());
+                pipeStepConfig.setKafkaPublishTopics(incompleteRoutes);
+                // Choose Option 1 or 2 based on how you want auto-registration to behave.
+                // For safety, let's just log and maybe set an empty list or null:
+                // pipeStepConfig.setKafkaPublishTopics(null); // Or Collections.emptyList();
             }
         }
 

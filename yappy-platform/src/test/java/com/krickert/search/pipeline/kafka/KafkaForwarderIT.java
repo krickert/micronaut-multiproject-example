@@ -95,7 +95,7 @@ public class KafkaForwarderIT {
         log.info("Forwarding PipeStream to topic: {}", testTopic);
 
         // Forward the PipeStream to the test topic
-        kafkaForwarder.forwardToKafka(pipeStream, route);
+        kafkaForwarder.forwardToKafka(pipeStream, route.getDestination());
 
         // Wait for the message to be received by the listener
         Awaitility.await()

@@ -176,26 +176,24 @@ message Blob {
 // Represents the state of a single pipeline execution run as it progresses.
 // This object is managed and updated by the PipeStreamEngine.
 message PipeStream {
-  // REQUIRED: Unique identifier for this specific pipeline execution/stream.
+  // REQUIRED: Unique identifier for this specific pipeline execution RUN.
   string stream_id = 1;
-  // REQUIRED: Name of the pipeline configuration being executed.
+  // REQUIRED: Name of the pipeline DEFINITION being executed.
   string pipeline_name = 2;
-  // The hop number representing the *next* step to be executed. Starts at 0.
-  // The engine increments this *before* calling the step.
-  int64 current_hop_number = 3;
-  // The state of the PipeDoc *before* the 'current_hop_number' step is executed.
-  // This is the primary input data passed to the next step.
-  optional PipeDoc current_doc = 4;
+  // *** NEW FIELD ***
+  // The unique logical name (key from PipelineConfigDto.services map / PipeStepConfigurationDto.name)
+  // that the RECIPIENT of this PipeStream should execute. Set by the SENDER.
+  optional string current_pipestep_id = 3; // <<< Using your suggested name
+  // The hop number incremented BEFORE the step identified by current_pipestep_id executes.
+  int64 current_hop_number = 4;
+  // The state of the PipeDoc.
+  optional PipeDoc current_doc = 5;
   // Detailed history of steps already executed in this stream.
-  repeated HistoryEntry history = 5;
-  // Optional: Holds binary data. Can be used for:
-  // 1. Initial raw input provided when the stream starts.
-  // 2. Intermediate binary results generated and consumed by steps.
-  // Steps are responsible for reading from/writing to/clearing this as needed.
-  optional Blob input_blob = 6; // Renamed for clarity
-  // Optional: Key-value parameters providing context for the entire pipeline run
-  // (e.g., trace ID, user ID). Passed down from the engine request.
-  map<string, string> context_params = 7;
+  repeated HistoryEntry history = 6;
+  // Optional: Holds binary data.
+  optional Blob input_blob = 7;
+  // Optional: Context params for the whole run.
+  map<string, string> context_params = 8;
 }
 
 // Records the execution details of a single step within the pipeline history.

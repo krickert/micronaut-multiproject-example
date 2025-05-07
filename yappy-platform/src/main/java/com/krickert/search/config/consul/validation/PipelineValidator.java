@@ -1,14 +1,12 @@
 package com.krickert.search.config.consul.validation;
 
+import com.krickert.search.config.consul.model.KafkaRouteTarget;
 import com.krickert.search.config.consul.model.PipeStepConfigurationDto;
 import com.krickert.search.config.consul.model.PipelineConfigDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Validator for pipeline configurations.
@@ -69,21 +67,26 @@ public class PipelineValidator {
             
             // Add topics this service publishes to
             if (service.getKafkaPublishTopics() != null) {
-                for (String topic : service.getKafkaPublishTopics()) {
-                    topicPublishers.computeIfAbsent(topic, k -> new HashSet<>()).add(serviceName);
+                for (KafkaRouteTarget routeTarget : service.getKafkaPublishTopics()) { // Iterate KafkaRouteTarget
+                    String topic = routeTarget.topic(); // Get topic name
+                    if (topic != null) { // Check for null topic
+                        topicPublishers.computeIfAbsent(topic, k -> new HashSet<>()).add(serviceName);
+                    }
                 }
             }
         }
         
         // Add the new service to the graph
         String newServiceName = newServiceConfig.getName();
+        // And similarly for the newServiceConfig block just below it:
         if (newServiceName != null) {
             graph.putIfAbsent(newServiceName, new HashSet<>());
-            
-            // Add topics this service publishes to
             if (newServiceConfig.getKafkaPublishTopics() != null) {
-                for (String topic : newServiceConfig.getKafkaPublishTopics()) {
-                    topicPublishers.computeIfAbsent(topic, k -> new HashSet<>()).add(newServiceName);
+                for (KafkaRouteTarget routeTarget : newServiceConfig.getKafkaPublishTopics()) { // Iterate KafkaRouteTarget
+                    String topic = routeTarget.topic(); // Get topic name
+                    if (topic != null) { // Check for null topic
+                        topicPublishers.computeIfAbsent(topic, k -> new HashSet<>()).add(newServiceName);
+                    }
                 }
             }
         }
@@ -197,12 +200,16 @@ public class PipelineValidator {
         
         // Find services that listen to topics this service publishes to
         if (service.getKafkaPublishTopics() != null) {
-            for (String topic : service.getKafkaPublishTopics()) {
-                for (PipeStepConfigurationDto otherService : pipeline.getServices().values()) {
-                    if (otherService.getKafkaListenTopics() != null && 
-                        otherService.getKafkaListenTopics().contains(topic) &&
-                        !otherService.getName().equals(serviceName)) {
-                        dependentServices.add(otherService.getName());
+            for (KafkaRouteTarget routeTarget : service.getKafkaPublishTopics()) { // Iterate KafkaRouteTarget
+                String topic = routeTarget.topic(); // Get topic name
+                if (topic != null) { // Check for null topic
+                    for (PipeStepConfigurationDto otherService : pipeline.getServices().values()) {
+                        // Check if the other service listens to this topic
+                        if (otherService.getKafkaListenTopics() != null &&
+                                otherService.getKafkaListenTopics().contains(topic) &&
+                                !Objects.equals(otherService.getName(), serviceName)) { // Safer comparison
+                            dependentServices.add(otherService.getName());
+                        }
                     }
                 }
             }
