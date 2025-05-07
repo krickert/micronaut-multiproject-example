@@ -24,7 +24,6 @@ consul:
 grpc:
   server:
     enabled: false
-    port: ${random.port}
 
 # Logging configuration
 logger:
@@ -45,4 +44,7 @@ testcontainers:
   moto: false
   consul: true
   apicurio: true
+
+test:
+  topic: test-topic
 

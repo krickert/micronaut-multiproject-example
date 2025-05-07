@@ -1,5 +1,8 @@
 package com.krickert.search.config.consul.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.model.*;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.event.ApplicationEventListener;
@@ -11,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -29,6 +33,7 @@ public class PipeStepRegistrationManager implements ApplicationEventListener<Ser
     private static final Logger LOG = LoggerFactory.getLogger(PipeStepRegistrationManager.class);
 
     private final PipelineService pipelineService;
+    private final ObjectMapper objectMapper;
 
     @Value("${pipeline.step.name:}")
     private String pipeStepName;
@@ -58,8 +63,9 @@ public class PipeStepRegistrationManager implements ApplicationEventListener<Ser
     private boolean registrationEnabled;
 
     @Inject
-    public PipeStepRegistrationManager(PipelineService pipelineService) {
+    public PipeStepRegistrationManager(PipelineService pipelineService, ObjectMapper objectMapper) {
         this.pipelineService = pipelineService;
+        this.objectMapper = objectMapper;
         LOG.info("PipeStepRegistrationManager initialized");
     }
 
@@ -132,6 +138,10 @@ public class PipeStepRegistrationManager implements ApplicationEventListener<Ser
         // Create a pipe step configuration DTO
         PipeStepConfigurationDto pipeStepConfig = createPipeStepConfigDto();
 
+        // Log the pipe step configuration before adding it to the pipeline
+        LOG.debug("Adding pipe step configuration to pipeline: {}", pipeStepConfig);
+        LOG.debug("Pipe step kafkaPublishTopics: {}", pipeStepConfig.getKafkaPublishTopics());
+
         // Add the pipe step to the pipeline
         pipeline.getServices().put(pipeStepName, pipeStepConfig);
 
@@ -170,21 +180,24 @@ public class PipeStepRegistrationManager implements ApplicationEventListener<Ser
         }
 
         // Parse publish topics
-        //(assuming property only contains topic names for simple auto-registration):
         if (publishTopics != null && !publishTopics.trim().isEmpty()) {
-            List<String> topicNamesOnly = parseCommaSeparatedList(publishTopics);
-            if (!topicNamesOnly.isEmpty()) {
-                // We cannot create full KafkaRouteTarget here easily from just topic names.
-                // Option 1: Log a warning that targetPipeStepId needs to be set manually/via API.
-                LOG.warn("Auto-registration for step '{}': Setting kafkaPublishTopics with topic names only. Target pipe step IDs must be configured via API/UI.", pipeStepName);
-                // Option 2: Create targets with null/default targetPipeStepId (might cause issues later).
-                List<KafkaRouteTarget> incompleteRoutes = topicNamesOnly.stream()
-                        .map(topic -> new KafkaRouteTarget(topic, null)) // Or some default marker
-                        .collect(Collectors.toList());
-                pipeStepConfig.setKafkaPublishTopics(incompleteRoutes);
-                // Choose Option 1 or 2 based on how you want auto-registration to behave.
-                // For safety, let's just log and maybe set an empty list or null:
-                // pipeStepConfig.setKafkaPublishTopics(null); // Or Collections.emptyList();
+            // Check if the publishTopics is in JSON format (starts with '[')
+            if (publishTopics.trim().startsWith("[")) {
+                try {
+                    List<KafkaRouteTarget> kafkaRouteTargets = parseJsonPublishTopics(publishTopics);
+                    LOG.debug("Parsed JSON publish topics for step '{}': {}", pipeStepName, kafkaRouteTargets);
+                    if (!kafkaRouteTargets.isEmpty()) {
+                        pipeStepConfig.setKafkaPublishTopics(kafkaRouteTargets);
+                        LOG.debug("Set kafkaPublishTopics for step '{}': {}", pipeStepName, pipeStepConfig.getKafkaPublishTopics());
+                    }
+                } catch (Exception e) {
+                    LOG.error("Failed to parse JSON publish topics for step '{}': {}", pipeStepName, e.getMessage(), e);
+                    // Fallback to comma-separated list parsing
+                    handleLegacyPublishTopics(pipeStepConfig);
+                }
+            } else {
+                // Legacy format (comma-separated list)
+                handleLegacyPublishTopics(pipeStepConfig);
             }
         }
 
@@ -224,5 +237,32 @@ public class PipeStepRegistrationManager implements ApplicationEventListener<Ser
             }
         }
         return result;
+    }
+
+    /**
+     * Parses JSON-formatted publish topics into a List of KafkaRouteTarget objects.
+     * 
+     * @param jsonPublishTopics the JSON-formatted publish topics
+     * @return a List of KafkaRouteTarget objects
+     * @throws JsonProcessingException if the JSON parsing fails
+     */
+    private List<KafkaRouteTarget> parseJsonPublishTopics(String jsonPublishTopics) throws JsonProcessingException {
+        return objectMapper.readValue(jsonPublishTopics, new TypeReference<List<KafkaRouteTarget>>() {});
+    }
+
+    /**
+     * Handles legacy format (comma-separated list) for publish topics.
+     * 
+     * @param pipeStepConfig the pipe step configuration DTO
+     */
+    private void handleLegacyPublishTopics(PipeStepConfigurationDto pipeStepConfig) {
+        List<String> topicNamesOnly = parseCommaSeparatedList(publishTopics);
+        if (!topicNamesOnly.isEmpty()) {
+            LOG.warn("Auto-registration for step '{}': Setting kafkaPublishTopics with topic names only. Target pipe step IDs must be configured via API/UI.", pipeStepName);
+            List<KafkaRouteTarget> incompleteRoutes = topicNamesOnly.stream()
+                    .map(topic -> new KafkaRouteTarget(topic, null))
+                    .collect(Collectors.toList());
+            pipeStepConfig.setKafkaPublishTopics(incompleteRoutes);
+        }
     }
 }

@@ -19,28 +19,30 @@ consul-config-service-test:
       port: 8500
 
 # ========== PIPELINE CONFIGURATION ==========
-# Pipeline-specific settings
 pipeline:
   configs:
     pipeline1:
       service:
         importer:
-          kafka-publish-topics: input-documents
+          # KEY NAME: Decide if 'kafkaPublishTopics' or 'kafka-publish-topics'
+          # VALUE: JSON string for List<KafkaRouteTarget>
+          # Assuming 'chunker' is the next logical step consuming this topic
+          kafkaPublishTopics: '[{"topic":"input-documents","targetPipeStepId":"chunker"}]'
           serviceImplementation: com.krickert.search.pipeline.service.ImporterService
 
         chunker:
-          kafka-listen-topics:
-            - input-documents
-            - tika-documents
-          kafka-publish-topics: chunker-results
+          kafka-listen-topics: input-documents,tika-documents # Keep comma-separated or update parsing if needed
+          # Assuming 'embedder' consumes this
+          kafkaPublishTopics: '[{"topic":"chunker-results","targetPipeStepId":"embedder"}]'
           serviceImplementation: com.krickert.search.pipeline.service.ChunkerService
-          configParams:
+          configParams: # These remain key-value under configParams prefix
             chunk-size: 1000
             overlap: 200
 
         embedder:
           kafka-listen-topics: chunker-results
-          kafka-publish-topics: enhanced-documents
+          # Assuming 'solr-indexer' consumes this
+          kafkaPublishTopics: '[{"topic":"enhanced-documents","targetPipeStepId":"solr-indexer"}]'
           serviceImplementation: com.krickert.search.pipeline.service.EmbedderService
           configParams:
             model: all-MiniLM-L6-v2
@@ -48,6 +50,7 @@ pipeline:
 
         solr-indexer:
           kafka-listen-topics: enhanced-documents
+          # No kafkaPublishTopics defined, so nothing to change here
           serviceImplementation: com.krickert.search.pipeline.service.SolrIndexerService
           configParams:
             solr-url: http://solr:8983/solr
@@ -55,24 +58,40 @@ pipeline:
 
     pipeline2:
       service:
-        chunker:
+        chunker: # Logical step "chunker"
           kafka-listen-topics: input-documents2
-          kafka-publish-topics: chunker-results2
+          # Publishes to topic consumed by logical step "embedder"
+          kafkaPublishTopics: '[{"topic":"chunker-results2","targetPipeStepId":"embedder"}]'
           serviceImplementation: com.krickert.search.pipeline.service.ChunkerService
           configParams:
             chunk-size: 500
             overlap: 100
+        # ---vvv IMPORTANT: This logical step was missing in original YAML vvv---
+        # Need to define chunker2 based on your pipeline2 example logic
+        chunker2: # Logical step "chunker2"
+          kafka-listen-topics: input-documents3 # Assuming different input for clarity
+          # Publishes to topic consumed by logical step "embedder" ??
+          # Or maybe chunker -> chunker2 -> embedder? Let's assume chunker2 -> embedder
+          kafkaPublishTopics: '[{"topic":"chunker2-results","targetPipeStepId":"embedder"}]' # Example
+          serviceImplementation: com.krickert.search.pipeline.service.ChunkerService # Same service implementation
+          configParams:
+            chunk-size: 250 # Different config value
+            overlap: 50
+        # ---^^^ IMPORTANT: Added missing chunker2 definition ^^^---
 
-        embedder:
-          kafka-listen-topics: chunker-results2
-          kafka-publish-topics: enhanced-documents2
+        embedder: # Logical step "embedder"
+          # Might listen to BOTH chunker and chunker2 results now?
+          kafka-listen-topics: chunker-results2,chunker2-results # Example update
+          # Publishes to topic consumed by logical step "solr-indexer"
+          kafkaPublishTopics: '[{"topic":"enhanced-documents2","targetPipeStepId":"solr-indexer"}]'
           serviceImplementation: com.krickert.search.pipeline.service.EmbedderService
           configParams:
             model: paraphrase-multilingual-MiniLM-L12-v2
             dimension: 384
 
-        solr-indexer:
+        solr-indexer: # Logical step "solr-indexer"
           kafka-listen-topics: enhanced-documents2
+          # No kafkaPublishTopics
           serviceImplementation: com.krickert.search.pipeline.service.SolrIndexerService
           configParams:
             solr-url: http://solr:8983/solr
@@ -80,17 +99,19 @@ pipeline:
 
     test-pipeline:
       service:
-        test-service:
+        test-service: # Logical step "test-service"
           kafka-listen-topics: test-input
-          kafka-publish-topics: test-output
+          # Assuming consumed by "chunker" logical step in this test pipeline
+          kafkaPublishTopics: '[{"topic":"test-output","targetPipeStepId":"chunker"}]'
           serviceImplementation: com.krickert.search.pipeline.service.TestService
           configParams:
             param1: value1
             param2: value2
 
-        chunker:
-          kafka-listen-topics: test-input
-          kafka-publish-topics: test-chunks
+        chunker: # Logical step "chunker" (in test-pipeline)
+          kafka-listen-topics: test-input, test-output # Example: listens to both
+          # Assuming consumed by a hypothetical "test-end" step
+          kafkaPublishTopics: '[{"topic":"test-chunks","targetPipeStepId":"test-end"}]'
           serviceImplementation: com.krickert.search.pipeline.service.ChunkerService
           configParams:
             chunk-size: 500

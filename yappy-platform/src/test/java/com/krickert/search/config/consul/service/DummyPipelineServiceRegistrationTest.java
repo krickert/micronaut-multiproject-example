@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Property(name = "pipeline.name", value = "test-pipeline")
 @Property(name = "pipeline.step.implementation", value = "com.krickert.search.config.consul.service.DummyPipelineServiceImpl")
 @Property(name = "pipeline.listen.topics", value = "input-topic-1,input-topic-2")
-@Property(name = "pipeline.publish.topics", value = "output-topic")
+@Property(name = "pipeline.publish.topics", value = "[{\"topic\":\"chunker2-results\",\"targetPipeStepId\":\"embedder\"}]")
 @Property(name = "pipeline.grpc.forward.to", value = "forward-service")
 @Property(name = "pipeline.step.registration.enabled", value = "true")
 public class DummyPipelineServiceRegistrationTest implements TestPropertyProvider {

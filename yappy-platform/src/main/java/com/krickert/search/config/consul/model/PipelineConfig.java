@@ -288,14 +288,14 @@ public class PipelineConfig {
 
                 if (serviceConfig.getKafkaPublishTopics() != null && !serviceConfig.getKafkaPublishTopics().isEmpty()) {
                     try {
-                        // Use a consistent key name, e.g., kafkaPublishRoutes
-                        String kafkaRoutesKey = serviceBaseKey + ".kafkaPublishRoutes"; // Or keep kafkaPublishTopics
+                        // Use a consistent key name that matches the field name in PipeStepConfigurationDto
+                        String kafkaRoutesKey = serviceBaseKey + ".kafkaPublishTopics";
                         ObjectMapper objectMapper = new ObjectMapper(); // Or get injected instance
                         String kafkaRoutesJson = objectMapper.writeValueAsString(serviceConfig.getKafkaPublishTopics());
                         otherKeysMap.put(kafkaRoutesKey, kafkaRoutesJson);
                         LOG.trace("Preparing to save {} = (kafka routes JSON string)", kafkaRoutesKey);
                     } catch (JsonProcessingException e) {
-                        LOG.error("Failed to serialize kafkaPublishRoutes for step '{}' in pipeline '{}': {}",
+                        LOG.error("Failed to serialize kafkaPublishTopics for step '{}' in pipeline '{}': {}",
                                 serviceName, pipelineName, e.getMessage());
                         // Decide how to handle serialization error - skip? error out? Maybe don't put the key.
                     }

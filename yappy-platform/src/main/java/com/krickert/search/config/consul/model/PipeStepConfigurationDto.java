@@ -64,4 +64,24 @@ public class PipeStepConfigurationDto {
         }
         return jsonConfig;
     }
+
+    /**
+     * Gets the list of Kafka topics this pipe step publishes to.
+     * This method is an alias for getKafkaPublishTopics() to support serialization with the name "kafkaPublishRoutes".
+     *
+     * @return the list of Kafka topics this pipe step publishes to
+     */
+    public List<KafkaRouteTarget> getKafkaPublishRoutes() {
+        return getKafkaPublishTopics();
+    }
+
+    /**
+     * Sets the list of Kafka topics this pipe step publishes to.
+     * This method is an alias for setKafkaPublishTopics() to support serialization with the name "kafkaPublishRoutes".
+     *
+     * @param kafkaPublishRoutes the list of Kafka topics this pipe step publishes to
+     */
+    public void setKafkaPublishRoutes(List<KafkaRouteTarget> kafkaPublishRoutes) {
+        setKafkaPublishTopics(kafkaPublishRoutes);
+    }
 }
