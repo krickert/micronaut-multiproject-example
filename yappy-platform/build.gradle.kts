@@ -145,6 +145,7 @@ dependencies {
         // Exclude transitive Wire dependencies to avoid conflicts
         exclude(group = "com.squareup.wire")
     }
+    testResourcesImplementation(libs.apicurio.serde)
 
     // Explicitly include Wire library to ensure consistent version
     api("com.squareup.wire:wire-schema")
