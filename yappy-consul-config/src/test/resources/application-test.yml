@@ -7,3 +7,18 @@ testcontainers:
     enabled: true
   apicurio:
     enabled: false
+
+consul:
+  client:
+    enabled: true
+    registration:
+      enabled: true
+    config:
+      enabled: true
+    discovery:
+      enabled: true
+    watch:
+      enabled: false
+  data:
+    seeding:
+      enabled: true

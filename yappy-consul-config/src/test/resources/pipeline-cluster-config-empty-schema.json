@@ -1,0 +1,34 @@
+{
+  "clusterName": "search-pipeline-cluster-empty-schema",
+  "pipelineGraphConfig": {
+    "pipelineGraph": {
+      "document-processing-pipeline": {
+        "name": "Document Processing Pipeline",
+        "pipelineSteps": {
+          "document-extractor": {
+            "pipelineStepId": "document-extractor",
+            "pipelineImplementationId": "document-extraction-module",
+            "customConfig": {
+              "jsonConfig": "{\"extractionMethod\":\"tika\",\"extractMetadata\":true,\"supportedFormats\":[\"pdf\",\"docx\",\"txt\"]}"
+            },
+            "kafkaListenTopics": ["raw-documents"],
+            "kafkaPublishTopics": [
+              {
+                "topic": "extracted-text",
+                "pipelineStepId": "document-extractor"
+              }
+            ],
+            "grpcForwardTo": ["text-analyzer"]
+          }
+        }
+      }
+    }
+  },
+  "moduleConfigurations": {
+    "document-extraction-module": {
+      "implementationName": "Document Extraction Module",
+      "implementationId": "document-extraction-module",
+      "customConfigJsonSchema": ""
+    }
+  }
+}
