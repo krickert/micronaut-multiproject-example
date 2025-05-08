@@ -6,6 +6,7 @@ import com.krickert.search.config.grpc.ReloadServiceEndpoint;
 import com.krickert.search.model.ApplicationChangeEvent;
 import com.krickert.search.model.PipeStepReloadRequest;
 import com.krickert.search.model.PipelineReloadRequest;
+import com.krickert.search.model.ReloadServiceGrpc;
 import io.micronaut.configuration.kafka.annotation.KafkaListener;
 import io.micronaut.configuration.kafka.annotation.Topic;
 import io.micronaut.context.annotation.Requires;
@@ -27,11 +28,11 @@ import java.util.UUID;
 public class ProtobufConfigUpdateKafkaListener {
 
     private static final Logger log = LoggerFactory.getLogger(ProtobufConfigUpdateKafkaListener.class);
-    private final ReloadServiceEndpoint reloadServiceEndpoint; // Inject the gRPC service implementation
+    private final ReloadServiceGrpc.ReloadServiceBlockingStub reloadService; // Inject the gRPC service implementation
 
     @Inject
-    public ProtobufConfigUpdateKafkaListener(ReloadServiceEndpoint reloadServiceEndpoint) {
-        this.reloadServiceEndpoint = reloadServiceEndpoint;
+    public ProtobufConfigUpdateKafkaListener(ReloadServiceGrpc.ReloadServiceBlockingStub reloadService) {
+        this.reloadService = reloadService;
     }
 
     // Listener for Pipeline Reload events
@@ -51,7 +52,7 @@ public class ProtobufConfigUpdateKafkaListener {
             // but that complicates things unnecessarily if the listener doesn't need the response.
 
             // Simple direct call (assuming endpoint methods handle exceptions):
-             reloadServiceEndpoint.reloadPipeline(request, new NoOpStreamObserver<>()); // Pass a dummy observer
+            reloadService.reloadPipeline(request); // Pass a dummy observer
 
             // Alternative: If ReloadServiceEndpoint methods were synchronous:
             // reloadServiceEndpoint.handlePipelineReloadSync(request);
@@ -72,7 +73,7 @@ public class ProtobufConfigUpdateKafkaListener {
          }
          log.info("Kafka listener received ServiceReloadRequest for service: {} (from topic '{}')", request.getServiceName(), record.topic());
         try {
-            reloadServiceEndpoint.reloadService(request, new NoOpStreamObserver<>());
+            reloadService.reloadService(request);
         } catch (Exception e) {
              log.error("Error processing ServiceReloadRequest for service '{}' from Kafka", request.getServiceName(), e);
         }
@@ -88,7 +89,7 @@ public class ProtobufConfigUpdateKafkaListener {
           }
          log.info("Kafka listener received ApplicationChangeEvent for app: {} (from topic '{}')", request.getApplication(), record.topic());
          try {
-             reloadServiceEndpoint.applicationChanged(request, new NoOpStreamObserver<>());
+             reloadService.applicationChanged(request);
          } catch (Exception e) {
               log.error("Error processing ApplicationChangeEvent for app '{}' from Kafka", request.getApplication(), e);
          }

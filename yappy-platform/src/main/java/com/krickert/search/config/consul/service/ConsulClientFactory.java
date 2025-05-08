@@ -60,14 +60,6 @@ public class ConsulClientFactory {
             // Shutdown the Consul client gracefully
             consulClient.destroy();
             LOG.debug("Consul client successfully closed");
-
-            // Add a small delay to allow resources to be released
-            try {
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                LOG.warn("Interrupted while waiting for resources to be released", e);
-            }
         } catch (Exception e) {
             LOG.warn("Error closing Consul client", e);
         }

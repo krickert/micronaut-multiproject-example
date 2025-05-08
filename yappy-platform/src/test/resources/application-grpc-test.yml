@@ -5,8 +5,8 @@ micronaut:
     port: ${random.port}
     netty:
       worker:
-        shutdown-quiet-period: 2s
-        shutdown-timeout: 5s
+        shutdown-quiet-period: 0s
+        shutdown-timeout: 0s
   config-client:
     enabled: false
 
@@ -24,6 +24,14 @@ micronaut:
 consul:
   client:
     enabled: true
+    registration:
+      # Disable HTTP server registration to prevent duplicate registrations
+      # Only register the gRPC server
+      http-server-enabled: false
+      check:
+        http: false
+      retry-delay: 0s
+      retry-max: 0
 
 # Enable gRPC server for this test
 grpc:

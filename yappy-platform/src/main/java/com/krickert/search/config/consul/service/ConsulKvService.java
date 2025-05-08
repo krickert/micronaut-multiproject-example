@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
+import javax.annotation.PreDestroy;
 import java.math.BigInteger;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -611,5 +612,10 @@ public class ConsulKvService {
                         return Mono.just(false);
                     });
             });
+    }
+
+    @PreDestroy
+    public void destroyAll() {
+        LOG.info("Destroy called for Counsul KV service, just a tag and nothing to destroy");
     }
 }

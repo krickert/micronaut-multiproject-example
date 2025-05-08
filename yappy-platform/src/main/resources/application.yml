@@ -1,12 +1,14 @@
 micronaut:
   application:
     name: consul-config-service
+    instance:
+      id: ${random.shortuuid}
   server:
     port: 61100
     netty:
       worker:
-        shutdown-quiet-period: 100ms
-        shutdown-timeout: 1s
+        shutdown-quiet-period: 2s
+        shutdown-timeout: 5s
 #  caches:
 #    pipeline-configs:
 #      maximum-size: 50 # Smaller cache for testing potentially

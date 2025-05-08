@@ -9,13 +9,16 @@ import io.micronaut.grpc.server.GrpcServerChannel;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -24,12 +27,33 @@ import static org.junit.jupiter.api.Assertions.*;
  * This test uses the Micronaut context and real gRPC calls.
  */
 @MicronautTest(environments = "grpc-test")
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ReloadServiceEndpointTest implements TestPropertyProvider {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReloadServiceEndpointTest.class);
 
     @Inject
+    @GrpcChannel(GrpcServerChannel.NAME)
+    private ManagedChannel channel;
+
     private ReloadServiceGrpc.ReloadServiceBlockingStub blockingStub;
+
+    @org.junit.jupiter.api.BeforeAll
+    void setup() {
+        blockingStub = ReloadServiceGrpc.newBlockingStub(channel);
+    }
+
+    @AfterAll
+    void cleanUp() {
+        if (channel != null) {
+            try {
+                channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                channel.shutdownNow();
+            }
+        }
+    }
 
     @Override
     public Map<String, String> getProperties() {
@@ -156,15 +180,5 @@ public class ReloadServiceEndpointTest implements TestPropertyProvider {
         assertTrue(response.getMessage().contains("empty"), "Response message should mention empty application name");
     }
 
-    @Factory
-    static class Clients {
 
-        @Bean
-        ReloadServiceGrpc.ReloadServiceBlockingStub blockingStub(
-                @GrpcChannel(GrpcServerChannel.NAME) ManagedChannel channel) {
-            return ReloadServiceGrpc.newBlockingStub(
-                    channel
-            );
-        }
-    }
 }

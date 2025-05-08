@@ -1,5 +1,6 @@
 package com.krickert.search.config.consul.cache;
 
+import jakarta.annotation.PreDestroy;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -117,6 +118,7 @@ public class ConsulKvCache {
     /**
      * Shuts down the cache scheduler.
      */
+    @PreDestroy
     public void shutdown() {
         LOG.info("Shutting down ConsulKvCache");
         scheduler.shutdown();

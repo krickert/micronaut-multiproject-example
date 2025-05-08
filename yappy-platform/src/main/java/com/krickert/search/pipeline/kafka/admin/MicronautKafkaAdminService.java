@@ -105,14 +105,39 @@ public class MicronautKafkaAdminService implements KafkaAdminService {
                  throw new KafkaAdminServiceException("Failed to list topics to check existence for: " + topicName, throwable);
             });
     }
-    
+
     @Override
     public CompletableFuture<Void> recreateTopicAsync(TopicOpts topicOpts, String topicName) {
-        // Using commonPool for chaining as AdminClient operations are non-blocking.
-        // The polling itself will use the TaskScheduler.
-        return deleteTopicIfExistsAsync(topicName)
-                .thenComposeAsync(v -> pollUntilTopicDeleted(topicName, config.getRecreatePollTimeout(), config.getRecreatePollInterval()), ForkJoinPool.commonPool())
-                .thenComposeAsync(v -> createTopicAsync(topicOpts, topicName), ForkJoinPool.commonPool());
+        CompletableFuture<Void> future = new CompletableFuture<>();
+
+        // Step 1: Delete the topic if it exists
+        deleteTopicIfExistsAsync(topicName).whenComplete((deleteResult, deleteError) -> {
+            if (deleteError != null) {
+                future.completeExceptionally(deleteError);
+                return;
+            }
+
+            // Step 2: Poll until the topic is deleted
+            pollUntilTopicDeleted(topicName, config.getRecreatePollTimeout(), config.getRecreatePollInterval())
+                .whenComplete((pollResult, pollError) -> {
+                    if (pollError != null) {
+                        // If polling fails (e.g., timeout), complete the future exceptionally with that error
+                        future.completeExceptionally(pollError);
+                        return;
+                    }
+
+                    // Step 3: Only if polling succeeds (topic is deleted), create the new topic
+                    createTopicAsync(topicOpts, topicName).whenComplete((createResult, createError) -> {
+                        if (createError != null) {
+                            future.completeExceptionally(createError);
+                        } else {
+                            future.complete(null);
+                        }
+                    });
+                });
+        });
+
+        return future;
     }
 
     private CompletableFuture<Void> deleteTopicIfExistsAsync(String topicName) {
@@ -124,7 +149,7 @@ public class MicronautKafkaAdminService implements KafkaAdminService {
             return CompletableFuture.completedFuture(null);
         }, ForkJoinPool.commonPool());
     }
-    
+
     private CompletableFuture<Void> pollUntilTopicDeleted(String topicName, Duration timeout, Duration interval) {
         CompletableFuture<Void> pollingFuture = new CompletableFuture<>();
         long startTime = System.currentTimeMillis();
@@ -152,7 +177,7 @@ public class MicronautKafkaAdminService implements KafkaAdminService {
                         taskScheduler.schedule(interval, this); // Schedule next poll
                         return;
                     }
-                    
+
                     if (!exists) {
                         pollingFuture.complete(null); // Topic is deleted
                     } else {
@@ -184,7 +209,7 @@ public class MicronautKafkaAdminService implements KafkaAdminService {
     public CompletableFuture<Set<String>> listTopicsAsync() {
         return toCompletableFuture(adminClient.listTopics().names());
     }
-    
+
     @Override
     public CompletableFuture<Config> getTopicConfigurationAsync(String topicName) {
         ConfigResource resource = new ConfigResource(ConfigResource.Type.TOPIC, topicName);
@@ -206,7 +231,7 @@ public class MicronautKafkaAdminService implements KafkaAdminService {
         List<AlterConfigOp> alterOps = configsToUpdate.entrySet().stream()
             .map(entry -> new AlterConfigOp(new ConfigEntry(entry.getKey(), entry.getValue()), AlterConfigOp.OpType.SET))
             .collect(Collectors.toList());
-        
+
         Map<ConfigResource, Collection<AlterConfigOp>> configs = Collections.singletonMap(resource, alterOps);
         return toCompletableFuture(adminClient.incrementalAlterConfigs(configs).all());
     }
@@ -223,7 +248,7 @@ public class MicronautKafkaAdminService implements KafkaAdminService {
         // To be implemented in Step 2
         return CompletableFuture.failedFuture(new UnsupportedOperationException("describeConsumerGroupAsync not implemented yet."));
     }
-    
+
     @Override
     public CompletableFuture<Set<String>> listConsumerGroupsAsync() {
         // To be implemented in Step 2

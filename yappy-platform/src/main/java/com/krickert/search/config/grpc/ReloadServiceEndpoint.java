@@ -9,6 +9,25 @@ import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * This class implements the gRPC service for handling reload operations for pipelines, services,
+ * and applications. It extends the ReloadServiceGrpc.ReloadServiceImplBase and provides concrete
+ * implementations for the defined RPC methods.
+ *<br/>
+ * The service aims to facilitate cache invalidation and reload operations based on client requests.
+ * It uses the ConfigurationService to perform the respective cache invalidation tasks.
+ *<br/>
+ * The class is marked as a Singleton and acts as a gRPC service endpoint. It logs the incoming
+ * requests and handles operations such as:
+ *<br/>
+ * - Reloading configuration for specific pipelines
+ * - Reloading configuration for specific services
+ * - Handling application-specific configuration changes
+ *<br/>
+ * Detailed logging is provided for both successful operations and error scenarios.
+ * Validation is performed to ensure mandatory input data is present before proceeding with
+ * any operation.
+ */
 @Singleton
 @GrpcService
 public class ReloadServiceEndpoint extends ReloadServiceGrpc.ReloadServiceImplBase {
