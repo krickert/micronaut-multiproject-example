@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * and that the message can be received by a Kafka listener.
  */
 @MicronautTest(environments = "apicurio-test")
-@Property(name = "test.topic", value = "kafka-forwarder-test-topic")
+@Property(name = "test.topic", value = "kafka-forwarder-topic")
 public class KafkaForwarderIT {
     private static final Logger log = LoggerFactory.getLogger(KafkaForwarderIT.class);
 
@@ -107,7 +107,7 @@ public class KafkaForwarderIT {
         assertTrue(testKafkaListener.isMessageReceived(), "Message should have been received");
 
         // Verify that the received message is the same as the sent message
-        PipeStream receivedPipeStream = testKafkaListener.getReceivedMessages().get(0);
+        PipeStream receivedPipeStream = testKafkaListener.getReceivedMessages().getFirst();
         assertEquals(pipeStream.getStreamId(), receivedPipeStream.getStreamId(), "Stream ID should match");
         assertEquals(pipeStream.getPipelineName(), receivedPipeStream.getPipelineName(), "Pipeline name should match");
     }
