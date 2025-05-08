@@ -1,0 +1,9 @@
+testcontainers:
+  kafka:
+    enabled: false
+  moto:
+    enabled: false
+  consul:
+    enabled: true
+  apicurio:
+    enabled: false

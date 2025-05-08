@@ -1,0 +1,74 @@
+{
+  "clusterName": "search-pipeline-cluster",
+  "pipelineGraphConfig": {
+    "pipelineGraph": {
+      "document-processing-pipeline": {
+        "name": "Document Processing Pipeline",
+        "pipelineSteps": {
+          "document-extractor": {
+            "pipelineStepId": "document-extractor",
+            "pipelineImplementationId": "document-extraction-module",
+            "customConfig": {
+              "jsonConfig": "{\"extractionMethod\":\"tika\",\"extractMetadata\":true,\"supportedFormats\":[\"pdf\",\"docx\",\"txt\"]}"
+            },
+            "kafkaListenTopics": ["raw-documents"],
+            "kafkaPublishTopics": [
+              {
+                "topic": "extracted-text",
+                "pipelineStepId": "document-extractor"
+              }
+            ],
+            "grpcForwardTo": ["text-analyzer"]
+          },
+          "text-analyzer": {
+            "pipelineStepId": "text-analyzer",
+            "pipelineImplementationId": "text-analysis-module",
+            "customConfig": {
+              "jsonConfig": "{\"language\":\"en\",\"performSentimentAnalysis\":true,\"extractEntities\":true,\"nlpModel\":\"spacy\"}"
+            },
+            "kafkaListenTopics": ["extracted-text"],
+            "kafkaPublishTopics": [
+              {
+                "topic": "analyzed-text",
+                "pipelineStepId": "text-analyzer"
+              }
+            ],
+            "grpcForwardTo": ["indexer"]
+          },
+          "indexer": {
+            "pipelineStepId": "indexer",
+            "pipelineImplementationId": "search-indexing-module",
+            "customConfig": {
+              "jsonConfig": "{\"indexName\":\"documents\",\"batchSize\":100,\"commitWithin\":1000,\"optimizeAfterCommit\":false}"
+            },
+            "kafkaListenTopics": ["analyzed-text"],
+            "kafkaPublishTopics": [
+              {
+                "topic": "indexed-documents",
+                "pipelineStepId": "indexer"
+              }
+            ],
+            "grpcForwardTo": []
+          }
+        }
+      }
+    }
+  },
+  "moduleConfigurations": {
+    "document-extraction-module": {
+      "implementationName": "Document Extraction Module",
+      "implementationId": "document-extraction-module",
+      "customConfigJsonSchema": "{\"type\":\"object\",\"properties\":{\"extractionMethod\":{\"type\":\"string\",\"enum\":[\"tika\",\"pdfbox\",\"custom\"]},\"extractMetadata\":{\"type\":\"boolean\"},\"supportedFormats\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},\"required\":[\"extractionMethod\"]}"
+    },
+    "text-analysis-module": {
+      "implementationName": "Text Analysis Module",
+      "implementationId": "text-analysis-module",
+      "customConfigJsonSchema": "{\"type\":\"object\",\"properties\":{\"language\":{\"type\":\"string\"},\"performSentimentAnalysis\":{\"type\":\"boolean\"},\"extractEntities\":{\"type\":\"boolean\"},\"nlpModel\":{\"type\":\"string\"}},\"required\":[\"language\"]}"
+    },
+    "search-indexing-module": {
+      "implementationName": "Search Indexing Module",
+      "implementationId": "search-indexing-module",
+      "customConfigJsonSchema": "{\"type\":\"object\",\"properties\":{\"indexName\":{\"type\":\"string\"},\"batchSize\":{\"type\":\"integer\"},\"commitWithin\":{\"type\":\"integer\"},\"optimizeAfterCommit\":{\"type\":\"boolean\"}},\"required\":[\"indexName\"]}"
+    }
+  }
+}
