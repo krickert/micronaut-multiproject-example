@@ -84,8 +84,8 @@ dependencies {
     }
 
     // Explicitly include Wire library to ensure consistent version
-    api("com.squareup.wire:wire-schema")
-    api("com.squareup.wire:wire-runtime")
+    api("com.squareup.wire:wire-schema:5.3.1")
+    api("com.squareup.wire:wire-runtime:5.3.1")
 
     // Compile-only dependencies
     compileOnly(mn.lombok)

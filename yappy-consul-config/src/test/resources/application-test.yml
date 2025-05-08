@@ -8,8 +8,14 @@ testcontainers:
   apicurio:
     enabled: false
 
+micronaut:
+  test:
+    resources:
+      enabled: true
+
 consul:
   client:
+    host: localhost
     enabled: true
     registration:
       enabled: true

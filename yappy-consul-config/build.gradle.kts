@@ -43,47 +43,14 @@ dependencies {
 
     // Annotation processors
     annotationProcessor(libs.bundles.micronaut.annotation.processors)
-
-    // API dependencies - these are exposed to consumers of the library
-    api(mn.micronaut.inject)
+    annotationProcessor(mn.lombok)
+    compileOnly(mn.lombok)
+    testResourcesImplementation(project(":yappy-test-resources"))
     api(mn.micronaut.serde.api)
     api(mn.micronaut.serde.jackson)
     api(mn.micronaut.jackson.databind)
-    api(mn.micronaut.runtime)
-    api(mn.micronaut.validation)
-    api(mn.micronaut.management)
-    api(mn.micronaut.discovery.core)
-    api(mn.micronaut.discovery.client)
-    api(libs.slf4j.api)
-    api(libs.logback.classic)
-
-    // Implementation dependencies
-    implementation(mn.micronaut.reactor)
-    implementation("com.networknt:json-schema-validator:1.5.6")
-
-    // Compile-only dependencies
-    compileOnly(mn.lombok)
-
-    // Runtime dependencies
-    runtimeOnly(mn.snakeyaml)
-
-    // Test dependencies
-    testAnnotationProcessor(mn.micronaut.inject.java)
-    testImplementation(mn.junit.jupiter.api)
-    testImplementation(mn.junit.jupiter.engine)
-    testImplementation(mn.micronaut.test.junit5)
-    testImplementation(libs.junit.jupiter.engine)
-    testImplementation(mn.reactor.test)
-    testImplementation(mn.assertj.core)
-    testImplementation("org.junit.platform:junit-platform-suite-engine")
-    testImplementation("org.testcontainers:junit-jupiter")
-    testImplementation("org.awaitility:awaitility:4.3.0")
-    testImplementation(mn.hamcrest)
-    testImplementation("org.testcontainers:consul:1.21.0")
-    testResourcesImplementation("org.testcontainers:consul:1.21.0")
-    testImplementation(mn.mockito.junit.jupiter)
-    //testResourcesImplementation(project(":yappy-test-resources"))
-
+    // https://mvnrepository.com/artifact/com.networknt/json-schema-validator
+    api("com.networknt:json-schema-validator:1.5.6")
 }
 
 // Publishing configuration
