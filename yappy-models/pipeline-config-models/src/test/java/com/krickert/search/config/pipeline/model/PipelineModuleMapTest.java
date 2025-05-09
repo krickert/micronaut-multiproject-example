@@ -9,7 +9,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineModuleMapTest {
@@ -20,7 +19,7 @@ class PipelineModuleMapTest {
     void testSerializationDeserialization() throws Exception {
         // Create a map of PipelineModuleConfiguration instances
         Map<String, PipelineModuleConfiguration> modules = new HashMap<>();
-        
+
         // Add a module to the map
         SchemaReference schemaReference = new SchemaReference("test-schema", 1);
         PipelineModuleConfiguration module = new PipelineModuleConfiguration(
@@ -28,7 +27,7 @@ class PipelineModuleMapTest {
                 "test-module", 
                 schemaReference);
         modules.put("test-module", module);
-        
+
         // Create a PipelineModuleMap instance
         PipelineModuleMap moduleMap = new PipelineModuleMap(modules);
 
@@ -39,15 +38,15 @@ class PipelineModuleMapTest {
         PipelineModuleMap deserialized = objectMapper.readValue(json, PipelineModuleMap.class);
 
         // Verify the values
-        assertNotNull(deserialized.getAvailableModules());
-        assertEquals(1, deserialized.getAvailableModules().size());
-        
-        PipelineModuleConfiguration deserializedModule = deserialized.getAvailableModules().get("test-module");
+        assertNotNull(deserialized.availableModules());
+        assertEquals(1, deserialized.availableModules().size());
+
+        PipelineModuleConfiguration deserializedModule = deserialized.availableModules().get("test-module");
         assertNotNull(deserializedModule);
-        assertEquals("Test Module", deserializedModule.getImplementationName());
-        assertEquals("test-module", deserializedModule.getImplementationId());
-        assertEquals("test-schema", deserializedModule.getCustomConfigSchemaReference().getSubject());
-        assertEquals(1, deserializedModule.getCustomConfigSchemaReference().getVersion());
+        assertEquals("Test Module", deserializedModule.implementationName());
+        assertEquals("test-module", deserializedModule.implementationId());
+        assertEquals("test-schema", deserializedModule.customConfigSchemaReference().subject());
+        assertEquals(1, deserializedModule.customConfigSchemaReference().version());
     }
 
     @Test
@@ -62,14 +61,14 @@ class PipelineModuleMapTest {
         PipelineModuleMap deserialized = objectMapper.readValue(json, PipelineModuleMap.class);
 
         // Verify the values
-        assertNull(deserialized.getAvailableModules());
+        assertTrue(deserialized.availableModules().isEmpty());
     }
 
     @Test
     void testJsonPropertyNames() throws Exception {
         // Create a map of PipelineModuleConfiguration instances
         Map<String, PipelineModuleConfiguration> modules = new HashMap<>();
-        
+
         // Add a module to the map
         SchemaReference schemaReference = new SchemaReference("test-schema", 1);
         PipelineModuleConfiguration module = new PipelineModuleConfiguration(
@@ -77,7 +76,7 @@ class PipelineModuleMapTest {
                 "test-module", 
                 schemaReference);
         modules.put("test-module", module);
-        
+
         // Create a PipelineModuleMap instance
         PipelineModuleMap moduleMap = new PipelineModuleMap(modules);
 
@@ -97,24 +96,24 @@ class PipelineModuleMapTest {
             PipelineModuleMap moduleMap = objectMapper.readValue(is, PipelineModuleMap.class);
 
             // Verify the values
-            assertNotNull(moduleMap.getAvailableModules());
-            assertEquals(2, moduleMap.getAvailableModules().size());
-            
+            assertNotNull(moduleMap.availableModules());
+            assertEquals(2, moduleMap.availableModules().size());
+
             // Verify first module
-            PipelineModuleConfiguration module1 = moduleMap.getAvailableModules().get("test-module-1");
+            PipelineModuleConfiguration module1 = moduleMap.availableModules().get("test-module-1");
             assertNotNull(module1);
-            assertEquals("Test Module 1", module1.getImplementationName());
-            assertEquals("test-module-1", module1.getImplementationId());
-            assertEquals("test-module-1-schema", module1.getCustomConfigSchemaReference().getSubject());
-            assertEquals(1, module1.getCustomConfigSchemaReference().getVersion());
-            
+            assertEquals("Test Module 1", module1.implementationName());
+            assertEquals("test-module-1", module1.implementationId());
+            assertEquals("test-module-1-schema", module1.customConfigSchemaReference().subject());
+            assertEquals(1, module1.customConfigSchemaReference().version());
+
             // Verify second module
-            PipelineModuleConfiguration module2 = moduleMap.getAvailableModules().get("test-module-2");
+            PipelineModuleConfiguration module2 = moduleMap.availableModules().get("test-module-2");
             assertNotNull(module2);
-            assertEquals("Test Module 2", module2.getImplementationName());
-            assertEquals("test-module-2", module2.getImplementationId());
-            assertEquals("test-module-2-schema", module2.getCustomConfigSchemaReference().getSubject());
-            assertEquals(2, module2.getCustomConfigSchemaReference().getVersion());
+            assertEquals("Test Module 2", module2.implementationName());
+            assertEquals("test-module-2", module2.implementationId());
+            assertEquals("test-module-2-schema", module2.customConfigSchemaReference().subject());
+            assertEquals(2, module2.customConfigSchemaReference().version());
         }
     }
 }

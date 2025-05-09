@@ -7,6 +7,7 @@ import java.io.InputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineModuleConfigurationTest {
@@ -17,7 +18,7 @@ class PipelineModuleConfigurationTest {
     void testSerializationDeserialization() throws Exception {
         // Create a SchemaReference for the test
         SchemaReference schemaReference = new SchemaReference("test-schema", 1);
-        
+
         // Create a PipelineModuleConfiguration instance
         PipelineModuleConfiguration config = new PipelineModuleConfiguration(
                 "Test Module", 
@@ -31,34 +32,41 @@ class PipelineModuleConfigurationTest {
         PipelineModuleConfiguration deserialized = objectMapper.readValue(json, PipelineModuleConfiguration.class);
 
         // Verify the values
-        assertEquals("Test Module", deserialized.getImplementationName());
-        assertEquals("test-module", deserialized.getImplementationId());
-        assertEquals("test-schema", deserialized.getCustomConfigSchemaReference().getSubject());
-        assertEquals(1, deserialized.getCustomConfigSchemaReference().getVersion());
+        assertEquals("Test Module", deserialized.implementationName());
+        assertEquals("test-module", deserialized.implementationId());
+        assertEquals("test-schema", deserialized.customConfigSchemaReference().subject());
+        assertEquals(1, deserialized.customConfigSchemaReference().version());
     }
 
     @Test
-    void testNullHandling() throws Exception {
-        // Create a PipelineModuleConfiguration instance with null values
-        PipelineModuleConfiguration config = new PipelineModuleConfiguration(null, null, null);
+    void testValidation() {
+        // Test null implementationName validation
+        assertThrows(IllegalArgumentException.class, () -> new PipelineModuleConfiguration(
+                null, "test-module", null));
 
-        // Serialize to JSON
-        String json = objectMapper.writeValueAsString(config);
+        // Test blank implementationName validation
+        assertThrows(IllegalArgumentException.class, () -> new PipelineModuleConfiguration(
+                "", "test-module", null));
 
-        // Deserialize from JSON
-        PipelineModuleConfiguration deserialized = objectMapper.readValue(json, PipelineModuleConfiguration.class);
+        // Test null implementationId validation
+        assertThrows(IllegalArgumentException.class, () -> new PipelineModuleConfiguration(
+                "Test Module", null, null));
 
-        // Verify the values
-        assertNull(deserialized.getImplementationName());
-        assertNull(deserialized.getImplementationId());
-        assertNull(deserialized.getCustomConfigSchemaReference());
+        // Test blank implementationId validation
+        assertThrows(IllegalArgumentException.class, () -> new PipelineModuleConfiguration(
+                "Test Module", "", null));
+
+        // Test that customConfigSchemaReference can be null
+        PipelineModuleConfiguration config = new PipelineModuleConfiguration(
+                "Test Module", "test-module", null);
+        assertNull(config.customConfigSchemaReference());
     }
 
     @Test
     void testJsonPropertyNames() throws Exception {
         // Create a SchemaReference for the test
         SchemaReference schemaReference = new SchemaReference("test-schema", 1);
-        
+
         // Create a PipelineModuleConfiguration instance
         PipelineModuleConfiguration config = new PipelineModuleConfiguration(
                 "Test Module", 
@@ -82,10 +90,10 @@ class PipelineModuleConfigurationTest {
             PipelineModuleConfiguration config = objectMapper.readValue(is, PipelineModuleConfiguration.class);
 
             // Verify the values
-            assertEquals("Test Module", config.getImplementationName());
-            assertEquals("test-module-1", config.getImplementationId());
-            assertEquals("test-module-schema", config.getCustomConfigSchemaReference().getSubject());
-            assertEquals(1, config.getCustomConfigSchemaReference().getVersion());
+            assertEquals("Test Module", config.implementationName());
+            assertEquals("test-module-1", config.implementationId());
+            assertEquals("test-module-schema", config.customConfigSchemaReference().subject());
+            assertEquals(1, config.customConfigSchemaReference().version());
         }
     }
 }

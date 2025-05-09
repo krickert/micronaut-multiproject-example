@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.io.InputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SchemaReferenceTest {
 
@@ -24,24 +24,24 @@ class SchemaReferenceTest {
         SchemaReference deserialized = objectMapper.readValue(json, SchemaReference.class);
 
         // Verify the values
-        assertEquals("test-subject", deserialized.getSubject());
-        assertEquals(123, deserialized.getVersion());
+        assertEquals("test-subject", deserialized.subject());
+        assertEquals(123, deserialized.version());
     }
 
     @Test
-    void testNullHandling() throws Exception {
-        // Create a SchemaReference instance with null values
-        SchemaReference reference = new SchemaReference(null, null);
+    void testValidation() {
+        // Test null subject validation
+        assertThrows(IllegalArgumentException.class, () -> new SchemaReference(null, 1));
 
-        // Serialize to JSON
-        String json = objectMapper.writeValueAsString(reference);
+        // Test blank subject validation
+        assertThrows(IllegalArgumentException.class, () -> new SchemaReference("", 1));
 
-        // Deserialize from JSON
-        SchemaReference deserialized = objectMapper.readValue(json, SchemaReference.class);
+        // Test null version validation
+        assertThrows(IllegalArgumentException.class, () -> new SchemaReference("test-subject", null));
 
-        // Verify the values
-        assertNull(deserialized.getSubject());
-        assertNull(deserialized.getVersion());
+        // Test negative version validation
+        assertThrows(IllegalArgumentException.class, () -> new SchemaReference("test-subject", 0));
+        assertThrows(IllegalArgumentException.class, () -> new SchemaReference("test-subject", -1));
     }
 
     @Test
@@ -65,8 +65,8 @@ class SchemaReferenceTest {
             SchemaReference reference = objectMapper.readValue(is, SchemaReference.class);
 
             // Verify the values
-            assertEquals("test-schema", reference.getSubject());
-            assertEquals(42, reference.getVersion());
+            assertEquals("test-schema", reference.subject());
+            assertEquals(42, reference.version());
         }
     }
 

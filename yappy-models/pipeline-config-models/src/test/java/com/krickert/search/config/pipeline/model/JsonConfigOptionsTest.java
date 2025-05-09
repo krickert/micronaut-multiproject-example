@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.io.InputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JsonConfigOptionsTest {
@@ -25,22 +25,13 @@ class JsonConfigOptionsTest {
         JsonConfigOptions deserialized = objectMapper.readValue(json, JsonConfigOptions.class);
 
         // Verify the values
-        assertEquals("{\"key\": \"value\"}", deserialized.getJsonConfig());
+        assertEquals("{\"key\": \"value\"}", deserialized.jsonConfig());
     }
 
     @Test
-    void testNullHandling() throws Exception {
-        // Create a JsonConfigOptions instance with null values
-        JsonConfigOptions options = new JsonConfigOptions(null);
-
-        // Serialize to JSON
-        String json = objectMapper.writeValueAsString(options);
-
-        // Deserialize from JSON
-        JsonConfigOptions deserialized = objectMapper.readValue(json, JsonConfigOptions.class);
-
-        // Verify the values - JsonConfigOptions has a default value of "{}" for jsonConfig
-        assertEquals("{}", deserialized.getJsonConfig());
+    void testValidation() {
+        // Test null jsonConfig validation
+        assertThrows(IllegalArgumentException.class, () -> new JsonConfigOptions(null));
     }
 
     @Test
@@ -63,16 +54,16 @@ class JsonConfigOptionsTest {
             JsonConfigOptions options = objectMapper.readValue(is, JsonConfigOptions.class);
 
             // Verify the values
-            assertEquals("{\"key\": \"value\", \"nested\": {\"nestedKey\": \"nestedValue\"}}", options.getJsonConfig());
+            assertEquals("{\"key\": \"value\", \"nested\": {\"nestedKey\": \"nestedValue\"}}", options.jsonConfig());
         }
     }
 
     @Test
-    void testDefaultValue() throws Exception {
+    void testDefaultValue() {
         // Create a JsonConfigOptions instance with default constructor
         JsonConfigOptions options = new JsonConfigOptions();
 
         // Verify the default value
-        assertEquals("{}", options.getJsonConfig());
+        assertEquals("{}", options.jsonConfig());
     }
 }

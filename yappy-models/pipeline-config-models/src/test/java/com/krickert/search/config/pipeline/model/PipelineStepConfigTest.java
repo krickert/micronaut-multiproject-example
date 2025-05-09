@@ -5,12 +5,11 @@ import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineStepConfigTest {
@@ -21,19 +20,19 @@ class PipelineStepConfigTest {
     void testSerializationDeserialization() throws Exception {
         // Create a JsonConfigOptions for the test
         JsonConfigOptions customConfig = new JsonConfigOptions("{\"key\": \"value\"}");
-        
+
         // Create a list of KafkaPublishTopic for the test
         List<KafkaPublishTopic> kafkaPublishTopics = new ArrayList<>();
         kafkaPublishTopics.add(new KafkaPublishTopic("test-output-topic"));
-        
+
         // Create a PipelineStepConfig instance
         PipelineStepConfig config = new PipelineStepConfig(
                 "test-step",
                 "test-module",
                 customConfig,
-                Arrays.asList("test-input-topic"),
+                List.of("test-input-topic"),
                 kafkaPublishTopics,
-                Arrays.asList("test-grpc-service")
+                List.of("test-grpc-service")
         );
 
         // Serialize to JSON
@@ -43,54 +42,60 @@ class PipelineStepConfigTest {
         PipelineStepConfig deserialized = objectMapper.readValue(json, PipelineStepConfig.class);
 
         // Verify the values
-        assertEquals("test-step", deserialized.getPipelineStepId());
-        assertEquals("test-module", deserialized.getPipelineImplementationId());
-        assertEquals("{\"key\": \"value\"}", deserialized.getCustomConfig().getJsonConfig());
-        assertEquals(1, deserialized.getKafkaListenTopics().size());
-        assertEquals("test-input-topic", deserialized.getKafkaListenTopics().get(0));
-        assertEquals(1, deserialized.getKafkaPublishTopics().size());
-        assertEquals("test-output-topic", deserialized.getKafkaPublishTopics().get(0).getTopic());
-        assertEquals(1, deserialized.getGrpcForwardTo().size());
-        assertEquals("test-grpc-service", deserialized.getGrpcForwardTo().get(0));
+        assertEquals("test-step", deserialized.pipelineStepId());
+        assertEquals("test-module", deserialized.pipelineImplementationId());
+        assertEquals("{\"key\": \"value\"}", deserialized.customConfig().jsonConfig());
+        assertEquals(1, deserialized.kafkaListenTopics().size());
+        assertEquals("test-input-topic", deserialized.kafkaListenTopics().getFirst());
+        assertEquals(1, deserialized.kafkaPublishTopics().size());
+        assertEquals("test-output-topic", deserialized.kafkaPublishTopics().getFirst().topic());
+        assertEquals(1, deserialized.grpcForwardTo().size());
+        assertEquals("test-grpc-service", deserialized.grpcForwardTo().getFirst());
     }
 
     @Test
-    void testNullHandling() throws Exception {
-        // Create a PipelineStepConfig instance with null values
-        PipelineStepConfig config = new PipelineStepConfig(null, null, null, null, null, null);
+    void testValidation() {
+        // Test null pipelineStepId validation
+        assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                null, "test-module", null, null, null, null));
 
-        // Serialize to JSON
-        String json = objectMapper.writeValueAsString(config);
+        // Test blank pipelineStepId validation
+        assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                "", "test-module", null, null, null, null));
 
-        // Deserialize from JSON
-        PipelineStepConfig deserialized = objectMapper.readValue(json, PipelineStepConfig.class);
+        // Test null pipelineImplementationId validation
+        assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                "test-step", null, null, null, null, null));
 
-        // Verify the values
-        assertNull(deserialized.getPipelineStepId());
-        assertNull(deserialized.getPipelineImplementationId());
-        assertNull(deserialized.getCustomConfig());
-        assertNull(deserialized.getKafkaListenTopics());
-        assertNull(deserialized.getKafkaPublishTopics());
-        assertNull(deserialized.getGrpcForwardTo());
+        // Test blank pipelineImplementationId validation
+        assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                "test-step", "", null, null, null, null));
+
+        // Test null collections handling (should not throw, converts to empty collections)
+        PipelineStepConfig config = new PipelineStepConfig(
+                "test-step", "test-module", null, null, null, null);
+        assertTrue(config.kafkaListenTopics().isEmpty());
+        assertTrue(config.kafkaPublishTopics().isEmpty());
+        assertTrue(config.grpcForwardTo().isEmpty());
     }
 
     @Test
     void testJsonPropertyNames() throws Exception {
         // Create a JsonConfigOptions for the test
         JsonConfigOptions customConfig = new JsonConfigOptions("{\"key\": \"value\"}");
-        
+
         // Create a list of KafkaPublishTopic for the test
         List<KafkaPublishTopic> kafkaPublishTopics = new ArrayList<>();
         kafkaPublishTopics.add(new KafkaPublishTopic("test-output-topic"));
-        
+
         // Create a PipelineStepConfig instance
         PipelineStepConfig config = new PipelineStepConfig(
                 "test-step",
                 "test-module",
                 customConfig,
-                Arrays.asList("test-input-topic"),
+                List.of("test-input-topic"),
                 kafkaPublishTopics,
-                Arrays.asList("test-grpc-service")
+                List.of("test-grpc-service")
         );
 
         // Serialize to JSON
@@ -113,25 +118,25 @@ class PipelineStepConfigTest {
             PipelineStepConfig config = objectMapper.readValue(is, PipelineStepConfig.class);
 
             // Verify the values
-            assertEquals("test-step-1", config.getPipelineStepId());
-            assertEquals("test-module-1", config.getPipelineImplementationId());
-            assertNotNull(config.getCustomConfig());
-            assertEquals("{\"key\": \"value\", \"threshold\": 0.75}", config.getCustomConfig().getJsonConfig());
-            
-            assertNotNull(config.getKafkaListenTopics());
-            assertEquals(2, config.getKafkaListenTopics().size());
-            assertEquals("test-input-topic-1", config.getKafkaListenTopics().get(0));
-            assertEquals("test-input-topic-2", config.getKafkaListenTopics().get(1));
-            
-            assertNotNull(config.getKafkaPublishTopics());
-            assertEquals(2, config.getKafkaPublishTopics().size());
-            assertEquals("test-output-topic-1", config.getKafkaPublishTopics().get(0).getTopic());
-            assertEquals("test-output-topic-2", config.getKafkaPublishTopics().get(1).getTopic());
-            
-            assertNotNull(config.getGrpcForwardTo());
-            assertEquals(2, config.getGrpcForwardTo().size());
-            assertEquals("test-grpc-service-1", config.getGrpcForwardTo().get(0));
-            assertEquals("test-grpc-service-2", config.getGrpcForwardTo().get(1));
+            assertEquals("test-step-1", config.pipelineStepId());
+            assertEquals("test-module-1", config.pipelineImplementationId());
+            assertNotNull(config.customConfig());
+            assertEquals("{\"key\": \"value\", \"threshold\": 0.75}", config.customConfig().jsonConfig());
+
+            assertNotNull(config.kafkaListenTopics());
+            assertEquals(2, config.kafkaListenTopics().size());
+            assertEquals("test-input-topic-1", config.kafkaListenTopics().get(0));
+            assertEquals("test-input-topic-2", config.kafkaListenTopics().get(1));
+
+            assertNotNull(config.kafkaPublishTopics());
+            assertEquals(2, config.kafkaPublishTopics().size());
+            assertEquals("test-output-topic-1", config.kafkaPublishTopics().get(0).topic());
+            assertEquals("test-output-topic-2", config.kafkaPublishTopics().get(1).topic());
+
+            assertNotNull(config.grpcForwardTo());
+            assertEquals(2, config.grpcForwardTo().size());
+            assertEquals("test-grpc-service-1", config.grpcForwardTo().get(0));
+            assertEquals("test-grpc-service-2", config.grpcForwardTo().get(1));
         }
     }
 }

@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.io.InputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KafkaPublishTopicTest {
@@ -25,22 +25,17 @@ class KafkaPublishTopicTest {
         KafkaPublishTopic deserialized = objectMapper.readValue(json, KafkaPublishTopic.class);
 
         // Verify the values
-        assertEquals("test-topic", deserialized.getTopic());
+        assertEquals("test-topic", deserialized.topic());
     }
 
     @Test
-    void testNullHandling() throws Exception {
-        // Create a KafkaPublishTopic instance with null values
-        KafkaPublishTopic topic = new KafkaPublishTopic(null);
+    void testValidation() {
+        // Test null topic validation
+        assertThrows(IllegalArgumentException.class, () -> new KafkaPublishTopic(null));
 
-        // Serialize to JSON
-        String json = objectMapper.writeValueAsString(topic);
-
-        // Deserialize from JSON
-        KafkaPublishTopic deserialized = objectMapper.readValue(json, KafkaPublishTopic.class);
-
-        // Verify the values
-        assertNull(deserialized.getTopic());
+        // Test blank topic validation
+        assertThrows(IllegalArgumentException.class, () -> new KafkaPublishTopic(""));
+        assertThrows(IllegalArgumentException.class, () -> new KafkaPublishTopic("  "));
     }
 
     @Test
@@ -63,7 +58,7 @@ class KafkaPublishTopicTest {
             KafkaPublishTopic topic = objectMapper.readValue(is, KafkaPublishTopic.class);
 
             // Verify the values
-            assertEquals("test-output-topic", topic.getTopic());
+            assertEquals("test-output-topic", topic.topic());
         }
     }
 }

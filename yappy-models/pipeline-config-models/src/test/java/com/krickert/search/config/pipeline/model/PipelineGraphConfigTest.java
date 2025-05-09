@@ -5,14 +5,12 @@ import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineGraphConfigTest {
@@ -23,28 +21,28 @@ class PipelineGraphConfigTest {
     void testSerializationDeserialization() throws Exception {
         // Create a map of PipelineConfig instances
         Map<String, PipelineConfig> pipelines = new HashMap<>();
-        
+
         // Create a pipeline for the map
         Map<String, PipelineStepConfig> steps = new HashMap<>();
-        
+
         // Create a step for the pipeline
         JsonConfigOptions customConfig = new JsonConfigOptions("{\"key\": \"value\"}");
         List<KafkaPublishTopic> kafkaPublishTopics = new ArrayList<>();
         kafkaPublishTopics.add(new KafkaPublishTopic("test-output-topic"));
-        
+
         PipelineStepConfig step = new PipelineStepConfig(
                 "test-step",
                 "test-module",
                 customConfig,
-                Arrays.asList("test-input-topic"),
+                List.of("test-input-topic"),
                 kafkaPublishTopics,
-                Arrays.asList("test-grpc-service")
+                List.of("test-grpc-service")
         );
         steps.put("test-step", step);
-        
+
         PipelineConfig pipeline = new PipelineConfig("test-pipeline", steps);
         pipelines.put("test-pipeline", pipeline);
-        
+
         // Create a PipelineGraphConfig instance
         PipelineGraphConfig config = new PipelineGraphConfig(pipelines);
 
@@ -55,26 +53,26 @@ class PipelineGraphConfigTest {
         PipelineGraphConfig deserialized = objectMapper.readValue(json, PipelineGraphConfig.class);
 
         // Verify the values
-        assertNotNull(deserialized.getPipelines());
-        assertEquals(1, deserialized.getPipelines().size());
-        
-        PipelineConfig deserializedPipeline = deserialized.getPipelines().get("test-pipeline");
+        assertNotNull(deserialized.pipelines());
+        assertEquals(1, deserialized.pipelines().size());
+
+        PipelineConfig deserializedPipeline = deserialized.pipelines().get("test-pipeline");
         assertNotNull(deserializedPipeline);
-        assertEquals("test-pipeline", deserializedPipeline.getName());
-        assertNotNull(deserializedPipeline.getPipelineSteps());
-        assertEquals(1, deserializedPipeline.getPipelineSteps().size());
-        
-        PipelineStepConfig deserializedStep = deserializedPipeline.getPipelineSteps().get("test-step");
+        assertEquals("test-pipeline", deserializedPipeline.name());
+        assertNotNull(deserializedPipeline.pipelineSteps());
+        assertEquals(1, deserializedPipeline.pipelineSteps().size());
+
+        PipelineStepConfig deserializedStep = deserializedPipeline.pipelineSteps().get("test-step");
         assertNotNull(deserializedStep);
-        assertEquals("test-step", deserializedStep.getPipelineStepId());
-        assertEquals("test-module", deserializedStep.getPipelineImplementationId());
-        assertEquals("{\"key\": \"value\"}", deserializedStep.getCustomConfig().getJsonConfig());
-        assertEquals(1, deserializedStep.getKafkaListenTopics().size());
-        assertEquals("test-input-topic", deserializedStep.getKafkaListenTopics().get(0));
-        assertEquals(1, deserializedStep.getKafkaPublishTopics().size());
-        assertEquals("test-output-topic", deserializedStep.getKafkaPublishTopics().get(0).getTopic());
-        assertEquals(1, deserializedStep.getGrpcForwardTo().size());
-        assertEquals("test-grpc-service", deserializedStep.getGrpcForwardTo().get(0));
+        assertEquals("test-step", deserializedStep.pipelineStepId());
+        assertEquals("test-module", deserializedStep.pipelineImplementationId());
+        assertEquals("{\"key\": \"value\"}", deserializedStep.customConfig().jsonConfig());
+        assertEquals(1, deserializedStep.kafkaListenTopics().size());
+        assertEquals("test-input-topic", deserializedStep.kafkaListenTopics().getFirst());
+        assertEquals(1, deserializedStep.kafkaPublishTopics().size());
+        assertEquals("test-output-topic", deserializedStep.kafkaPublishTopics().getFirst().topic());
+        assertEquals(1, deserializedStep.grpcForwardTo().size());
+        assertEquals("test-grpc-service", deserializedStep.grpcForwardTo().getFirst());
     }
 
     @Test
@@ -89,35 +87,35 @@ class PipelineGraphConfigTest {
         PipelineGraphConfig deserialized = objectMapper.readValue(json, PipelineGraphConfig.class);
 
         // Verify the values
-        assertNull(deserialized.getPipelines());
+        assertTrue(deserialized.pipelines().isEmpty());
     }
 
     @Test
     void testJsonPropertyNames() throws Exception {
         // Create a map of PipelineConfig instances
         Map<String, PipelineConfig> pipelines = new HashMap<>();
-        
+
         // Create a pipeline for the map
         Map<String, PipelineStepConfig> steps = new HashMap<>();
-        
+
         // Create a step for the pipeline
         JsonConfigOptions customConfig = new JsonConfigOptions("{\"key\": \"value\"}");
         List<KafkaPublishTopic> kafkaPublishTopics = new ArrayList<>();
         kafkaPublishTopics.add(new KafkaPublishTopic("test-output-topic"));
-        
+
         PipelineStepConfig step = new PipelineStepConfig(
                 "test-step",
                 "test-module",
                 customConfig,
-                Arrays.asList("test-input-topic"),
+                List.of("test-input-topic"),
                 kafkaPublishTopics,
-                Arrays.asList("test-grpc-service")
+                List.of("test-grpc-service")
         );
         steps.put("test-step", step);
-        
+
         PipelineConfig pipeline = new PipelineConfig("test-pipeline", steps);
         pipelines.put("test-pipeline", pipeline);
-        
+
         // Create a PipelineGraphConfig instance
         PipelineGraphConfig config = new PipelineGraphConfig(pipelines);
 
@@ -137,40 +135,40 @@ class PipelineGraphConfigTest {
             PipelineGraphConfig config = objectMapper.readValue(is, PipelineGraphConfig.class);
 
             // Verify the values
-            assertNotNull(config.getPipelines());
-            assertEquals(2, config.getPipelines().size());
-            
+            assertNotNull(config.pipelines());
+            assertEquals(2, config.pipelines().size());
+
             // Verify first pipeline
-            PipelineConfig pipeline1 = config.getPipelines().get("pipeline1");
+            PipelineConfig pipeline1 = config.pipelines().get("pipeline1");
             assertNotNull(pipeline1);
-            assertEquals("pipeline1", pipeline1.getName());
-            assertNotNull(pipeline1.getPipelineSteps());
-            assertEquals(2, pipeline1.getPipelineSteps().size());
-            
+            assertEquals("pipeline1", pipeline1.name());
+            assertNotNull(pipeline1.pipelineSteps());
+            assertEquals(2, pipeline1.pipelineSteps().size());
+
             // Verify first step of first pipeline
-            PipelineStepConfig step1 = pipeline1.getPipelineSteps().get("step1");
+            PipelineStepConfig step1 = pipeline1.pipelineSteps().get("step1");
             assertNotNull(step1);
-            assertEquals("step1", step1.getPipelineStepId());
-            assertEquals("test-module-1", step1.getPipelineImplementationId());
-            
+            assertEquals("step1", step1.pipelineStepId());
+            assertEquals("test-module-1", step1.pipelineImplementationId());
+
             // Verify second step of first pipeline
-            PipelineStepConfig step2 = pipeline1.getPipelineSteps().get("step2");
+            PipelineStepConfig step2 = pipeline1.pipelineSteps().get("step2");
             assertNotNull(step2);
-            assertEquals("step2", step2.getPipelineStepId());
-            assertEquals("test-module-2", step2.getPipelineImplementationId());
-            
+            assertEquals("step2", step2.pipelineStepId());
+            assertEquals("test-module-2", step2.pipelineImplementationId());
+
             // Verify second pipeline
-            PipelineConfig pipeline2 = config.getPipelines().get("pipeline2");
+            PipelineConfig pipeline2 = config.pipelines().get("pipeline2");
             assertNotNull(pipeline2);
-            assertEquals("pipeline2", pipeline2.getName());
-            assertNotNull(pipeline2.getPipelineSteps());
-            assertEquals(1, pipeline2.getPipelineSteps().size());
-            
+            assertEquals("pipeline2", pipeline2.name());
+            assertNotNull(pipeline2.pipelineSteps());
+            assertEquals(1, pipeline2.pipelineSteps().size());
+
             // Verify first step of second pipeline
-            PipelineStepConfig step3 = pipeline2.getPipelineSteps().get("step1");
+            PipelineStepConfig step3 = pipeline2.pipelineSteps().get("step1");
             assertNotNull(step3);
-            assertEquals("step1", step3.getPipelineStepId());
-            assertEquals("test-module-3", step3.getPipelineImplementationId());
+            assertEquals("step1", step3.pipelineStepId());
+            assertEquals("test-module-3", step3.pipelineImplementationId());
         }
     }
 }
