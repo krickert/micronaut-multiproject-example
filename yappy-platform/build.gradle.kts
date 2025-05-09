@@ -117,9 +117,8 @@ dependencies {
     // https://mvnrepository.com/artifact/org.kiwiproject/consul-client
     implementation("org.kiwiproject:consul-client:1.5.1")
 
-    // https://mvnrepository.com/artifact/org.testcontainers/consul
-    testResourcesImplementation("org.testcontainers:consul:1.21.0")
-    testResourcesImplementation("org.testcontainers:kafka:1.21.0")
+    // Test resources implementation from yappy-test-resources project
+    testResourcesImplementation(project(":yappy-test-resources"))
     // https://mvnrepository.com/artifact/org.awaitility/awaitility
     testImplementation("org.awaitility:awaitility:4.3.0")
     // https://mvnrepository.com/artifact/com.networknt/json-schema-validator

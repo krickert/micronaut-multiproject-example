@@ -31,5 +31,6 @@ include(
 //    "pipeline-services",
 //    "pipeline-services:chunker",
     "util",
-    "yappy-platform"
+    "yappy-platform",
+    "yappy-test-resources"
 )
