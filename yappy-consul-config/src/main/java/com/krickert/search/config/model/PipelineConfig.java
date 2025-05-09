@@ -17,12 +17,12 @@ import java.util.Map;
 @Serdeable
 public class PipelineConfig {
     /**
-     * The name of the pipeline.
+     * The name of the pipeline (unique within a PipelineGraphConfig).
      */
     private String name;
 
     /**
-     * Map of pipeline step configurations, where the key is the step ID.
+     * Map of pipeline step configurations, where the key is the step ID (PipelineStepConfig.pipelineStepId).
      */
     private Map<String, PipelineStepConfig> pipelineSteps;
 }

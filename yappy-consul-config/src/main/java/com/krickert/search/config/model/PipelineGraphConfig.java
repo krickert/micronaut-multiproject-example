@@ -18,7 +18,7 @@ import java.util.Map;
 @Serdeable
 public class PipelineGraphConfig {
     /**
-     * Map of pipeline configurations, where the key is the pipeline ID.
+     * Map of pipeline configurations, where the key is the pipeline ID (e.g., PipelineConfig.name or another unique ID).
      */
-    private Map<String, PipelineConfig> pipelineGraph;
+    private Map<String, PipelineConfig> pipelines; // Renamed from pipelineGraph to pipelines for clarity
 }

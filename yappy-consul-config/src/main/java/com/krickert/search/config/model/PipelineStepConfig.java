@@ -18,32 +18,38 @@ import java.util.List;
 @Serdeable
 public class PipelineStepConfig {
     /**
-     * The ID of the pipeline step.
+     * The ID of the pipeline step (unique within a pipeline).
      */
     private String pipelineStepId;
 
     /**
-     * The ID of the pipeline implementation.
+     * The ID of the pipeline module implementation (references a key in PipelineModuleMap.availableModules).
+     * This determines the type of service/logic to execute for this step and its configuration schema.
      */
     private String pipelineImplementationId;
 
     /**
-     * Custom configuration options for the pipeline step.
+     * Custom configuration options for this pipeline step, validated against the schema
+     * defined in the corresponding PipelineModuleConfiguration.
      */
-    private JsonConfigOptions customConfig;
+    private JsonConfigOptions customConfig; // Assumes JsonConfigOptions is properly initialized with schema
 
     /**
-     * List of Kafka topics to listen to.
+     * List of Kafka topic names this step should listen to for input.
+     * These topics must be present in PipelineClusterConfig.allowedKafkaTopics.
      */
     private List<String> kafkaListenTopics;
 
     /**
-     * List of Kafka topics to publish to.
+     * List of Kafka topics this step will publish its output to.
+     * These topics must be present in PipelineClusterConfig.allowedKafkaTopics.
      */
-    private List<KafkaPublishTopics> kafkaPublishTopics;
+    private List<KafkaPublishTopic> kafkaPublishTopics; // Note: Class name changed to singular
 
     /**
-     * List of gRPC services to forward to.
+     * List of gRPC service identifiers this step may forward requests or data to.
+     * These services must be present in PipelineClusterConfig.allowedGrpcServices.
+     * The format should be standardized (e.g., "package.ServiceName" or "servicename.methodname").
      */
     private List<String> grpcForwardTo;
 }

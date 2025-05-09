@@ -1,6 +1,7 @@
 package com.krickert.search.config.model;
 
 import io.micronaut.core.annotation.Introspected;
+import io.micronaut.core.annotation.Nullable;
 import io.micronaut.serde.annotation.Serdeable;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -18,18 +19,23 @@ import lombok.NoArgsConstructor;
 public class PipelineModuleConfiguration {
 
     /**
-     * Required field - the name of this module (pretty display name)
+     * Required field - the user-friendly display name of this module.
      */
     private String implementationName;
 
     /**
-     * Required field - the ID of the module (service ID unique)
+     * Required field - the unique ID of the module (e.g., service ID).
+     * This ID is used as the key in PipelineModuleMap.availableModules and
+     * referenced by PipelineStepConfig.pipelineImplementationId.
      */
     private String implementationId;
 
     /**
-     * Each application itself is its own PipeStep implementation, and with that comes with a custom JSON
-     * to be used by the SchemaServiceConfig.
+     * The JSON schema string that defines the structure and validation rules for
+     * the custom configuration (JsonConfigOptions.jsonConfig) this module accepts.
+     * This schema is used by SchemaServiceConfig for validation.
+     * Can be null or empty if the module does not require custom configuration or accepts any JSON object.
      */
+    @Nullable
     private String customConfigJsonSchema;
 }
