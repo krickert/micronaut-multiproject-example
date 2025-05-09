@@ -252,6 +252,6 @@ erDiagram
     * If valid, `the grpc-pipeline-engine` invokes the appropriate gRPC developer module, passing the (potentially parsed from JSON) custom configuration and other necessary context.
     * The engine also uses `allowedKafkaTopics` and `allowedGrpcServices` from `PipelineClusterConfig` to enforce communication policies for the step.
 3. **Developer Module Execution**:
-  * The gRPC developer module (written in any language using the **grpc-developer-sdk**) receives its invocation.
+  * The gRPC developer module (written in any language using the `grpc-developer-sdk`) receives its invocation.
   * It parses its custom configuration (which it knows is valid according to its advertised schema).
   * It performs its processing logic.
