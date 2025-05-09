@@ -26,5 +26,8 @@ include(
     "util",
  //   "yappy-platform",
     "yappy-test-resources",
-    "yappy-consul-config"
+    "yappy-consul-config",
+    "yappy-models",
+    "yappy-models:pipeline-config-models",
+    "yappy-models:schema-registry-models"
 )

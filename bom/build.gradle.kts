@@ -49,6 +49,10 @@ dependencies {
         api("${rootProject.group}:pipeline-service-test-utils.micronaut-kafka-registry-core:${rootProject.version}")
         api("${rootProject.group}:pipeline-service-test-utils.micronaut-kafka-registry-moto:${rootProject.version}")
         api("${rootProject.group}:pipeline-service-test-utils.micronaut-kafka-registry-apicurio:${rootProject.version}")
+        // Yappy models modules
+        api("${rootProject.group}:yappy-models:${rootProject.version}")
+        api("${rootProject.group}:pipeline-config-models:${rootProject.version}")
+        api("${rootProject.group}:schema-registry-models:${rootProject.version}")
     }
 }
 

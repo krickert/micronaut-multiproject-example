@@ -8,7 +8,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
-// No Micronaut imports
 
 @Data
 @NoArgsConstructor
