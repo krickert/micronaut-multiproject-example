@@ -56,6 +56,19 @@ dependencies {
     // https://mvnrepository.com/artifact/com.networknt/json-schema-validator
     api("com.networknt:json-schema-validator:1.5.6")
     testImplementation(mn.mockito.junit.jupiter)
+    runtimeOnly(mn.logback.classic) // This line was missing from your provided snippet, re-add if it was there
+}
+
+// Add this block to explicitly configure the Mockito agent
+tasks.withType<Test>().configureEach {
+    val mockitoCoreJar = configurations.testRuntimeClasspath.get()
+        .files.find { it.name.startsWith("mockito-core") }
+    if (mockitoCoreJar != null) {
+        jvmArgs("-javaagent:${mockitoCoreJar.absolutePath}")
+        logger.lifecycle("Configured Mockito agent: ${mockitoCoreJar.absolutePath}")
+    } else {
+        logger.warn("WARNING: mockito-core.jar not found in testRuntimeClasspath for agent configuration. Mockito inline mocking may not work as expected or show warnings.")
+    }
 }
 
 // Publishing configuration
@@ -77,5 +90,4 @@ publishing {
             }
         }
     }
-
 }

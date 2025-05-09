@@ -27,12 +27,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
+import org.mockito.ArgumentMatchers;
 
 @ExtendWith(MockitoExtension.class)
 class DynamicConfigurationManagerImplTest {
@@ -53,7 +53,7 @@ class DynamicConfigurationManagerImplTest {
     @Captor
     private ArgumentCaptor<ClusterConfigUpdateEvent> eventCaptor;
     @Captor
-    private ArgumentCaptor<Map<SchemaReference, String>> schemaCacheCaptor; // Correctly parameterized
+    private ArgumentCaptor<Map<SchemaReference, String>> schemaCacheCaptor;
 
 
     private DynamicConfigurationManagerImpl dynamicConfigurationManager;
@@ -72,10 +72,11 @@ class DynamicConfigurationManagerImplTest {
     @Test
     void initialize_successfulInitialLoad_validatesAndCachesConfigAndStartsWatch() {
         // ... (Arrange as before) ...
-        PipelineClusterConfig mockClusterConfig = new PipelineClusterConfig(
+        new PipelineClusterConfig(
                 TEST_CLUSTER_NAME, null, new PipelineModuleMap(Collections.emptyMap()),
                 Collections.emptySet(), Collections.emptySet()
         );
+        PipelineClusterConfig mockClusterConfig;
         // For this specific test, let's assume it has one module requiring one schema for clarity
         SchemaReference schemaRef1 = new SchemaReference("moduleA-schema", 1);
         PipelineModuleConfiguration moduleAConfig = new PipelineModuleConfiguration("ModuleA", "moduleA_impl_id", schemaRef1);
@@ -92,7 +93,7 @@ class DynamicConfigurationManagerImplTest {
                 .thenReturn(Optional.of(mockClusterConfig));
         when(mockConsulConfigFetcher.fetchSchemaVersionData(schemaRef1.subject(), schemaRef1.version()))
                 .thenReturn(Optional.of(schemaVersionData1));
-        when(mockConfigurationValidator.validate(eq(mockClusterConfig), any(Function.class)))
+        when(mockConfigurationValidator.validate(eq(mockClusterConfig), ArgumentMatchers.any()))
                 .thenReturn(ValidationResult.valid());
 
 
@@ -103,7 +104,7 @@ class DynamicConfigurationManagerImplTest {
         verify(mockConsulConfigFetcher).connect();
         verify(mockConsulConfigFetcher).fetchPipelineClusterConfig(TEST_CLUSTER_NAME);
         verify(mockConsulConfigFetcher).fetchSchemaVersionData(schemaRef1.subject(), schemaRef1.version()); // Verify schema fetch
-        verify(mockConfigurationValidator).validate(eq(mockClusterConfig), any(Function.class)); // Verify validation
+        verify(mockConfigurationValidator).validate(eq(mockClusterConfig), ArgumentMatchers.any()); // Verify validation
 
         verify(mockCachedConfigHolder).updateConfiguration(eq(mockClusterConfig), schemaCacheCaptor.capture());
         Map<SchemaReference, String> capturedSchemaMap = schemaCacheCaptor.getValue();
@@ -115,7 +116,7 @@ class DynamicConfigurationManagerImplTest {
         assertTrue(publishedEvent.oldConfig().isEmpty());
         assertEquals(mockClusterConfig, publishedEvent.newConfig());
 
-        verify(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), any(Consumer.class));
+        verify(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), ArgumentMatchers.any());
     }
 
     @Test
@@ -130,7 +131,7 @@ class DynamicConfigurationManagerImplTest {
         verify(mockConfigurationValidator, never()).validate(any(), any()); // Correct: no validation if no config
         verify(mockCachedConfigHolder, never()).updateConfiguration(any(), any());
         verify(mockEventPublisher, never()).publishEvent(any());
-        verify(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), any(Consumer.class));
+        verify(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), ArgumentMatchers.any());
     }
 
     @Test
@@ -141,7 +142,7 @@ class DynamicConfigurationManagerImplTest {
                 .thenReturn(Optional.of(mockClusterConfig));
         // Even if it's an empty config, schema fetching for its (empty) module map might occur.
         // For this test, assuming no modules, so no schema fetches.
-        when(mockConfigurationValidator.validate(eq(mockClusterConfig), any(Function.class)))
+        when(mockConfigurationValidator.validate(eq(mockClusterConfig), ArgumentMatchers.any()))
                 .thenReturn(ValidationResult.invalid(List.of("Test validation error")));
 
         dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
@@ -149,10 +150,10 @@ class DynamicConfigurationManagerImplTest {
         verify(mockConsulConfigFetcher).connect();
         verify(mockConsulConfigFetcher).fetchPipelineClusterConfig(TEST_CLUSTER_NAME);
         // If mockClusterConfig had modules, schema fetches would be verified here.
-        verify(mockConfigurationValidator).validate(eq(mockClusterConfig), any(Function.class));
+        verify(mockConfigurationValidator).validate(eq(mockClusterConfig), ArgumentMatchers.any());
         verify(mockCachedConfigHolder, never()).updateConfiguration(any(), any());
         verify(mockEventPublisher, never()).publishEvent(any());
-        verify(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), any(Consumer.class));
+        verify(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), ArgumentMatchers.any());
     }
 
     // --- Tests for handleConsulClusterConfigUpdate ---
@@ -176,7 +177,7 @@ class DynamicConfigurationManagerImplTest {
 
         when(mockConsulConfigFetcher.fetchSchemaVersionData(schemaRefNew.subject(), schemaRefNew.version()))
                 .thenReturn(Optional.of(schemaVersionDataNew));
-        when(mockConfigurationValidator.validate(eq(newWatchedConfig), any(Function.class)))
+        when(mockConfigurationValidator.validate(eq(newWatchedConfig), ArgumentMatchers.any()))
                 .thenReturn(ValidationResult.valid());
 
         dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME); // Sets up the watch via mock
@@ -187,14 +188,13 @@ class DynamicConfigurationManagerImplTest {
         actualWatchCallback.accept(Optional.of(newWatchedConfig));
 
         // --- Assert ---
-        verify(mockConfigurationValidator).validate(eq(newWatchedConfig), any(Function.class));
+        verify(mockConfigurationValidator).validate(eq(newWatchedConfig), ArgumentMatchers.any());
         verify(mockConsulConfigFetcher).fetchSchemaVersionData(schemaRefNew.subject(), schemaRefNew.version());
 
         // Use the SAME captor instance (it should have been reset or this is a new capture for this interaction)
         // If updateConfiguration is called multiple times in a test method flow with the same captor,
         // getValue() gets the last captured value. This is fine here.
         verify(mockCachedConfigHolder).updateConfiguration(eq(newWatchedConfig), schemaCacheCaptor.capture());
-        // Corrected the type here:
         Map<SchemaReference, String> capturedSchemaMap = schemaCacheCaptor.getValue();
         assertEquals(1, capturedSchemaMap.size());
         assertEquals(schemaVersionDataNew.schemaContent(), capturedSchemaMap.get(schemaRefNew));
