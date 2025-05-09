@@ -1,0 +1,73 @@
+{
+  "clusterName": "test-cluster",
+  "pipelineGraphConfig": {
+    "pipelines": {
+      "pipeline1": {
+        "name": "pipeline1",
+        "pipelineSteps": {
+          "step1": {
+            "pipelineStepId": "step1",
+            "pipelineImplementationId": "test-module-1",
+            "customConfig": {
+              "jsonConfig": "{\"key\": \"value\", \"threshold\": 0.75}"
+            },
+            "kafkaListenTopics": [
+              "test-input-topic-1"
+            ],
+            "kafkaPublishTopics": [
+              {
+                "topic": "intermediate-topic-1"
+              }
+            ],
+            "grpcForwardTo": []
+          },
+          "step2": {
+            "pipelineStepId": "step2",
+            "pipelineImplementationId": "test-module-2",
+            "customConfig": {
+              "jsonConfig": "{\"key2\": \"value2\", \"limit\": 100}"
+            },
+            "kafkaListenTopics": [
+              "intermediate-topic-1"
+            ],
+            "kafkaPublishTopics": [
+              {
+                "topic": "test-output-topic-1"
+              }
+            ],
+            "grpcForwardTo": []
+          }
+        }
+      }
+    }
+  },
+  "pipelineModuleMap": {
+    "availableModules": {
+      "test-module-1": {
+        "implementationName": "Test Module 1",
+        "implementationId": "test-module-1",
+        "customConfigSchemaReference": {
+          "subject": "test-module-1-schema",
+          "version": 1
+        }
+      },
+      "test-module-2": {
+        "implementationName": "Test Module 2",
+        "implementationId": "test-module-2",
+        "customConfigSchemaReference": {
+          "subject": "test-module-2-schema",
+          "version": 2
+        }
+      }
+    }
+  },
+  "allowedKafkaTopics": [
+    "test-input-topic-1",
+    "intermediate-topic-1",
+    "test-output-topic-1"
+  ],
+  "allowedGrpcServices": [
+    "test-grpc-service-1",
+    "test-grpc-service-2"
+  ]
+}

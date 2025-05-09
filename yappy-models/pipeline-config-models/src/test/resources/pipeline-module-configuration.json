@@ -1,0 +1,8 @@
+{
+  "implementationName": "Test Module",
+  "implementationId": "test-module-1",
+  "customConfigSchemaReference": {
+    "subject": "test-module-schema",
+    "version": 1
+  }
+}

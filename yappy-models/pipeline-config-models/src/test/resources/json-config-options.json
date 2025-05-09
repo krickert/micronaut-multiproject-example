@@ -1,0 +1,3 @@
+{
+  "jsonConfig": "{\"key\": \"value\", \"nested\": {\"nestedKey\": \"nestedValue\"}}"
+}

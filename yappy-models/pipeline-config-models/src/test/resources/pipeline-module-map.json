@@ -1,0 +1,20 @@
+{
+  "availableModules": {
+    "test-module-1": {
+      "implementationName": "Test Module 1",
+      "implementationId": "test-module-1",
+      "customConfigSchemaReference": {
+        "subject": "test-module-1-schema",
+        "version": 1
+      }
+    },
+    "test-module-2": {
+      "implementationName": "Test Module 2",
+      "implementationId": "test-module-2",
+      "customConfigSchemaReference": {
+        "subject": "test-module-2-schema",
+        "version": 2
+      }
+    }
+  }
+}

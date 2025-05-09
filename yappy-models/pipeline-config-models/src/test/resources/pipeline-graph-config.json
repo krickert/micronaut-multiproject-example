@@ -1,0 +1,62 @@
+{
+  "pipelines": {
+    "pipeline1": {
+      "name": "pipeline1",
+      "pipelineSteps": {
+        "step1": {
+          "pipelineStepId": "step1",
+          "pipelineImplementationId": "test-module-1",
+          "customConfig": {
+            "jsonConfig": "{\"key\": \"value\", \"threshold\": 0.75}"
+          },
+          "kafkaListenTopics": [
+            "test-input-topic-1"
+          ],
+          "kafkaPublishTopics": [
+            {
+              "topic": "intermediate-topic-1"
+            }
+          ],
+          "grpcForwardTo": []
+        },
+        "step2": {
+          "pipelineStepId": "step2",
+          "pipelineImplementationId": "test-module-2",
+          "customConfig": {
+            "jsonConfig": "{\"key2\": \"value2\", \"limit\": 100}"
+          },
+          "kafkaListenTopics": [
+            "intermediate-topic-1"
+          ],
+          "kafkaPublishTopics": [
+            {
+              "topic": "test-output-topic-1"
+            }
+          ],
+          "grpcForwardTo": []
+        }
+      }
+    },
+    "pipeline2": {
+      "name": "pipeline2",
+      "pipelineSteps": {
+        "step1": {
+          "pipelineStepId": "step1",
+          "pipelineImplementationId": "test-module-3",
+          "customConfig": {
+            "jsonConfig": "{\"source\": \"database\", \"query\": \"SELECT * FROM data\"}"
+          },
+          "kafkaListenTopics": [],
+          "kafkaPublishTopics": [
+            {
+              "topic": "test-output-topic-2"
+            }
+          ],
+          "grpcForwardTo": [
+            "test-grpc-service-2"
+          ]
+        }
+      }
+    }
+  }
+}
