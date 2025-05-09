@@ -23,14 +23,8 @@ rootProject.name = "yappy-platform-build"
 include(
     "bom",
     "protobuf-models",
-//    "pipeline-service-core",
-//    "pipeline-service-test-utils",
-//    "pipeline-service-test-utils:pipeline-test-platform",
-//    "pipeline-examples",
-//    "pipeline-examples:pipeline-echo-service",
-//    "pipeline-services",
-//    "pipeline-services:chunker",
     "util",
-    "yappy-platform",
-    "yappy-test-resources"
+ //   "yappy-platform",
+    "yappy-test-resources",
+    "yappy-consul-config"
 )

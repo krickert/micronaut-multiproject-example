@@ -40,7 +40,7 @@ public class JsonConfigOptions {
      */
     public SchemaServiceConfig getSchemaServiceConfig() {
         if (schemaServiceConfig == null) {
-            schemaServiceConfig = new SimpleSchemaServiceConfig(jsonConfig);
+            schemaServiceConfig = new DefaultSchemaServiceConfig(jsonConfig);
         }
         return schemaServiceConfig;
     }
