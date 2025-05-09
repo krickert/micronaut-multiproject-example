@@ -1,20 +1,26 @@
-package com.krickert.search.config.pipeline.model; // Adjusted package
+package com.krickert.search.config.pipeline.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 import java.util.Map;
-// No Micronaut imports
+import java.util.Collections; // For unmodifiable map
+// No Lombok needed
 
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
+/**
+ * Configuration for a pipeline graph, which contains a map of all defined pipeline configurations.
+ * This record is immutable.
+ *
+ * @param pipelines Map of pipeline configurations, where the key is the pipeline ID
+ * (e.g., PipelineConfig.name or another unique ID). Can be null (treated as empty).
+ * If provided, keys and values cannot be null.
+ */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class PipelineGraphConfig {
-
-    @JsonProperty("pipelines") // Renamed from pipelineGraph for clarity in previous discussion
-    private Map<String, PipelineConfig> pipelines;
+public record PipelineGraphConfig(
+    @JsonProperty("pipelines") Map<String, PipelineConfig> pipelines
+) {
+    // Canonical constructor making map unmodifiable and handling nulls
+    public PipelineGraphConfig {
+        pipelines = (pipelines == null) ? Collections.emptyMap() : Map.copyOf(pipelines);
+        // Map.copyOf will throw NPE if map contains null keys or values.
+    }
 }

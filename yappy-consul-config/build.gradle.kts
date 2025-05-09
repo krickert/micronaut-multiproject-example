@@ -49,8 +49,13 @@ dependencies {
     api(mn.micronaut.serde.api)
     api(mn.micronaut.serde.jackson)
     api(mn.micronaut.jackson.databind)
+    // https://mvnrepository.com/artifact/org.kiwiproject/consul-client
+    implementation("org.kiwiproject:consul-client:1.5.1")
+    api(project(":yappy-models:schema-registry-models"))
+    api(project(":yappy-models:pipeline-config-models"))
     // https://mvnrepository.com/artifact/com.networknt/json-schema-validator
     api("com.networknt:json-schema-validator:1.5.6")
+    testImplementation(mn.mockito.junit.jupiter)
 }
 
 // Publishing configuration
