@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+// Defines the gRPC service for the central PipeStream Engine, which orchestrates
+// pipeline execution based on configurations.
+package com.krickert.search.engine;
+
+// --- Imports ---
+import "pipeline_models.proto";         // Core data structures (PipeStream, PipeDoc, Blob, HistoryEntry)
+import "google/protobuf/struct.proto";    // For flexible error details
+import "google/protobuf/empty.proto";     // For async response
+
+// --- Java Options ---
+option java_multiple_files = true;
+option java_package = "com.krickert.search.engine"; // Match package
+
+// =============================================================================
+// Service Definition: PipeStreamEngine
+// =============================================================================
+// This service acts as the central orchestrator for executing pipelines defined
+// in the configuration system (e.g., Consul). It loads pipeline definitions
+// and sequentially invokes the appropriate PipeStepProcessor services.
+// =============================================================================
+
+
+service PipeStreamEngine {
+  // --- RPC: process ---
+  // Purpose: Initiates and executes a complete pipeline run based on a named
+  //          configuration, waiting for completion and returning the final state.
+  // Usage:   Called by systems needing the synchronous result of a pipeline run.
+  //          Suitable for request/response scenarios or testing.
+  // Request: EngineProcessRequest - Specifies the pipeline name and initial data/state.
+  // Response: EngineProcessResponse - Returns the final state of the PipeStream
+  //            after the entire pipeline execution completes or fails.
+  rpc process(com.krickert.search.model.PipeStream) returns (com.krickert.search.model.PipeStream);
+
+  // --- RPC: processAsync ---
+  // Purpose: Initiates a pipeline run based on a named configuration without
+  //          the caller waiting for the final result (fire-and-forget).
+  // Usage:   Used when the initiating system doesn't need immediate feedback.
+  //          Ideal for triggering background processing or batch jobs.
+  //          Pipeline outcome must be monitored via other means (e.g., logs,
+  //          events, checking final data state).
+  // Request: EngineProcessRequest - Same input as 'process'.
+  // Response: google.protobuf.Empty - Simple acknowledgement that the pipeline
+  //           run has been successfully initiated by the engine. Errors during
+  //           initiation (e.g., config not found) may still be returned via
+  //           gRPC status codes.
+  rpc processAsync(com.krickert.search.model.PipeStream) returns (google.protobuf.Empty);
+}
+

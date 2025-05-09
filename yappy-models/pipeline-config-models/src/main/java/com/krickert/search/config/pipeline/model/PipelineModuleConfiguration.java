@@ -5,16 +5,20 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+// No Micronaut imports
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class SchemaReference {
+public class PipelineModuleConfiguration {
 
-    @JsonProperty("subject")
-    private String subject;
+    @JsonProperty("implementationName")
+    private String implementationName;
 
-    @JsonProperty("version")
-    private Integer version;
+    @JsonProperty("implementationId")
+    private String implementationId;
+
+    @JsonProperty("customConfigSchemaReference")
+    private SchemaReference customConfigSchemaReference;
 }

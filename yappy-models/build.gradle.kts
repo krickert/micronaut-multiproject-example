@@ -15,6 +15,7 @@ dependencies {
         // Constrain own modules
         api("${rootProject.group}:pipeline-config-models:${rootProject.version}")
         api("${rootProject.group}:schema-registry-models:${rootProject.version}")
+        api("${rootProject.group}:protobuf-models:${rootProject.version}")
     }
 }
 

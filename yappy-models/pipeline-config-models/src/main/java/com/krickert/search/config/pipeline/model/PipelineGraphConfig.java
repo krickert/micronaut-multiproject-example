@@ -6,15 +6,15 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Map;
+// No Micronaut imports
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class SchemaReference {
+public class PipelineGraphConfig {
 
-    @JsonProperty("subject")
-    private String subject;
-
-    @JsonProperty("version")
-    private Integer version;
+    @JsonProperty("pipelines") // Renamed from pipelineGraph for clarity in previous discussion
+    private Map<String, PipelineConfig> pipelines;
 }

@@ -22,12 +22,12 @@ rootProject.name = "yappy-platform-build"
 // Include all the subprojects
 include(
     "bom",
-    "protobuf-models",
     "util",
  //   "yappy-platform",
     "yappy-test-resources",
     "yappy-consul-config",
     "yappy-models",
     "yappy-models:pipeline-config-models",
-    "yappy-models:schema-registry-models"
+    "yappy-models:schema-registry-models",
+    "yappy-models:protobuf-models"
 )

@@ -41,7 +41,6 @@ dependencies {
         api("com.squareup.wire:wire-runtime:4.9.3")
 
         // Constrain own modules
-        api("${rootProject.group}:protobuf-models:${rootProject.version}")
         api("${rootProject.group}:util:${rootProject.version}")
         api("${rootProject.group}:pipeline-service-core:${rootProject.version}")
         api("${rootProject.group}:pipeline-service-test-utils:${rootProject.version}")
@@ -53,6 +52,7 @@ dependencies {
         api("${rootProject.group}:yappy-models:${rootProject.version}")
         api("${rootProject.group}:pipeline-config-models:${rootProject.version}")
         api("${rootProject.group}:schema-registry-models:${rootProject.version}")
+        api("${rootProject.group}:protobuf-models:${rootProject.version}")
     }
 }
 
