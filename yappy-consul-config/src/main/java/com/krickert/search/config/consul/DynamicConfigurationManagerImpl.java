@@ -58,24 +58,42 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
         if (!this.clusterName.equals(clusterName)) {
             LOG.warn("Initialize called with different cluster name '{}', expected '{}'. Using configured name.", clusterName, this.clusterName);
         }
-        try {
-            consulConfigFetcher.connect();
-            LOG.info("Attempting initial configuration load for cluster: {}", this.clusterName);
-            Optional<PipelineClusterConfig> initialClusterConfigOpt = consulConfigFetcher.fetchPipelineClusterConfig(this.clusterName);
 
-            if (initialClusterConfigOpt.isPresent()) {
-                PipelineClusterConfig initialConfig = initialClusterConfigOpt.get();
-                LOG.info("Initial configuration fetched for cluster '{}'. Validating...", this.clusterName);
-                processAndCacheConfigUpdate(Optional.empty(), initialConfig, "Initial Load");
-            } else {
-                LOG.warn("No initial configuration found for cluster '{}'. Waiting for Consul watch updates.", this.clusterName);
-                // Consider clearing cache if this is a definitive "no config exists" state
-                // cachedConfigHolder.clearConfiguration();
+        boolean initialLoadAttempted = false;
+        try {
+            consulConfigFetcher.connect(); // Ensure connection is established
+            LOG.info("Attempting initial configuration load for cluster: {}", this.clusterName);
+
+            try { // More granular try-catch for the fetching and processing part
+                Optional<PipelineClusterConfig> initialClusterConfigOpt = consulConfigFetcher.fetchPipelineClusterConfig(this.clusterName);
+                initialLoadAttempted = true; // Mark that we at least tried to fetch
+
+                if (initialClusterConfigOpt.isPresent()) {
+                    PipelineClusterConfig initialConfig = initialClusterConfigOpt.get();
+                    LOG.info("Initial configuration fetched for cluster '{}'. Validating...", this.clusterName);
+                    // processAndCacheConfigUpdate also has its own try-catch for robustness
+                    processAndCacheConfigUpdate(Optional.empty(), initialConfig, "Initial Load");
+                } else {
+                    LOG.warn("No initial configuration found for cluster '{}'. Waiting for Consul watch updates.", this.clusterName);
+                    // cachedConfigHolder.clearConfiguration(); // Optional: if no config means "empty state"
+                }
+            } catch (Exception fetchOrProcessEx) {
+                LOG.error("Error during initial configuration load/processing for cluster '{}': {}. Will still attempt to start watch.",
+                        this.clusterName, fetchOrProcessEx.getMessage(), fetchOrProcessEx);
+                if (!initialLoadAttempted) { // If fetchPipelineClusterConfig itself threw, it wasn't even attempted
+                    initialLoadAttempted = true; // Correct this logic slightly; if fetch throws, it was attempted.
+                }
             }
+
+            // Always attempt to start the watch, even if initial load had issues (unless connect failed)
             consulConfigFetcher.watchClusterConfig(this.clusterName, this::handleConsulClusterConfigUpdate);
             LOG.info("Consul watch established for cluster configuration: {}", this.clusterName);
-        } catch (Exception e) {
-            LOG.error("CRITICAL: Failed to initialize DynamicConfigurationManager for cluster '{}': {}", this.clusterName, e.getMessage(), e);
+
+        } catch (Exception e) { // Catches exceptions from connect() or watchClusterConfig() setup
+            LOG.error("CRITICAL: Failed to initialize DynamicConfigurationManager (e.g., connect or watch setup) for cluster '{}': {}",
+                    this.clusterName, e.getMessage(), e);
+            // If connect() or watchClusterConfig() fails, the component is likely non-functional.
+            // Depending on policy, rethrow or enter a failed state.
         }
     }
 
