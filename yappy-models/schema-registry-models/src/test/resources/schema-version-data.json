@@ -1,0 +1,10 @@
+{
+  "globalId": 12345,
+  "subject": "test-artifact",
+  "version": 2,
+  "schemaContent": "{\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\"}}}",
+  "schemaType": "JSON_SCHEMA",
+  "compatibility": "BACKWARD",
+  "createdAt": "2023-05-15T10:30:45.678Z",
+  "versionDescription": "Added name property"
+}
