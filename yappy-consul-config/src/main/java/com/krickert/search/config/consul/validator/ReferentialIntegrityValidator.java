@@ -8,6 +8,18 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.function.Function;
 
+/**
+ * Validates the referential integrity of a PipelineClusterConfig.
+ * <br/>
+ * This validator ensures that:
+ * 1. The PipelineClusterConfig and its main components are not null
+ * 2. Pipeline step implementation IDs reference valid modules in the available modules map
+ * 3. Step IDs are unique within each pipeline
+ * 4. Pipeline names are unique within the graph
+ * <br/>
+ * The validator is designed to collect all errors rather than failing fast on the first error.
+ */
+
 @Singleton // Each rule is a bean
 public class ReferentialIntegrityValidator implements ClusterValidationRule {
     private static final Logger LOG = LoggerFactory.getLogger(ReferentialIntegrityValidator.class);
@@ -44,6 +56,9 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
 
 
         if (clusterConfig.pipelineGraphConfig() != null && clusterConfig.pipelineGraphConfig().pipelines() != null) {
+            // Check for pipeline name uniqueness within the graph
+            Set<String> pipelineNames = new HashSet<>();
+
             for (Map.Entry<String, PipelineConfig> pipelineEntry : clusterConfig.pipelineGraphConfig().pipelines().entrySet()) {
                 String pipelineName = pipelineEntry.getKey();
                 PipelineConfig pipeline = pipelineEntry.getValue();
@@ -54,10 +69,18 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                 }
                 if (pipeline.name() == null || pipeline.name().isBlank()){
                     errors.add(String.format("Pipeline with key '%s' has a null or blank name in cluster '%s'.", pipelineName, clusterConfig.clusterName()));
+                } else {
+                    // Check for pipeline name uniqueness
+                    if (!pipelineNames.add(pipeline.name())) {
+                        errors.add(String.format("Duplicate pipeline name '%s' found in cluster '%s'. Pipeline names must be unique within a graph.", 
+                                pipeline.name(), clusterConfig.clusterName()));
+                    }
                 }
 
-
                 if (pipeline.pipelineSteps() != null) {
+                    // Check for step ID uniqueness within the pipeline
+                    Set<String> stepIds = new HashSet<>();
+
                     for (Map.Entry<String, PipelineStepConfig> stepEntry : pipeline.pipelineSteps().entrySet()) {
                         String stepIdInMap = stepEntry.getKey();
                         PipelineStepConfig step = stepEntry.getValue();
@@ -70,11 +93,20 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                         if (step.pipelineStepId() == null || step.pipelineStepId().isBlank()){
                             errors.add(String.format("Pipeline step with key '%s' in pipeline '%s' (cluster '%s') has a null or blank pipelineStepId field.",
                                     stepIdInMap, pipelineName, clusterConfig.clusterName()));
-                        } else if (!stepIdInMap.equals(step.pipelineStepId())){
-                            errors.add(String.format("Pipeline step key '%s' does not match its pipelineStepId field '%s' in pipeline '%s' (cluster '%s').",
-                                    stepIdInMap, step.pipelineStepId(), pipelineName, clusterConfig.clusterName()));
-                        }
+                        } else {
+                            // Check if the step ID matches the map key
+                            if (!stepIdInMap.equals(step.pipelineStepId())){
+                                errors.add(String.format("Pipeline step key '%s' does not match its pipelineStepId field '%s' in pipeline '%s' (cluster '%s').",
+                                        stepIdInMap, step.pipelineStepId(), pipelineName, clusterConfig.clusterName()));
+                            }
 
+                            // Check for step ID uniqueness within the pipeline
+                            // This check is performed regardless of whether the step ID matches the map key
+                            if (!stepIds.add(step.pipelineStepId())) {
+                                errors.add(String.format("Duplicate step ID '%s' found in pipeline '%s' (cluster '%s'). Step IDs must be unique within a pipeline.", 
+                                        step.pipelineStepId(), pipelineName, clusterConfig.clusterName()));
+                            }
+                        }
 
                         // Check pipelineImplementationId
                         if (step.pipelineImplementationId() == null || step.pipelineImplementationId().isBlank()) {
@@ -96,8 +128,6 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                                 // unless you want to be extremely defensive against somehow bypassing record constructor validation.
                             }
                         }
-                        // TODO: Add more checks: step ID uniqueness within pipeline (requires iterating all steps in this pipeline first).
-                        // TODO: Pipeline name uniqueness within graph (requires iterating all pipelines first).
                     }
                 }
             }
