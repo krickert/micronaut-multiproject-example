@@ -7,3 +7,5 @@ testcontainers:
     enabled: true
   apicurio:
     enabled: false
+
+consul:

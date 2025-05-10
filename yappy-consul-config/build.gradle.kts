@@ -23,10 +23,10 @@ micronaut {
     testRuntime("junit5")
     processing {
         incremental(true)
-        annotations("com.krickert.search.config.consul.**")
+        annotations("com.krickert.search.config.consul.**", "com.krickert.testcontainers.consul.*")
     }
     testResources {
-        enabled.set(false)
+        enabled.set(true)
         inferClasspath.set(true)
         additionalModules.add(KnownModules.KAFKA)
         clientTimeout.set(60)
@@ -46,6 +46,9 @@ dependencies {
     annotationProcessor(mn.lombok)
     compileOnly(mn.lombok)
     testResourcesImplementation(project(":yappy-test-resources"))
+
+    testImplementation(project(":yappy-test-resources"))
+
     api(mn.micronaut.serde.api)
     api(mn.micronaut.serde.jackson)
     api(mn.micronaut.jackson.databind)
@@ -59,6 +62,8 @@ dependencies {
     implementation("org.jgrapht:jgrapht-core:1.5.2")
     testImplementation(mn.mockito.junit.jupiter)
     runtimeOnly(mn.logback.classic) // This line was missing from your provided snippet, re-add if it was there
+    implementation(mn.micronaut.reactor.http.client)
+    implementation(mn.javax.annotation.api)
 }
 
 // Add this block to explicitly configure the Mockito agent
