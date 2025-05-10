@@ -43,61 +43,12 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
     public static final String DISPLAY_NAME = "Consul";
 
 
-    // ... (Keep isContainerEnabled method as is) ...
-    protected boolean isContainerEnabled(Map<String, Object> testResourcesConfig) {
-        // Check if testcontainers are globally enabled
-        Object globalEnabled = testResourcesConfig.get(PROPERTY_TESTCONTAINERS_ENABLED);
-        if (globalEnabled != null) {
-            if (globalEnabled instanceof Boolean) {
-                if (!(Boolean) globalEnabled) {
-                    LOG.debug("Test containers are globally disabled via {}", PROPERTY_TESTCONTAINERS_ENABLED);
-                    return false;
-                }
-            } else if (globalEnabled instanceof String) {
-                if ("false".equalsIgnoreCase((String) globalEnabled)) {
-                    LOG.debug("Test containers are globally disabled via {}", PROPERTY_TESTCONTAINERS_ENABLED);
-                    return false;
-                }
-            }
-        }
 
-        // Check if this specific container is enabled
-        Object consulEnabled = testResourcesConfig.get(PROPERTY_TESTCONTAINERS_CONSUL_ENABLED);
-        if (consulEnabled != null) {
-            if (consulEnabled instanceof Boolean) {
-                return (Boolean) consulEnabled;
-            } else if (consulEnabled instanceof String) {
-                return Boolean.parseBoolean((String) consulEnabled);
-            } else if (consulEnabled instanceof Map) {
-                // Check if there's an 'enabled' property in the map
-                @SuppressWarnings("unchecked")
-                Map<String, Object> enabledMap = (Map<String, Object>) consulEnabled;
-                Object enabledValue = enabledMap.get("enabled");
-                if (enabledValue != null) {
-                    if (enabledValue instanceof Boolean) {
-                        return (Boolean) enabledValue;
-                    } else if (enabledValue instanceof String) {
-                        return Boolean.parseBoolean((String) enabledValue);
-                    }
-                }
-                // If there's no 'enabled' property, but the map exists, consider it enabled
-                return true;
-            }
-        }
-
-        // Default to enabled
-        return true;
-    }
 
 
     // ... (Keep getResolvableProperties, getDisplayName, getSimpleName, getDefaultImageName methods as is) ...
     @Override
     public List<String> getResolvableProperties(Map<String, Collection<String>> propertyEntries, Map<String, Object> testResourcesConfig) {
-        // Check if this container is enabled
-        if (!isContainerEnabled(testResourcesConfig)) {
-            LOG.debug("Consul container is disabled, returning empty list of resolvable properties");
-            return Collections.emptyList();
-        }
         // Return all properties we can resolve
         return RESOLVABLE_PROPERTIES_LIST;
     }
@@ -121,17 +72,12 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
     // --- UPDATED createContainer METHOD ---
     @Override
     protected ConsulContainer createContainer(DockerImageName imageName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
-        // Check if this container is enabled
-        if (!isContainerEnabled(testResourcesConfig)) {
-            LOG.debug("Consul container is disabled, not creating container");
-            return null;
-        }
 
         LOG.info("Creating Consul container with image: {}", imageName);
         // Create a new Consul container with the specified image
-        ConsulContainer consulContainer = new ConsulContainer(imageName)
-                // Expose the Consul HTTP port and map it to a random port on the host
-                .withExposedPorts(CONSUL_HTTP_PORT);
+        ConsulContainer consulContainer = new ConsulContainer(imageName);
+        // The ConsulContainer automatically exposes port 8500 and maps it to a random port
+        // No need to explicitly call withExposedPorts
 
         // Set startup KV properties (keep existing logic)
         // This uses `withConsulCommand` which executes AFTER the container starts
@@ -202,11 +148,6 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
 
     @Override
     protected boolean shouldAnswer(String propertyName, Map<String, Object> properties, Map<String, Object> testResourcesConfig) {
-        // Check if this container is enabled
-        if (!isContainerEnabled(testResourcesConfig)) {
-            // LOG.debug("Consul container is disabled, not answering property {}", propertyName); // Optional: reduce logging noise
-            return false;
-        }
         // Answer if the property is one we can resolve
         return propertyName != null && RESOLVABLE_PROPERTIES_LIST.contains(propertyName);
     }
