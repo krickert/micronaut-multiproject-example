@@ -134,6 +134,36 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                                 // unless you want to be extremely defensive against somehow bypassing record constructor validation.
                             }
                         }
+
+                        // Check for null or blank values in kafkaListenTopics
+                        if (step.kafkaListenTopics() != null) {
+                            for (String topic : step.kafkaListenTopics()) {
+                                if (topic == null || topic.isBlank()) {
+                                    errors.add(String.format("Pipeline step '%s' in pipeline '%s' (cluster '%s') contains a null or blank Kafka listen topic.",
+                                            step.pipelineStepId(), pipelineName, clusterConfig.clusterName()));
+                                }
+                            }
+                        }
+
+                        // Check for null or blank values in kafkaPublishTopics
+                        if (step.kafkaPublishTopics() != null) {
+                            for (KafkaPublishTopic pubTopic : step.kafkaPublishTopics()) {
+                                if (pubTopic == null || pubTopic.topic() == null || pubTopic.topic().isBlank()) {
+                                    errors.add(String.format("Pipeline step '%s' in pipeline '%s' (cluster '%s') contains a null or blank Kafka publish topic.",
+                                            step.pipelineStepId(), pipelineName, clusterConfig.clusterName()));
+                                }
+                            }
+                        }
+
+                        // Check for null or blank values in grpcForwardTo
+                        if (step.grpcForwardTo() != null) {
+                            for (String service : step.grpcForwardTo()) {
+                                if (service == null || service.isBlank()) {
+                                    errors.add(String.format("Pipeline step '%s' in pipeline '%s' (cluster '%s') contains a null or blank gRPC forward-to service.",
+                                            step.pipelineStepId(), pipelineName, clusterConfig.clusterName()));
+                                }
+                            }
+                        }
                     }
                 }
             }
