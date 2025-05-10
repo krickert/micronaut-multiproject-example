@@ -36,9 +36,9 @@ class WhitelistValidatorTest {
         Set<String> allowedKafkaTopics = new HashSet<>(Arrays.asList("topic1", "topic2"));
         Set<String> allowedGrpcServices = new HashSet<>(Arrays.asList("service1", "service2"));
 
-        List<String> kafkaListenTopics = Arrays.asList("topic1");
-        List<KafkaPublishTopic> kafkaPublishTopics = Arrays.asList(new KafkaPublishTopic("topic2"));
-        List<String> grpcForwardTo = Arrays.asList("service1");
+        List<String> kafkaListenTopics = List.of("topic1");
+        List<KafkaPublishTopic> kafkaPublishTopics = List.of(new KafkaPublishTopic("topic2"));
+        List<String> grpcForwardTo = List.of("service1");
 
         PipelineClusterConfig clusterConfig = createTestClusterConfig(
             allowedKafkaTopics, allowedGrpcServices, kafkaListenTopics, kafkaPublishTopics, grpcForwardTo
@@ -55,9 +55,9 @@ class WhitelistValidatorTest {
         Set<String> allowedKafkaTopics = new HashSet<>(Arrays.asList("topic1", "topic2"));
         Set<String> allowedGrpcServices = new HashSet<>(Arrays.asList("service1", "service2"));
 
-        List<String> kafkaListenTopics = Arrays.asList("non-whitelisted-topic");
-        List<KafkaPublishTopic> kafkaPublishTopics = Arrays.asList(new KafkaPublishTopic("topic2"));
-        List<String> grpcForwardTo = Arrays.asList("service1");
+        List<String> kafkaListenTopics = List.of("non-whitelisted-topic");
+        List<KafkaPublishTopic> kafkaPublishTopics = List.of(new KafkaPublishTopic("topic2"));
+        List<String> grpcForwardTo = List.of("service1");
 
         PipelineClusterConfig clusterConfig = createTestClusterConfig(
             allowedKafkaTopics, allowedGrpcServices, kafkaListenTopics, kafkaPublishTopics, grpcForwardTo
@@ -76,9 +76,9 @@ class WhitelistValidatorTest {
         Set<String> allowedKafkaTopics = new HashSet<>(Arrays.asList("topic1", "topic2"));
         Set<String> allowedGrpcServices = new HashSet<>(Arrays.asList("service1", "service2"));
 
-        List<String> kafkaListenTopics = Arrays.asList("topic1");
-        List<KafkaPublishTopic> kafkaPublishTopics = Arrays.asList(new KafkaPublishTopic("non-whitelisted-topic"));
-        List<String> grpcForwardTo = Arrays.asList("service1");
+        List<String> kafkaListenTopics = List.of("topic1");
+        List<KafkaPublishTopic> kafkaPublishTopics = List.of(new KafkaPublishTopic("non-whitelisted-topic"));
+        List<String> grpcForwardTo = List.of("service1");
 
         PipelineClusterConfig clusterConfig = createTestClusterConfig(
             allowedKafkaTopics, allowedGrpcServices, kafkaListenTopics, kafkaPublishTopics, grpcForwardTo
@@ -97,9 +97,9 @@ class WhitelistValidatorTest {
         Set<String> allowedKafkaTopics = new HashSet<>(Arrays.asList("topic1", "topic2"));
         Set<String> allowedGrpcServices = new HashSet<>(Arrays.asList("service1", "service2"));
 
-        List<String> kafkaListenTopics = Arrays.asList("topic1");
-        List<KafkaPublishTopic> kafkaPublishTopics = Arrays.asList(new KafkaPublishTopic("topic2"));
-        List<String> grpcForwardTo = Arrays.asList("non-whitelisted-service");
+        List<String> kafkaListenTopics = List.of("topic1");
+        List<KafkaPublishTopic> kafkaPublishTopics = List.of(new KafkaPublishTopic("topic2"));
+        List<String> grpcForwardTo = List.of("non-whitelisted-service");
 
         PipelineClusterConfig clusterConfig = createTestClusterConfig(
             allowedKafkaTopics, allowedGrpcServices, kafkaListenTopics, kafkaPublishTopics, grpcForwardTo
@@ -118,9 +118,9 @@ class WhitelistValidatorTest {
         Set<String> allowedKafkaTopics = Collections.emptySet();
         Set<String> allowedGrpcServices = Collections.emptySet();
 
-        List<String> kafkaListenTopics = Arrays.asList("topic1");
-        List<KafkaPublishTopic> kafkaPublishTopics = Arrays.asList(new KafkaPublishTopic("topic2"));
-        List<String> grpcForwardTo = Arrays.asList("service1");
+        List<String> kafkaListenTopics = List.of("topic1");
+        List<KafkaPublishTopic> kafkaPublishTopics = List.of(new KafkaPublishTopic("topic2"));
+        List<String> grpcForwardTo = List.of("service1");
 
         PipelineClusterConfig clusterConfig = createTestClusterConfig(
             allowedKafkaTopics, allowedGrpcServices, kafkaListenTopics, kafkaPublishTopics, grpcForwardTo

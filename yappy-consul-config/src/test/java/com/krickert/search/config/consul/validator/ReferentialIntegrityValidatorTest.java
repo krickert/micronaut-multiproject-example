@@ -196,4 +196,62 @@ class ReferentialIntegrityValidatorTest {
 
         assertTrue(errors.isEmpty(), "Valid configuration should not produce any errors");
     }
+
+    /**
+     * Note: We can't directly test null/blank values in the lists (kafkaListenTopics, kafkaPublishTopics, grpcForwardTo)
+     * because the PipelineStepConfig record constructor already validates these inputs and throws exceptions for null
+     * or blank elements. The ReferentialIntegrityValidator's null/blank checks are still important for robustness,
+     * but they're effectively redundant with the record constructor's validation.
+     * <br/>
+     * In a real application, these checks would catch issues if the validation in the record constructor was bypassed
+     * or if the data came from a source that didn't validate it.
+     * <br/>
+     * The code that checks for null/blank values in the lists is at lines 138-166 in ReferentialIntegrityValidator.java:
+     * <br/>
+     * 1. For kafkaListenTopics:
+     * ```java
+     * if (step.kafkaListenTopics() != null) {
+     *     for (String topic : step.kafkaListenTopics()) {
+     *         if (topic == null || topic.isBlank()) {
+     *             errors.add(String.format("Pipeline step '%s' in pipeline '%s' (cluster '%s') contains a null or blank Kafka listen topic.",
+     *                     step.pipelineStepId(), pipelineName, clusterConfig.clusterName()));
+     *         }
+     *     }
+     * }
+     * ```
+     * <br/>
+     * 2. For kafkaPublishTopics:
+     * ```java
+     * if (step.kafkaPublishTopics() != null) {
+     *     for (KafkaPublishTopic pubTopic : step.kafkaPublishTopics()) {
+     *         if (pubTopic == null || pubTopic.topic() == null || pubTopic.topic().isBlank()) {
+     *             errors.add(String.format("Pipeline step '%s' in pipeline '%s' (cluster '%s') contains a null or blank Kafka publish topic.",
+     *                     step.pipelineStepId(), pipelineName, clusterConfig.clusterName()));
+     *         }
+     *     }
+     * }
+     * ```
+     * <br/>
+     * 3. For grpcForwardTo:
+     * ```java
+     * if (step.grpcForwardTo() != null) {
+     *     for (String service : step.grpcForwardTo()) {
+     *         if (service == null || service.isBlank()) {
+     *             errors.add(String.format("Pipeline step '%s' in pipeline '%s' (cluster '%s') contains a null or blank gRPC forward-to service.",
+     *                     step.pipelineStepId(), pipelineName, clusterConfig.clusterName()));
+     *         }
+     *     }
+     * }
+     * ```
+     */
+    @Test
+    void validate_nullOrBlankValuesInLists_cannotBeTestedDirectly() {
+        // This test is a placeholder to document why we can't directly test null/blank values in the lists
+        // See the comment above for details
+
+        // We can verify that the ReferentialIntegrityValidator class has the code to check for null/blank values
+        // in the lists by examining the implementation, but we can't directly test it with null/blank values
+        // because the PipelineStepConfig record constructor already validates these inputs and throws exceptions
+        // for null or blank elements.
+    }
 }

@@ -4,7 +4,6 @@ import org.kiwiproject.consul.Consul;
 import org.kiwiproject.consul.cache.KVCache;
 import org.kiwiproject.consul.model.kv.Value;
 import com.google.common.net.HostAndPort; // Assuming Guava is available
-import org.kiwiproject.consul.option.Options;
 
 
 import java.util.Map; // For using the result of getMap()
@@ -15,7 +14,7 @@ import static org.kiwiproject.consul.cache.KVCache.newCache;
 
 public class ConsulWatchExample {
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) {
         // 1. Create a Consul client instance
         Consul client = Consul.builder()
                 .withHostAndPort(HostAndPort.fromParts("localhost", 8500))
@@ -43,6 +42,7 @@ public class ConsulWatchExample {
                     updatedValueString = consulApiValue.getValueAsString();
                     System.out.println("Key '" + keyToWatch + "' (watched as root) updated. New value: " + updatedValueString.orElse("[empty or null string]"));
                 } else {
+                    //noinspection UnusedAssignment
                     updatedValueString = Optional.empty();
                     System.out.println("Key '" + keyToWatch + "' (watched as root) was deleted or is no longer present.");
                 }
