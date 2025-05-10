@@ -2,10 +2,9 @@ package com.krickert.search.config.consul;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.net.HostAndPort; // From Guava, often included with kiwiproject or add explicitly
+import com.google.common.net.HostAndPort;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.schema.registry.model.SchemaVersionData;
-
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value;
 import jakarta.annotation.PreDestroy;
@@ -20,6 +19,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+
+import static org.kiwiproject.consul.cache.KVCache.newCache;
 
 /**
  * A fetcher implementation that interacts with Consul to retrieve and optionally watch
@@ -195,7 +196,7 @@ public class KiwiprojectConsulConfigFetcher implements ConsulConfigFetcher {
         try {
             // KVCache watches a "rootPath". If keyToWatch is the exact key, it should work.
             // The key within the map returned by KVCache listener might be empty string "" if rootPath is the exact key.
-            clusterConfigCache = KVCache.newCache(kvClient, keyToWatch, watchSeconds);
+            clusterConfigCache = newCache(kvClient, keyToWatch, watchSeconds);
 
             clusterConfigCache.addListener(newValues -> {
                 LOG.debug("KVCache listener invoked for key '{}'. Snapshot size: {}", keyToWatch, newValues.size());
