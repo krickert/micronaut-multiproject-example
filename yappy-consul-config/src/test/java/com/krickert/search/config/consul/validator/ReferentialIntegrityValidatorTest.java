@@ -138,6 +138,27 @@ class ReferentialIntegrityValidatorTest {
     }
 
     @Test
+    void validate_pipelineNameMismatch_returnsErrors() {
+        // Create a pipeline where the map key doesn't match the pipeline.name() field
+        Map<String, PipelineConfig> pipelines = new HashMap<>();
+
+        PipelineConfig pipeline = new PipelineConfig("actual-name", Collections.emptyMap());
+        pipelines.put("different-key", pipeline); // Map key doesn't match pipeline.name()
+
+        PipelineGraphConfig graphConfig = new PipelineGraphConfig(pipelines);
+        PipelineModuleMap moduleMap = new PipelineModuleMap(Collections.emptyMap());
+
+        PipelineClusterConfig clusterConfig = new PipelineClusterConfig(
+            "test-cluster", graphConfig, moduleMap, null, null
+        );
+
+        List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
+
+        assertTrue(errors.stream().anyMatch(e -> e.contains("Pipeline map key 'different-key' does not match its pipeline.name() field 'actual-name'")),
+                "Should detect pipeline name mismatch with map key");
+    }
+
+    @Test
     void validate_validConfig_returnsNoErrors() {
         // Create a valid pipeline configuration
         Map<String, PipelineStepConfig> steps = new HashMap<>();

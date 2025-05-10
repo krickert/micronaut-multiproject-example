@@ -70,6 +70,12 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                 if (pipeline.name() == null || pipeline.name().isBlank()){
                     errors.add(String.format("Pipeline with key '%s' has a null or blank name in cluster '%s'.", pipelineName, clusterConfig.clusterName()));
                 } else {
+                    // Check if the pipeline name matches the map key
+                    if (!pipelineName.equals(pipeline.name())) {
+                        errors.add(String.format("Pipeline map key '%s' does not match its pipeline.name() field '%s' in cluster '%s'.",
+                                pipelineName, pipeline.name(), clusterConfig.clusterName()));
+                    }
+
                     // Check for pipeline name uniqueness
                     if (!pipelineNames.add(pipeline.name())) {
                         errors.add(String.format("Duplicate pipeline name '%s' found in cluster '%s'. Pipeline names must be unique within a graph.", 
