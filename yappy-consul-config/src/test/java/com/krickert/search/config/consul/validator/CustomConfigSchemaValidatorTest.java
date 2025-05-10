@@ -26,35 +26,39 @@ class CustomConfigSchemaValidatorTest {
     private Map<SchemaReference, String> schemaMap;
 
     // Test JSON schemas
-    private static final String VALID_SCHEMA = "{\n" +
-            "  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n" +
-            "  \"type\": \"object\",\n" +
-            "  \"properties\": {\n" +
-            "    \"name\": { \"type\": \"string\" },\n" +
-            "    \"age\": { \"type\": \"integer\", \"minimum\": 0 },\n" +
-            "    \"email\": { \"type\": \"string\", \"format\": \"email\" }\n" +
-            "  },\n" +
-            "  \"required\": [\"name\", \"age\"]\n" +
-            "}";
+    private static final String VALID_SCHEMA = """
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "age": { "type": "integer", "minimum": 0 },
+                "email": { "type": "string", "format": "email" }
+              },
+              "required": ["name", "age"]
+            }""";
 
     private static final String MALFORMED_SCHEMA = "{ this is not valid JSON }";
 
     // Test JSON configs
-    private static final String VALID_CONFIG = "{\n" +
-            "  \"name\": \"John Doe\",\n" +
-            "  \"age\": 30,\n" +
-            "  \"email\": \"john.doe@example.com\"\n" +
-            "}";
+    private static final String VALID_CONFIG = """
+            {
+              "name": "John Doe",
+              "age": 30,
+              "email": "john.doe@example.com"
+            }""";
 
-    private static final String INVALID_CONFIG_MISSING_REQUIRED = "{\n" +
-            "  \"name\": \"John Doe\"\n" +
-            "}";
+    private static final String INVALID_CONFIG_MISSING_REQUIRED = """
+            {
+              "name": "John Doe"
+            }""";
 
-    private static final String INVALID_CONFIG_WRONG_TYPE = "{\n" +
-            "  \"name\": \"John Doe\",\n" +
-            "  \"age\": \"thirty\",\n" +
-            "  \"email\": \"john.doe@example.com\"\n" +
-            "}";
+    private static final String INVALID_CONFIG_WRONG_TYPE = """
+            {
+              "name": "John Doe",
+              "age": "thirty",
+              "email": "john.doe@example.com"
+            }""";
 
     private static final String MALFORMED_CONFIG = "{ this is not valid JSON }";
 
@@ -216,7 +220,7 @@ class CustomConfigSchemaValidatorTest {
     /**
      * Helper method to create a test cluster configuration without a custom config.
      */
-    private PipelineClusterConfig createTestClusterConfigWithoutCustomConfig(String schemaSubject) {
+    private PipelineClusterConfig createTestClusterConfigWithoutCustomConfig(@SuppressWarnings("SameParameterValue") String schemaSubject) {
         // Create a module that will be referenced by the step
         Map<String, PipelineModuleConfiguration> modules = new HashMap<>();
         PipelineModuleConfiguration module = new PipelineModuleConfiguration(
@@ -248,7 +252,7 @@ class CustomConfigSchemaValidatorTest {
     /**
      * Helper method to create a test cluster configuration without a schema reference.
      */
-    private PipelineClusterConfig createTestClusterConfigWithoutSchemaRef(String jsonConfig) {
+    private PipelineClusterConfig createTestClusterConfigWithoutSchemaRef(@SuppressWarnings("SameParameterValue") String jsonConfig) {
         // Create a module that will be referenced by the step, but without a schema reference
         Map<String, PipelineModuleConfiguration> modules = new HashMap<>();
         PipelineModuleConfiguration module = new PipelineModuleConfiguration(

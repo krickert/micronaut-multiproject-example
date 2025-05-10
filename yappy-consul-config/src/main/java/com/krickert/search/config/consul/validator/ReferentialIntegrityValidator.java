@@ -127,7 +127,7 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                             // but double-checking here or ensuring modules always have valid refs is okay.
                             PipelineModuleConfiguration module = availableModules.get(step.pipelineImplementationId());
                             if (module.customConfigSchemaReference() != null) {
-                                SchemaReference ref = module.customConfigSchemaReference();
+                                @SuppressWarnings("unused") SchemaReference ref = module.customConfigSchemaReference();
                                 // The SchemaReference record constructor already validates subject and version > 0.
                                 // So, if a SchemaReference object exists and is non-null, it's internally valid.
                                 // No need for: ref.subject() == null || ref.subject().isBlank() || ref.version() == null || ref.version() < 1
