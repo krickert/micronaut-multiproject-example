@@ -1,21 +1,21 @@
 package com.krickert.search.config.consul.validator;
 
-import com.google.common.graph.GraphBuilder;
-import com.google.common.graph.Graphs;
-import com.google.common.graph.MutableGraph;
 import com.krickert.search.config.pipeline.model.*;
 import jakarta.inject.Singleton;
+import org.jgrapht.Graph;
+import org.jgrapht.alg.cycle.CycleDetector;
+import org.jgrapht.graph.DefaultDirectedGraph;
+import org.jgrapht.graph.DefaultEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 
-@SuppressWarnings("UnstableApiUsage")
 @Singleton
 public class IntraPipelineLoopValidator implements ClusterValidationRule {
     private static final Logger LOG = LoggerFactory.getLogger(IntraPipelineLoopValidator.class);
@@ -49,12 +49,12 @@ public class IntraPipelineLoopValidator implements ClusterValidationRule {
 
             // Build the graph for the current pipeline
             // Nodes are step IDs. Edges represent potential data flow via Kafka topics.
-            MutableGraph<String> pipelineStepGraph = GraphBuilder.directed().allowsSelfLoops(true).build();
+            Graph<String, DefaultEdge> pipelineStepGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
 
             // Add all steps as nodes
             for (String stepId : pipeline.pipelineSteps().keySet()) {
                 if (stepId != null && !stepId.isBlank()) { // Ensure valid stepId before adding
-                    pipelineStepGraph.addNode(stepId);
+                    pipelineStepGraph.addVertex(stepId);
                 } else {
                     // This should ideally be caught by ReferentialIntegrityValidator
                     LOG.warn("Pipeline '{}' contains a step with a null or blank ID in the map key. Skipping this entry for loop detection.", pipelineName);
@@ -83,17 +83,15 @@ public class IntraPipelineLoopValidator implements ClusterValidationRule {
                         }
                         if (listeningStep.kafkaListenTopics() != null && listeningStep.kafkaListenTopics().contains(topicName)) {
                             // Add a directed edge from publishingStep to listeningStep
-                            // Guava's putEdge is fine even if nodes are already present.
-                            // If the graph does not allow self-loops and one is added, it throws.
-                            // If it allows self-loops, Graphs.hasCycle() will detect it.
+                            // JGraphT's addEdge is fine even if vertices are already present.
+                            // DefaultDirectedGraph allows self-loops by default.
                             try {
-                                pipelineStepGraph.putEdge(publishingStep.pipelineStepId(), listeningStep.pipelineStepId());
+                                pipelineStepGraph.addEdge(publishingStep.pipelineStepId(), listeningStep.pipelineStepId());
                                 LOG.trace("Added edge from {} to {} via topic {} in pipeline {}",
                                         publishingStep.pipelineStepId(), listeningStep.pipelineStepId(), topicName, pipelineName);
                             } catch (IllegalArgumentException e) {
-                                // This might happen if a stepId was null/blank and not added as a node,
-                                // or if self-loops are not allowed and one is attempted.
-                                // Our graph allows self-loops, so this is less likely for that reason.
+                                // This might happen if a stepId was null/blank and not added as a vertex,
+                                // or if there's some other issue with the graph.
                                 errors.add(String.format(
                                     "Error building graph for pipeline '%s': Could not add edge between '%s' and '%s'. Ensure step IDs are valid. Error: %s",
                                     pipelineName, publishingStep.pipelineStepId(), listeningStep.pipelineStepId(), e.getMessage()));
@@ -105,14 +103,17 @@ public class IntraPipelineLoopValidator implements ClusterValidationRule {
             }
 
             // Check for cycles in the constructed graph for this pipeline
-            if (Graphs.hasCycle(pipelineStepGraph)) {
-                // Note: Guava's hasCycle just returns boolean. Finding the actual cycle members is more complex.
-                // For now, just reporting the presence of a cycle in the pipeline is sufficient.
+            CycleDetector<String, DefaultEdge> cycleDetector = new CycleDetector<>(pipelineStepGraph);
+            if (cycleDetector.detectCycles()) {
+                // JGraphT's CycleDetector can find the specific nodes involved in cycles
+                Set<String> cycleVertices = cycleDetector.findCycles();
+                String cycleNodesStr = String.join(", ", cycleVertices);
+
                 String errorMessage = String.format(
-                        "Loop detected in Kafka data flow within pipeline '%s' in cluster '%s'. Steps and topics involved form a cycle.",
-                        pipelineName, clusterConfig.clusterName());
+                        "Loop detected in Kafka data flow within pipeline '%s' in cluster '%s'. Steps involved in the cycle: [%s]",
+                        pipelineName, clusterConfig.clusterName(), cycleNodesStr);
                 errors.add(errorMessage);
-                LOG.warn(errorMessage + " Graph nodes: " + pipelineStepGraph.nodes()); // Log nodes for easier debugging
+                LOG.warn(errorMessage);
             } else {
                 LOG.debug("No intra-pipeline loops detected in pipeline: {}", pipelineName);
             }

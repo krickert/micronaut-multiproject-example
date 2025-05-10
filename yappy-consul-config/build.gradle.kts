@@ -55,6 +55,8 @@ dependencies {
     api(project(":yappy-models:pipeline-config-models"))
     // https://mvnrepository.com/artifact/com.networknt/json-schema-validator
     api("com.networknt:json-schema-validator:1.5.6")
+    // https://mvnrepository.com/artifact/org.jgrapht/jgrapht-core
+    implementation("org.jgrapht:jgrapht-core:1.5.2")
     testImplementation(mn.mockito.junit.jupiter)
     runtimeOnly(mn.logback.classic) // This line was missing from your provided snippet, re-add if it was there
 }

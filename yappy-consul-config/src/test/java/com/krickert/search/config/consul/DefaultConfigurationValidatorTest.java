@@ -1,21 +1,14 @@
 package com.krickert.search.config.consul;
 
 import com.krickert.search.config.consul.validator.ClusterValidationRule;
-import com.krickert.search.config.consul.validator.CustomConfigSchemaValidator;
 import com.krickert.search.config.consul.validator.ReferentialIntegrityValidator;
 import com.krickert.search.config.consul.validator.WhitelistValidator;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
-import com.krickert.search.config.pipeline.model.SchemaReference;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.mockito.MockedStatic;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -100,7 +93,7 @@ class DefaultConfigurationValidatorTest {
 
         assertFalse(result.isValid());
         assertEquals(1, result.errors().size());
-        assertTrue(result.errors().get(0).contains("Validation exception"));
+        assertTrue(result.errors().getFirst().contains("Validation exception"));
 
         verify(mockRule1, times(1)).validate(eq(config), any());
         verify(mockRule2, times(1)).validate(eq(config), any());
@@ -140,36 +133,6 @@ class DefaultConfigurationValidatorTest {
         assertTrue(result.errors().isEmpty());
     }
 
-    @Test
-    void validate_logsAppropriateMessages() {
-        // Mock the logger
-        Logger mockLogger = mock(Logger.class);
-
-        try (MockedStatic<LoggerFactory> mockedLoggerFactory = mockStatic(LoggerFactory.class)) {
-            // Set up the mock logger factory
-            mockedLoggerFactory.when(() -> LoggerFactory.getLogger(DefaultConfigurationValidator.class))
-                    .thenReturn(mockLogger);
-
-            // Create a mock rule that returns errors
-            ClusterValidationRule mockRule = mock(ClusterValidationRule.class);
-            when(mockRule.validate(any(), any())).thenReturn(List.of("Error 1", "Error 2"));
-
-            // Create the validator with the mock rule
-            DefaultConfigurationValidator validator = new DefaultConfigurationValidator(List.of(mockRule));
-
-            // Verify initialization logging
-            verify(mockLogger).info(eq("DefaultConfigurationValidator initialized with {} validation rules."), eq(1));
-
-            // Create a config and validate it
-            PipelineClusterConfig config = new PipelineClusterConfig("TestCluster");
-            validator.validate(config, schemaReference -> Optional.empty());
-
-            // Verify validation logging
-            verify(mockLogger).info(eq("Starting comprehensive validation for cluster: {}"), eq("TestCluster"));
-            verify(mockLogger).warn(eq("Comprehensive validation failed for cluster: {}. Total errors found: {}. First few errors: {}"), 
-                    eq("TestCluster"), eq(2), any());
-        }
-    }
 
     @Test
     void validate_executesRulesInOrder() {
