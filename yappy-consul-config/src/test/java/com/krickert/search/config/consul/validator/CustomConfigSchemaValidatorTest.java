@@ -185,6 +185,24 @@ class CustomConfigSchemaValidatorTest {
         assertTrue(errors.isEmpty(), "Configuration without schema reference should not produce errors");
     }
 
+    @Test
+    void validate_caseSensitiveSchemaSubject_returnsErrors() {
+        // Add a schema with a lowercase subject to the map
+        SchemaReference lowercaseSchemaRef = new SchemaReference("test-schema", 1);
+        schemaMap.put(lowercaseSchemaRef, VALID_SCHEMA);
+
+        // Create a pipeline configuration with a valid custom config but referencing a schema with a different case
+        PipelineClusterConfig clusterConfig = createTestClusterConfig("TEST-SCHEMA", VALID_CONFIG);
+
+        List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
+
+        assertFalse(errors.isEmpty(), "Schema with different case should be treated as different");
+        assertTrue(errors.stream().anyMatch(e -> e.contains("Schema content for")), 
+                "Error should indicate missing schema");
+        assertTrue(errors.stream().anyMatch(e -> e.contains("not found by provider")), 
+                "Error should indicate schema not found by provider");
+    }
+
     /**
      * Helper method to create a test cluster configuration with a custom config and schema reference.
      */
