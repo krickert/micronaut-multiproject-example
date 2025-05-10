@@ -3,7 +3,6 @@ package com.krickert.search.config.consul;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
-import com.krickert.search.config.schema.registry.model.SchemaCompatibility;
 import com.krickert.search.config.schema.registry.model.SchemaType;
 import com.krickert.search.config.schema.registry.model.SchemaVersionData;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,11 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.kiwiproject.consul.Consul;
 import org.kiwiproject.consul.KeyValueClient;
-import org.kiwiproject.consul.cache.ConsulCache;
 import org.kiwiproject.consul.cache.KVCache;
-import org.kiwiproject.consul.model.kv.Value;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.MockitoAnnotations;
@@ -23,13 +18,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.kiwiproject.consul.cache.KVCache.newCache;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -40,6 +34,7 @@ class KiwiprojectConsulConfigFetcherTest {
     // Use lenient mocking to avoid "unnecessary stubbings" errors
     @BeforeEach
     void setUpMockitoExtension() {
+        //noinspection resource
         MockitoAnnotations.openMocks(this);
     }
 
@@ -384,14 +379,14 @@ class KiwiprojectConsulConfigFetcherTest {
 
         // Setup
         String clusterConfigKey = DEFAULT_CLUSTER_CONFIG_KEY_PREFIX + TEST_CLUSTER_NAME;
-        Consumer<Optional<PipelineClusterConfig>> mockUpdateHandler = mock(Consumer.class);
+        var mockUpdateHandler = mock(Consumer.class);
 
         // Setup mocks with lenient to avoid "unnecessary stubbings" errors
         lenient().when(mockConsul.keyValueClient()).thenReturn(mockKeyValueClient);
 
         // Use MockedStatic for KVCache.newCache static method
         try (MockedStatic<KVCache> mockedKVCache = mockStatic(KVCache.class)) {
-            mockedKVCache.when(() -> KVCache.newCache(eq(mockKeyValueClient), eq(clusterConfigKey), eq(30)))
+            mockedKVCache.when(() -> newCache(eq(mockKeyValueClient), eq(clusterConfigKey), eq(30)))
                     .thenReturn(mockKVCache);
 
             doNothing().when(mockKVCache).start();
@@ -414,10 +409,11 @@ class KiwiprojectConsulConfigFetcherTest {
             }
 
             // Execute
+            //noinspection unchecked
             consulConfigFetcher.watchClusterConfig(TEST_CLUSTER_NAME, mockUpdateHandler);
 
             // Verify KVCache setup
-            mockedKVCache.verify(() -> KVCache.newCache(eq(mockKeyValueClient), eq(clusterConfigKey), eq(30)));
+            mockedKVCache.verify(() -> newCache(eq(mockKeyValueClient), eq(clusterConfigKey), eq(30)));
             verify(mockKVCache).start();
 
             // Verify that the clusterConfigCache field was set

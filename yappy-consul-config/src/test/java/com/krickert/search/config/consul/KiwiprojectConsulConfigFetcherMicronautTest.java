@@ -2,7 +2,6 @@ package com.krickert.search.config.consul;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
-import com.krickert.search.config.pipeline.model.SchemaReference; // For creating test data
 import com.krickert.search.config.schema.registry.model.SchemaVersionData;
 import com.krickert.search.config.schema.registry.model.SchemaType; // For creating test data
 import com.krickert.search.config.schema.registry.model.SchemaCompatibility; // For creating test data
@@ -94,10 +93,11 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         LOG.info("Test finished, keys potentially cleaned.");
     }
 
-    private PipelineClusterConfig createDummyClusterConfig(String name) {
+    private PipelineClusterConfig createDummyClusterConfig(@SuppressWarnings("SameParameterValue") String name) {
         return new PipelineClusterConfig(name, null, null, Collections.emptySet(), Collections.emptySet());
     }
 
+    @SuppressWarnings("SameParameterValue")
     private SchemaVersionData createDummySchemaData(String subject, int version) {
         return new SchemaVersionData(1L, subject, version, "{\"type\":\"string\"}", SchemaType.JSON_SCHEMA, SchemaCompatibility.NONE, Instant.now(), "Integ test schema");
     }
@@ -161,7 +161,7 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
     @Timeout(value = 45, unit = TimeUnit.SECONDS) // KVCache watch default is 30s, give some buffer
     void watchClusterConfig_receivesUpdatesAndDeletes() throws Exception {
         BlockingQueue<Optional<PipelineClusterConfig>> updates = new ArrayBlockingQueue<>(10);
-        Consumer<Optional<PipelineClusterConfig>> testUpdateHandler = updates::offer;
+        @SuppressWarnings("ResultOfMethodCallIgnored") Consumer<Optional<PipelineClusterConfig>> testUpdateHandler = updates::offer;
 
         configFetcher.watchClusterConfig(testClusterName1, testUpdateHandler);
         LOG.info("Watch started for {}", clusterConfigKey1);
