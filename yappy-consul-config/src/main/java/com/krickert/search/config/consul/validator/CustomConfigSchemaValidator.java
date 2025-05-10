@@ -37,6 +37,12 @@ public class CustomConfigSchemaValidator implements ClusterValidationRule {
     public List<String> validate(PipelineClusterConfig clusterConfig,
                                  Function<SchemaReference, Optional<String>> schemaContentProvider) {
         List<String> errors = new ArrayList<>();
+
+        if (clusterConfig == null) {
+            LOG.warn("PipelineClusterConfig is null, skipping custom config schema validation.");
+            return errors;
+        }
+
         LOG.debug("Performing custom config JSON schema validation for cluster: {}", clusterConfig.clusterName());
 
         Map<String, PipelineModuleConfiguration> availableModules =
