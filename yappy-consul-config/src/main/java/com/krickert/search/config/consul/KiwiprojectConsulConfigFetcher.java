@@ -167,36 +167,79 @@ public class KiwiprojectConsulConfigFetcher implements ConsulConfigFetcher {
                 keyToWatch, this.appWatchSeconds);
 
         try {
-            // Use the simpler KVCache.newCache factory method.
-            // The CacheConfig (for backoff etc.) is implicitly used from the kvClient's existing configuration.
             clusterConfigCache = KVCache.newCache(kvClient, keyToWatch, this.appWatchSeconds);
 
             clusterConfigCache.addListener(newValues -> { // newValues is Map<String, org.kiwiproject.consul.model.kv.Value>
-                LOG.debug("KVCache listener invoked for key '{}'. Snapshot keys: {}", keyToWatch, newValues.keySet());
-                Optional<org.kiwiproject.consul.model.kv.Value> consulApiValueOpt =
-                        Optional.ofNullable(newValues.get(keyToWatch)); // When watching a single key, it should be under its own name
+                LOG.debug("KVCache listener for key '{}' received update. Raw newValues map: {}", keyToWatch, newValues);
 
-                if (consulApiValueOpt.isPresent()) {
-                    org.kiwiproject.consul.model.kv.Value consulValue = consulApiValueOpt.get();
-                    Optional<String> valueAsString = consulValue.getValueAsString();
+                org.kiwiproject.consul.model.kv.Value consulApiValue = null;
 
-                    if (valueAsString.isPresent() && !valueAsString.get().isBlank()) {
-                        LOG.info("Configuration data received from watch for key '{}'. Attempting deserialization.", keyToWatch);
+                if (newValues.containsKey(keyToWatch)) {
+                    // Ideal case: the map contains the key we are watching
+                    consulApiValue = newValues.get(keyToWatch);
+                    LOG.debug("Found value using exact keyToWatch: '{}'", keyToWatch);
+                } else if (newValues.size() == 1) {
+                    // If the map has only one entry, it's likely our watched key.
+                    // Based on logs, the key in the map might be empty.
+                    // The Value object's getKey() might also be unconventional for single key watches.
+                    // For a single key watch, if KVCache gives us one entry, we assume it's the one.
+                    Optional<org.kiwiproject.consul.model.kv.Value> firstValueOpt = newValues.values().stream().findFirst();
+                    if (firstValueOpt.isPresent()) {
+                        consulApiValue = firstValueOpt.get();
+                        String internalKeyValue = consulApiValue.getKey(); // getKey() returns String
+
+                        // Log what we found for diagnostics.
+                        // We are now *assuming* this single entry IS for our keyToWatch,
+                        // regardless of what its internal getKey() reports if it's not matching keyToWatch.
+                        // This is a workaround for the KVCache behavior where the internal key might be the base64 value.
+                        LOG.info("Found single value in map. Assuming it's for watched key '{}'. Map key was: '{}'. Value's internal key reports as: '{}'",
+                                keyToWatch,
+                                newValues.keySet().stream().findFirst().orElse("N/A"),
+                                (internalKeyValue != null ? internalKeyValue : "null (Value.getKey() returned null)"));
+
+                        // If the internal key *is* null or doesn't match, it's strange, but we might still
+                        // proceed if we trust that a single-entry map for a single-key watch IS the value.
+                        // However, if the internal key IS the base64 value, then `getValueAsString()` is what we need.
+                        // The critical part is that `consulApiValue` is now set.
+                    } else {
+                        LOG.warn("KVCache newValues map had size 1 but contained no actual value. This is unexpected.");
+                    }
+                } else if (newValues.isEmpty()) {
+                    LOG.debug("KVCache newValues map is empty.");
+                    // consulApiValue remains null, will be treated as deleted.
+                } else {
+                    LOG.warn("KVCache newValues map has {} entries, but does not contain the watched key '{}'. Map keys: {}. This is unexpected for a single key watch.",
+                            newValues.size(), keyToWatch, newValues.keySet());
+                    // consulApiValue remains null, will be treated as deleted.
+                }
+
+                // The rest of your logic for processing consulApiValue:
+                if (consulApiValue == null) {
+                    LOG.info("Watched key '{}' effectively not present in KVCache snapshot. Treating as deleted.", keyToWatch);
+                    updateHandler.accept(WatchCallbackResult.createAsDeleted());
+                } else {
+                    Optional<String> valueAsStringOpt = consulApiValue.getValueAsString(); // This should give the decoded JSON string
+
+                    if (valueAsStringOpt.isPresent() && !valueAsStringOpt.get().isBlank()) {
+                        String jsonValue = valueAsStringOpt.get();
+                        LOG.info("Watched key '{}' present with non-blank value. Attempting deserialization. Length: {}", keyToWatch, jsonValue.length());
+                        LOG.trace("Value for key '{}': {}", keyToWatch, jsonValue);
                         try {
-                            PipelineClusterConfig config = objectMapper.readValue(valueAsString.get(), PipelineClusterConfig.class);
+                            PipelineClusterConfig config = objectMapper.readValue(jsonValue, PipelineClusterConfig.class);
                             updateHandler.accept(WatchCallbackResult.success(config));
                         } catch (JsonProcessingException e) {
                             LOG.error("Failed to deserialize updated PipelineClusterConfig from watch for key '{}': {}", keyToWatch, e.getMessage());
-                            LOG.debug("Malformed JSON content from watch for key '{}': {}", keyToWatch, valueAsString.get());
+                            LOG.debug("Malformed JSON content from watch for key '{}': {}", keyToWatch, jsonValue, e);
                             updateHandler.accept(WatchCallbackResult.failure(e));
                         }
                     } else {
-                        LOG.info("Configuration for key '{}' has a blank or null value in snapshot. Treating as deleted.", keyToWatch);
+                        if (valueAsStringOpt.isPresent()) { // It was blank
+                            LOG.info("Watched key '{}' IS PRESENT in KVCache snapshot but its value is blank. Treating as deleted/empty.", keyToWatch);
+                        } else { // It was present in map but getValueAsString() was empty
+                            LOG.info("Watched key '{}' IS PRESENT in KVCache snapshot but its value is null (Optional.empty from getValueAsString). Treating as deleted/empty.", keyToWatch);
+                        }
                         updateHandler.accept(WatchCallbackResult.createAsDeleted());
                     }
-                } else {
-                    LOG.info("Watched key '{}' not present in KVCache snapshot. Treating as deleted.", keyToWatch);
-                    updateHandler.accept(WatchCallbackResult.createAsDeleted());
                 }
             });
 
