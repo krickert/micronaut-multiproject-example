@@ -13,8 +13,6 @@ testcontainers:
 
 # Consul client configuration
 consul:
-  host: ${consul.client.host}
-  port: ${consul.client.port}
   client:
     enabled: true
     config:

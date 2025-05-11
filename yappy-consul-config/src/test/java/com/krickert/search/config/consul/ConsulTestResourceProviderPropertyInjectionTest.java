@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * are correctly injected into the Micronaut application context when Testcontainers
  * for Consul is active.
  */
-@MicronautTest(startApplication = false) // We don't need the full app, just property resolution
+@MicronautTest(startApplication = false, environments = {"test"}) // We don't need the full app, just property resolution
 @Requires(property = ConsulTestResourceProvider.PROPERTY_TESTCONTAINERS_CONSUL_ENABLED, value = "true", defaultValue = "true")
 // You can also use your application.properties or a test-specific one
 // @Property(name = "micronaut.config-client.enabled", value = "false") // Good to keep this off

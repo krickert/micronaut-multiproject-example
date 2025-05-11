@@ -33,7 +33,7 @@ import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@MicronautTest(propertySources = "classpath:application-test.properties")
+@MicronautTest(startApplication = false, environments = {"test"}) // We don't need the full app, just property resolution
 @Property(name = "micronaut.config-client.enabled", value = "false")
 @Property(name = "consul.client.enabled", value = "true")
 @Property(name = "testcontainers.consul.enabled", value = "true")
