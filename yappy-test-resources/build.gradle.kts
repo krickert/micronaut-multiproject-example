@@ -51,10 +51,7 @@ dependencies {
         // Exclude transitive Wire dependencies to avoid conflicts
         exclude(group = "com.squareup.wire")
     }
-
-    // Logging
-    api(libs.slf4j.api)
-    api(libs.logback.classic)
+    api(mn.logback.classic)
 }
 
 // Publishing configuration

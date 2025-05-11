@@ -1,11 +1,38 @@
+# Enable testcontainers
 testcontainers:
+  enabled: true
+  consul:
+    enabled: true
+  # Disable other containers that aren't needed for this test
   kafka:
     enabled: false
   moto:
     enabled: false
-  consul:
-    enabled: true
   apicurio:
     enabled: false
 
+# Consul client configuration
 consul:
+  host: ${consul.client.host}
+  port: ${consul.client.port}
+  client:
+    enabled: true
+    config:
+      enabled: true
+      format: properties
+      path: config/pipeline
+
+# Disable Micronaut's config client to avoid conflicts
+micronaut:
+  config-client:
+    enabled: false
+
+# Application-specific Consul configuration
+app:
+  config:
+    cluster-name: blahblah
+    consul:
+      key-prefixes:
+        pipeline-clusters: pipeline-configs/clusters
+        schema-versions: pipeline-configs/schemas/versions
+      watch-seconds: 5

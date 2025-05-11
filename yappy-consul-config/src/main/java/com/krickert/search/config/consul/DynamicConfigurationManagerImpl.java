@@ -54,107 +54,114 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
     }
 
     @Override
-    public void initialize(String clusterName) {
-        if (!this.clusterName.equals(clusterName)) {
-            LOG.warn("Initialize called with different cluster name '{}', expected '{}'. Using configured name.", clusterName, this.clusterName);
+    public void initialize(String clusterNameFromParam) {
+        if (!this.clusterName.equals(clusterNameFromParam)) {
+            LOG.warn("Initialize called with different cluster name '{}', expected '{}'. Using configured name: {}",
+                    clusterNameFromParam, this.clusterName, this.clusterName);
         }
-
-        boolean initialLoadAttempted = false;
         try {
-            consulConfigFetcher.connect(); // Ensure connection is established
+            consulConfigFetcher.connect();
             LOG.info("Attempting initial configuration load for cluster: {}", this.clusterName);
 
-            try { // More granular try-catch for the fetching and processing part
+            try {
                 Optional<PipelineClusterConfig> initialClusterConfigOpt = consulConfigFetcher.fetchPipelineClusterConfig(this.clusterName);
-                initialLoadAttempted = true; // Mark that we at least tried to fetch
-
                 if (initialClusterConfigOpt.isPresent()) {
                     PipelineClusterConfig initialConfig = initialClusterConfigOpt.get();
-                    LOG.info("Initial configuration fetched for cluster '{}'. Validating...", this.clusterName);
-                    // processAndCacheConfigUpdate also has its own try-catch for robustness
-                    processAndCacheConfigUpdate(Optional.empty(), initialConfig, "Initial Load");
+                    LOG.info("Initial configuration fetched for cluster '{}'. Processing...", this.clusterName);
+                    processConsulUpdate(WatchCallbackResult.success(initialConfig), "Initial Load");
                 } else {
-                    LOG.warn("No initial configuration found for cluster '{}'. Waiting for Consul watch updates.", this.clusterName);
-                    // cachedConfigHolder.clearConfiguration(); // Optional: if no config means "empty state"
+                    LOG.warn("No initial configuration found for cluster '{}'. Watch will pick up first appearance or deletion.", this.clusterName);
+                    // If no initial config, the first event from the watch will determine state.
+                    // We could also explicitly treat this as a "deleted" state by calling:
+                    // processConsulUpdate(WatchCallbackResult.createAsDeleted(), "Initial Load - Not Found");
+                    // For now, let the watch be the primary driver after initial attempt.
                 }
-            } catch (Exception fetchOrProcessEx) {
-                LOG.error("Error during initial configuration load/processing for cluster '{}': {}. Will still attempt to start watch.",
-                        this.clusterName, fetchOrProcessEx.getMessage(), fetchOrProcessEx);
-                if (!initialLoadAttempted) { // If fetchPipelineClusterConfig itself threw, it wasn't even attempted
-                    initialLoadAttempted = true; // Correct this logic slightly; if fetch throws, it was attempted.
-                }
+            } catch (Exception fetchEx) {
+                 LOG.error("Error during initial configuration fetch for cluster '{}': {}. Will still attempt to start watch.",
+                        this.clusterName, fetchEx.getMessage(), fetchEx);
+                 // If fetch itself fails (e.g. connection issue not caught by connect()), treat as error for initial state.
+                 processConsulUpdate(WatchCallbackResult.failure(fetchEx), "Initial Load Fetch Error");
             }
-
-            // Always attempt to start the watch, even if initial load had issues (unless connect failed)
-            consulConfigFetcher.watchClusterConfig(this.clusterName, this::handleConsulClusterConfigUpdate);
+            consulConfigFetcher.watchClusterConfig(this.clusterName, this::handleConsulWatchUpdate);
             LOG.info("Consul watch established for cluster configuration: {}", this.clusterName);
-
-        } catch (Exception e) { // Catches exceptions from connect() or watchClusterConfig() setup
-            LOG.error("CRITICAL: Failed to initialize DynamicConfigurationManager (e.g., connect or watch setup) for cluster '{}': {}",
+        } catch (Exception e) {
+            LOG.error("CRITICAL: Failed to initialize DynamicConfigurationManager (connect or watch setup) for cluster '{}': {}",
                     this.clusterName, e.getMessage(), e);
-            // If connect() or watchClusterConfig() fails, the component is likely non-functional.
-            // Depending on policy, rethrow or enter a failed state.
         }
     }
 
-    private void handleConsulClusterConfigUpdate(Optional<PipelineClusterConfig> newClusterConfigOpt) {
-        LOG.info("Consul watch triggered for cluster '{}'. New config present: {}", this.clusterName, newClusterConfigOpt.isPresent());
-        Optional<PipelineClusterConfig> oldConfigFromCache = cachedConfigHolder.getCurrentConfig();
+    private void handleConsulWatchUpdate(WatchCallbackResult watchResult) {
+        processConsulUpdate(watchResult, "Consul Watch Update");
+    }
 
-        if (newClusterConfigOpt.isEmpty()) {
-            LOG.warn("PipelineClusterConfig for cluster '{}' was deleted from Consul. Clearing local cache and notifying listeners.", this.clusterName);
+    private void processConsulUpdate(WatchCallbackResult watchResult, String updateSource) {
+
+        Optional<PipelineClusterConfig> oldConfigForEvent = cachedConfigHolder.getCurrentConfig();
+
+        if (watchResult.hasError()) {
+            LOG.error("CRITICAL: Error received from Consul source '{}' for cluster '{}': {}. Keeping previous configuration.",
+                    updateSource, this.clusterName, watchResult.error().map(Throwable::getMessage).orElse("Unknown error"));
+            watchResult.error().ifPresent(e -> LOG.debug("Consul source error details:", e));
+            return;
+        }
+
+        if (watchResult.deleted()) { // Uses the boolean accessor from the record instance
+            LOG.warn("PipelineClusterConfig for cluster '{}' indicated as deleted by source '{}'. Clearing local cache and notifying listeners.",
+                    this.clusterName, updateSource);
             cachedConfigHolder.clearConfiguration();
-            if (oldConfigFromCache.isPresent()) {
-                // Using the convenience constructor for PipelineClusterConfig for a minimal representation
+            if (oldConfigForEvent.isPresent()) {
                 PipelineClusterConfig effectivelyEmptyConfig = new PipelineClusterConfig(this.clusterName);
-                ClusterConfigUpdateEvent event = new ClusterConfigUpdateEvent(oldConfigFromCache, effectivelyEmptyConfig);
+                ClusterConfigUpdateEvent event = new ClusterConfigUpdateEvent(oldConfigForEvent, effectivelyEmptyConfig);
                 publishEvent(event);
+            } else {
+                 LOG.info("Cache was already empty or no previous config to compare for deletion event from source '{}' for cluster '{}'.",
+                         updateSource, this.clusterName);
             }
             return;
         }
-        processAndCacheConfigUpdate(oldConfigFromCache, newClusterConfigOpt.get(), "Consul Watch Update");
-    }
 
-    private void processAndCacheConfigUpdate(Optional<PipelineClusterConfig> oldConfig, PipelineClusterConfig newConfig, String updateSource) {
-        try {
-            Map<SchemaReference, String> schemaCacheForNewConfig = new HashMap<>();
-            // Using record accessor pipelineModuleMap() and availableModules()
-            if (newConfig.pipelineModuleMap() != null && newConfig.pipelineModuleMap().availableModules() != null) {
-                // Using record accessor customConfigSchemaReference()
-                for (PipelineModuleConfiguration moduleConfig : newConfig.pipelineModuleMap().availableModules().values()) {
-                    if (moduleConfig.customConfigSchemaReference() != null) {
-                        SchemaReference ref = moduleConfig.customConfigSchemaReference();
-                        // Using record accessors subject() and version()
-                        Optional<SchemaVersionData> schemaDataOpt = consulConfigFetcher.fetchSchemaVersionData(ref.subject(), ref.version());
-                        // Using record accessor schemaContent()
-                        if (schemaDataOpt.isPresent() && schemaDataOpt.get().schemaContent() != null) {
-                            schemaCacheForNewConfig.put(ref, schemaDataOpt.get().schemaContent());
-                        } else {
-                            LOG.warn("Schema content not found for reference {} during {}. Validation might fail for steps using this module.", ref, updateSource);
+        if (watchResult.config().isPresent()) {
+            PipelineClusterConfig newConfig = watchResult.config().get();
+            try {
+                Map<SchemaReference, String> schemaCacheForNewConfig = new HashMap<>();
+                if (newConfig.pipelineModuleMap() != null && newConfig.pipelineModuleMap().availableModules() != null) {
+                    for (PipelineModuleConfiguration moduleConfig : newConfig.pipelineModuleMap().availableModules().values()) {
+                        if (moduleConfig.customConfigSchemaReference() != null) {
+                            SchemaReference ref = moduleConfig.customConfigSchemaReference();
+                            Optional<SchemaVersionData> schemaDataOpt = consulConfigFetcher.fetchSchemaVersionData(ref.subject(), ref.version());
+                            if (schemaDataOpt.isPresent() && schemaDataOpt.get().schemaContent() != null) {
+                                schemaCacheForNewConfig.put(ref, schemaDataOpt.get().schemaContent());
+                            } else {
+                                LOG.warn("Schema content not found for reference {} during processing for source '{}'. Validation will likely fail for steps using this module.",
+                                        ref, updateSource);
+                            }
                         }
                     }
                 }
-            }
-            LOG.debug("Fetched {} schema references for validation during {}.", schemaCacheForNewConfig.size(), updateSource);
+                LOG.debug("Fetched {} schema references for validation for source '{}'.", schemaCacheForNewConfig.size(), updateSource);
 
-            ValidationResult validationResult = configurationValidator.validate(
-                newConfig,
-                (schemaRef) -> Optional.ofNullable(schemaCacheForNewConfig.get(schemaRef))
-            );
+                ValidationResult validationResult = configurationValidator.validate(
+                    newConfig,
+                    (schemaRef) -> Optional.ofNullable(schemaCacheForNewConfig.get(schemaRef))
+                );
 
-            if (validationResult.isValid()) {
-                LOG.info("Configuration for cluster '{}' validated successfully ({}) . Updating cache and notifying listeners.", this.clusterName, updateSource);
-                cachedConfigHolder.updateConfiguration(newConfig, schemaCacheForNewConfig);
-                ClusterConfigUpdateEvent event = new ClusterConfigUpdateEvent(oldConfig, newConfig);
-                publishEvent(event);
-            } else {
-                // Using record accessor errors()
-                LOG.error("CRITICAL: New configuration for cluster '{}' ({}) failed validation. Errors: {}. Keeping previous configuration.",
-                        this.clusterName, updateSource, validationResult.errors());
+                if (validationResult.isValid()) {
+                    LOG.info("Configuration for cluster '{}' from source '{}' validated successfully. Updating cache and notifying listeners.",
+                            this.clusterName, updateSource);
+                    cachedConfigHolder.updateConfiguration(newConfig, schemaCacheForNewConfig);
+                    ClusterConfigUpdateEvent event = new ClusterConfigUpdateEvent(oldConfigForEvent, newConfig);
+                    publishEvent(event);
+                } else {
+                    LOG.error("CRITICAL: New configuration for cluster '{}' from source '{}' failed validation. Errors: {}. Keeping previous configuration.",
+                            this.clusterName, updateSource, validationResult.errors());
+                }
+            } catch (Exception e) {
+                LOG.error("CRITICAL: Exception during processing of new configuration from source '{}' for cluster '{}': {}. Keeping previous configuration.",
+                        updateSource, this.clusterName, e.getMessage(), e);
             }
-        } catch (Exception e) {
-            LOG.error("CRITICAL: Exception during processing of configuration update for cluster '{}' ({}): {}",
-                    this.clusterName, updateSource, e.getMessage(), e);
+        } else {
+            LOG.warn("Received ambiguous WatchCallbackResult (no config, no error, not deleted) from source '{}' for cluster '{}'. No action taken.",
+                     updateSource, this.clusterName);
         }
     }
 
@@ -174,7 +181,6 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
             LOG.error("Error publishing ClusterConfigUpdateEvent for cluster {}: {}", this.clusterName, e.getMessage(), e);
         }
     }
-
 
     @Override
     public Optional<PipelineClusterConfig> getCurrentPipelineClusterConfig() {

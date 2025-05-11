@@ -64,6 +64,8 @@ dependencies {
     runtimeOnly(mn.logback.classic) // This line was missing from your provided snippet, re-add if it was there
     implementation(mn.micronaut.reactor.http.client)
     implementation(mn.javax.annotation.api)
+    implementation(mn.micronaut.context)
+    testResourcesImplementation("org.testcontainers:consul:1.21.0")
 }
 
 // Add this block to explicitly configure the Mockito agent

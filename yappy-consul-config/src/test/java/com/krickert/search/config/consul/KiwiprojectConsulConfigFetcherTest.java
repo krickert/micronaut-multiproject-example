@@ -1,8 +1,10 @@
+// File: src/test/java/com/krickert/search/config/consul/KiwiprojectConsulConfigFetcherTest.java
 package com.krickert.search.config.consul;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
+import com.krickert.search.config.schema.registry.model.SchemaCompatibility;
 import com.krickert.search.config.schema.registry.model.SchemaType;
 import com.krickert.search.config.schema.registry.model.SchemaVersionData;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,20 +12,24 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.kiwiproject.consul.Consul;
 import org.kiwiproject.consul.KeyValueClient;
+import org.kiwiproject.consul.cache.ConsulCache; // Listener interface
 import org.kiwiproject.consul.cache.KVCache;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
-import org.mockito.MockitoAnnotations;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.Collections;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.kiwiproject.consul.cache.KVCache.newCache;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -31,32 +37,26 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class KiwiprojectConsulConfigFetcherTest {
 
-    // Use lenient mocking to avoid "unnecessary stubbings" errors
-    @BeforeEach
-    void setUpMockitoExtension() {
-        //noinspection resource
-        MockitoAnnotations.openMocks(this);
-    }
-
     private static final String TEST_CLUSTER_NAME = "test-cluster";
     private static final String TEST_SCHEMA_SUBJECT = "test-schema";
     private static final int TEST_SCHEMA_VERSION = 1;
-    private static final String DEFAULT_CLUSTER_CONFIG_KEY_PREFIX = "pipeline-configs/clusters/";
-    private static final String DEFAULT_SCHEMA_VERSIONS_KEY_PREFIX = "pipeline-configs/schemas/versions/";
+    private static final String DEFAULT_CLUSTER_CONFIG_KEY_PREFIX_WITH_SLASH = "pipeline-configs/clusters/";
+    private static final String DEFAULT_SCHEMA_VERSIONS_KEY_PREFIX_WITH_SLASH = "pipeline-configs/schemas/versions/";
+    private static final int TEST_WATCH_SECONDS = 5;
 
     @Mock
     private ObjectMapper mockObjectMapper;
-
     @Mock
-    private Consul mockConsul;
-
+    private Consul mockConsulClient;
     @Mock
     private KeyValueClient mockKeyValueClient;
-
     @Mock
-    private KVCache mockKVCache;
+    private KVCache mockKVCacheInstance;
 
-    // We'll use a different approach for capturing the listener
+    @Captor
+    private ArgumentCaptor<ConsulCache.Listener<String, org.kiwiproject.consul.model.kv.Value>> kvCacheListenerCaptor;
+    @Captor
+    private ArgumentCaptor<WatchCallbackResult> watchCallbackResultCaptor;
 
     private KiwiprojectConsulConfigFetcher consulConfigFetcher;
 
@@ -64,428 +64,254 @@ class KiwiprojectConsulConfigFetcherTest {
     void setUp() {
         consulConfigFetcher = new KiwiprojectConsulConfigFetcher(
                 mockObjectMapper,
-                "localhost",
-                8500,
-                "",
-                DEFAULT_CLUSTER_CONFIG_KEY_PREFIX,
-                DEFAULT_SCHEMA_VERSIONS_KEY_PREFIX,
-                30
+                "localhost", 8500,
+                DEFAULT_CLUSTER_CONFIG_KEY_PREFIX_WITH_SLASH,
+                DEFAULT_SCHEMA_VERSIONS_KEY_PREFIX_WITH_SLASH,
+                TEST_WATCH_SECONDS,
+                mockConsulClient // Pass the mock Consul client
         );
+        // This lenient stubbing is important as connect() might be called multiple times
+        // by ensureConnected() or directly in tests that don't focus on connect() itself.
+        lenient().when(mockConsulClient.keyValueClient()).thenReturn(mockKeyValueClient);
+    }
+
+    // Helper to simulate that connect() has been successfully called
+    private void simulateConnectedState() {
+        // Directly call connect() which uses the mockConsulClient
+        consulConfigFetcher.connect();
+        // Assertions now use direct field access due to package-private visibility
+        assertTrue(consulConfigFetcher.connected.get(), "Fetcher should be marked as connected.");
+        assertSame(mockKeyValueClient, consulConfigFetcher.kvClient, "kvClient should be set from mockConsulClient.");
     }
 
     @Test
-    void testGetClusterConfigKey() throws Exception {
-        // Using reflection to test private method
-        java.lang.reflect.Method method = KiwiprojectConsulConfigFetcher.class.getDeclaredMethod("getClusterConfigKey", String.class);
-        method.setAccessible(true);
-        String key = (String) method.invoke(consulConfigFetcher, TEST_CLUSTER_NAME);
-        assertEquals(DEFAULT_CLUSTER_CONFIG_KEY_PREFIX + TEST_CLUSTER_NAME, key);
+    void getClusterConfigKey_returnsCorrectPath() {
+        // Access package-private method directly for testing
+        assertEquals(DEFAULT_CLUSTER_CONFIG_KEY_PREFIX_WITH_SLASH + TEST_CLUSTER_NAME,
+                consulConfigFetcher.getClusterConfigKey(TEST_CLUSTER_NAME));
     }
 
     @Test
-    void testGetSchemaVersionKey() throws Exception {
-        // Using reflection to test private method
-        java.lang.reflect.Method method = KiwiprojectConsulConfigFetcher.class.getDeclaredMethod("getSchemaVersionKey", String.class, int.class);
-        method.setAccessible(true);
-        String key = (String) method.invoke(consulConfigFetcher, TEST_SCHEMA_SUBJECT, TEST_SCHEMA_VERSION);
-        assertEquals(DEFAULT_SCHEMA_VERSIONS_KEY_PREFIX + TEST_SCHEMA_SUBJECT + "/" + TEST_SCHEMA_VERSION, key);
+    void getSchemaVersionKey_returnsCorrectPath() {
+        // Access package-private method directly for testing
+        assertEquals(DEFAULT_SCHEMA_VERSIONS_KEY_PREFIX_WITH_SLASH + TEST_SCHEMA_SUBJECT + "/" + TEST_SCHEMA_VERSION,
+                consulConfigFetcher.getSchemaVersionKey(TEST_SCHEMA_SUBJECT, TEST_SCHEMA_VERSION));
     }
 
     @Test
-    void testConnect() throws Exception {
-        // We need to mock the Consul.Builder and its methods
-        Consul.Builder mockBuilder = mock(Consul.Builder.class);
-
-        // Use MockedStatic for Consul.builder static method
-        try (MockedStatic<Consul> mockedConsul = mockStatic(Consul.class)) {
-            mockedConsul.when(Consul::builder).thenReturn(mockBuilder);
-
-            // Setup the builder chain
-            when(mockBuilder.withHostAndPort(any())).thenReturn(mockBuilder);
-            when(mockBuilder.build()).thenReturn(mockConsul);
-
-            // Setup the keyValueClient
-            when(mockConsul.keyValueClient()).thenReturn(mockKeyValueClient);
-
-            // Execute
-            consulConfigFetcher.connect();
-
-            // Verify
-            mockedConsul.verify(Consul::builder);
-            verify(mockBuilder).withHostAndPort(any());
-            verify(mockBuilder).build();
-            verify(mockConsul).keyValueClient();
-
-            // Verify that the fields were set correctly
-            java.lang.reflect.Field connectedField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("connected");
-            connectedField.setAccessible(true);
-            java.util.concurrent.atomic.AtomicBoolean connected = (java.util.concurrent.atomic.AtomicBoolean) connectedField.get(consulConfigFetcher);
-            assertTrue(connected.get());
-
-            java.lang.reflect.Field consulClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("consulClient");
-            consulClientField.setAccessible(true);
-            assertEquals(mockConsul, consulClientField.get(consulConfigFetcher));
-
-            java.lang.reflect.Field kvClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("kvClient");
-            kvClientField.setAccessible(true);
-            assertEquals(mockKeyValueClient, kvClientField.get(consulConfigFetcher));
-        }
+    void connect_success_setsUpClientsAndFlags() {
+        consulConfigFetcher.connect(); // Act
+        verify(mockConsulClient).keyValueClient();
+        assertTrue(consulConfigFetcher.connected.get());
+        assertSame(mockKeyValueClient, consulConfigFetcher.kvClient);
+        assertSame(mockConsulClient, consulConfigFetcher.consulClient);
     }
 
     @Test
-    void testFetchPipelineClusterConfig_Success() throws JsonProcessingException {
-        // Setup
-        String clusterConfigKey = DEFAULT_CLUSTER_CONFIG_KEY_PREFIX + TEST_CLUSTER_NAME;
-        String clusterConfigJson = "{\"clusterName\":\"test-cluster\",\"allowedKafkaTopics\":[\"topic1\",\"topic2\"]}";
-        PipelineClusterConfig expectedConfig = new PipelineClusterConfig(
-                TEST_CLUSTER_NAME, 
-                null, 
-                null, 
-                Set.of("topic1", "topic2"), 
-                Collections.emptySet()
+    void connect_whenConsulClientIsNull_throwsIllegalStateException() {
+        KiwiprojectConsulConfigFetcher fetcherWithNullClient = new KiwiprojectConsulConfigFetcher(
+                mockObjectMapper, "h", 0, "p/", "s/", 0, null
         );
+        assertThrows(IllegalStateException.class, fetcherWithNullClient::connect);
+    }
 
-        // Setup mocks with lenient to avoid "unnecessary stubbings" errors
-        lenient().when(mockConsul.keyValueClient()).thenReturn(mockKeyValueClient);
-        lenient().when(mockKeyValueClient.getValueAsString(clusterConfigKey)).thenReturn(Optional.of(clusterConfigJson));
-        lenient().when(mockObjectMapper.readValue(clusterConfigJson, PipelineClusterConfig.class)).thenReturn(expectedConfig);
+    @Test
+    void connect_whenGetKeyValueClientThrows_throwsIllegalStateExceptionAndSetsNotConnected() {
+        when(mockConsulClient.keyValueClient()).thenThrow(new RuntimeException("KV client init failed"));
+        assertThrows(IllegalStateException.class, () -> consulConfigFetcher.connect());
+        assertFalse(consulConfigFetcher.connected.get());
+    }
 
-        // Use reflection to set the fields
-        try {
-            java.lang.reflect.Field consulClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("consulClient");
-            consulClientField.setAccessible(true);
-            consulClientField.set(consulConfigFetcher, mockConsul);
+    @Test
+    void fetchPipelineClusterConfig_success() throws Exception {
+        simulateConnectedState();
+        String clusterConfigKey = consulConfigFetcher.getClusterConfigKey(TEST_CLUSTER_NAME);
+        String clusterConfigJson = "{\"clusterName\":\"" + TEST_CLUSTER_NAME + "\"}";
+        PipelineClusterConfig expectedConfig = new PipelineClusterConfig(TEST_CLUSTER_NAME, null, null, Collections.emptySet(), Collections.emptySet());
 
-            java.lang.reflect.Field kvClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("kvClient");
-            kvClientField.setAccessible(true);
-            kvClientField.set(consulConfigFetcher, mockKeyValueClient);
+        when(mockKeyValueClient.getValueAsString(clusterConfigKey)).thenReturn(Optional.of(clusterConfigJson));
+        when(mockObjectMapper.readValue(clusterConfigJson, PipelineClusterConfig.class)).thenReturn(expectedConfig);
 
-            java.lang.reflect.Field connectedField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("connected");
-            connectedField.setAccessible(true);
-            connectedField.set(consulConfigFetcher, new java.util.concurrent.atomic.AtomicBoolean(true));
-        } catch (Exception e) {
-            fail("Failed to set fields: " + e.getMessage());
-        }
-
-        // Execute
         Optional<PipelineClusterConfig> result = consulConfigFetcher.fetchPipelineClusterConfig(TEST_CLUSTER_NAME);
-
-        // Verify
         assertTrue(result.isPresent());
         assertEquals(expectedConfig, result.get());
-        verify(mockKeyValueClient).getValueAsString(clusterConfigKey);
-        verify(mockObjectMapper).readValue(clusterConfigJson, PipelineClusterConfig.class);
     }
 
     @Test
-    void testFetchPipelineClusterConfig_NotFound() throws Exception {
-        // Setup
-        String clusterConfigKey = DEFAULT_CLUSTER_CONFIG_KEY_PREFIX + TEST_CLUSTER_NAME;
-
-        // Setup mocks with lenient to avoid "unnecessary stubbings" errors
-        lenient().when(mockConsul.keyValueClient()).thenReturn(mockKeyValueClient);
-        lenient().when(mockKeyValueClient.getValueAsString(clusterConfigKey)).thenReturn(Optional.empty());
-
-        // Use reflection to set the fields
-        try {
-            java.lang.reflect.Field consulClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("consulClient");
-            consulClientField.setAccessible(true);
-            consulClientField.set(consulConfigFetcher, mockConsul);
-
-            java.lang.reflect.Field kvClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("kvClient");
-            kvClientField.setAccessible(true);
-            kvClientField.set(consulConfigFetcher, mockKeyValueClient);
-
-            java.lang.reflect.Field connectedField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("connected");
-            connectedField.setAccessible(true);
-            connectedField.set(consulConfigFetcher, new java.util.concurrent.atomic.AtomicBoolean(true));
-        } catch (Exception e) {
-            fail("Failed to set fields: " + e.getMessage());
-        }
-
-        // Execute
+    void fetchPipelineClusterConfig_notFound_returnsEmpty() throws JsonProcessingException {
+        simulateConnectedState();
+        String clusterConfigKey = consulConfigFetcher.getClusterConfigKey(TEST_CLUSTER_NAME);
+        when(mockKeyValueClient.getValueAsString(clusterConfigKey)).thenReturn(Optional.empty());
         Optional<PipelineClusterConfig> result = consulConfigFetcher.fetchPipelineClusterConfig(TEST_CLUSTER_NAME);
-
-        // Verify
         assertFalse(result.isPresent());
-        verify(mockKeyValueClient).getValueAsString(clusterConfigKey);
         verify(mockObjectMapper, never()).readValue(anyString(), eq(PipelineClusterConfig.class));
     }
 
     @Test
-    void testFetchPipelineClusterConfig_JsonProcessingException() throws JsonProcessingException {
-        // Setup
-        String clusterConfigKey = DEFAULT_CLUSTER_CONFIG_KEY_PREFIX + TEST_CLUSTER_NAME;
+    void fetchPipelineClusterConfig_jsonProcessingException_returnsEmpty() throws Exception {
+        simulateConnectedState();
+        String clusterConfigKey = consulConfigFetcher.getClusterConfigKey(TEST_CLUSTER_NAME);
         String invalidJson = "{invalid-json}";
-
-        // Setup mocks with lenient to avoid "unnecessary stubbings" errors
-        lenient().when(mockConsul.keyValueClient()).thenReturn(mockKeyValueClient);
-        lenient().when(mockKeyValueClient.getValueAsString(clusterConfigKey)).thenReturn(Optional.of(invalidJson));
-        lenient().when(mockObjectMapper.readValue(invalidJson, PipelineClusterConfig.class))
-                .thenThrow(new JsonProcessingException("Invalid JSON") {});
-
-        // Use reflection to set the fields
-        try {
-            java.lang.reflect.Field consulClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("consulClient");
-            consulClientField.setAccessible(true);
-            consulClientField.set(consulConfigFetcher, mockConsul);
-
-            java.lang.reflect.Field kvClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("kvClient");
-            kvClientField.setAccessible(true);
-            kvClientField.set(consulConfigFetcher, mockKeyValueClient);
-
-            java.lang.reflect.Field connectedField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("connected");
-            connectedField.setAccessible(true);
-            connectedField.set(consulConfigFetcher, new java.util.concurrent.atomic.AtomicBoolean(true));
-        } catch (Exception e) {
-            fail("Failed to set fields: " + e.getMessage());
-        }
-
-        // Execute
+        when(mockKeyValueClient.getValueAsString(clusterConfigKey)).thenReturn(Optional.of(invalidJson));
+        when(mockObjectMapper.readValue(invalidJson, PipelineClusterConfig.class))
+                .thenThrow(new JsonProcessingException("Invalid JSON Test") {});
         Optional<PipelineClusterConfig> result = consulConfigFetcher.fetchPipelineClusterConfig(TEST_CLUSTER_NAME);
-
-        // Verify
-        assertFalse(result.isPresent());
-        verify(mockKeyValueClient).getValueAsString(clusterConfigKey);
-        verify(mockObjectMapper).readValue(invalidJson, PipelineClusterConfig.class);
+        assertFalse(result.isPresent()); // Verify Optional.empty() is returned
+        verify(mockObjectMapper).readValue(invalidJson, PipelineClusterConfig.class); // Verify attempt
     }
 
     @Test
-    void testFetchSchemaVersionData_Success() throws JsonProcessingException {
-        // Setup
-        String schemaVersionKey = DEFAULT_SCHEMA_VERSIONS_KEY_PREFIX + TEST_SCHEMA_SUBJECT + "/" + TEST_SCHEMA_VERSION;
-        String schemaJson = "{\"subject\":\"test-schema\",\"version\":1,\"schemaContent\":\"{\\\"type\\\":\\\"object\\\"}\",\"createdAt\":\"2023-01-01T00:00:00.000Z\"}";
-        SchemaVersionData expectedData = new SchemaVersionData(
-                null,
-                TEST_SCHEMA_SUBJECT,
-                TEST_SCHEMA_VERSION,
-                "{\"type\":\"object\"}",
-                SchemaType.JSON_SCHEMA,
-                null,
-                Instant.parse("2023-01-01T00:00:00.000Z"),
-                null
-        );
-
-        // Setup mocks with lenient to avoid "unnecessary stubbings" errors
-        lenient().when(mockConsul.keyValueClient()).thenReturn(mockKeyValueClient);
-        lenient().when(mockKeyValueClient.getValueAsString(schemaVersionKey)).thenReturn(Optional.of(schemaJson));
-        lenient().when(mockObjectMapper.readValue(schemaJson, SchemaVersionData.class)).thenReturn(expectedData);
-
-        // Use reflection to set the fields
-        try {
-            java.lang.reflect.Field consulClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("consulClient");
-            consulClientField.setAccessible(true);
-            consulClientField.set(consulConfigFetcher, mockConsul);
-
-            java.lang.reflect.Field kvClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("kvClient");
-            kvClientField.setAccessible(true);
-            kvClientField.set(consulConfigFetcher, mockKeyValueClient);
-
-            java.lang.reflect.Field connectedField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("connected");
-            connectedField.setAccessible(true);
-            connectedField.set(consulConfigFetcher, new java.util.concurrent.atomic.AtomicBoolean(true));
-        } catch (Exception e) {
-            fail("Failed to set fields: " + e.getMessage());
-        }
-
-        // Execute
+    void fetchSchemaVersionData_success() throws Exception {
+        simulateConnectedState();
+        String schemaKey = consulConfigFetcher.getSchemaVersionKey(TEST_SCHEMA_SUBJECT, TEST_SCHEMA_VERSION);
+        String schemaJson = "{\"schemaContent\":\"{}\"}";
+        SchemaVersionData expectedData = new SchemaVersionData(1L, TEST_SCHEMA_SUBJECT, TEST_SCHEMA_VERSION, "{}", SchemaType.JSON_SCHEMA, null, Instant.now(), null);
+        when(mockKeyValueClient.getValueAsString(schemaKey)).thenReturn(Optional.of(schemaJson));
+        when(mockObjectMapper.readValue(schemaJson, SchemaVersionData.class)).thenReturn(expectedData);
         Optional<SchemaVersionData> result = consulConfigFetcher.fetchSchemaVersionData(TEST_SCHEMA_SUBJECT, TEST_SCHEMA_VERSION);
-
-        // Verify
         assertTrue(result.isPresent());
         assertEquals(expectedData, result.get());
-        verify(mockKeyValueClient).getValueAsString(schemaVersionKey);
-        verify(mockObjectMapper).readValue(schemaJson, SchemaVersionData.class);
     }
 
     @Test
-    void testFetchSchemaVersionData_NotFound() throws Exception {
-        // Setup
-        String schemaVersionKey = DEFAULT_SCHEMA_VERSIONS_KEY_PREFIX + TEST_SCHEMA_SUBJECT + "/" + TEST_SCHEMA_VERSION;
+    void watchClusterConfig_setupAndStart_correctlyInitializesKVCache() throws Exception {
+        simulateConnectedState();
+        String clusterConfigKey = consulConfigFetcher.getClusterConfigKey(TEST_CLUSTER_NAME);
+        @SuppressWarnings("unchecked")
+        Consumer<WatchCallbackResult> mockUpdateHandler = mock(Consumer.class);
 
-        // Setup mocks with lenient to avoid "unnecessary stubbings" errors
-        lenient().when(mockConsul.keyValueClient()).thenReturn(mockKeyValueClient);
-        lenient().when(mockKeyValueClient.getValueAsString(schemaVersionKey)).thenReturn(Optional.empty());
+        try (MockedStatic<KVCache> mockedStaticKVCache = mockStatic(KVCache.class)) {
+            // We expect the simpler newCache method that takes watchSeconds directly
+            mockedStaticKVCache.when(() -> KVCache.newCache(
+                    eq(mockKeyValueClient),
+                    eq(clusterConfigKey),
+                    eq(TEST_WATCH_SECONDS)
+            )).thenReturn(mockKVCacheInstance);
+            doNothing().when(mockKVCacheInstance).start();
 
-        // Use reflection to set the fields
-        try {
-            java.lang.reflect.Field consulClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("consulClient");
-            consulClientField.setAccessible(true);
-            consulClientField.set(consulConfigFetcher, mockConsul);
-
-            java.lang.reflect.Field kvClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("kvClient");
-            kvClientField.setAccessible(true);
-            kvClientField.set(consulConfigFetcher, mockKeyValueClient);
-
-            java.lang.reflect.Field connectedField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("connected");
-            connectedField.setAccessible(true);
-            connectedField.set(consulConfigFetcher, new java.util.concurrent.atomic.AtomicBoolean(true));
-        } catch (Exception e) {
-            fail("Failed to set fields: " + e.getMessage());
-        }
-
-        // Execute
-        Optional<SchemaVersionData> result = consulConfigFetcher.fetchSchemaVersionData(TEST_SCHEMA_SUBJECT, TEST_SCHEMA_VERSION);
-
-        // Verify
-        assertFalse(result.isPresent());
-        verify(mockKeyValueClient).getValueAsString(schemaVersionKey);
-        verify(mockObjectMapper, never()).readValue(anyString(), eq(SchemaVersionData.class));
-    }
-
-    @Test
-    void testFetchSchemaVersionData_JsonProcessingException() throws JsonProcessingException {
-        // Setup
-        String schemaVersionKey = DEFAULT_SCHEMA_VERSIONS_KEY_PREFIX + TEST_SCHEMA_SUBJECT + "/" + TEST_SCHEMA_VERSION;
-        String invalidJson = "{invalid-json}";
-
-        // Setup mocks with lenient to avoid "unnecessary stubbings" errors
-        lenient().when(mockConsul.keyValueClient()).thenReturn(mockKeyValueClient);
-        lenient().when(mockKeyValueClient.getValueAsString(schemaVersionKey)).thenReturn(Optional.of(invalidJson));
-        lenient().when(mockObjectMapper.readValue(invalidJson, SchemaVersionData.class))
-                .thenThrow(new JsonProcessingException("Invalid JSON") {});
-
-        // Use reflection to set the fields
-        try {
-            java.lang.reflect.Field consulClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("consulClient");
-            consulClientField.setAccessible(true);
-            consulClientField.set(consulConfigFetcher, mockConsul);
-
-            java.lang.reflect.Field kvClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("kvClient");
-            kvClientField.setAccessible(true);
-            kvClientField.set(consulConfigFetcher, mockKeyValueClient);
-
-            java.lang.reflect.Field connectedField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("connected");
-            connectedField.setAccessible(true);
-            connectedField.set(consulConfigFetcher, new java.util.concurrent.atomic.AtomicBoolean(true));
-        } catch (Exception e) {
-            fail("Failed to set fields: " + e.getMessage());
-        }
-
-        // Execute
-        Optional<SchemaVersionData> result = consulConfigFetcher.fetchSchemaVersionData(TEST_SCHEMA_SUBJECT, TEST_SCHEMA_VERSION);
-
-        // Verify
-        assertFalse(result.isPresent());
-        verify(mockKeyValueClient).getValueAsString(schemaVersionKey);
-        verify(mockObjectMapper).readValue(invalidJson, SchemaVersionData.class);
-    }
-
-    @Test
-    void testWatchClusterConfig_Success() throws Exception {
-        // Since we can't easily mock the KVCache.addListener method, we'll test the watchClusterConfig method
-        // by verifying that it calls KVCache.newCache with the correct parameters and starts the cache.
-        // We'll skip testing the listener functionality directly.
-
-        // Setup
-        String clusterConfigKey = DEFAULT_CLUSTER_CONFIG_KEY_PREFIX + TEST_CLUSTER_NAME;
-        var mockUpdateHandler = mock(Consumer.class);
-
-        // Setup mocks with lenient to avoid "unnecessary stubbings" errors
-        lenient().when(mockConsul.keyValueClient()).thenReturn(mockKeyValueClient);
-
-        // Use MockedStatic for KVCache.newCache static method
-        try (MockedStatic<KVCache> mockedKVCache = mockStatic(KVCache.class)) {
-            mockedKVCache.when(() -> newCache(eq(mockKeyValueClient), eq(clusterConfigKey), eq(30)))
-                    .thenReturn(mockKVCache);
-
-            doNothing().when(mockKVCache).start();
-
-            // Use reflection to set the fields
-            try {
-                java.lang.reflect.Field consulClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("consulClient");
-                consulClientField.setAccessible(true);
-                consulClientField.set(consulConfigFetcher, mockConsul);
-
-                java.lang.reflect.Field kvClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("kvClient");
-                kvClientField.setAccessible(true);
-                kvClientField.set(consulConfigFetcher, mockKeyValueClient);
-
-                java.lang.reflect.Field connectedField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("connected");
-                connectedField.setAccessible(true);
-                connectedField.set(consulConfigFetcher, new java.util.concurrent.atomic.AtomicBoolean(true));
-            } catch (Exception e) {
-                fail("Failed to set fields: " + e.getMessage());
-            }
-
-            // Execute
-            //noinspection unchecked
             consulConfigFetcher.watchClusterConfig(TEST_CLUSTER_NAME, mockUpdateHandler);
 
-            // Verify KVCache setup
-            mockedKVCache.verify(() -> newCache(eq(mockKeyValueClient), eq(clusterConfigKey), eq(30)));
-            verify(mockKVCache).start();
-
-            // Verify that the clusterConfigCache field was set
-            java.lang.reflect.Field clusterConfigCacheField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("clusterConfigCache");
-            clusterConfigCacheField.setAccessible(true);
-            assertEquals(mockKVCache, clusterConfigCacheField.get(consulConfigFetcher));
-
-            // Verify that the watcherStarted flag was set to true
-            java.lang.reflect.Field watcherStartedField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("watcherStarted");
-            watcherStartedField.setAccessible(true);
-            java.util.concurrent.atomic.AtomicBoolean watcherStarted = (java.util.concurrent.atomic.AtomicBoolean) watcherStartedField.get(consulConfigFetcher);
-            assertTrue(watcherStarted.get());
+            mockedStaticKVCache.verify(() -> KVCache.newCache(
+                    eq(mockKeyValueClient), eq(clusterConfigKey), eq(TEST_WATCH_SECONDS))
+            );
+            verify(mockKVCacheInstance).addListener(kvCacheListenerCaptor.capture());
+            verify(mockKVCacheInstance).start();
+            assertTrue(consulConfigFetcher.watcherStarted.get());
+            assertSame(mockKVCacheInstance, consulConfigFetcher.clusterConfigCache);
         }
     }
 
     @Test
-    void testClose() throws Exception {
-        // Setup with lenient to avoid "unnecessary stubbings" errors
-        lenient().when(mockConsul.keyValueClient()).thenReturn(mockKeyValueClient);
+    void watchClusterConfig_listener_receivesUpdateAndCallsHandlerWithSuccess() throws Exception {
+        simulateConnectedState();
+        String clusterConfigKey = consulConfigFetcher.getClusterConfigKey(TEST_CLUSTER_NAME);
+        @SuppressWarnings("unchecked")
+        Consumer<WatchCallbackResult> mockUpdateHandler = mock(Consumer.class);
+        PipelineClusterConfig testConfig = new PipelineClusterConfig(TEST_CLUSTER_NAME);
+        String testConfigJson = "{\"clusterName\":\"" + TEST_CLUSTER_NAME + "\"}";
 
-        // Use reflection to set the fields
-        try {
-            java.lang.reflect.Field consulClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("consulClient");
-            consulClientField.setAccessible(true);
-            consulClientField.set(consulConfigFetcher, mockConsul);
+        org.kiwiproject.consul.model.kv.Value consulApiValue = mock(org.kiwiproject.consul.model.kv.Value.class);
+        when(consulApiValue.getValueAsString()).thenReturn(Optional.of(testConfigJson));
+        // KVCache listener provides a map where key is the full path of the changed item
+        Map<String, org.kiwiproject.consul.model.kv.Value> newValuesMap = Collections.singletonMap(clusterConfigKey, consulApiValue);
 
-            java.lang.reflect.Field kvClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("kvClient");
-            kvClientField.setAccessible(true);
-            kvClientField.set(consulConfigFetcher, mockKeyValueClient);
+        try (MockedStatic<KVCache> mockedStaticKVCache = mockStatic(KVCache.class)) {
+            mockedStaticKVCache.when(() -> KVCache.newCache(any(), anyString(), anyInt())).thenReturn(mockKVCacheInstance);
+            doNothing().when(mockKVCacheInstance).start();
 
-            java.lang.reflect.Field clusterConfigCacheField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("clusterConfigCache");
-            clusterConfigCacheField.setAccessible(true);
-            clusterConfigCacheField.set(consulConfigFetcher, mockKVCache);
+            consulConfigFetcher.watchClusterConfig(TEST_CLUSTER_NAME, mockUpdateHandler);
+            verify(mockKVCacheInstance).addListener(kvCacheListenerCaptor.capture());
 
-            java.lang.reflect.Field connectedField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("connected");
-            connectedField.setAccessible(true);
-            connectedField.set(consulConfigFetcher, new java.util.concurrent.atomic.AtomicBoolean(true));
+            when(mockObjectMapper.readValue(testConfigJson, PipelineClusterConfig.class)).thenReturn(testConfig);
+            // Simulate KVCache invoking the listener
+            ConsulCache.Listener<String, org.kiwiproject.consul.model.kv.Value> capturedListener = kvCacheListenerCaptor.getValue();
+            capturedListener.notify(newValuesMap); // CORRECTED: Call notify() which is the method on the Listener interface
 
-            java.lang.reflect.Field watcherStartedField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("watcherStarted");
-            watcherStartedField.setAccessible(true);
-            watcherStartedField.set(consulConfigFetcher, new java.util.concurrent.atomic.AtomicBoolean(true));
-        } catch (Exception e) {
-            fail("Failed to set fields: " + e.getMessage());
+            verify(mockUpdateHandler).accept(watchCallbackResultCaptor.capture());
+            WatchCallbackResult result = watchCallbackResultCaptor.getValue();
+            assertTrue(result.hasValidConfig());
+            assertEquals(testConfig, result.config().get());
         }
+    }
 
-        // Execute
+    @Test
+    void watchClusterConfig_listener_receivesDeleteAndCallsHandlerWithDeleted() throws Exception {
+        simulateConnectedState();
+        @SuppressWarnings("unchecked")
+        Consumer<WatchCallbackResult> mockUpdateHandler = mock(Consumer.class);
+        // When a key is deleted, newValues map passed to listener by KVCache for that key will be empty
+        // or the key will be absent from the map.
+        Map<String, org.kiwiproject.consul.model.kv.Value> emptySnapshotForKey = Collections.emptyMap();
+
+        try (MockedStatic<KVCache> mockedStaticKVCache = mockStatic(KVCache.class)) {
+            mockedStaticKVCache.when(() -> KVCache.newCache(any(), anyString(), anyInt())).thenReturn(mockKVCacheInstance);
+            doNothing().when(mockKVCacheInstance).start();
+
+            consulConfigFetcher.watchClusterConfig(TEST_CLUSTER_NAME, mockUpdateHandler);
+            verify(mockKVCacheInstance).addListener(kvCacheListenerCaptor.capture());
+
+            ConsulCache.Listener<String, org.kiwiproject.consul.model.kv.Value> capturedListener = kvCacheListenerCaptor.getValue();
+            capturedListener.notify(emptySnapshotForKey); // CORRECTED: Call notify()
+
+            verify(mockUpdateHandler).accept(watchCallbackResultCaptor.capture());
+            WatchCallbackResult result = watchCallbackResultCaptor.getValue();
+            assertTrue(result.deleted());
+            assertFalse(result.hasValidConfig());
+            assertFalse(result.hasError());
+        }
+    }
+
+    @Test
+    void watchClusterConfig_listener_handlesMalformedJsonAndCallsHandlerWithFailure() throws Exception {
+        simulateConnectedState();
+        String clusterConfigKey = consulConfigFetcher.getClusterConfigKey(TEST_CLUSTER_NAME);
+        @SuppressWarnings("unchecked")
+        Consumer<WatchCallbackResult> mockUpdateHandler = mock(Consumer.class);
+        String malformedJson = "{\"invalid";
+
+        org.kiwiproject.consul.model.kv.Value consulApiValue = mock(org.kiwiproject.consul.model.kv.Value.class);
+        when(consulApiValue.getValueAsString()).thenReturn(Optional.of(malformedJson));
+        Map<String, org.kiwiproject.consul.model.kv.Value> newValuesMap = Collections.singletonMap(clusterConfigKey, consulApiValue);
+
+        JsonProcessingException mockJsonException = new JsonProcessingException("Test Malformed JSON") {};
+        when(mockObjectMapper.readValue(malformedJson, PipelineClusterConfig.class)).thenThrow(mockJsonException);
+
+        try (MockedStatic<KVCache> mockedStaticKVCache = mockStatic(KVCache.class)) {
+            mockedStaticKVCache.when(() -> KVCache.newCache(any(), anyString(), anyInt())).thenReturn(mockKVCacheInstance);
+            doNothing().when(mockKVCacheInstance).start();
+
+            consulConfigFetcher.watchClusterConfig(TEST_CLUSTER_NAME, mockUpdateHandler);
+            verify(mockKVCacheInstance).addListener(kvCacheListenerCaptor.capture());
+
+            ConsulCache.Listener<String, org.kiwiproject.consul.model.kv.Value> capturedListener = kvCacheListenerCaptor.getValue();
+            capturedListener.notify(newValuesMap); // CORRECTED: Call notify()
+
+            verify(mockUpdateHandler).accept(watchCallbackResultCaptor.capture());
+            WatchCallbackResult result = watchCallbackResultCaptor.getValue();
+            assertFalse(result.hasValidConfig());
+            assertFalse(result.deleted());
+            assertTrue(result.hasError());
+            assertTrue(result.error().isPresent());
+            assertSame(mockJsonException, result.error().get());
+        }
+    }
+
+    @Test
+    void close_stopsCacheAndResetsFlags() throws Exception {
+        simulateConnectedState();
+        // Simulate watcher was started
+        consulConfigFetcher.clusterConfigCache = mockKVCacheInstance; // Direct assignment
+        consulConfigFetcher.watcherStarted.set(true); // Direct assignment
+
+        doNothing().when(mockKVCacheInstance).stop();
+
         consulConfigFetcher.close();
 
-        // Verify
-        verify(mockKVCache).stop();
-
-        // Verify that the fields were reset
-        java.lang.reflect.Field connectedField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("connected");
-        connectedField.setAccessible(true);
-        java.util.concurrent.atomic.AtomicBoolean connected = (java.util.concurrent.atomic.AtomicBoolean) connectedField.get(consulConfigFetcher);
-        assertFalse(connected.get());
-
-        java.lang.reflect.Field watcherStartedField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("watcherStarted");
-        watcherStartedField.setAccessible(true);
-        java.util.concurrent.atomic.AtomicBoolean watcherStarted = (java.util.concurrent.atomic.AtomicBoolean) watcherStartedField.get(consulConfigFetcher);
-        assertFalse(watcherStarted.get());
-
-        java.lang.reflect.Field clusterConfigCacheField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("clusterConfigCache");
-        clusterConfigCacheField.setAccessible(true);
-        assertNull(clusterConfigCacheField.get(consulConfigFetcher));
-
-        java.lang.reflect.Field kvClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("kvClient");
-        kvClientField.setAccessible(true);
-        assertNull(kvClientField.get(consulConfigFetcher));
-
-        java.lang.reflect.Field consulClientField = KiwiprojectConsulConfigFetcher.class.getDeclaredField("consulClient");
-        consulClientField.setAccessible(true);
-        assertNull(consulClientField.get(consulConfigFetcher));
+        verify(mockKVCacheInstance).stop();
+        assertFalse(consulConfigFetcher.watcherStarted.get());
+        assertFalse(consulConfigFetcher.connected.get());
+        assertNull(consulConfigFetcher.clusterConfigCache);
+        assertNull(consulConfigFetcher.kvClient);
+        assertNull(consulConfigFetcher.consulClient);
     }
 }
