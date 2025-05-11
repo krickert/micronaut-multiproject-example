@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.kiwiproject.consul.Consul;
 import org.kiwiproject.consul.KeyValueClient;
+import org.kiwiproject.consul.cache.KVCache;
+import org.mockito.MockedStatic;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +34,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
 
 @MicronautTest(startApplication = false, environments = {"test"}) // We don't need the full app, just property resolution
 @Property(name = "micronaut.config-client.enabled", value = "false")
@@ -665,6 +669,151 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         assertTrue(result1.config().isPresent(), "Config should be present in the received update");
         assertEquals(config1, result1.config().get());
         LOG.info("kvClient_null_test: Handler received config1: {}", result1);
+    }
+
+    @Test
+    @DisplayName("watchClusterConfig - when KVCache.start() fails, throws RuntimeException and marks watcher as not started")
+    @Timeout(value = 15, unit = TimeUnit.SECONDS) // Shorter timeout as it's not waiting for Consul events
+    void watchClusterConfig_whenKVCacheStartFails_throwsAndMarksNotStarted() throws Exception {
+        // Ensure connected state for kvClient
+        configFetcher.connect();
+        assertTrue(configFetcher.connected.get(), "Fetcher should be connected");
+        assertNotNull(configFetcher.kvClient, "kvClient should be initialized");
+
+        @SuppressWarnings("unchecked")
+        Consumer<WatchCallbackResult> mockUpdateHandler = mock(Consumer.class);
+        String clusterConfigKey = configFetcher.getClusterConfigKey(testClusterForWatch);
+
+        // Mock KVCache static factory and the instance methods
+        try (MockedStatic<KVCache> mockedStaticKVCache = mockStatic(KVCache.class)) {
+            KVCache mockLocalKVCacheInstance = mock(KVCache.class); // Local mock for this test
+
+            mockedStaticKVCache.when(() -> KVCache.newCache(
+                    eq(configFetcher.kvClient),
+                    eq(clusterConfigKey),
+                    eq(appWatchSeconds)
+            )).thenReturn(mockLocalKVCacheInstance);
+
+            // Simulate KVCache.start() throwing an exception
+            RuntimeException simulatedStartException = new RuntimeException("Simulated KVCache.start() failure");
+            doThrow(simulatedStartException).when(mockLocalKVCacheInstance).start();
+
+            // Act: Attempt to watch the cluster config
+            Exception thrownException = assertThrows(RuntimeException.class, () -> {
+                configFetcher.watchClusterConfig(testClusterForWatch, mockUpdateHandler);
+            }, "watchClusterConfig should throw a RuntimeException when KVCache.start() fails");
+
+            // Assertions
+            assertEquals("Failed to establish Consul watch on " + clusterConfigKey, thrownException.getMessage());
+            assertSame(simulatedStartException, thrownException.getCause(), "The original exception should be the cause");
+
+            mockedStaticKVCache.verify(() -> KVCache.newCache(
+                    eq(configFetcher.kvClient), eq(clusterConfigKey), eq(appWatchSeconds))
+            );
+            verify(mockLocalKVCacheInstance).addListener(any()); // Listener would have been added before start()
+            verify(mockLocalKVCacheInstance).start(); // Verify start() was attempted
+
+            assertFalse(configFetcher.watcherStarted.get(), "watcherStarted flag should be false after KVCache.start() failure");
+            // The clusterConfigCache field might still hold the mockLocalKVCacheInstance
+            // as it's assigned before start() is called. This is acceptable.
+            assertSame(mockLocalKVCacheInstance, configFetcher.clusterConfigCache, "clusterConfigCache field should hold the KVCache instance that failed to start");
+
+            verifyNoInteractions(mockUpdateHandler); // Handler should not have been called
+        }
+    }
+
+    @Test
+    @DisplayName("watchClusterConfig - can re-establish a new watch after close()")
+    @Timeout(value = 45, unit = TimeUnit.SECONDS)
+    void watchClusterConfig_canReEstablishWatchAfterClose() throws Exception {
+        BlockingQueue<WatchCallbackResult> updates1 = new ArrayBlockingQueue<>(5);
+        Consumer<WatchCallbackResult> handler1 = updates1::offer;
+
+        BlockingQueue<WatchCallbackResult> updates2 = new ArrayBlockingQueue<>(5);
+        Consumer<WatchCallbackResult> handler2 = updates2::offer;
+
+        PipelineClusterConfig config1 = createDummyClusterConfig(testClusterForWatch);
+        config1 = new PipelineClusterConfig(config1.clusterName(), config1.pipelineGraphConfig(),
+                config1.pipelineModuleMap(), Set.of("topicWatch1"), config1.allowedGrpcServices());
+
+        PipelineClusterConfig config2 = createDummyClusterConfig(testClusterForWatch); // Same key, different content
+        config2 = new PipelineClusterConfig(config2.clusterName(), config2.pipelineGraphConfig(),
+                config2.pipelineModuleMap(), Set.of("topicWatch2"), config2.allowedGrpcServices());
+
+        // 1. Establish first watch and verify it works
+        configFetcher.watchClusterConfig(testClusterForWatch, handler1);
+        LOG.info("reEstablishWatch_test: Watch 1 started for {}", fullWatchClusterKey);
+        updates1.poll(appWatchSeconds + 5, TimeUnit.SECONDS); // Consume initial
+
+        seedConsulKv(fullWatchClusterKey, config1);
+        WatchCallbackResult result1 = updates1.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(result1, "Handler 1 should receive config1");
+        assertEquals(config1, result1.config().orElse(null));
+        LOG.info("reEstablishWatch_test: Handler 1 received config1: {}", result1);
+
+        // 2. Close the config fetcher
+        LOG.info("reEstablishWatch_test: Calling configFetcher.close()");
+        configFetcher.close();
+        LOG.info("reEstablishWatch_test: configFetcher.close() completed");
+        assertNull(configFetcher.clusterConfigCache, "KVCache should be null after close");
+        assertFalse(configFetcher.watcherStarted.get(), "WatcherStarted flag should be false after close");
+
+        // 3. Attempt to re-establish a watch (for the same key, with a new handler)
+        LOG.info("reEstablishWatch_test: Attempting to start Watch 2 for {} AFTER close", fullWatchClusterKey);
+        configFetcher.watchClusterConfig(testClusterForWatch, handler2);
+        LOG.info("reEstablishWatch_test: Watch 2 supposedly started for {}", fullWatchClusterKey);
+
+        // Verify internal state after re-watch attempt
+        assertTrue(configFetcher.connected.get(), "Should be re-connected for Watch 2");
+        assertNotNull(configFetcher.kvClient, "kvClient should be re-initialized for Watch 2");
+        assertTrue(configFetcher.watcherStarted.get(), "WatcherStarted flag should be true for Watch 2");
+        assertNotNull(configFetcher.clusterConfigCache, "A new KVCache should be created for Watch 2");
+
+        // Consume initial event for Handler 2 (might be config1 if not cleared from Consul, or deleted)
+        WatchCallbackResult initialEventWatch2 = updates2.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(initialEventWatch2, "Handler 2 should receive an initial event");
+        LOG.info("reEstablishWatch_test: Handler 2 initial event: {}", initialEventWatch2);
+
+
+        // 4. Seed new data and verify Watch 2 receives it
+        LOG.info("reEstablishWatch_test: Seeding config2 for Watch 2");
+        seedConsulKv(fullWatchClusterKey, config2);
+        WatchCallbackResult result2 = updates2.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(result2, "Handler 2 should receive config2");
+        assertTrue(result2.config().isPresent(), "Config2 should be present in Handler 2's update");
+        assertEquals(config2, result2.config().get());
+        LOG.info("reEstablishWatch_test: Handler 2 received config2: {}", result2);
+
+        // 5. Ensure Handler 1 (from before close) does not receive any more updates
+        WatchCallbackResult spuriousResult1 = updates1.poll(2, TimeUnit.SECONDS); // Short poll
+        assertNull(spuriousResult1, "Handler 1 should NOT receive any updates after close and re-watch. Got: " + spuriousResult1);
+        LOG.info("reEstablishWatch_test: Confirmed Handler 1 received no further updates.");
+    }
+
+    @Test
+    @DisplayName("watchClusterConfig - with null or blank clusterName throws IllegalArgumentException")
+    void watchClusterConfig_withInvalidClusterName_throwsIllegalArgumentException() {
+        @SuppressWarnings("unchecked")
+        Consumer<WatchCallbackResult> dummyHandler = mock(Consumer.class);
+
+        // Test with null clusterName
+        Exception nullNameException = assertThrows(IllegalArgumentException.class, () -> {
+            configFetcher.watchClusterConfig(null, dummyHandler);
+        }, "Should throw IllegalArgumentException for null cluster name");
+        assertEquals("Cluster name cannot be null or blank for key construction.", nullNameException.getMessage());
+        LOG.info("watchClusterConfig_withInvalidClusterName: Correctly threw for null cluster name.");
+
+        // Test with blank clusterName
+        Exception blankNameException = assertThrows(IllegalArgumentException.class, () -> {
+            configFetcher.watchClusterConfig("   ", dummyHandler);
+        }, "Should throw IllegalArgumentException for blank cluster name");
+        assertEquals("Cluster name cannot be null or blank for key construction.", blankNameException.getMessage());
+        LOG.info("watchClusterConfig_withInvalidClusterName: Correctly threw for blank cluster name.");
+
+        // Ensure no watcher was actually started
+        assertFalse(configFetcher.watcherStarted.get(), "Watcher should not be started for invalid cluster name");
+        assertNull(configFetcher.clusterConfigCache, "KVCache should not be created for invalid cluster name");
+        verifyNoInteractions(dummyHandler);
     }
     // The watchClusterConfig_handlesMalformedJsonUpdate test is now effectively merged into
     // the comprehensive watchClusterConfig_receivesAllStates test.
