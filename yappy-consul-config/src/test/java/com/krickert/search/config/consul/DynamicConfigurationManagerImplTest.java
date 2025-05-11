@@ -1,6 +1,7 @@
 package com.krickert.search.config.consul;
 
 import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
+import com.krickert.search.config.consul.exception.ConfigurationManagerInitializationException;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineModuleConfiguration;
 import com.krickert.search.config.pipeline.model.PipelineModuleMap;
@@ -323,4 +324,196 @@ class DynamicConfigurationManagerImplTest {
         verify(mockCachedConfigHolder, never()).clearConfiguration();
         verify(mockEventPublisher, never()).publishEvent(any(ClusterConfigUpdateEvent.class));
     }
+
+
+    @Test
+    void initialize_connectThrows_throwsConfigurationManagerInitializationException() {
+        doThrow(new RuntimeException("Simulated connection failure"))
+                .when(mockConsulConfigFetcher).connect();
+
+        assertThrows(ConfigurationManagerInitializationException.class, () -> {
+            dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
+        });
+
+        verify(mockConsulConfigFetcher).connect();
+        verify(mockConsulConfigFetcher, never()).fetchPipelineClusterConfig(anyString());
+        verify(mockConsulConfigFetcher, never()).watchClusterConfig(anyString(), any());
+    }
+
+    @Test
+    void initialize_watchClusterConfigThrows_throwsConfigurationManagerInitializationException() {
+        // Assume initial fetch is okay or not relevant for this specific failure point
+        when(mockConsulConfigFetcher.fetchPipelineClusterConfig(TEST_CLUSTER_NAME))
+                .thenReturn(Optional.empty()); // Or some valid config
+
+        doThrow(new RuntimeException("Simulated watch setup failure"))
+                .when(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), any());
+
+        assertThrows(ConfigurationManagerInitializationException.class, () -> {
+            dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
+        });
+
+        verify(mockConsulConfigFetcher).connect();
+        verify(mockConsulConfigFetcher).fetchPipelineClusterConfig(TEST_CLUSTER_NAME); // This would have been called
+        verify(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), any());
+    }
+
+    @Test
+    void handleConsulWatchUpdate_watchResultHasError_logsAndKeepsOldConfig() {
+        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config");
+        when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
+
+        // Initial setup
+        dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
+        verify(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), watchCallbackCaptor.capture());
+        Consumer<WatchCallbackResult> actualWatchCallback = watchCallbackCaptor.getValue();
+
+        // Reset mocks for the specific interaction
+        Mockito.reset(mockEventPublisher, mockCachedConfigHolder, mockConfigurationValidator, mockConsulConfigFetcher);
+        // Crucially, re-stub getCurrentConfig for the oldConfigForEvent in processConsulUpdate
+        when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
+
+
+        // Simulate watch event with an error
+        RuntimeException watchError = new RuntimeException("KVCache internal error");
+        actualWatchCallback.accept(WatchCallbackResult.failure(watchError));
+
+        // Verifications
+        verify(mockConsulConfigFetcher, never()).fetchSchemaVersionData(anyString(), anyInt());
+        verify(mockConfigurationValidator, never()).validate(any(), any());
+        verify(mockCachedConfigHolder, never()).updateConfiguration(any(), any());
+        verify(mockCachedConfigHolder, never()).clearConfiguration();
+        verify(mockEventPublisher, never()).publishEvent(any(ClusterConfigUpdateEvent.class));
+        // Add log verification if you have a test utility for it, to ensure the error was logged.
+    }
+    @Test
+    void handleConsulWatchUpdate_validationItselfThrowsRuntimeException_logsAndKeepsOldConfig() {
+        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config");
+        PipelineClusterConfig newConfigFromWatch = new PipelineClusterConfig("new-config-causes-validator-error");
+        when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
+
+        dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
+        verify(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), watchCallbackCaptor.capture());
+        Consumer<WatchCallbackResult> actualWatchCallback = watchCallbackCaptor.getValue();
+
+        Mockito.reset(mockEventPublisher, mockCachedConfigHolder, mockConfigurationValidator, mockConsulConfigFetcher);
+        when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
+
+        // Assume newConfigFromWatch has no schemas or schema fetching is successful
+        when(mockConfigurationValidator.validate(eq(newConfigFromWatch), any()))
+                .thenThrow(new RuntimeException("Validator blew up!"));
+
+        actualWatchCallback.accept(WatchCallbackResult.success(newConfigFromWatch));
+
+        verify(mockConfigurationValidator).validate(eq(newConfigFromWatch), any());
+        verify(mockCachedConfigHolder, never()).updateConfiguration(any(), any());
+        verify(mockCachedConfigHolder, never()).clearConfiguration();
+        verify(mockEventPublisher, never()).publishEvent(any(ClusterConfigUpdateEvent.class));
+    }
+    @Test
+    void handleConsulWatchUpdate_cacheUpdateThrowsRuntimeException_logsError_eventNotPublished() {
+        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config");
+        PipelineClusterConfig newConfigFromWatch = new PipelineClusterConfig("new-config-causes-cache-error");
+        when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
+
+        dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
+        verify(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), watchCallbackCaptor.capture());
+        Consumer<WatchCallbackResult> actualWatchCallback = watchCallbackCaptor.getValue();
+
+        Mockito.reset(mockEventPublisher, mockCachedConfigHolder, mockConfigurationValidator, mockConsulConfigFetcher);
+        when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
+
+        // Assume newConfigFromWatch has no schemas or schema fetching is successful
+        when(mockConfigurationValidator.validate(eq(newConfigFromWatch), any()))
+                .thenReturn(ValidationResult.valid()); // Validation succeeds
+        doThrow(new RuntimeException("Cache update failed!"))
+                .when(mockCachedConfigHolder).updateConfiguration(eq(newConfigFromWatch), any());
+
+        actualWatchCallback.accept(WatchCallbackResult.success(newConfigFromWatch));
+
+        verify(mockConfigurationValidator).validate(eq(newConfigFromWatch), any());
+        verify(mockCachedConfigHolder).updateConfiguration(eq(newConfigFromWatch), any()); // It was attempted
+        verify(mockEventPublisher, never()).publishEvent(any(ClusterConfigUpdateEvent.class)); // But event not published
+    }
+    @Test
+    void publishEvent_directListenerThrows_continuesNotifyingOtherListenersAndMicronautPublisher() {
+        PipelineClusterConfig currentConfig = new PipelineClusterConfig("current");
+        PipelineClusterConfig newConfig = new PipelineClusterConfig("new-valid-config");
+
+        Consumer<ClusterConfigUpdateEvent> misbehavingListener = Mockito.mock(Consumer.class);
+        doThrow(new RuntimeException("Listener failed!")).when(misbehavingListener).accept(any());
+
+        Consumer<ClusterConfigUpdateEvent> wellBehavedListener = Mockito.mock(Consumer.class);
+
+        dynamicConfigurationManager.registerConfigUpdateListener(misbehavingListener);
+        dynamicConfigurationManager.registerConfigUpdateListener(wellBehavedListener);
+
+        // --- Initialisation Phase Stubs ---
+        when(mockConsulConfigFetcher.fetchPipelineClusterConfig(TEST_CLUSTER_NAME)).thenReturn(Optional.of(currentConfig));
+        when(mockConfigurationValidator.validate(eq(currentConfig), any())).thenReturn(ValidationResult.valid());
+        when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(currentConfig)); // For oldConfig in event
+
+        dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
+        verify(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), watchCallbackCaptor.capture());
+        Consumer<WatchCallbackResult> actualWatchCallback = watchCallbackCaptor.getValue();
+
+        // --- Watch Event Simulation Phase ---
+        // Resetting only the event publisher and listeners for this specific check
+        Mockito.reset(mockEventPublisher, misbehavingListener, wellBehavedListener);
+        // Ensure getCurrentConfig still provides the old config for the event generation.
+        when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(currentConfig));
+        // Stubbing for the new config processing
+        when(mockConfigurationValidator.validate(eq(newConfig), any())).thenReturn(ValidationResult.valid());
+        // Assuming newConfig has no schemas for simplicity here, or stub schema fetching
+
+        // Simulate the watch event
+        actualWatchCallback.accept(WatchCallbackResult.success(newConfig));
+
+        // Verifications
+        verify(misbehavingListener).accept(eventCaptor.capture()); // It was called
+        ClusterConfigUpdateEvent eventForMisbehaving = eventCaptor.getValue();
+        assertEquals(Optional.of(currentConfig), eventForMisbehaving.oldConfig());
+        assertEquals(newConfig, eventForMisbehaving.newConfig());
+
+        verify(wellBehavedListener).accept(eventCaptor.capture()); // Also called
+        ClusterConfigUpdateEvent eventForWellBehaved = eventCaptor.getValue();
+        assertEquals(Optional.of(currentConfig), eventForWellBehaved.oldConfig());
+        assertEquals(newConfig, eventForWellBehaved.newConfig());
+
+
+        verify(mockEventPublisher).publishEvent(eventCaptor.capture()); // Micronaut publisher also called
+        ClusterConfigUpdateEvent eventForMicronaut = eventCaptor.getValue();
+        assertEquals(Optional.of(currentConfig), eventForMicronaut.oldConfig());
+        assertEquals(newConfig, eventForMicronaut.newConfig());
+
+        // Cleanup
+        dynamicConfigurationManager.unregisterConfigUpdateListener(misbehavingListener);
+        dynamicConfigurationManager.unregisterConfigUpdateListener(wellBehavedListener);
+    }
+    @Test
+    void handleConsulWatchUpdate_ambiguousWatchResult_logsAndNoAction() {
+        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config");
+        when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
+
+        dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
+        verify(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), watchCallbackCaptor.capture());
+        Consumer<WatchCallbackResult> actualWatchCallback = watchCallbackCaptor.getValue();
+
+        Mockito.reset(mockEventPublisher, mockCachedConfigHolder, mockConfigurationValidator, mockConsulConfigFetcher);
+        when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
+
+        // Create an ambiguous WatchCallbackResult
+        WatchCallbackResult ambiguousResult = new WatchCallbackResult(Optional.empty(), Optional.empty(), false);
+        actualWatchCallback.accept(ambiguousResult);
+
+        verifyNoInteractions(mockConfigurationValidator);
+        verify(mockCachedConfigHolder, never()).updateConfiguration(any(), any());
+        verify(mockCachedConfigHolder, never()).clearConfiguration();
+        verifyNoInteractions(mockEventPublisher);
+        // Add log verification if possible
+    }
+
+
+
+
 }
