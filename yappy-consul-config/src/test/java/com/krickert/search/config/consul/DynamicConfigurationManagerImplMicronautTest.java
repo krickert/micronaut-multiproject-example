@@ -39,8 +39,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 
 @MicronautTest(startApplication = false, environments = {"test-dynamic-manager"})
@@ -509,5 +508,96 @@ class DynamicConfigurationManagerImplMicronautTest {
         assertTrue(deletionEvent.newConfig().pipelineModuleMap() == null || deletionEvent.newConfig().pipelineModuleMap().availableModules().isEmpty());
         assertFalse(cachedConfigAfterDelete.isPresent(), "Config should be cleared from cache after deletion");
         LOG.info("integration_configDeleted: Deletion processed successfully, cache cleared.");
+    }
+
+    @Test
+    @DisplayName("Integration: Watch update - new config fails validation, keeps old config")
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
+    void integration_watchUpdate_newConfigFailsValidation_keepsOldConfig() throws Exception {
+        // --- Setup Initial Valid Config ---
+        SchemaReference initialSchemaRef = new SchemaReference("integSchemaInitial", 1);
+        PipelineClusterConfig initialValidConfig = createClusterConfigWithSchema(TEST_EXECUTION_CLUSTER, initialSchemaRef, "topicInitialValid");
+        SchemaVersionData initialSchemaData = createDummySchemaData(initialSchemaRef.subject(), initialSchemaRef.version(), "{\"type\":\"string\"}");
+
+        String fullClusterKey = getFullClusterKey(TEST_EXECUTION_CLUSTER);
+        String fullInitialSchemaKey = getFullSchemaKey(initialSchemaRef.subject(), initialSchemaRef.version());
+
+        testKvClient.deleteKey(fullInitialSchemaKey); // Clean schema key
+
+        seedConsulKv(fullInitialSchemaKey, initialSchemaData);
+        seedConsulKv(fullClusterKey, initialValidConfig);
+
+        when(mockValidator.validate(eq(initialValidConfig), any()))
+                .thenReturn(ValidationResult.valid());
+
+        // --- Initialize DCM ---
+        LOG.info("integration_watchUpdate_failsValidation: Initializing DCM...");
+        dynamicConfigurationManager.initialize(TEST_EXECUTION_CLUSTER);
+
+        // --- Verify Initial Load ---
+        ClusterConfigUpdateEvent initialLoadEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 10, TimeUnit.SECONDS);
+        assertNotNull(initialLoadEvent, "Should have received an initial load event");
+        assertEquals(initialValidConfig, initialLoadEvent.newConfig());
+        assertEquals(initialValidConfig, testCachedConfigHolder.getCurrentConfig().orElse(null));
+        assertEquals(initialSchemaData.schemaContent(), testCachedConfigHolder.getSchemaContent(initialSchemaRef).orElse(null));
+        LOG.info("integration_watchUpdate_failsValidation: Initial load verified.");
+        testApplicationEventListener.clear(); // Clear events before watch update
+
+        // --- Setup for Watch Update (which will fail validation) ---
+        SchemaReference newSchemaRef = new SchemaReference("integSchemaNewInvalid", 1); // Could be same or different
+        PipelineClusterConfig newInvalidConfigFromWatch = createClusterConfigWithSchema(TEST_EXECUTION_CLUSTER, newSchemaRef, "topicNewInvalid");
+        SchemaVersionData newSchemaData = createDummySchemaData(newSchemaRef.subject(), newSchemaRef.version(), "{\"type\":\"integer\"}");
+        String fullNewSchemaKey = getFullSchemaKey(newSchemaRef.subject(), newSchemaRef.version());
+
+        testKvClient.deleteKey(fullNewSchemaKey); // Clean new schema key
+        seedConsulKv(fullNewSchemaKey, newSchemaData); // Seed the schema for the new invalid config
+
+        // Configure validator to FAIL for the new config
+        when(mockValidator.validate(eq(newInvalidConfigFromWatch), any()))
+                .thenReturn(ValidationResult.invalid(Collections.singletonList("Test: New config from watch is invalid")));
+
+        // --- Act: Trigger Watch Update by changing Consul data ---
+        LOG.info("integration_watchUpdate_failsValidation: Seeding new (invalid) config to trigger watch...");
+        seedConsulKv(fullClusterKey, newInvalidConfigFromWatch);
+        LOG.info("integration_watchUpdate_failsValidation: New (invalid) config seeded.");
+
+        // --- Verify Behavior after Failed Validation on Watch ---
+        // We expect NO successful update event for newInvalidConfigFromWatch.
+        // The KVCache might fire, DCM will process, validation will fail, and nothing should change in cache/event for success.
+        ClusterConfigUpdateEvent eventAfterInvalidUpdate = testApplicationEventListener.pollEvent(appWatchSeconds + 10, TimeUnit.SECONDS); // Poll for a while
+
+        if (eventAfterInvalidUpdate != null) {
+            LOG.warn("integration_watchUpdate_failsValidation: Polled an event: {}. This should not be for the new invalid config.", eventAfterInvalidUpdate);
+            // If an event *is* received, it MUST NOT be the newInvalidConfigFromWatch as the 'newConfig'
+            // and its oldConfig should be the initialValidConfig. This could happen if KVCache fires multiple times.
+            assertNotEquals(newInvalidConfigFromWatch, eventAfterInvalidUpdate.newConfig(),
+                    "Event's newConfig should not be the invalid one.");
+            if (eventAfterInvalidUpdate.oldConfig().isPresent()) {
+                assertEquals(initialValidConfig, eventAfterInvalidUpdate.oldConfig().get(), "If an event occurred, its oldConfig should be the initial one.");
+            }
+        } else {
+            LOG.info("integration_watchUpdate_failsValidation: Correctly received no new successful update event after invalid config from watch.");
+        }
+
+
+        // CRITICAL: Verify that the cache still holds the OLD VALID config
+        Optional<PipelineClusterConfig> cachedConfigAfterInvalid = testCachedConfigHolder.getCurrentConfig();
+        assertTrue(cachedConfigAfterInvalid.isPresent(), "Cache should still contain a config");
+        assertEquals(initialValidConfig, cachedConfigAfterInvalid.get(), "Cache should still hold the initial valid config");
+        assertEquals(initialSchemaData.schemaContent(), testCachedConfigHolder.getSchemaContent(initialSchemaRef).orElse(null), "Cache should still hold initial valid schema");
+        LOG.info("integration_watchUpdate_failsValidation: Verified cache still holds the old valid configuration.");
+
+        // Verify that the validator was indeed called with the new invalid config
+        // The schema provider passed to validate should be able to resolve newSchemaRef
+        verify(mockValidator).validate(eq(newInvalidConfigFromWatch), argThat(provider -> {
+            Optional<String> schemaContentOpt = provider.apply(newSchemaRef); // Use .apply()
+            return schemaContentOpt.isPresent() &&
+                    newSchemaData.schemaContent().equals(schemaContentOpt.get());
+        }));
+        LOG.info("integration_watchUpdate_failsValidation: Verified validator was called for the new invalid config.");
+
+        // Clean up schema keys
+        testKvClient.deleteKey(fullInitialSchemaKey);
+        testKvClient.deleteKey(fullNewSchemaKey);
     }
 }
