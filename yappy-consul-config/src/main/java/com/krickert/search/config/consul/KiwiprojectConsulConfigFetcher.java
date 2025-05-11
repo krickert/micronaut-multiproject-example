@@ -29,9 +29,9 @@ public class KiwiprojectConsulConfigFetcher implements ConsulConfigFetcher {
     private final ObjectMapper objectMapper;
     private final String consulHostForInfo;
     private final int consulPortForInfo;
-    private final String clusterConfigKeyPrefix;
-    private final String schemaVersionsKeyPrefix;
-    private final int appWatchSeconds;
+    final String clusterConfigKeyPrefix;
+    final String schemaVersionsKeyPrefix;
+    final int appWatchSeconds;
 
     // Package-private for test access
     Consul consulClient;
