@@ -558,6 +558,114 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         assertTrue(deletedKeyEvent.deleted(), "Explicit key deletion should be treated as deleted. Event: " + deletedKeyEvent);
         LOG.info("handlesEmptyOrBlankJsonValues: Explicit key deletion treated as deleted: {}", deletedKeyEvent);
     }
+
+    @Test
+    @DisplayName("connect and close methods should be idempotent")
+    void connectAndClose_shouldBeIdempotent() throws Exception {
+        LOG.info("idempotency_test: Starting connect/close idempotency test");
+
+        // 1. Test multiple connect() calls
+        LOG.info("idempotency_test: Testing multiple connect() calls");
+        configFetcher.connect(); // First call (already called in @BeforeEach, but good to be explicit)
+        assertTrue(configFetcher.connected.get(), "Should be connected after first explicit connect");
+        KeyValueClient firstKvClient = configFetcher.kvClient;
+        assertNotNull(firstKvClient, "kvClient should be set after first connect");
+
+        configFetcher.connect(); // Second call
+        assertTrue(configFetcher.connected.get(), "Should remain connected after second connect");
+        assertSame(firstKvClient, configFetcher.kvClient, "kvClient instance should not change on redundant connect");
+        LOG.info("idempotency_test: Multiple connect() calls handled correctly.");
+
+        // 2. Test multiple close() calls
+        LOG.info("idempotency_test: Testing multiple close() calls");
+        configFetcher.close(); // First close
+        assertFalse(configFetcher.connected.get(), "Should be disconnected after first close");
+        assertNull(configFetcher.kvClient, "kvClient should be null after first close");
+
+        // Verify no exceptions on second close
+        assertDoesNotThrow(() -> {
+            configFetcher.close(); // Second close
+        }, "Second close() call should not throw an exception");
+        assertFalse(configFetcher.connected.get(), "Should remain disconnected after second close");
+        assertNull(configFetcher.kvClient, "kvClient should remain null after second close");
+        LOG.info("idempotency_test: Multiple close() calls handled correctly.");
+
+        // 3. Test connect() after multiple close() calls
+        LOG.info("idempotency_test: Testing connect() after multiple close() calls");
+        configFetcher.connect(); // Connect again
+        assertTrue(configFetcher.connected.get(), "Should be connected after connect() post-closes");
+        assertNotNull(configFetcher.kvClient, "kvClient should be re-initialized after connect() post-closes");
+        LOG.info("idempotency_test: connect() after multiple closes handled correctly.");
+
+        // 4. Test close() when never explicitly connected (beyond @BeforeEach)
+        // Create a new instance that hasn't had its connect() method explicitly called by the test logic yet
+        // (though @BeforeEach in the main test class calls it).
+        // For a truly isolated test of this, you might need a helper to get a "fresh" instance
+        // or accept that @BeforeEach's connect() is the baseline.
+        // Given @BeforeEach, this part is somewhat covered by the multiple close() above.
+        // However, if we want to be super explicit about a "never connected then closed":
+        KiwiprojectConsulConfigFetcher freshFetcher = new KiwiprojectConsulConfigFetcher(
+                objectMapper,
+                "localhost", 0, // Port doesn't matter as we won't connect
+                clusterConfigKeyPrefixWithSlash,
+                schemaVersionsKeyPrefixWithSlash,
+                appWatchSeconds,
+                directConsulClientForTestSetup // Use the real one to avoid null issues if it tried to connect
+        );
+        // Don't call freshFetcher.connect()
+        LOG.info("idempotency_test: Testing close() on a fetcher where connect() was not explicitly called by test logic (beyond its own @BeforeEach if applicable)");
+        assertDoesNotThrow(() -> {
+            freshFetcher.close();
+        }, "close() on a 'fresh' (or minimally connected) fetcher should not throw");
+        assertFalse(freshFetcher.connected.get(), "Fresh fetcher should be marked not connected after close");
+        LOG.info("idempotency_test: close() on 'fresh' fetcher handled correctly.");
+    }
+
+    @Test
+    @DisplayName("watchClusterConfig - when kvClient is null, ensureConnected re-initializes and watch succeeds")
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void watchClusterConfig_whenKvClientIsNull_reconnectsAndWatchesSuccessfully() throws Exception {
+        BlockingQueue<WatchCallbackResult> updates = new ArrayBlockingQueue<>(5);
+        Consumer<WatchCallbackResult> handler = updates::offer;
+
+        PipelineClusterConfig config1 = createDummyClusterConfig(testClusterForWatch);
+        config1 = new PipelineClusterConfig(config1.clusterName(), config1.pipelineGraphConfig(),
+                config1.pipelineModuleMap(), Set.of("topicKvNullTest"), config1.allowedGrpcServices());
+
+        // Initial state: connected via @BeforeEach
+        assertTrue(configFetcher.connected.get(), "Should be connected initially from @BeforeEach");
+        assertNotNull(configFetcher.kvClient, "kvClient should be non-null initially");
+
+        // 1. Artificially nullify kvClient to simulate an unexpected state
+        //    (but consulClient remains valid)
+        LOG.info("kvClient_null_test: Artificially setting kvClient to null");
+        configFetcher.kvClient = null;
+        configFetcher.connected.set(false); // Also mark as not connected to ensure connect() logic runs fully
+
+        // 2. Call watchClusterConfig. It should trigger ensureConnected -> connect -> re-init kvClient
+        LOG.info("kvClient_null_test: Calling watchClusterConfig for {}", fullWatchClusterKey);
+        configFetcher.watchClusterConfig(testClusterForWatch, handler);
+
+        // Verify that connect() was indeed called and re-initialized kvClient
+        assertTrue(configFetcher.connected.get(), "Should be re-connected after watchClusterConfig");
+        assertNotNull(configFetcher.kvClient, "kvClient should be re-initialized by watchClusterConfig");
+        assertTrue(configFetcher.watcherStarted.get(), "Watcher should be started");
+        assertNotNull(configFetcher.clusterConfigCache, "KVCache should be created");
+        LOG.info("kvClient_null_test: Watch started successfully after kvClient was null.");
+
+        // 3. Consume initial event (likely deleted)
+        WatchCallbackResult initialEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(initialEvent, "Should receive an initial event after watch setup");
+        LOG.info("kvClient_null_test: Initial event: {}", initialEvent);
+
+        // 4. Seed data and verify the watch receives it
+        seedConsulKv(fullWatchClusterKey, config1);
+        WatchCallbackResult result1 = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(result1, "Handler should receive config1 even after kvClient was initially null");
+        assertTrue(result1.config().isPresent(), "Config should be present in the received update");
+        assertEquals(config1, result1.config().get());
+        LOG.info("kvClient_null_test: Handler received config1: {}", result1);
+    }
     // The watchClusterConfig_handlesMalformedJsonUpdate test is now effectively merged into
     // the comprehensive watchClusterConfig_receivesAllStates test.
     // If kept separate, it would be a more focused version of step 4 in the above test.
