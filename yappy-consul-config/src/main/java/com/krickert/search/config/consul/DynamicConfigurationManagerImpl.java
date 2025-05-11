@@ -1,6 +1,7 @@
 package com.krickert.search.config.consul;
 
 import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
+import com.krickert.search.config.consul.exception.ConfigurationManagerInitializationException;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineModuleConfiguration;
 import com.krickert.search.config.pipeline.model.SchemaReference;
@@ -71,22 +72,34 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                     processConsulUpdate(WatchCallbackResult.success(initialConfig), "Initial Load");
                 } else {
                     LOG.warn("No initial configuration found for cluster '{}'. Watch will pick up first appearance or deletion.", this.clusterName);
-                    // If no initial config, the first event from the watch will determine state.
-                    // We could also explicitly treat this as a "deleted" state by calling:
-                    // processConsulUpdate(WatchCallbackResult.createAsDeleted(), "Initial Load - Not Found");
-                    // For now, let the watch be the primary driver after initial attempt.
+                    // Current behavior: If no initial config, let the watch be the primary driver.
+                    // This is acceptable as the system might still become consistent once the watch provides data.
                 }
             } catch (Exception fetchEx) {
-                 LOG.error("Error during initial configuration fetch for cluster '{}': {}. Will still attempt to start watch.",
+                // This catch block handles failures ONLY during the initial fetch.
+                // It's reasonable to log this and still attempt to start the watch,
+                // as the watch might succeed later.
+                LOG.error("Error during initial configuration fetch for cluster '{}': {}. Will still attempt to start watch.",
                         this.clusterName, fetchEx.getMessage(), fetchEx);
-                 // If fetch itself fails (e.g. connection issue not caught by connect()), treat as error for initial state.
-                 processConsulUpdate(WatchCallbackResult.failure(fetchEx), "Initial Load Fetch Error");
+                // Process this as a failure for the initial state, but don't stop initialization.
+                processConsulUpdate(WatchCallbackResult.failure(fetchEx), "Initial Load Fetch Error");
             }
+
+            // If connect() succeeded and initial fetch (even if failed) didn't stop us,
+            // setting up the watch is critical.
             consulConfigFetcher.watchClusterConfig(this.clusterName, this::handleConsulWatchUpdate);
             LOG.info("Consul watch established for cluster configuration: {}", this.clusterName);
+
         } catch (Exception e) {
+            // This outer catch block handles failures from consulConfigFetcher.connect()
+            // or consulConfigFetcher.watchClusterConfig() setup.
+            // These are critical failures for the manager's core functionality.
             LOG.error("CRITICAL: Failed to initialize DynamicConfigurationManager (connect or watch setup) for cluster '{}': {}",
                     this.clusterName, e.getMessage(), e);
+            // Re-throw as a custom runtime exception to make the initialization failure explicit.
+            // This will typically cause the bean creation to fail if called from @PostConstruct.
+            throw new ConfigurationManagerInitializationException(
+                    "Failed to initialize Consul connection or watch for cluster " + this.clusterName, e);
         }
     }
 
