@@ -312,6 +312,7 @@ class KiwiprojectConsulConfigFetcherTest {
         assertFalse(consulConfigFetcher.connected.get());
         assertNull(consulConfigFetcher.clusterConfigCache);
         assertNull(consulConfigFetcher.kvClient);
-        assertNull(consulConfigFetcher.consulClient);
+        //we want to keep the client alive to get a chance to re-connect
+        assertNotNull(consulConfigFetcher.consulClient);
     }
 }

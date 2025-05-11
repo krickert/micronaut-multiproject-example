@@ -275,6 +275,289 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         assertNull(spuriousUpdate, "Should be no more spurious updates in the queue. Last received: " + receivedRecreateResult);
     }
 
+    @Test
+    @DisplayName("watchClusterConfig - re-watching same key replaces handler")
+    @Timeout(value = 30, unit = TimeUnit.SECONDS) // Adjust timeout as needed
+    void watchClusterConfig_rewatchSameKey_replacesHandler() throws Exception {
+        BlockingQueue<WatchCallbackResult> updatesA = new ArrayBlockingQueue<>(5);
+        Consumer<WatchCallbackResult> handlerA = updatesA::offer;
+
+        BlockingQueue<WatchCallbackResult> updatesB = new ArrayBlockingQueue<>(5);
+        Consumer<WatchCallbackResult> handlerB = updatesB::offer;
+
+        PipelineClusterConfig config1 = createDummyClusterConfig(testClusterForWatch);
+        config1 = new PipelineClusterConfig(config1.clusterName(), config1.pipelineGraphConfig(), config1.pipelineModuleMap(), Set.of("topic1"), config1.allowedGrpcServices());
+
+        PipelineClusterConfig config2 = createDummyClusterConfig(testClusterForWatch);
+        config2 = new PipelineClusterConfig(config2.clusterName(), config2.pipelineGraphConfig(), config2.pipelineModuleMap(), Set.of("topic2"), config2.allowedGrpcServices());
+
+        PipelineClusterConfig config3 = createDummyClusterConfig(testClusterForWatch);
+        config3 = new PipelineClusterConfig(config3.clusterName(), config3.pipelineGraphConfig(), config3.pipelineModuleMap(), Set.of("topic3"), config3.allowedGrpcServices());
+
+
+        // Initial watch with Handler A
+        configFetcher.watchClusterConfig(testClusterForWatch, handlerA);
+        LOG.info("watchClusterConfig_rewatchSameKey: Watch A started for {}", fullWatchClusterKey);
+
+        // Consume initial event for Handler A (could be deleted or pre-existing)
+        updatesA.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+
+        seedConsulKv(fullWatchClusterKey, config1);
+        WatchCallbackResult resultA1 = updatesA.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(resultA1, "Handler A should receive config1");
+        assertEquals(config1, resultA1.config().orElse(null));
+        LOG.info("watchClusterConfig_rewatchSameKey: Handler A received config1");
+
+        // Re-watch with Handler B for the SAME key
+        configFetcher.watchClusterConfig(testClusterForWatch, handlerB);
+        LOG.info("watchClusterConfig_rewatchSameKey: Watch B started for {}", fullWatchClusterKey);
+
+        // Consume initial event for Handler B
+        updatesB.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+
+        seedConsulKv(fullWatchClusterKey, config2);
+        WatchCallbackResult resultB2 = updatesB.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(resultB2, "Handler B should receive config2");
+        assertEquals(config2, resultB2.config().orElse(null));
+        LOG.info("watchClusterConfig_rewatchSameKey: Handler B received config2");
+
+        // Handler A should NOT receive config2
+        WatchCallbackResult spuriousResultA = updatesA.poll(2, TimeUnit.SECONDS); // Short poll
+        assertNull(spuriousResultA, "Handler A should NOT receive config2 after re-watch. Got: " + spuriousResultA);
+
+        // Further check: Handler B receives another update, Handler A still doesn't
+        seedConsulKv(fullWatchClusterKey, config3);
+        WatchCallbackResult resultB3 = updatesB.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(resultB3, "Handler B should receive config3");
+        assertEquals(config3, resultB3.config().orElse(null));
+        LOG.info("watchClusterConfig_rewatchSameKey: Handler B received config3");
+
+        spuriousResultA = updatesA.poll(2, TimeUnit.SECONDS);
+        assertNull(spuriousResultA, "Handler A should NOT receive config3. Got: " + spuriousResultA);
+    }
+
+    @Test
+    @DisplayName("watchClusterConfig - watching a different key stops previous watch")
+    @Timeout(value = 45, unit = TimeUnit.SECONDS) // May need adjustment
+    void watchClusterConfig_watchDifferentKey_stopsPreviousWatch() throws Exception {
+        String clusterNameA = "clusterToWatchA";
+        String fullClusterKeyA = (clusterConfigKeyPrefixWithSlash.endsWith("/") ? clusterConfigKeyPrefixWithSlash : clusterConfigKeyPrefixWithSlash + "/") + clusterNameA;
+
+        String clusterNameB = "clusterToWatchB";
+        String fullClusterKeyB = (clusterConfigKeyPrefixWithSlash.endsWith("/") ? clusterConfigKeyPrefixWithSlash : clusterConfigKeyPrefixWithSlash + "/") + clusterNameB;
+
+        // Clean up these specific keys before the test
+        testKvClient.deleteKey(fullClusterKeyA);
+        testKvClient.deleteKey(fullClusterKeyB);
+        LOG.info("Cleaned up keys for watchDifferentKey test: {}, {}", fullClusterKeyA, fullClusterKeyB);
+
+
+        BlockingQueue<WatchCallbackResult> updatesA = new ArrayBlockingQueue<>(5);
+        Consumer<WatchCallbackResult> handlerA = updatesA::offer;
+
+        BlockingQueue<WatchCallbackResult> updatesB = new ArrayBlockingQueue<>(5);
+        Consumer<WatchCallbackResult> handlerB = updatesB::offer;
+
+        PipelineClusterConfig configA1 = createDummyClusterConfig(clusterNameA);
+        configA1 = new PipelineClusterConfig(configA1.clusterName(), configA1.pipelineGraphConfig(), configA1.pipelineModuleMap(), Set.of("topicA1"), configA1.allowedGrpcServices());
+        PipelineClusterConfig configA2 = createDummyClusterConfig(clusterNameA); // A second config for cluster A
+        configA2 = new PipelineClusterConfig(configA2.clusterName(), configA2.pipelineGraphConfig(), configA2.pipelineModuleMap(), Set.of("topicA2"), configA2.allowedGrpcServices());
+
+
+        PipelineClusterConfig configB1 = createDummyClusterConfig(clusterNameB);
+        configB1 = new PipelineClusterConfig(configB1.clusterName(), configB1.pipelineGraphConfig(), configB1.pipelineModuleMap(), Set.of("topicB1"), configB1.allowedGrpcServices());
+
+        // 1. Watch Cluster A
+        configFetcher.watchClusterConfig(clusterNameA, handlerA);
+        LOG.info("watchDifferentKey: Watch A started for {}", fullClusterKeyA);
+
+        // Consume initial event for Handler A (likely deleted)
+        WatchCallbackResult initialA = updatesA.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(initialA, "Handler A should receive an initial event");
+        LOG.info("watchDifferentKey: Handler A initial event: {}", initialA);
+
+
+        // Seed and verify config for Cluster A
+        seedConsulKv(fullClusterKeyA, configA1);
+        WatchCallbackResult resultA1 = updatesA.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(resultA1, "Handler A should receive configA1");
+        assertEquals(configA1, resultA1.config().orElse(null));
+        LOG.info("watchDifferentKey: Handler A received configA1");
+
+        // 2. Now, watch Cluster B. This should implicitly stop the watch on Cluster A.
+        configFetcher.watchClusterConfig(clusterNameB, handlerB);
+        LOG.info("watchDifferentKey: Watch B started for {}", fullClusterKeyB);
+
+        // Consume initial event for Handler B (likely deleted)
+        WatchCallbackResult initialB = updatesB.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(initialB, "Handler B should receive an initial event");
+        LOG.info("watchDifferentKey: Handler B initial event: {}", initialB);
+
+        // Seed and verify config for Cluster B
+        seedConsulKv(fullClusterKeyB, configB1);
+        WatchCallbackResult resultB1 = updatesB.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(resultB1, "Handler B should receive configB1");
+        assertEquals(configB1, resultB1.config().orElse(null));
+        LOG.info("watchDifferentKey: Handler B received configB1");
+
+        // 3. Now, update Cluster A again. Handler A should NOT receive this update.
+        LOG.info("watchDifferentKey: Seeding {} with configA2, Handler A should NOT receive this.", fullClusterKeyA);
+        seedConsulKv(fullClusterKeyA, configA2);
+
+        WatchCallbackResult spuriousResultA = updatesA.poll(appWatchSeconds + 2, TimeUnit.SECONDS); // Poll for a bit longer than a very short poll
+        assertNull(spuriousResultA, "Handler A should NOT receive configA2 after watch switched to B. Got: " + spuriousResultA);
+        LOG.info("watchDifferentKey: Confirmed Handler A did not receive configA2 (as expected).");
+
+        // Ensure Handler B is still active and not affected
+        assertTrue(updatesB.isEmpty(), "Handler B's queue should be empty before next update to B");
+
+        // Cleanup specific keys at the end of this test as well
+        testKvClient.deleteKey(fullClusterKeyA);
+        testKvClient.deleteKey(fullClusterKeyB);
+    }
+
+    @Test
+    @DisplayName("close - stops active watch and allows subsequent fetches")
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void close_stopsWatchAndAllowsSubsequentFetches() throws Exception {
+        BlockingQueue<WatchCallbackResult> updates = new ArrayBlockingQueue<>(5);
+        Consumer<WatchCallbackResult> handler = updates::offer;
+
+        PipelineClusterConfig config1 = createDummyClusterConfig(testClusterForWatch);
+        config1 = new PipelineClusterConfig(config1.clusterName(), config1.pipelineGraphConfig(), config1.pipelineModuleMap(), Set.of("topicClose1"), config1.allowedGrpcServices());
+        PipelineClusterConfig config2 = createDummyClusterConfig(testClusterForWatch);
+        config2 = new PipelineClusterConfig(config2.clusterName(), config2.pipelineGraphConfig(), config2.pipelineModuleMap(), Set.of("topicClose2"), config2.allowedGrpcServices());
+
+        // 1. Establish a watch and get an initial update
+        configFetcher.watchClusterConfig(testClusterForWatch, handler);
+        LOG.info("close_test: Watch started for {}", fullWatchClusterKey);
+
+        // Consume initial event (likely deleted)
+        WatchCallbackResult initialEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(initialEvent, "Should receive an initial event");
+        LOG.info("close_test: Initial event: {}", initialEvent);
+
+        seedConsulKv(fullWatchClusterKey, config1);
+        WatchCallbackResult result1 = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(result1, "Handler should receive config1");
+        assertEquals(config1, result1.config().orElse(null));
+        LOG.info("close_test: Handler received config1: {}", result1);
+
+        // 2. Close the config fetcher
+        LOG.info("close_test: Calling configFetcher.close()");
+        configFetcher.close();
+        LOG.info("close_test: configFetcher.close() completed");
+
+        // Assertions about the closed state (optional, but good)
+        assertNull(configFetcher.clusterConfigCache, "KVCache should be null after close");
+        assertFalse(configFetcher.watcherStarted.get(), "WatcherStarted flag should be false after close");
+        assertFalse(configFetcher.connected.get(), "Connected flag should be false after close");
+        assertNull(configFetcher.kvClient, "kvClient should be null after close (as per current close logic)");
+
+
+        // 3. Try to update the key in Consul. The handler should NOT receive this.
+        LOG.info("close_test: Seeding {} with config2 AFTER close. Handler should NOT receive this.", fullWatchClusterKey);
+        seedConsulKv(fullWatchClusterKey, config2);
+
+        WatchCallbackResult spuriousResult = updates.poll(appWatchSeconds + 2, TimeUnit.SECONDS);
+        assertNull(spuriousResult, "Handler should NOT receive config2 after close. Got: " + spuriousResult);
+        LOG.info("close_test: Confirmed handler did not receive config2 after close (as expected).");
+
+        // 4. Attempt to fetch the configuration again. This should succeed.
+        // The `ensureConnected()` within `fetchPipelineClusterConfig` should re-establish the kvClient.
+        LOG.info("close_test: Attempting to fetch {} AFTER close.", fullWatchClusterKey);
+        Optional<PipelineClusterConfig> fetchedAfterCloseOpt = configFetcher.fetchPipelineClusterConfig(testClusterForWatch);
+        assertTrue(fetchedAfterCloseOpt.isPresent(), "Should be able to fetch config2 after close (and re-connect)");
+        assertEquals(config2, fetchedAfterCloseOpt.get(), "Fetched config after close should be config2");
+        LOG.info("close_test: Successfully fetched config2 after close: {}", fetchedAfterCloseOpt.get());
+
+        // Verify internal state after fetch (kvClient should be re-initialized)
+        assertTrue(configFetcher.connected.get(), "Connected flag should be true after successful fetch post-close");
+        assertNotNull(configFetcher.kvClient, "kvClient should be re-initialized after successful fetch post-close");
+    }
+
+    @Test
+    @DisplayName("watchClusterConfig - handles empty or blank JSON values correctly")
+    @Timeout(value = 45, unit = TimeUnit.SECONDS)
+    void watchClusterConfig_handlesEmptyOrBlankJsonValues() throws Exception {
+        BlockingQueue<WatchCallbackResult> updates = new ArrayBlockingQueue<>(10);
+        Consumer<WatchCallbackResult> handler = updates::offer;
+
+        PipelineClusterConfig initialValidConfig = createDummyClusterConfig(testClusterForWatch);
+        initialValidConfig = new PipelineClusterConfig(initialValidConfig.clusterName(),
+                initialValidConfig.pipelineGraphConfig(), initialValidConfig.pipelineModuleMap(),
+                Set.of("topicInitial"), initialValidConfig.allowedGrpcServices());
+
+        // Start the watch
+        configFetcher.watchClusterConfig(testClusterForWatch, handler);
+        LOG.info("handlesEmptyOrBlankJsonValues: Watch started for {}", fullWatchClusterKey);
+
+        // Consume initial event (likely deleted)
+        WatchCallbackResult initialEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(initialEvent, "Should receive an initial event");
+        LOG.info("handlesEmptyOrBlankJsonValues: Initial event: {}", initialEvent);
+
+        // 1. Seed with a valid config first
+        seedConsulKv(fullWatchClusterKey, initialValidConfig);
+        WatchCallbackResult validConfigEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(validConfigEvent, "Handler should receive initial valid config");
+        assertTrue(validConfigEvent.config().isPresent(), "Valid config should be present");
+        assertEquals(initialValidConfig, validConfigEvent.config().get());
+        LOG.info("handlesEmptyOrBlankJsonValues: Received initial valid config: {}", validConfigEvent);
+
+        // 2. Update with an empty JSON object "{}"
+        LOG.info("handlesEmptyOrBlankJsonValues: Seeding with empty JSON object {{}}");
+        assertTrue(testKvClient.putValue(fullWatchClusterKey, "{}"), "Failed to seed empty JSON object");
+        WatchCallbackResult emptyObjectEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(emptyObjectEvent, "Should receive event for empty JSON object");
+
+        // Expectation for "{}":
+        // If PipelineClusterConfig can be deserialized from "{}", it's a success.
+        // Otherwise, it's a JsonProcessingException (error).
+        // Let's assume for now it might deserialize to a default/empty PipelineClusterConfig.
+        // If your ObjectMapper is configured to fail on unknown properties or if default constructor is not suitable,
+        // this might be an error. Adjust assertion based on your PipelineClusterConfig and ObjectMapper.
+        if (emptyObjectEvent.hasError()) {
+            LOG.info("handlesEmptyOrBlankJsonValues: Empty JSON object resulted in an error: {}", emptyObjectEvent.error().get());
+            assertTrue(emptyObjectEvent.error().get() instanceof JsonProcessingException, "Error should be JsonProcessingException for empty object if deserialization fails");
+        } else {
+            assertTrue(emptyObjectEvent.config().isPresent(), "Config should be present for empty JSON object if deserialized");
+            // You might want to assert specific fields of the deserialized empty object if applicable
+            // e.g., assertNotNull(emptyObjectEvent.config().get().getClusterName()); if it has a default
+            LOG.info("handlesEmptyOrBlankJsonValues: Empty JSON object deserialized to: {}", emptyObjectEvent.config().get());
+        }
+
+
+        // 3. Update with an empty string ""
+        LOG.info("handlesEmptyOrBlankJsonValues: Seeding with empty string \"\"");
+        // Note: Consul might treat putting an empty string as deleting the value or the key itself.
+        // The KVCache behavior might then report it as a delete.
+        assertTrue(testKvClient.putValue(fullWatchClusterKey, ""), "Failed to seed empty string");
+        WatchCallbackResult emptyStringEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(emptyStringEvent, "Should receive event for empty string");
+        assertTrue(emptyStringEvent.deleted(), "Empty string should be treated as deleted. Event: " + emptyStringEvent);
+        LOG.info("handlesEmptyOrBlankJsonValues: Empty string treated as deleted: {}", emptyStringEvent);
+
+        // Re-seed with valid config to reset state for next sub-test
+        seedConsulKv(fullWatchClusterKey, initialValidConfig);
+        updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS); // Consume this update
+
+        // 4. Update with a string of only whitespace "   "
+        LOG.info("handlesEmptyOrBlankJsonValues: Seeding with whitespace string \"   \"");
+        assertTrue(testKvClient.putValue(fullWatchClusterKey, "   "), "Failed to seed whitespace string");
+        WatchCallbackResult whitespaceEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(whitespaceEvent, "Should receive event for whitespace string");
+        assertTrue(whitespaceEvent.deleted(), "Whitespace string should be treated as deleted. Event: " + whitespaceEvent);
+        LOG.info("handlesEmptyOrBlankJsonValues: Whitespace string treated as deleted: {}", whitespaceEvent);
+
+        // 5. Delete the key (simulates value becoming null/absent)
+        LOG.info("handlesEmptyOrBlankJsonValues: Deleting the key explicitly");
+        testKvClient.deleteKey(fullWatchClusterKey);
+        WatchCallbackResult deletedKeyEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
+        assertNotNull(deletedKeyEvent, "Should receive event for explicit key deletion");
+        assertTrue(deletedKeyEvent.deleted(), "Explicit key deletion should be treated as deleted. Event: " + deletedKeyEvent);
+        LOG.info("handlesEmptyOrBlankJsonValues: Explicit key deletion treated as deleted: {}", deletedKeyEvent);
+    }
     // The watchClusterConfig_handlesMalformedJsonUpdate test is now effectively merged into
     // the comprehensive watchClusterConfig_receivesAllStates test.
     // If kept separate, it would be a more focused version of step 4 in the above test.

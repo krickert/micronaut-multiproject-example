@@ -267,8 +267,13 @@ public class KiwiprojectConsulConfigFetcher implements ConsulConfigFetcher {
         }
         watcherStarted.set(false);
         clusterConfigCache = null;
-        this.kvClient = null;       // Null out local reference
-        this.consulClient = null;   // Null out local reference, factory manages the bean.
+        this.kvClient = null;       // Null out local reference for the derived client
+
+        // DO NOT null out the injected consulClient if you want the ability to re-connect
+        // for fetching operations after a close(). The factory/DI container manages the
+        // lifecycle of the injected consulClient bean itself.
+        // this.consulClient = null; // Comment this line out or remove it
+
         this.connected.set(false);
         LOG.info("KiwiprojectConsulConfigFetcher resources released and marked as disconnected.");
     }
