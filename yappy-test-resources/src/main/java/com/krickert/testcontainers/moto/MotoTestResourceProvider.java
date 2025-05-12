@@ -104,64 +104,8 @@ public class MotoTestResourceProvider extends AbstractTestContainersProvider<Gen
     public static final String DISPLAY_NAME = "Moto Server";
     public static final String DEFAULT_REGISTRY_NAME = "default";
 
-    /**
-     * Checks if this container is enabled based on configuration.
-     *
-     * @param testResourcesConfig the test resources configuration
-     * @return true if the container is enabled, false otherwise
-     */
-    protected boolean isContainerEnabled(Map<String, Object> testResourcesConfig) {
-        // Check if testcontainers are globally enabled
-        Object globalEnabled = testResourcesConfig.get(PROPERTY_TESTCONTAINERS_ENABLED);
-        if (globalEnabled != null) {
-            if (globalEnabled instanceof Boolean) {
-                if (!(Boolean) globalEnabled) {
-                    LOG.debug("Test containers are globally disabled via {}", PROPERTY_TESTCONTAINERS_ENABLED);
-                    return false;
-                }
-            } else if (globalEnabled instanceof String) {
-                if ("false".equalsIgnoreCase((String) globalEnabled)) {
-                    LOG.debug("Test containers are globally disabled via {}", PROPERTY_TESTCONTAINERS_ENABLED);
-                    return false;
-                }
-            }
-        }
-
-        // Check if this specific container is enabled
-        Object motoEnabled = testResourcesConfig.get(PROPERTY_TESTCONTAINERS_MOTO_ENABLED);
-        if (motoEnabled != null) {
-            if (motoEnabled instanceof Boolean) {
-                return (Boolean) motoEnabled;
-            } else if (motoEnabled instanceof String) {
-                return Boolean.parseBoolean((String) motoEnabled);
-            } else if (motoEnabled instanceof Map) {
-                // Check if there's an 'enabled' property in the map
-                @SuppressWarnings("unchecked")
-                Map<String, Object> enabledMap = (Map<String, Object>) motoEnabled;
-                Object enabledValue = enabledMap.get("enabled");
-                if (enabledValue != null) {
-                    if (enabledValue instanceof Boolean) {
-                        return (Boolean) enabledValue;
-                    } else if (enabledValue instanceof String) {
-                        return Boolean.parseBoolean((String) enabledValue);
-                    }
-                }
-                // If there's no 'enabled' property, but the map exists, consider it enabled
-                return true;
-            }
-        }
-
-        // Default to enabled
-        return true;
-    }
-
     @Override
     public List<String> getResolvableProperties(Map<String, Collection<String>> propertyEntries, Map<String, Object> testResourcesConfig) {
-        // Check if this container is enabled
-        if (!isContainerEnabled(testResourcesConfig)) {
-            LOG.debug("Moto container is disabled, returning empty list of resolvable properties");
-            return Collections.emptyList();
-        }
         // Return all properties we can resolve
         return RESOLVABLE_PROPERTIES_LIST;
     }
@@ -183,11 +127,6 @@ public class MotoTestResourceProvider extends AbstractTestContainersProvider<Gen
 
     @Override
     protected GenericContainer<?> createContainer(DockerImageName imageName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
-        // Check if this container is enabled
-        if (!isContainerEnabled(testResourcesConfig)) {
-            LOG.debug("Moto container is disabled, not creating container");
-            return null;
-        }
         // Create a new Moto server container with the specified image
         return new GenericContainer<>(imageName)
                 .withExposedPorts(MOTO_PORT)
@@ -282,11 +221,6 @@ public class MotoTestResourceProvider extends AbstractTestContainersProvider<Gen
 
     @Override
     protected boolean shouldAnswer(String propertyName, Map<String, Object> properties, Map<String, Object> testResourcesConfig) {
-        // Check if this container is enabled
-        if (!isContainerEnabled(testResourcesConfig)) {
-            LOG.debug("Moto container is disabled, not answering property {}", propertyName);
-            return false;
-        }
         // Answer if the property is one we can resolve
         return propertyName != null && RESOLVABLE_PROPERTIES_LIST.contains(propertyName);
     }

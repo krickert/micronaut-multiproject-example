@@ -43,9 +43,6 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
     public static final String DISPLAY_NAME = "Consul";
 
 
-
-
-
     // ... (Keep getResolvableProperties, getDisplayName, getSimpleName, getDefaultImageName methods as is) ...
     @Override
     public List<String> getResolvableProperties(Map<String, Collection<String>> propertyEntries, Map<String, Object> testResourcesConfig) {
