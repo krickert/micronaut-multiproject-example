@@ -56,6 +56,8 @@
         ApplicationEventPublisher<ClusterConfigUpdateEvent> eventPublisher;
         @Inject
         KiwiprojectConsulConfigFetcher realConsulConfigFetcher;
+        @Inject
+        CachedConfigHolder testCachedConfigHolder;
 
         @Inject
         DefaultConfigurationValidator realConfigurationValidator; // Inject your DefaultConfigurationValidator
@@ -69,7 +71,6 @@
         private int appWatchSeconds;
 
         private DynamicConfigurationManagerImpl dynamicConfigurationManager;
-        private CachedConfigHolder testCachedConfigHolder;
 
         // Re-use TestApplicationEventListener and SimpleMapCachedConfigHolder
         // (They are already suitable as real, simple implementations for testing)
@@ -94,17 +95,6 @@
             public void clear() { receivedEvents.clear(); }
         }
 
-        static class SimpleMapCachedConfigHolder implements CachedConfigHolder { // Copied
-            private PipelineClusterConfig currentConfig;
-            private Map<SchemaReference, String> currentSchemas = new HashMap<>();
-            @Override public synchronized Optional<PipelineClusterConfig> getCurrentConfig() { return Optional.ofNullable(currentConfig); }
-            @Override public synchronized Optional<String> getSchemaContent(SchemaReference schemaRef) { return Optional.ofNullable(currentSchemas.get(schemaRef)); }
-            @Override public synchronized void updateConfiguration(PipelineClusterConfig newC, Map<SchemaReference, String> sC) {
-                this.currentConfig = newC; this.currentSchemas = new HashMap<>(sC);
-                LOG.info("SimpleMapCachedConfigHolder (Full Integ) updated. Config: {}, Schemas: {}", newC != null ? newC.clusterName() : "null", sC.keySet());
-            }
-            @Override public synchronized void clearConfiguration() { this.currentConfig = null; this.currentSchemas.clear(); LOG.info("SimpleMapCachedConfigHolder (Full Integ) cleared.");}
-        }
 
 
         @BeforeEach
@@ -116,7 +106,6 @@
 
             deleteConsulKeysForCluster(TEST_EXECUTION_CLUSTER);
             testApplicationEventListener.clear();
-            testCachedConfigHolder = new SimpleMapCachedConfigHolder();
 
             // Construct SUT with REAL dependencies
             dynamicConfigurationManager = new DynamicConfigurationManagerImpl(
@@ -312,9 +301,6 @@
             assertFalse(cachedConfigAfterInit.isPresent(), "Config should NOT be in cache after validation failure");
             LOG.info("FullInteg-RuleFail: Verified no config cached and no successful event published.");
         }
-
-        // TODO: Add more tests for other validation rules failing during initial load
-        // TODO: Add tests for validation rules failing during a watch update (keeping old config)
 
     }
     
