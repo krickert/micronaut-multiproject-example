@@ -102,40 +102,9 @@ public class ApicurioTestResourceProvider extends AbstractTestContainersProvider
     public static final String SIMPLE_NAME = "apicurio-registry";
     public static final String DISPLAY_NAME = "Apicurio Registry";
 
-    protected boolean isContainerEnabled(Map<String, Object> testResourcesConfig) {
-        Object globalEnabled = testResourcesConfig.get(PROPERTY_TESTCONTAINERS_ENABLED);
-        if (globalEnabled != null) {
-            if (globalEnabled instanceof Boolean && !(Boolean) globalEnabled) {
-                LOG.debug("Test containers are globally disabled via {}", PROPERTY_TESTCONTAINERS_ENABLED);
-                return false;
-            } else if (globalEnabled instanceof String && "false".equalsIgnoreCase((String) globalEnabled)) {
-                LOG.debug("Test containers are globally disabled via {}", PROPERTY_TESTCONTAINERS_ENABLED);
-                return false;
-            }
-        }
-
-        Object apicurioEnabled = testResourcesConfig.get(PROPERTY_TESTCONTAINERS_APICURIO_ENABLED);
-        if (apicurioEnabled != null) {
-            if (apicurioEnabled instanceof Boolean) return (Boolean) apicurioEnabled;
-            if (apicurioEnabled instanceof String) return Boolean.parseBoolean((String) apicurioEnabled);
-            if (apicurioEnabled instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> enabledMap = (Map<String, Object>) apicurioEnabled;
-                Object enabledValue = enabledMap.get("enabled");
-                if (enabledValue instanceof Boolean) return (Boolean) enabledValue;
-                if (enabledValue instanceof String) return Boolean.parseBoolean((String) enabledValue);
-                return true;
-            }
-        }
-        return true;
-    }
 
     @Override
     public List<String> getResolvableProperties(Map<String, Collection<String>> propertyEntries, Map<String, Object> testResourcesConfig) {
-        if (!isContainerEnabled(testResourcesConfig)) {
-            LOG.debug("Apicurio container is disabled, returning empty list of resolvable properties");
-            return Collections.emptyList();
-        }
         return RESOLVABLE_PROPERTIES_LIST;
     }
 
@@ -156,10 +125,7 @@ public class ApicurioTestResourceProvider extends AbstractTestContainersProvider
 
     @Override
     protected GenericContainer<?> createContainer(DockerImageName imageName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
-        if (!isContainerEnabled(testResourcesConfig)) {
-            LOG.debug("Apicurio container is disabled, not creating container");
-            return null;
-        }
+        LOG.info("Creating Apicurio container with image: {}", imageName);
         return new GenericContainer<>(imageName)
                 .withExposedPorts(APICURIO_PORT)
                 .withEnv("QUARKUS_PROFILE", "prod")
@@ -168,9 +134,12 @@ public class ApicurioTestResourceProvider extends AbstractTestContainersProvider
 
     @Override
     protected Optional<String> resolveProperty(String propertyName, GenericContainer<?> container) {
+        LOG.info("Resolving property '{}' for Apicurio container: {}", propertyName, container.getContainerName());
         String registryUrl = String.format("http://%s:%d/apis/registry/v3",
                 container.getHost(),
                 container.getMappedPort(APICURIO_PORT));
+
+        LOG.info("ApicurioRegistry URL: {}", registryUrl);
 
         Optional<String> resolvedValue = Optional.empty();
 
@@ -223,10 +192,6 @@ public class ApicurioTestResourceProvider extends AbstractTestContainersProvider
 
     @Override
     protected boolean shouldAnswer(String propertyName, Map<String, Object> properties, Map<String, Object> testResourcesConfig) {
-        if (!isContainerEnabled(testResourcesConfig)) {
-            LOG.debug("Apicurio container is disabled, not answering property {}", propertyName);
-            return false;
-        }
         boolean canAnswer = propertyName != null && RESOLVABLE_PROPERTIES_LIST.contains(propertyName);
         if (canAnswer) {
             LOG.debug("ApicurioTestResourceProvider will attempt to answer for property: {}", propertyName);
