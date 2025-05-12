@@ -54,8 +54,11 @@ dependencies {
     api(mn.micronaut.jackson.databind)
     // https://mvnrepository.com/artifact/org.kiwiproject/consul-client
     implementation("org.kiwiproject:consul-client:1.5.1")
-    api(project(":yappy-models:schema-registry-models"))
-    api(project(":yappy-models:pipeline-config-models"))
+    // Main models dependency
+    // Individual model dependencies
+    implementation(project(":yappy-models:schema-registry-models"))
+    implementation(project(":yappy-models:pipeline-config-models"))
+    implementation(project(":yappy-test-resources:consul-test-resource"))
     // https://mvnrepository.com/artifact/com.networknt/json-schema-validator
     api("com.networknt:json-schema-validator:1.5.6")
     // https://mvnrepository.com/artifact/org.jgrapht/jgrapht-core
@@ -66,6 +69,7 @@ dependencies {
     implementation(mn.javax.annotation.api)
     implementation(mn.micronaut.context)
     testResourcesImplementation("org.testcontainers:consul:1.21.0")
+    testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
 }
 
 // Add this block to explicitly configure the Mockito agent
