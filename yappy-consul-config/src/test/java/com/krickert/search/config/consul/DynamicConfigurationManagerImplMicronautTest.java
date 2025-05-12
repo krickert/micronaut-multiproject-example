@@ -3,6 +3,7 @@ package com.krickert.search.config.consul;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
+import com.krickert.search.config.consul.exception.ConfigurationManagerInitializationException;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineModuleConfiguration;
 import com.krickert.search.config.pipeline.model.PipelineModuleMap;
@@ -816,5 +817,54 @@ class DynamicConfigurationManagerImplMicronautTest {
 
         // Shutdown the locally created DCM
         localDcmForTest.shutdown();
+    }
+
+    @Test
+    @DisplayName("Integration: initialize() - when consulConfigFetcher.connect() fails, throws ConfigurationManagerInitializationException")
+    @Timeout(value = 15, unit = TimeUnit.SECONDS) // Shorter timeout, not waiting for watches
+    void integration_initialize_whenConnectFails_throwsInitializationException() throws InterruptedException {
+        // Spy on the realConsulConfigFetcher bean
+        KiwiprojectConsulConfigFetcher spiedFetcher = spy(this.realConsulConfigFetcher);
+
+        // IMPORTANT: Construct a NEW DynamicConfigurationManager for THIS TEST that uses the spy
+        DynamicConfigurationManagerImpl localDcmForTest = new DynamicConfigurationManagerImpl(
+                TEST_EXECUTION_CLUSTER,
+                spiedFetcher, // Use the spied fetcher
+                mockValidator,
+                testCachedConfigHolder,
+                eventPublisher
+        );
+
+        // Configure the spied connect() method to throw an exception
+        RuntimeException simulatedConnectException = new RuntimeException("Simulated KCCF.connect() failure!");
+        doThrow(simulatedConnectException).when(spiedFetcher).connect();
+
+        // --- Act & Assert ---
+        LOG.info("integration_initialize_connectFails: Attempting to initialize DCM where connect() will fail...");
+        ConfigurationManagerInitializationException thrown = assertThrows(
+                ConfigurationManagerInitializationException.class,
+                () -> localDcmForTest.initialize(TEST_EXECUTION_CLUSTER),
+                "initialize() should throw ConfigurationManagerInitializationException when connect() fails"
+        );
+
+        LOG.info("integration_initialize_connectFails: Correctly caught ConfigurationManagerInitializationException: {}", thrown.getMessage());
+        assertNotNull(thrown.getCause(), "The original exception should be the cause");
+        assertSame(simulatedConnectException, thrown.getCause(), "Cause should be the simulated connect exception");
+        assertEquals("Failed to initialize Consul connection or watch for cluster " + TEST_EXECUTION_CLUSTER, thrown.getMessage());
+
+        // --- Verify Interactions ---
+        // Verify connect() was attempted
+        verify(spiedFetcher).connect();
+
+        // Verify that subsequent operations were NOT attempted
+        verify(spiedFetcher, never()).fetchPipelineClusterConfig(anyString());
+        verify(spiedFetcher, never()).watchClusterConfig(anyString(), any());
+
+        // Verify cache and event listener were not affected
+        assertFalse(testCachedConfigHolder.getCurrentConfig().isPresent(), "Cache should be empty if connect failed");
+        assertNull(testApplicationEventListener.pollEvent(1, TimeUnit.SECONDS), "No event should be published if connect failed");
+        LOG.info("integration_initialize_connectFails: Verifications complete.");
+
+        // No need to call localDcmForTest.shutdown() as initialize failed before watch setup
     }
 }
