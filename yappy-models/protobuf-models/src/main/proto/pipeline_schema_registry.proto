@@ -24,8 +24,8 @@ service SchemaRegistryService {
   // Deletes a JSON schema by its ID.
   rpc DeleteSchema(DeleteSchemaRequest) returns (DeleteSchemaResponse);
 
-  // Lists all registered JSON schemas, with optional filtering and pagination.
-  rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse);
+  // Lists all registered JSON schemas, with optional filtering.
+  rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse); // <--- Description updated
 
   // Validates the provided JSON schema content without registering it.
   // This can be used to check schema correctness before attempting registration.
@@ -121,27 +121,14 @@ message DeleteSchemaResponse {
 message ListSchemasRequest {
   // Optional. A filter to apply to schema_id (e.g., prefix match).
   optional string id_filter = 1;
-
-  // Optional. The maximum number of schemas to return.
-  // The service may return fewer than this value.
-  // If unspecified, a service-defined default will be used.
-  int32 page_size = 2;
-
-  // Optional. A page token, received from a previous ListSchemas call.
-  // Provide this to retrieve the subsequent page.
-  string page_token = 3;
+  // page_size and page_token removed
 }
 
 // Response containing a list of JSON schemas.
 message ListSchemasResponse {
   // A list of schema information objects.
   repeated SchemaInfo schemas = 1;
-
-  // A token to retrieve the next page of results.
-  // Pass this value in the `page_token` field in a subsequent call to
-  // `ListSchemasRequest` to retrieve the next page.
-  // If this field is empty, there are no more results.
-  string next_page_token = 2;
+  // next_page_token removed
 }
 
 // Request to validate JSON schema content.

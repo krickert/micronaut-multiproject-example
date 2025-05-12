@@ -139,15 +139,21 @@ public class ConsulSchemaRegistryDelegate {
     public Mono<List<String>> listSchemaIds() {
         log.debug("Listing schema IDs from Consul prefix '{}'", fullSchemaKvPrefix);
         return consulKvService.getKeysWithPrefix(fullSchemaKvPrefix)
-                .map(keys -> keys.stream()
-                        .map(key -> key.startsWith(this.fullSchemaKvPrefix) ? key.substring(this.fullSchemaKvPrefix.length()) : key)
-                        .map(key -> key.endsWith("/") ? key.substring(0, key.length() - 1) : key)
-                        .filter(StringUtils::isNotEmpty)
-                        .distinct()
-                        .collect(Collectors.toList()))
+                .map(keys -> {
+                    if (keys == null) { // Defensive null check
+                        return Collections.<String>emptyList();
+                    }
+                    return keys.stream()
+                            .map(key -> key.startsWith(this.fullSchemaKvPrefix) ? key.substring(this.fullSchemaKvPrefix.length()) : key)
+                            .map(key -> key.endsWith("/") ? key.substring(0, key.length() - 1) : key)
+                            .filter(StringUtils::isNotEmpty)
+                            .distinct()
+                            .sorted() // Explicitly sort for consistent results
+                            .collect(Collectors.toList());
+                })
                 .doOnSuccess(ids -> log.debug("Found {} schema IDs", ids.size()))
                 .onErrorResume(e -> {
-                    log.error("Error listing schema keys from Consul: {}", e.getMessage(), e);
+                    log.error("Error listing schema keys from Consul under prefix '{}': {}", fullSchemaKvPrefix, e.getMessage(), e);
                     return Mono.just(Collections.emptyList());
                 });
     }
