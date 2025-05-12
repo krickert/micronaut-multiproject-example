@@ -27,31 +27,38 @@ public class SchemaRegistryServiceImpl extends SchemaRegistryServiceGrpc.SchemaR
         this.delegate = delegate;
     }
 
+    // In SchemaRegistryServiceImpl.java
+
     @Override
     public void registerSchema(RegisterSchemaRequest request, StreamObserver<RegisterSchemaResponse> responseObserver) {
         log.info("gRPC RegisterSchema request for ID: {}", request.getSchemaId());
-        //noinspection ReactorTransformationOnMonoVoid
         delegate.saveSchema(request.getSchemaId(), request.getSchemaContent())
                 .subscribe(
-                        (Void v) -> { /* No-op for Mono<Void>'s "success" value */ },
+                        (Void v) -> { /* No-op */ },
                         error -> { // onError
-                            log.error("Error registering schema ID '{}': {}", request.getSchemaId(), error.getMessage());
+                            log.error("Error registering schema ID '{}': {}", request.getSchemaId(), error.getMessage(), error); // Log the exception too
                             RegisterSchemaResponse.Builder responseBuilder = RegisterSchemaResponse.newBuilder()
                                     .setSchemaId(request.getSchemaId())
                                     .setSuccess(false)
                                     .setTimestamp(Timestamp.newBuilder().setSeconds(System.currentTimeMillis() / 1000L).build());
 
-                            Status status;
+                            // Populate validation_errors based on the type of error
                             if (error instanceof IllegalArgumentException) {
-                                status = Status.INVALID_ARGUMENT.withDescription(error.getMessage());
+                                // This is our expected business error for invalid content
                                 responseBuilder.addValidationErrors(error.getMessage());
-                            } else if (error instanceof SchemaNotFoundException) { // Should not happen for register typically, but for completeness
-                                status = Status.NOT_FOUND.withDescription(error.getMessage());
                             } else {
-                                status = Status.INTERNAL.withDescription("Internal error: " + error.getMessage());
+                                // For unexpected errors, you might add a generic error message
+                                // or leave validation_errors empty and rely on the client to infer
+                                // from success=false if no specific errors are provided.
+                                // Or, for truly unexpected internal errors, you *could* still call
+                                // responseObserver.onError(Status.INTERNAL.withCause(error).asRuntimeException());
+                                // but for now, let's stick to the response payload for business errors.
+                                responseBuilder.addValidationErrors("An unexpected error occurred during registration.");
+                                // Consider if you want to expose internal error messages.
+                                // For now, a generic message is safer.
                             }
-                            responseObserver.onNext(responseBuilder.build()); // Send error details if any
-                            responseObserver.onError(status.asRuntimeException());
+                            responseObserver.onNext(responseBuilder.build());
+                            responseObserver.onCompleted(); // <--- Key change: Complete normally after sending error payload
                         },
                         () -> { // onComplete (Runnable)
                             RegisterSchemaResponse response = RegisterSchemaResponse.newBuilder()

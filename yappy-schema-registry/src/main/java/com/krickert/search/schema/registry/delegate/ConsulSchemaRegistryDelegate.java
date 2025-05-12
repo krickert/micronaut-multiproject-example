@@ -1,15 +1,20 @@
-// In ConsulSchemaRegistryDelegate.java
 package com.krickert.search.schema.registry.delegate;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.service.ConsulKvService;
+import com.krickert.search.schema.registry.exception.SchemaLoadException; // Assuming you have this custom exception
 import com.krickert.search.schema.registry.exception.SchemaNotFoundException;
+import com.networknt.schema.ExecutionContext;
+import com.networknt.schema.JsonNodePath;
 import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
+import com.networknt.schema.PathType;
+import com.networknt.schema.SchemaValidatorsConfig;
 import com.networknt.schema.SpecVersion;
-import com.networknt.schema.ValidationMessage; // Correct import
+import com.networknt.schema.ValidationContext;
+import com.networknt.schema.ValidationMessage;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.core.annotation.NonNull;
 import io.micronaut.core.util.StringUtils;
@@ -19,6 +24,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -33,27 +40,67 @@ public class ConsulSchemaRegistryDelegate {
     private final ConsulKvService consulKvService;
     private final ObjectMapper objectMapper;
     private final JsonSchemaFactory schemaFactory;
+    private final JsonSchema metaSchema;
+
+    private SchemaValidatorsConfig getSchemaValidationConfig() {
+        return SchemaValidatorsConfig.builder()
+                .pathType(PathType.LEGACY)
+                .errorMessageKeyword("message")
+                .nullableKeywordEnabled(true)
+                .build();
+    }
 
     @Inject
     public ConsulSchemaRegistryDelegate(
             ConsulKvService consulKvService,
-            ObjectMapper objectMapper,
+            ObjectMapper objectMapper, // Micronaut will inject its configured ObjectMapper
             @Value("${consul.client.config.path:config/pipeline}") String baseConfigPath) {
         this.consulKvService = consulKvService;
-        this.objectMapper = objectMapper.copy();
+        this.objectMapper = objectMapper;
+
+        SchemaValidatorsConfig metaSchemaLoadingConfig = getSchemaValidationConfig();
+
+        // 1. Initialize the factory for Draft 7
         this.schemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7);
+
+        // 2. Load the draft7.json content from src/main/resources (root of classpath)
+        String metaSchemaClasspathPath = "/draft7.json"; // Path from the root of the classpath
+        JsonNode metaSchemaNode;
+
+        try (InputStream metaSchemaStream = ConsulSchemaRegistryDelegate.class.getResourceAsStream(metaSchemaClasspathPath)) {
+            if (metaSchemaStream == null) {
+                log.error("CRITICAL: Could not find 'draft7.json' at classpath root: {}. " +
+                        "Ensure the file is in 'src/main/resources/draft7.json'.", metaSchemaClasspathPath);
+                throw new SchemaLoadException("Could not find 'draft7.json' at classpath root: " + metaSchemaClasspathPath);
+            }
+            log.info("Loading meta-schema from classpath: {}", metaSchemaClasspathPath);
+            metaSchemaNode = this.objectMapper.readTree(metaSchemaStream);
+            log.info("Successfully loaded and parsed meta-schema from: {}", metaSchemaClasspathPath);
+        } catch (IOException e) {
+            log.error("CRITICAL: Failed to read or parse 'draft7.json' from classpath (path: {}). Error: {}",
+                    metaSchemaClasspathPath, e.getMessage(), e);
+            throw new RuntimeException("Failed to initialize ConsulSchemaRegistryDelegate: Could not read/parse 'draft7.json' from classpath.", e);
+        }
+
+        // 3. Create the JsonSchema instance for the meta-schema from its JsonNode content
+        try {
+            this.metaSchema = this.schemaFactory.getSchema(metaSchemaNode, metaSchemaLoadingConfig);
+        } catch (Exception e) {
+            log.error("CRITICAL: Failed to create JsonSchema instance from 'draft7.json' content. Error: {}",
+                    e.getMessage(), e);
+            throw new RuntimeException("Failed to initialize ConsulSchemaRegistryDelegate: Could not create JsonSchema from 'draft7.json' content.", e);
+        }
 
         String sanitizedBaseConfigPath = baseConfigPath.endsWith("/") ? baseConfigPath : baseConfigPath + "/";
         this.fullSchemaKvPrefix = sanitizedBaseConfigPath + "schemas/";
-        log.info("ConsulSchemaRegistryDelegate initialized, using Consul KV prefix: {}", this.fullSchemaKvPrefix);
-    }
+        log.info("ConsulSchemaRegistryDelegate initialized with Draft 7 meta-schema (loaded from classpath), using Consul KV prefix: {}", this.fullSchemaKvPrefix);
 
+    }
 
     public Mono<Void> saveSchema(@NonNull String schemaId, @NonNull String schemaContent) {
         if (StringUtils.isEmpty(schemaId) || StringUtils.isEmpty(schemaContent)) {
             return Mono.error(new IllegalArgumentException("Schema ID and content cannot be empty."));
         }
-
         return validateSchemaSyntax(schemaContent)
                 .flatMap(validationMessages -> {
                     if (!validationMessages.isEmpty()) {
@@ -63,7 +110,6 @@ public class ConsulSchemaRegistryDelegate {
                         log.warn("Schema syntax validation failed for ID '{}': {}", schemaId, errors);
                         return Mono.error(new IllegalArgumentException("Schema content is not a valid JSON Schema: " + errors));
                     }
-
                     log.debug("Schema syntax validated successfully for ID: {}", schemaId);
                     String consulKey = getSchemaKey(schemaId);
                     return consulKvService.putValue(consulKey, schemaContent)
@@ -79,15 +125,13 @@ public class ConsulSchemaRegistryDelegate {
                 });
     }
 
-    // In ConsulSchemaRegistryDelegate.java
     public Mono<String> getSchemaContent(@NonNull String schemaId) {
         if (StringUtils.isEmpty(schemaId)) {
             return Mono.error(new IllegalArgumentException("Schema ID cannot be empty."));
         }
         String consulKey = getSchemaKey(schemaId);
         log.debug("Attempting to get schema content for ID '{}' from Consul key '{}'", schemaId, consulKey);
-
-        return consulKvService.getValue(consulKey) // Returns Mono<Optional<String>>
+        return consulKvService.getValue(consulKey)
                 .flatMap(contentOpt -> {
                     if (contentOpt.isPresent() && !contentOpt.get().isBlank()) {
                         log.debug("Found schema content for ID: {}", schemaId);
@@ -97,11 +141,13 @@ public class ConsulSchemaRegistryDelegate {
                         return Mono.error(new SchemaNotFoundException("Schema not found for ID: " + schemaId + " at key: " + consulKey));
                     }
                 })
-                .switchIfEmpty(Mono.defer(() -> { // <-- ADDED THIS
+                .switchIfEmpty(Mono.defer(() -> {
                     log.warn("Schema not found (source Mono from getValue was empty) for ID '{}' at key '{}'", schemaId, consulKey);
                     return Mono.error(new SchemaNotFoundException("Schema not found for ID: " + schemaId + " at key: " + consulKey));
                 }));
     }
+
+    // In com.krickert.search.schema.registry.delegate.ConsulSchemaRegistryDelegate.java
 
     public Mono<Void> deleteSchema(@NonNull String schemaId) {
         if (StringUtils.isEmpty(schemaId)) {
@@ -110,31 +156,34 @@ public class ConsulSchemaRegistryDelegate {
         String consulKey = getSchemaKey(schemaId);
         log.info("Attempting to delete schema with ID '{}' from Consul key '{}'", schemaId, consulKey);
 
-        return consulKvService.getValue(consulKey)
+        return consulKvService.getValue(consulKey) // Mono<Optional<String>>
+                // Filter out empty or blank Optionals. If filtered, the stream becomes empty.
+                .filter(contentOpt -> contentOpt.isPresent() && !contentOpt.get().isBlank())
+                // If the stream is empty (because filter removed the item), trigger the not found error.
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.warn("Schema not found for deletion (getValue was empty or blank) for ID '{}' at key '{}'", schemaId, consulKey);
+                    return Mono.error(new SchemaNotFoundException("Cannot delete. Schema not found for ID: " + schemaId));
+                }))
+                // If filter passed, flatMap receives the Optional (which we know is present and not blank)
                 .flatMap(contentOpt -> {
-                    if (contentOpt.isEmpty() || contentOpt.get().isBlank()) {
-                        log.warn("Schema not found for deletion for ID '{}' at key '{}'", schemaId, consulKey);
-                        return Mono.error(new SchemaNotFoundException("Cannot delete. Schema not found for ID: " + schemaId));
-                    }
-                    return consulKvService.deleteKey(consulKey)
-                            .flatMap(success -> {
+                    // Now we know the schema exists and has content, proceed with delete
+                    return consulKvService.deleteKey(consulKey) // Mono<Boolean>
+                            .flatMap(success -> { // Operate on the result of deleteKey
                                 if (Boolean.TRUE.equals(success)) {
-                                    log.info("Delete command successful for schema ID '{}' (key '{}')", schemaId, consulKey);
+                                    log.info("Successfully deleted schema with ID '{}' from Consul key '{}'", schemaId, consulKey);
+                                    // Return a Mono<Void> that completes successfully.
+                                    // This inner Mono completing successfully causes the outer flatMap to also complete successfully.
                                     return Mono.empty();
                                 } else {
-                                    log.error("Consul deleteKey returned false for schema ID '{}' (key '{}')", schemaId, consulKey);
-                                    return Mono.error(new RuntimeException("Failed to delete schema from Consul for ID: " + schemaId));
+                                    log.error("Consul deleteKey command returned false (or was empty) for key '{}' (schema ID '{}')", consulKey, schemaId);
+                                    // This indicates the delete operation itself failed at the Consul level or deleteKey returned empty for some reason
+                                    return Mono.error(new RuntimeException("Failed to delete schema from Consul (delete command unsuccessful or unexpected empty result) for ID: " + schemaId));
                                 }
                             });
                 })
-                .onErrorResume(e -> {
-                    if (e instanceof SchemaNotFoundException) {
-                        return Mono.error(e);
-                    }
-                    log.error("Error during delete operation for schema ID '{}' (key '{}'): {}", schemaId, consulKey, e.getMessage(), e);
-                    return Mono.error(new RuntimeException("Error deleting schema from Consul for ID: " + schemaId, e));
-                }).then();
+                .then(); // Ensures Mono<Void> and handles errors or successful completion.
     }
+
 
     public Mono<List<String>> listSchemaIds() {
         log.debug("Listing schema IDs from Consul prefix '{}'", fullSchemaKvPrefix);
@@ -154,50 +203,55 @@ public class ConsulSchemaRegistryDelegate {
                 .doOnSuccess(ids -> log.debug("Found {} schema IDs", ids.size()))
                 .onErrorResume(e -> {
                     log.error("Error listing schema keys from Consul under prefix '{}': {}", fullSchemaKvPrefix, e.getMessage(), e);
-                    return Mono.just(Collections.emptyList());
+                    return Mono.just(Collections.<String>emptyList());
                 });
     }
 
     public Mono<Set<ValidationMessage>> validateSchemaSyntax(@NonNull String schemaContent) {
         return Mono.fromCallable(() -> {
             if (StringUtils.isEmpty(schemaContent)) {
-                log.warn("Schema content is empty.");
                 return Set.of(ValidationMessage.builder().message("Schema content cannot be empty.").build());
             }
+
             try {
-                log.debug("Attempting to parse schema content: {}", schemaContent.length() > 200 ? schemaContent.substring(0, 200) + "..." : schemaContent);
-                JsonNode schemaNode = objectMapper.readTree(schemaContent);
+                JsonNode schemaNodeToValidate = objectMapper.readTree(schemaContent);
 
-                // This call is expected to throw JsonSchemaException (or a subclass/related exception)
-                // if the schema is fundamentally malformed according to the meta-schema or spec
-                // (e.g., "type": 123 should cause an issue here if the library is strict).
-                // For cases like unknown keywords ("invalid_prop": "object"}), it might only log a warning
-                // and successfully return a JsonSchema instance if the library is configured to be lenient.
-                JsonSchema schema = schemaFactory.getSchema(schemaNode); // Attempt to parse and create the schema object
+                // Use the pre-loaded this.metaSchema to validate the user's schema (schemaNodeToValidate)
+                ExecutionContext executionContext = this.metaSchema.createExecutionContext();
 
-                // If schemaFactory.getSchema() SUCCEEDS without throwing an exception,
-                // we consider the schema definition "valid enough" for the library to have parsed it.
-                // Any non-fatal issues (like unknown keywords) would have been logged as warnings by networknt-schema.
-                // We are not further validating the 'schema' object against a meta-schema here because
-                // JsonSchema.java you provided does not have a public instance method for that returning Set<ValidationMessage>.
-                log.debug("Schema content successfully parsed by JsonSchemaFactory for: {}",
-                        schemaContent.length() > 200 ? schemaContent.substring(0, 200) + "..." : schemaContent);
-                return Collections.emptySet(); // No fatal parsing/structural errors were caught by exception.
+                ValidationContext metaSchemaVC = this.metaSchema.getValidationContext();
+                PathType pathTypeForRoot = metaSchemaVC.getConfig().getPathType();
+                if (pathTypeForRoot == null) {
+                    pathTypeForRoot = PathType.LEGACY; // Fallback, should be set by metaSchemaLoadingConfig
+                }
 
-            } catch (JsonProcessingException e) { // For malformed JSON (not valid JSON at all)
-                log.warn("Invalid JSON syntax for schema content. Input: [{}], Error: {}", schemaContent, e.getMessage());
+                Set<ValidationMessage> messages = this.metaSchema.validate(
+                        executionContext,
+                        schemaNodeToValidate,      // The node to validate (the user's schema)
+                        schemaNodeToValidate,      // The root node of the instance (which is the user's schema itself)
+                        new JsonNodePath(pathTypeForRoot) // Instance location starts at root
+                );
+
+                if (messages.isEmpty()) {
+                    log.trace("Schema syntax appears valid and compliant with meta-schema.");
+                    return Collections.emptySet();
+                } else {
+                    String errors = messages.stream()
+                            .map(ValidationMessage::getMessage)
+                            .collect(Collectors.joining("; "));
+                    log.warn("Invalid JSON Schema structure (failed meta-schema validation) for content. Errors: {}", errors);
+                    return messages;
+                }
+
+            } catch (JsonProcessingException e) {
+                log.warn("Invalid JSON syntax: {}", e.getMessage());
                 return Set.of(ValidationMessage.builder().message("Invalid JSON syntax: " + e.getMessage()).build());
-            } catch (Exception e) { // Catches JsonSchemaException or other schema parsing issues from getSchema()
-                log.warn("Invalid JSON Schema structure or other parsing error for schema content. Input: [{}], ErrorType: {}, Error: {}",
-                        schemaContent.length() > 200 ? schemaContent.substring(0, 200) + "..." : schemaContent,
-                        e.getClass().getName(),
-                        e.getMessage(),
-                        e); // Log the actual exception
-                return Set.of(ValidationMessage.builder().message("Invalid JSON Schema structure: " + e.getMessage()).build());
+            } catch (Exception e) {
+                log.warn("Error during schema syntax validation: {}", e.getMessage(), e);
+                return Set.of(ValidationMessage.builder().message("Error during schema syntax validation: " + e.getMessage()).build());
             }
         });
     }
-
 
     private String getSchemaKey(String schemaId) {
         return this.fullSchemaKvPrefix + schemaId;
