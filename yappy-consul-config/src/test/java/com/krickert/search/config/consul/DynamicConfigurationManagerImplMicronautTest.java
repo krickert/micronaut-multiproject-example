@@ -668,4 +668,82 @@ class DynamicConfigurationManagerImplMicronautTest {
         ));
         LOG.info("integration_watchUpdate_missingSchema: Verified validator was called for the new config with a provider that could not resolve the missing schema.");
     }
+
+    @Test
+    @DisplayName("Integration: Initial load - config references schema, but schema fetch fails, watch still starts")
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
+    void integration_initialLoad_configReferencesMissingSchema_watchStarts() throws Exception {
+        // --- Setup Data ---
+        SchemaReference missingSchemaRef = new SchemaReference("integInitialMissingSchema", 1);
+        PipelineClusterConfig initialConfigWithMissingSchema = createClusterConfigWithSchema(TEST_EXECUTION_CLUSTER, missingSchemaRef, "topicInitialMissingSchema");
+
+        String fullClusterKey = getFullClusterKey(TEST_EXECUTION_CLUSTER);
+        String fullMissingSchemaKey = getFullSchemaKey(missingSchemaRef.subject(), missingSchemaRef.version());
+
+        // Seed the cluster config
+        seedConsulKv(fullClusterKey, initialConfigWithMissingSchema);
+
+        // Ensure the referenced schema is NOT in Consul
+        testKvClient.deleteKey(fullMissingSchemaKey);
+        LOG.info("integration_initialLoad_missingSchema: Ensured schema key {} is deleted for initial load.", fullMissingSchemaKey);
+
+        // Configure mock validator:
+        // It should be called with initialConfigWithMissingSchema.
+        // The schemaProvider given to it should return Optional.empty() for missingSchemaRef.
+        // In this case, the validator should deem the config invalid.
+        when(mockValidator.validate(
+                eq(initialConfigWithMissingSchema),
+                argThat(provider -> !provider.apply(missingSchemaRef).isPresent()) // Verifies schema is missing from provider
+        )).thenReturn(ValidationResult.invalid(Collections.singletonList("Validation Error: Schema " + missingSchemaRef + " could not be resolved")));
+
+        // --- Act: Initialize DCM ---
+        LOG.info("integration_initialLoad_missingSchema: Initializing DynamicConfigurationManager for cluster '{}'...", TEST_EXECUTION_CLUSTER);
+        dynamicConfigurationManager.initialize(TEST_EXECUTION_CLUSTER);
+        LOG.info("integration_initialLoad_missingSchema: Initialization complete (expected to proceed to watch setup).");
+
+        // --- Verify Initial Load Failure (due to missing schema leading to validation failure) ---
+        ClusterConfigUpdateEvent initialEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 2, TimeUnit.SECONDS); // Short poll
+        assertNull(initialEvent, "Should NOT have received a successful config update event due to missing schema during initial load");
+
+        Optional<PipelineClusterConfig> cachedConfigAfterInit = testCachedConfigHolder.getCurrentConfig();
+        assertFalse(cachedConfigAfterInit.isPresent(), "Config should NOT be in cache after initial load with missing schema");
+        LOG.info("integration_initialLoad_missingSchema: Verified no config cached and no successful event published.");
+
+        // --- Verify Watch is Active by seeding a new, fully valid config AND its schema ---
+        LOG.info("integration_initialLoad_missingSchema: Attempting to seed a fully valid config and its schema to check if watch is active...");
+
+        SchemaReference nowPresentSchemaRef = new SchemaReference("integNowPresentSchema", 1);
+        PipelineClusterConfig subsequentValidConfig = createClusterConfigWithSchema(TEST_EXECUTION_CLUSTER, nowPresentSchemaRef, "topicSubsequentlyValid");
+        SchemaVersionData nowPresentSchemaData = createDummySchemaData(nowPresentSchemaRef.subject(), nowPresentSchemaRef.version(), "{\"type\":\"number\"}");
+        String fullNowPresentSchemaKey = getFullSchemaKey(nowPresentSchemaRef.subject(), nowPresentSchemaRef.version());
+
+        // Clean and seed the new schema
+        testKvClient.deleteKey(fullNowPresentSchemaKey);
+        seedConsulKv(fullNowPresentSchemaKey, nowPresentSchemaData);
+
+        // Validator for the new, valid config (this time schema provider WILL find the schema)
+        when(mockValidator.validate(
+                eq(subsequentValidConfig),
+                argThat(provider -> provider.apply(nowPresentSchemaRef).isPresent() &&
+                        nowPresentSchemaData.schemaContent().equals(provider.apply(nowPresentSchemaRef).get()))
+        )).thenReturn(ValidationResult.valid());
+
+        // Seed the new valid cluster config
+        seedConsulKv(fullClusterKey, subsequentValidConfig);
+        LOG.info("integration_initialLoad_missingSchema: Subsequent valid config and its schema seeded.");
+
+        ClusterConfigUpdateEvent recoveryEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 15, TimeUnit.SECONDS);
+        assertNotNull(recoveryEvent, "Should have received an event when a subsequent valid config (with schema) appeared on the watch");
+        assertTrue(recoveryEvent.oldConfig().isEmpty(), "Old config in recovery event should be empty (as initial load effectively failed)");
+        assertEquals(subsequentValidConfig, recoveryEvent.newConfig(), "New config in recovery event should match the valid seeded config");
+
+        Optional<PipelineClusterConfig> cachedConfigAfterRecovery = testCachedConfigHolder.getCurrentConfig();
+        assertTrue(cachedConfigAfterRecovery.isPresent(), "Config should be in cache after valid config discovered by watch");
+        assertEquals(subsequentValidConfig, cachedConfigAfterRecovery.get());
+        assertEquals(nowPresentSchemaData.schemaContent(), testCachedConfigHolder.getSchemaContent(nowPresentSchemaRef).orElse(null), "The new schema should be cached");
+        LOG.info("integration_initialLoad_missingSchema: Watch successfully picked up a subsequent valid configuration and its schema.");
+
+        // Cleanup
+        testKvClient.deleteKey(fullNowPresentSchemaKey);
+    }
 }
