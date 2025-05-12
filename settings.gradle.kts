@@ -23,8 +23,11 @@ rootProject.name = "yappy-platform-build"
 include(
     "bom",
     "util",
- //   "yappy-platform",
     "yappy-test-resources",
+    "yappy-test-resources:consul-test-resource",
+    "yappy-test-resources:apicurio-test-resource",
+    "yappy-test-resources:moto-test-resource",
+    "yappy-test-resources:apache-kafka-test-resource",
     "yappy-consul-config",
     "yappy-models",
     "yappy-models:pipeline-config-models",

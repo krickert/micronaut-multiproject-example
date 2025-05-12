@@ -1,4 +1,0 @@
-com.krickert.testcontainers.consul.ConsulTestResourceProvider
-com.krickert.testcontainers.kafka.KafkaTestResourceProvider
-com.krickert.testcontainers.moto.MotoTestResourceProvider
-com.krickert.testcontainers.apicurio.ApicurioTestResourceProvider
