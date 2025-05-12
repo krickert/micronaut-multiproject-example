@@ -30,7 +30,7 @@ micronaut {
         inferClasspath.set(true)
         additionalModules.add(KnownModules.KAFKA)
         clientTimeout.set(60)
-        sharedServer.set(true)
+        sharedServer.set(false)
     }
 }
 
