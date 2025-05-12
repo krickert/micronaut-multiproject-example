@@ -746,4 +746,75 @@ class DynamicConfigurationManagerImplMicronautTest {
         // Cleanup
         testKvClient.deleteKey(fullNowPresentSchemaKey);
     }
+
+    @Test
+    @DisplayName("Integration: Watch update - schema fetch throws RuntimeException, keeps old config")
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
+    void integration_watchUpdate_schemaFetchThrowsRuntimeException_keepsOldConfig() throws Exception {
+        // --- Setup Initial Valid Config ---
+        PipelineClusterConfig initialValidConfig = createDummyClusterConfig(TEST_EXECUTION_CLUSTER, "topicInitialForSchemaFetchFail");
+        String fullClusterKey = getFullClusterKey(TEST_EXECUTION_CLUSTER);
+
+        seedConsulKv(fullClusterKey, initialValidConfig);
+        when(mockValidator.validate(eq(initialValidConfig), any()))
+                .thenReturn(ValidationResult.valid());
+
+        // Spy on the realConsulConfigFetcher bean
+        KiwiprojectConsulConfigFetcher spiedFetcher = spy(this.realConsulConfigFetcher);
+
+        // IMPORTANT: Construct a NEW DynamicConfigurationManager for THIS TEST that uses the spy
+        DynamicConfigurationManagerImpl localDcmForTest = new DynamicConfigurationManagerImpl(
+                TEST_EXECUTION_CLUSTER,
+                spiedFetcher, // Use the spied fetcher
+                mockValidator,
+                testCachedConfigHolder,
+                eventPublisher
+        );
+
+        LOG.info("integration_watchUpdate_schemaFetchThrowsRT: Initializing DCM with spied fetcher...");
+        localDcmForTest.initialize(TEST_EXECUTION_CLUSTER); // Initialize this local instance
+
+        // --- Verify Initial Load (using localDcmForTest) ---
+        ClusterConfigUpdateEvent initialLoadEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 10, TimeUnit.SECONDS);
+        assertNotNull(initialLoadEvent, "Should have received an initial load event");
+        assertEquals(initialValidConfig, initialLoadEvent.newConfig());
+        assertEquals(initialValidConfig, testCachedConfigHolder.getCurrentConfig().orElse(null));
+        LOG.info("integration_watchUpdate_schemaFetchThrowsRT: Initial load verified.");
+        testApplicationEventListener.clear();
+
+        // --- Setup for Watch Update (where schema fetch will throw) ---
+        SchemaReference problematicSchemaRef = new SchemaReference("integSchemaFetchProblem", 1);
+        PipelineClusterConfig newConfigWithProblematicSchema = createClusterConfigWithSchema(TEST_EXECUTION_CLUSTER, problematicSchemaRef, "topicNewProblematicSchema");
+
+        RuntimeException simulatedSchemaFetchException = new RuntimeException("Simulated Consul/Network error during schema fetch!");
+        doThrow(simulatedSchemaFetchException)
+                .when(spiedFetcher).fetchSchemaVersionData(eq(problematicSchemaRef.subject()), eq(problematicSchemaRef.version()));
+
+        // --- Act: Trigger Watch Update by changing Consul data ---
+        LOG.info("integration_watchUpdate_schemaFetchThrowsRT: Seeding new config (problematic schema fetch) to trigger watch...");
+        seedConsulKv(fullClusterKey, newConfigWithProblematicSchema);
+        LOG.info("integration_watchUpdate_schemaFetchThrowsRT: New config (problematic schema fetch) seeded.");
+
+        // --- Verify Behavior after Schema Fetch Throws Exception ---
+        ClusterConfigUpdateEvent eventAfterFetchError = testApplicationEventListener.pollEvent(appWatchSeconds + 10, TimeUnit.SECONDS);
+
+        if (eventAfterFetchError != null) {
+            LOG.warn("integration_watchUpdate_schemaFetchThrowsRT: Polled an event: {}. This should not be for the new config with schema fetch error.", eventAfterFetchError);
+            assertNotEquals(newConfigWithProblematicSchema, eventAfterFetchError.newConfig(),
+                    "Event's newConfig should not be the one with the schema fetch error.");
+        } else {
+            LOG.info("integration_watchUpdate_schemaFetchThrowsRT: Correctly received no new successful update event after config with schema fetch error.");
+        }
+
+        Optional<PipelineClusterConfig> cachedConfigAfterFetchError = testCachedConfigHolder.getCurrentConfig();
+        assertTrue(cachedConfigAfterFetchError.isPresent(), "Cache should still contain a config");
+        assertEquals(initialValidConfig, cachedConfigAfterFetchError.get(), "Cache should still hold the initial valid config");
+        LOG.info("integration_watchUpdate_schemaFetchThrowsRT: Verified cache still holds the old valid configuration.");
+
+        verify(spiedFetcher).fetchSchemaVersionData(eq(problematicSchemaRef.subject()), eq(problematicSchemaRef.version()));
+        LOG.info("integration_watchUpdate_schemaFetchThrowsRT: Verified schema fetch was attempted for the problematic schema.");
+
+        // Shutdown the locally created DCM
+        localDcmForTest.shutdown();
+    }
 }
