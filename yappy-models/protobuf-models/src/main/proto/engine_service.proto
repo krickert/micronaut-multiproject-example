@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package com.krickert.search.engine;
+
+option java_multiple_files = true;
+option java_package = "com.krickert.search.engine";
+option java_outer_classname = "EngineServiceProto";
+
+import "yappy_core_types.proto"; // For PipeStream
+import "google/protobuf/empty.proto";
+
+// PipeStreamEngine service orchestrates pipeline execution based on configurations
+// loaded from the DynamicConfigurationManager (sourced from Consul).
+service PipeStreamEngine {
+  // Initiates a pipeline run and returns the final state of the PipeStream
+  // after the entire pipeline execution completes or fails (synchronous call pattern).
+  //
+  // The client invoking this RPC is expected to populate the input PipeStream with:
+  // - stream_id: A unique ID for this run (or the engine can generate one if left empty).
+  // - document and/or blob: The initial data payload.
+  // - current_pipeline_name: REQUIRED - Specifies which PipelineConfig definition to execute.
+  // - target_step_name: REQUIRED - Specifies the 'stepName' of the first step within that pipeline to execute.
+  // - context_params: Optional map for global run context.
+  // - history and stream_error_data should typically be empty/null on initial call.
+  rpc process(com.krickert.search.model.PipeStream) returns (com.krickert.search.model.PipeStream);
+
+  // Initiates a pipeline run in a fire-and-forget manner (asynchronous call pattern).
+  // The client provides the same initial PipeStream as for the 'process' RPC.
+  // Returns google.protobuf.Empty on successful *initiation* by the engine.
+  // Errors during the pipeline's execution will be handled within the pipeline's
+  // configured error steps or logged, not directly returned by this RPC.
+  // Errors during *initiation* itself (e.g., pipeline_name not found in config)
+  // may still be returned via gRPC status codes.
+  rpc processAsync(com.krickert.search.model.PipeStream) returns (google.protobuf.Empty);
+}
