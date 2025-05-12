@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.service.ConsulKvService;
+import com.krickert.search.schema.registry.exception.SchemaDeleteException;
 import com.krickert.search.schema.registry.exception.SchemaLoadException; // Assuming you have this custom exception
 import com.krickert.search.schema.registry.exception.SchemaNotFoundException;
 import com.networknt.schema.ExecutionContext;
@@ -147,8 +148,6 @@ public class ConsulSchemaRegistryDelegate {
                 }));
     }
 
-    // In com.krickert.search.schema.registry.delegate.ConsulSchemaRegistryDelegate.java
-
     public Mono<Void> deleteSchema(@NonNull String schemaId) {
         if (StringUtils.isEmpty(schemaId)) {
             return Mono.error(new IllegalArgumentException("Schema ID cannot be empty."));
@@ -157,31 +156,28 @@ public class ConsulSchemaRegistryDelegate {
         log.info("Attempting to delete schema with ID '{}' from Consul key '{}'", schemaId, consulKey);
 
         return consulKvService.getValue(consulKey) // Mono<Optional<String>>
-                // Filter out empty or blank Optionals. If filtered, the stream becomes empty.
                 .filter(contentOpt -> contentOpt.isPresent() && !contentOpt.get().isBlank())
-                // If the stream is empty (because filter removed the item), trigger the not found error.
                 .switchIfEmpty(Mono.defer(() -> {
                     log.warn("Schema not found for deletion (getValue was empty or blank) for ID '{}' at key '{}'", schemaId, consulKey);
                     return Mono.error(new SchemaNotFoundException("Cannot delete. Schema not found for ID: " + schemaId));
                 }))
-                // If filter passed, flatMap receives the Optional (which we know is present and not blank)
-                .flatMap(contentOpt -> {
-                    // Now we know the schema exists and has content, proceed with delete
-                    return consulKvService.deleteKey(consulKey) // Mono<Boolean>
-                            .flatMap(success -> { // Operate on the result of deleteKey
-                                if (Boolean.TRUE.equals(success)) {
-                                    log.info("Successfully deleted schema with ID '{}' from Consul key '{}'", schemaId, consulKey);
-                                    // Return a Mono<Void> that completes successfully.
-                                    // This inner Mono completing successfully causes the outer flatMap to also complete successfully.
-                                    return Mono.empty();
-                                } else {
-                                    log.error("Consul deleteKey command returned false (or was empty) for key '{}' (schema ID '{}')", consulKey, schemaId);
-                                    // This indicates the delete operation itself failed at the Consul level or deleteKey returned empty for some reason
-                                    return Mono.error(new RuntimeException("Failed to delete schema from Consul (delete command unsuccessful or unexpected empty result) for ID: " + schemaId));
-                                }
-                            });
-                })
-                .then(); // Ensures Mono<Void> and handles errors or successful completion.
+                .flatMap(contentOpt -> // contentOpt is guaranteed to be present and not blank here
+                        consulKvService.deleteKey(consulKey) // Mono<Boolean>
+                                .flatMap(success -> {
+                                    if (Boolean.TRUE.equals(success)) {
+                                        log.info("Successfully deleted schema with ID '{}' from Consul key '{}'", schemaId, consulKey);
+                                        return Mono.empty(); // Signal successful deletion completion
+                                    } else {
+                                        log.error("Consul deleteKey command returned false for key '{}' (schema ID '{}')", consulKey, schemaId);
+                                        return Mono.error(new RuntimeException("Failed to delete schema from Consul (delete command unsuccessful) for ID: " + schemaId));
+                                    }
+                                })
+                                .onErrorResume(deleteError -> { // Catch errors specifically from deleteKey operation
+                                    log.error("Error during Consul deleteKey operation for schema ID '{}' (key '{}'): {}", schemaId, consulKey, deleteError.getMessage(), deleteError);
+                                    return Mono.error(new SchemaDeleteException("Error deleting schema from Consul for ID: " + schemaId, deleteError)); // Wrap the original error
+                                })
+                )
+                .then(); // Ensures Mono<Void> and propagates errors (including wrapped ones or SchemaNotFoundException)
     }
 
 

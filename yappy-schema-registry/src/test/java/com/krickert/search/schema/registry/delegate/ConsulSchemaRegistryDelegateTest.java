@@ -2,6 +2,7 @@ package com.krickert.search.schema.registry.delegate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.service.ConsulKvService;
+import com.krickert.search.schema.registry.exception.SchemaDeleteException;
 import com.krickert.search.schema.registry.exception.SchemaNotFoundException;
 import com.networknt.schema.ValidationMessage;
 import io.micronaut.context.annotation.Property;
@@ -43,16 +44,17 @@ class ConsulSchemaRegistryDelegateTest {
     private final String TEST_SCHEMA_ID = "test-schema-1";
     private final String VALID_SCHEMA_CONTENT_MINIMAL = "{\"type\": \"object\"}";
     private final String INVALID_JSON_CONTENT = "{ type: \"object\" }"; // Malformed JSON
-    private final String STRUCTURALLY_INVALID_TYPE_VALUE = "{\"type\": 123}"; // Correct JSON, but schema factory is lenient
-    private final String STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_PATTERN = "{\"type\": \"string\", \"pattern\": \"([\"}"; // Invalid regex, factory WILL throw
-    private final String STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_REF = "{\"$ref\": \"#/definitions/nonExistent\"}"; // Unresolvable local ref, factory is lenient
-    private final String SCHEMA_WITH_UNKNOWN_KEYWORD = "{\"invalid_prop\": \"object\", \"type\": \"object\"}"; // Unknown keyword, factory is lenient
+    private final String STRUCTURALLY_INVALID_TYPE_VALUE = "{\"type\": 123}"; // Correct JSON, but structurally invalid schema
+    private final String STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_PATTERN = "{\"type\": \"string\", \"pattern\": \"([\"}"; // Invalid regex
+    private final String STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_REF = "{\"$ref\": \"#/definitions/nonExistent\"}"; // Unresolvable local ref, but networknt is lenient on this during syntax check
+    private final String SCHEMA_WITH_UNKNOWN_KEYWORD = "{\"invalid_prop\": \"object\", \"type\": \"object\"}"; // Unknown keyword, networknt is lenient on this during syntax check
 
     private String expectedFullSchemaPrefix;
 
     @BeforeEach
     void setUp() {
         mockConsulKvService = Mockito.mock(ConsulKvService.class);
+        // Re-initialize delegate for each test to ensure clean state and reflect any @BeforeEach changes to mocks
         delegate = new ConsulSchemaRegistryDelegate(mockConsulKvService, objectMapper, baseConfigPath);
         expectedFullSchemaPrefix = (baseConfigPath.endsWith("/") ? baseConfigPath : baseConfigPath + "/") + "schemas/";
     }
@@ -100,46 +102,37 @@ class ConsulSchemaRegistryDelegateTest {
 
         @Test
         void saveSchema_structurallyInvalidPattern_throwsIllegalArgumentException() {
-            // This input WILL cause validateSchemaSyntax to return errors
             StepVerifier.create(delegate.saveSchema(TEST_SCHEMA_ID, STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_PATTERN))
                     .expectErrorSatisfies(throwable -> {
                         assertThat(throwable).isInstanceOf(IllegalArgumentException.class);
                         assertThat(throwable.getMessage()).contains("Schema content is not a valid JSON Schema");
-                        assertThat(throwable.getMessage()).contains("Invalid JSON Schema structure");
-                        assertThat(throwable.getMessage()).contains("Unclosed character class");
+                        // Check for the specific error from the validator
+                        assertThat(throwable.getMessage()).contains("pattern must be a valid ECMA-262 regular expression");
                     })
                     .verify();
         }
 
         @Test
-        void saveSchema_whenValidationPassesForLenientSchema_structurallyInvalidTypeValue_andConsulPutSucceeds() {
-            // "{\"type\": 123}" does NOT cause validateSchemaSyntax to return errors by default.
-            // So, saveSchema should proceed and try to save it. This test now checks successful save.
-            when(mockConsulKvService.putValue(eq(getExpectedConsulKey(TEST_SCHEMA_ID)), eq(STRUCTURALLY_INVALID_TYPE_VALUE)))
-                    .thenReturn(Mono.just(true));
-
-            StepVerifier.create(delegate.saveSchema(TEST_SCHEMA_ID, STRUCTURALLY_INVALID_TYPE_VALUE))
-                    .verifyComplete();
-        }
-
-        @Test
-        void saveSchema_whenValidationPassesForLenientSchema_structurallyInvalidTypeValue_andConsulPutFails() {
-            // "{\"type\": 123}" does NOT cause validateSchemaSyntax to return errors by default.
-            // SaveSchema proceeds. This test checks when putValue returns false.
-            when(mockConsulKvService.putValue(eq(getExpectedConsulKey(TEST_SCHEMA_ID)), eq(STRUCTURALLY_INVALID_TYPE_VALUE)))
-                    .thenReturn(Mono.just(false)); // Mock crucial for this test path
-
+        @DisplayName("Given structurally invalid schema (bad type value), saveSchema fails validation early")
+        void saveSchema_structurallyInvalidTypeValue_throwsIllegalArgumentException() {
+            // "{\"type\": 123}" WILL now cause validateSchemaSyntax to return errors.
+            // So, saveSchema should fail before trying to save.
             StepVerifier.create(delegate.saveSchema(TEST_SCHEMA_ID, STRUCTURALLY_INVALID_TYPE_VALUE))
                     .expectErrorSatisfies(throwable -> {
-                        assertThat(throwable).isInstanceOf(RuntimeException.class);
-                        assertThat(throwable.getMessage()).isEqualTo("Failed to save schema to Consul for ID: " + TEST_SCHEMA_ID);
+                        assertThat(throwable).isInstanceOf(IllegalArgumentException.class);
+                        assertThat(throwable.getMessage()).contains("Schema content is not a valid JSON Schema");
+                        assertThat(throwable.getMessage()).contains("does not have a value in the enumeration"); // Specific error
                     })
                     .verify();
         }
 
 
         @Test
+        @DisplayName("Given schema with unresolvable local $ref, saveSchema succeeds as syntax check is lenient")
         void saveSchema_lenientValidSchemaWithBadRef_savesSuccessfully() {
+            // The networknt validator, during the syntax check phase (meta-schema validation),
+            // does not typically fail for unresolvable local $refs if the overall structure is JSON.
+            // It might fail during actual data validation against such a schema if $ref resolution is strict there.
             when(mockConsulKvService.putValue(eq(getExpectedConsulKey(TEST_SCHEMA_ID)), eq(STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_REF)))
                     .thenReturn(Mono.just(true));
             StepVerifier.create(delegate.saveSchema(TEST_SCHEMA_ID, STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_REF))
@@ -147,7 +140,10 @@ class ConsulSchemaRegistryDelegateTest {
         }
 
         @Test
+        @DisplayName("Given schema with unknown keyword, saveSchema succeeds as syntax check is lenient")
         void saveSchema_lenientValidSchemaWithUnknownKeyword_savesSuccessfully() {
+            // Similar to bad $refs, unknown keywords are often ignored by the meta-schema validation
+            // unless specific configurations are set to disallow them.
             when(mockConsulKvService.putValue(eq(getExpectedConsulKey(TEST_SCHEMA_ID)), eq(SCHEMA_WITH_UNKNOWN_KEYWORD)))
                     .thenReturn(Mono.just(true));
             StepVerifier.create(delegate.saveSchema(TEST_SCHEMA_ID, SCHEMA_WITH_UNKNOWN_KEYWORD))
@@ -159,7 +155,10 @@ class ConsulSchemaRegistryDelegateTest {
             when(mockConsulKvService.putValue(eq(getExpectedConsulKey(TEST_SCHEMA_ID)), eq(VALID_SCHEMA_CONTENT_MINIMAL)))
                     .thenReturn(Mono.just(false));
             StepVerifier.create(delegate.saveSchema(TEST_SCHEMA_ID, VALID_SCHEMA_CONTENT_MINIMAL))
-                    .expectError(RuntimeException.class)
+                    .expectErrorSatisfies(throwable -> {
+                        assertThat(throwable).isInstanceOf(RuntimeException.class);
+                        assertThat(throwable.getMessage()).isEqualTo("Failed to save schema to Consul for ID: " + TEST_SCHEMA_ID);
+                    })
                     .verify();
         }
 
@@ -170,7 +169,7 @@ class ConsulSchemaRegistryDelegateTest {
             StepVerifier.create(delegate.saveSchema(TEST_SCHEMA_ID, VALID_SCHEMA_CONTENT_MINIMAL))
                     .expectErrorSatisfies(throwable -> {
                         assertThat(throwable).isInstanceOf(RuntimeException.class);
-                        assertThat(throwable.getMessage()).isEqualTo("Consul error"); // Expecting the original error from the service
+                        assertThat(throwable.getMessage()).isEqualTo("Consul error");
                     })
                     .verify();
         }
@@ -238,6 +237,7 @@ class ConsulSchemaRegistryDelegateTest {
 
         @Test
         void deleteSchema_notFound_throwsSchemaNotFoundException() {
+            // This covers when getValue returns an empty Optional
             when(mockConsulKvService.getValue(eq(getExpectedConsulKey(TEST_SCHEMA_ID))))
                     .thenReturn(Mono.just(Optional.empty()));
             StepVerifier.create(delegate.deleteSchema(TEST_SCHEMA_ID))
@@ -246,27 +246,50 @@ class ConsulSchemaRegistryDelegateTest {
         }
 
         @Test
-        void deleteSchema_consulDeleteReturnsFalse_throwsRuntimeException() {
+        void deleteSchema_notFound_whenGetValueIsMonoEmpty_throwsSchemaNotFoundException() {
+            // This covers when getValue itself is an empty Mono
             when(mockConsulKvService.getValue(eq(getExpectedConsulKey(TEST_SCHEMA_ID))))
-                    .thenReturn(Mono.just(Optional.of(VALID_SCHEMA_CONTENT_MINIMAL)));
-            when(mockConsulKvService.deleteKey(eq(getExpectedConsulKey(TEST_SCHEMA_ID))))
-                    .thenReturn(Mono.just(false));
+                    .thenReturn(Mono.empty());
             StepVerifier.create(delegate.deleteSchema(TEST_SCHEMA_ID))
-                    .expectError(RuntimeException.class)
+                    .expectError(SchemaNotFoundException.class)
                     .verify();
         }
 
         @Test
-        void deleteSchema_consulDeleteErrors_throwsRuntimeException() {
+        void deleteSchema_consulDeleteReturnsFalse_throwsSchemaDeleteException() { // Renamed for clarity
             when(mockConsulKvService.getValue(eq(getExpectedConsulKey(TEST_SCHEMA_ID))))
                     .thenReturn(Mono.just(Optional.of(VALID_SCHEMA_CONTENT_MINIMAL)));
             when(mockConsulKvService.deleteKey(eq(getExpectedConsulKey(TEST_SCHEMA_ID))))
-                    .thenReturn(Mono.error(new RuntimeException("Consul delete error")));
+                    .thenReturn(Mono.just(false)); // Mock deleteKey to return false
+
             StepVerifier.create(delegate.deleteSchema(TEST_SCHEMA_ID))
                     .expectErrorSatisfies(throwable -> {
-                        assertThat(throwable).isInstanceOf(RuntimeException.class);
-                        assertThat(throwable.getMessage()).contains("Error deleting schema");
-                        assertThat(throwable.getCause().getMessage()).contains("Consul delete error");
+                        assertThat(throwable).isInstanceOf(SchemaDeleteException.class);
+                        // Assert the message of the SchemaDeleteException
+                        assertThat(throwable.getMessage()).isEqualTo("Error deleting schema from Consul for ID: " + TEST_SCHEMA_ID);
+                        // Assert the message of the cause (the RuntimeException for unsuccessful delete)
+                        assertThat(throwable.getCause()).isInstanceOf(RuntimeException.class);
+                        assertThat(throwable.getCause().getMessage()).isEqualTo("Failed to delete schema from Consul (delete command unsuccessful) for ID: " + TEST_SCHEMA_ID);
+                    })
+                    .verify();
+        }
+
+        @Test
+        void deleteSchema_consulDeleteErrors_throwsSchemaDeleteException() { // Renamed for clarity
+            when(mockConsulKvService.getValue(eq(getExpectedConsulKey(TEST_SCHEMA_ID))))
+                    .thenReturn(Mono.just(Optional.of(VALID_SCHEMA_CONTENT_MINIMAL)));
+            // This is the original error we are mocking from the deleteKey operation
+            RuntimeException consulDeleteOperationException = new RuntimeException("Consul delete operation error");
+            when(mockConsulKvService.deleteKey(eq(getExpectedConsulKey(TEST_SCHEMA_ID))))
+                    .thenReturn(Mono.error(consulDeleteOperationException));
+
+            StepVerifier.create(delegate.deleteSchema(TEST_SCHEMA_ID))
+                    .expectErrorSatisfies(throwable -> {
+                        assertThat(throwable).isInstanceOf(SchemaDeleteException.class);
+                        // Assert the message of the SchemaDeleteException
+                        assertThat(throwable.getMessage()).isEqualTo("Error deleting schema from Consul for ID: " + TEST_SCHEMA_ID);
+                        // Assert that the cause is the original mocked exception
+                        assertThat(throwable.getCause()).isSameAs(consulDeleteOperationException);
                     })
                     .verify();
         }
@@ -287,15 +310,22 @@ class ConsulSchemaRegistryDelegateTest {
             List<String> keysFromConsul = List.of(
                     expectedFullSchemaPrefix + "id1",
                     expectedFullSchemaPrefix + "id2",
-                    expectedFullSchemaPrefix + "id3/sub"
+                    expectedFullSchemaPrefix + "id3/sub" // Keep this to test path stripping
             );
+            // Expected IDs after stripping prefix
             List<String> expectedIds = List.of("id1", "id2", "id3/sub");
+
             when(mockConsulKvService.getKeysWithPrefix(eq(expectedFullSchemaPrefix)))
                     .thenReturn(Mono.just(keysFromConsul));
+
             StepVerifier.create(delegate.listSchemaIds())
-                    .expectNextMatches(ids -> ids.containsAll(expectedIds) && expectedIds.containsAll(ids) && ids.size() == expectedIds.size())
+                    .expectNextMatches(ids -> {
+                        assertThat(ids).containsExactlyInAnyOrderElementsOf(expectedIds);
+                        return true;
+                    })
                     .verifyComplete();
         }
+
 
         @Test
         void listSchemaIds_success_empty() {
@@ -307,11 +337,12 @@ class ConsulSchemaRegistryDelegateTest {
         }
 
         @Test
-        void listSchemaIds_consulGetKeysFails_returnsEmptyList() {
+        void listSchemaIds_consulGetKeysFails_returnsEmptyListAndLogsError() {
+            // The delegate's onErrorResume should catch this and return an empty list
             when(mockConsulKvService.getKeysWithPrefix(eq(expectedFullSchemaPrefix)))
                     .thenReturn(Mono.error(new RuntimeException("Consul error")));
             StepVerifier.create(delegate.listSchemaIds())
-                    .expectNextMatches(List::isEmpty)
+                    .expectNextMatches(List::isEmpty) // Expecting empty list due to onErrorResume
                     .verifyComplete();
         }
     }
@@ -338,12 +369,16 @@ class ConsulSchemaRegistryDelegateTest {
         }
 
         @Test
-        void validateSchemaSyntax_structurallyInvalid_wrongTypeValue_EXPECT_EMPTY_asFactoryIsLenient() {
+        @DisplayName("Given structurally invalid schema (bad type value), expect specific validation errors")
+        void validateSchemaSyntax_structurallyInvalid_wrongTypeValue_returnsErrorMessages() {
             System.out.println("Testing with wrong type value: " + STRUCTURALLY_INVALID_TYPE_VALUE);
             StepVerifier.create(delegate.validateSchemaSyntax(STRUCTURALLY_INVALID_TYPE_VALUE))
                     .expectNextMatches(messages -> {
                         System.out.println("Actual messages (wrong type value): " + messages);
-                        assertThat(messages).as("Validation messages for wrong type value '{\"type\": 123}' should be EMPTY by default").isEmpty();
+                        assertThat(messages).as("Validation messages for wrong type value '{\"type\": 123}'").isNotEmpty();
+                        assertThat(messages).extracting(ValidationMessage::getMessage)
+                                .anySatisfy(message -> assertThat(message).contains("does not have a value in the enumeration"))
+                                .anySatisfy(message -> assertThat(message).contains("integer found, array expected"));
                         return true;
                     })
                     .verifyComplete();
@@ -355,36 +390,40 @@ class ConsulSchemaRegistryDelegateTest {
             StepVerifier.create(delegate.validateSchemaSyntax(STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_PATTERN))
                     .expectNextMatches(messages -> {
                         System.out.println("Actual messages (bad pattern): " + messages);
-                        if (messages.isEmpty()) return false; // Fails the predicate if empty
-                        ValidationMessage vm = messages.iterator().next(); // Get the single message
-                        boolean startsWithCorrectPrefix = vm.getMessage().startsWith("Invalid JSON Schema structure:");
-                        boolean containsSubMessage = vm.getMessage().contains("Unclosed character class");
-                        return messages.size() == 1 && startsWithCorrectPrefix && containsSubMessage;
-                    })
-                    .verifyComplete();
-        }
-
-        @Test
-        @DisplayName("Given schema with unresolvable local $ref, expect empty messages as factory.getSchema() is lenient")
-        void validateSchemaSyntax_structurallyInvalidSchema_badRef_returnsEmptyMessages() {
-            System.out.println("Testing with bad ref: " + STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_REF);
-            StepVerifier.create(delegate.validateSchemaSyntax(STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_REF))
-                    .expectNextMatches(messages -> {
-                        System.out.println("Actual messages (bad ref): " + messages);
-                        assertThat(messages).as("Validation messages for bad $ref should be empty by default").isEmpty();
+                        assertThat(messages).as("Validation messages for bad pattern").hasSize(1);
+                        ValidationMessage vm = messages.iterator().next();
+                        // The message from networknt for bad pattern is quite direct
+                        assertThat(vm.getMessage()).contains("pattern must be a valid ECMA-262 regular expression");
                         return true;
                     })
                     .verifyComplete();
         }
 
         @Test
-        @DisplayName("Given schema with an unknown keyword, expect empty messages as it's not a fatal parsing error")
+        @DisplayName("Given schema with unresolvable local $ref, expect empty messages as syntax check is lenient on this")
+        void validateSchemaSyntax_structurallyInvalidSchema_badRef_returnsEmptyMessages() {
+            // The networknt validator's meta-schema validation (syntax check) is typically lenient
+            // on unresolvable local $refs. It might only fail if $ref itself is malformed.
+            // Actual data validation against such a schema would likely fail later if strict $ref resolution is enabled.
+            System.out.println("Testing with bad ref: " + STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_REF);
+            StepVerifier.create(delegate.validateSchemaSyntax(STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_REF))
+                    .expectNextMatches(messages -> {
+                        System.out.println("Actual messages (bad ref): " + messages);
+                        assertThat(messages).as("Validation messages for unresolvable local $ref should be empty for syntax check").isEmpty();
+                        return true;
+                    })
+                    .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("Given schema with an unknown keyword, expect empty messages as syntax check is lenient on this")
         void validateSchemaSyntax_unknownKeyword_returnsEmptyMessages() {
+            // By default, unknown keywords are often ignored during meta-schema validation.
             System.out.println("Testing with unknown keyword: " + SCHEMA_WITH_UNKNOWN_KEYWORD);
             StepVerifier.create(delegate.validateSchemaSyntax(SCHEMA_WITH_UNKNOWN_KEYWORD))
                     .expectNextMatches(messages -> {
                         System.out.println("Messages for SCHEMA_WITH_UNKNOWN_KEYWORD: " + messages);
-                        assertThat(messages).as("Validation messages for unknown keyword should be empty by default").isEmpty();
+                        assertThat(messages).as("Validation messages for unknown keyword should be empty for syntax check").isEmpty();
                         return true;
                     })
                     .verifyComplete();
