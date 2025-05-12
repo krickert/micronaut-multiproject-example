@@ -22,11 +22,11 @@ import java.util.Collections; // For unmodifiable set
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record PipelineClusterConfig(
-    @JsonProperty("clusterName") String clusterName,
-    @JsonProperty("pipelineGraphConfig") PipelineGraphConfig pipelineGraphConfig,
-    @JsonProperty("pipelineModuleMap") PipelineModuleMap pipelineModuleMap,
-    @JsonProperty("allowedKafkaTopics") Set<String> allowedKafkaTopics,
-    @JsonProperty("allowedGrpcServices") Set<String> allowedGrpcServices
+        @JsonProperty("clusterName") String clusterName,
+        @JsonProperty("pipelineGraphConfig") PipelineGraphConfig pipelineGraphConfig,
+        @JsonProperty("pipelineModuleMap") PipelineModuleMap pipelineModuleMap,
+        @JsonProperty("allowedKafkaTopics") Set<String> allowedKafkaTopics,
+        @JsonProperty("allowedGrpcServices") Set<String> allowedGrpcServices
 ) {
     // Canonical constructor with validation and making collections unmodifiable
     public PipelineClusterConfig {
@@ -35,15 +35,33 @@ public record PipelineClusterConfig(
         }
         // pipelineGraphConfig and pipelineModuleMap can be null
 
-        allowedKafkaTopics = (allowedKafkaTopics == null) ? Collections.emptySet() : Set.copyOf(allowedKafkaTopics);
-        allowedGrpcServices = (allowedGrpcServices == null) ? Collections.emptySet() : Set.copyOf(allowedGrpcServices);
+        // Validate and make allowedKafkaTopics unmodifiable
+        if (allowedKafkaTopics == null) {
+            allowedKafkaTopics = Collections.emptySet();
+        } else {
+            // First, validate elements in the provided set
+            for (String topic : allowedKafkaTopics) {
+                if (topic == null || topic.isBlank()) {
+                    throw new IllegalArgumentException("allowedKafkaTopics cannot contain null or blank topics.");
+                }
+            }
+            // If validation passes, then create an immutable copy
+            allowedKafkaTopics = Set.copyOf(allowedKafkaTopics);
+        }
 
-        allowedKafkaTopics.forEach(topic -> {
-            if (topic == null || topic.isBlank()) throw new IllegalArgumentException("allowedKafkaTopics cannot contain null or blank topics.");
-        });
-        allowedGrpcServices.forEach(service -> {
-            if (service == null || service.isBlank()) throw new IllegalArgumentException("allowedGrpcServices cannot contain null or blank service identifiers.");
-        });
+        // Validate and make allowedGrpcServices unmodifiable
+        if (allowedGrpcServices == null) {
+            allowedGrpcServices = Collections.emptySet();
+        } else {
+            // First, validate elements in the provided set
+            for (String service : allowedGrpcServices) {
+                if (service == null || service.isBlank()) {
+                    throw new IllegalArgumentException("allowedGrpcServices cannot contain null or blank service identifiers.");
+                }
+            }
+            // If validation passes, then create an immutable copy
+            allowedGrpcServices = Set.copyOf(allowedGrpcServices);
+        }
     }
 
     /**
@@ -51,6 +69,6 @@ public record PipelineClusterConfig(
      * @param clusterName The name of the cluster.
      */
     public PipelineClusterConfig(String clusterName) {
-        this(clusterName, new PipelineGraphConfig(Collections.emptyMap()), new PipelineModuleMap(Collections.emptyMap()), Collections.emptySet(), Collections.emptySet());
+        this(clusterName, null, null, Collections.emptySet(), Collections.emptySet());
     }
 }
