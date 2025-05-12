@@ -867,4 +867,59 @@ class DynamicConfigurationManagerImplMicronautTest {
 
         // No need to call localDcmForTest.shutdown() as initialize failed before watch setup
     }
+
+    @Test
+    @DisplayName("Integration: initialize() - when consulConfigFetcher.watchClusterConfig() fails, throws ConfigurationManagerInitializationException")
+    @Timeout(value = 15, unit = TimeUnit.SECONDS) // Shorter timeout
+    void integration_initialize_whenWatchClusterConfigFails_throwsInitializationException() throws Exception {
+        // Spy on the realConsulConfigFetcher bean
+        KiwiprojectConsulConfigFetcher spiedFetcher = spy(this.realConsulConfigFetcher);
+
+        // IMPORTANT: Construct a NEW DynamicConfigurationManager for THIS TEST that uses the spy
+        DynamicConfigurationManagerImpl localDcmForTest = new DynamicConfigurationManagerImpl(
+                TEST_EXECUTION_CLUSTER,
+                spiedFetcher, // Use the spied fetcher
+                mockValidator,
+                testCachedConfigHolder,
+                eventPublisher
+        );
+
+        // Simulate initial fetch succeeding or returning empty (doesn't matter for this test's core)
+        // We need connect() to succeed and fetchPipelineClusterConfig to not throw an earlier exception.
+        doNothing().when(spiedFetcher).connect(); // Ensure connect doesn't throw
+
+        // Use doReturn for stubbing methods on spies to avoid calling the real method during stubbing
+        doReturn(Optional.empty())
+                .when(spiedFetcher).fetchPipelineClusterConfig(eq(TEST_EXECUTION_CLUSTER));
+
+        // Configure the spied watchClusterConfig() method to throw an exception
+        RuntimeException simulatedWatchSetupException = new RuntimeException("Simulated KCCF.watchClusterConfig() failure!");
+        doThrow(simulatedWatchSetupException)
+                .when(spiedFetcher).watchClusterConfig(eq(TEST_EXECUTION_CLUSTER), any());
+
+        // --- Act & Assert ---
+        LOG.info("integration_initialize_watchFails: Attempting to initialize DCM where watchClusterConfig() will fail...");
+        ConfigurationManagerInitializationException thrown = assertThrows(
+                ConfigurationManagerInitializationException.class,
+                () -> localDcmForTest.initialize(TEST_EXECUTION_CLUSTER),
+                "initialize() should throw ConfigurationManagerInitializationException when watchClusterConfig() fails"
+        );
+
+        LOG.info("integration_initialize_watchFails: Correctly caught ConfigurationManagerInitializationException: {}", thrown.getMessage());
+        assertNotNull(thrown.getCause(), "The original exception should be the cause");
+        assertSame(simulatedWatchSetupException, thrown.getCause(), "Cause should be the simulated watch setup exception");
+        assertEquals("Failed to initialize Consul connection or watch for cluster " + TEST_EXECUTION_CLUSTER, thrown.getMessage());
+
+        // --- Verify Interactions ---
+        verify(spiedFetcher).connect(); // connect() should have been called
+        verify(spiedFetcher).fetchPipelineClusterConfig(eq(TEST_EXECUTION_CLUSTER)); // initial fetch attempt
+        verify(spiedFetcher).watchClusterConfig(eq(TEST_EXECUTION_CLUSTER), any()); // watch setup attempt
+
+        // Verify cache and event listener were not affected by a successful load
+        assertFalse(testCachedConfigHolder.getCurrentConfig().isPresent(), "Cache should be empty if watch setup failed during init");
+        assertNull(testApplicationEventListener.pollEvent(1, TimeUnit.SECONDS), "No event should be published if watch setup failed");
+        LOG.info("integration_initialize_watchFails: Verifications complete.");
+
+        // No need to call localDcmForTest.shutdown() as initialize failed before watch was fully active
+    }
 }
