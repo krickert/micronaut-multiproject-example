@@ -1,6 +1,8 @@
-# YAPPY (Yet Another Pipeline Processor <sub>yawn</sub>)
+# Yet Another Pipeline Processor: YAPPY
 
 ## Overview
+
+NOTE: This needs to be updated.  But the core concepts remain the same
 
 YAPPY is a decentralized, self-discoverable pipeline platform designed for flexible text mining and search indexing workflows. Built using the Micronaut framework, it leverages Kafka for asynchronous message passing, gRPC for synchronous inter-service communication (enabling potential polyglot services), and HashiCorp Consul for dynamic configuration management and service discovery.
 

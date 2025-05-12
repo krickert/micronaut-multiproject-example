@@ -1,5 +1,7 @@
 # Consul Config Service API Priority
 
+NOTE: this was written and the models are out of date slightly.   But the calls are still slated for development.
+
 This document outlines the prioritized order of API endpoints for implementation in the `consul-config-service`, along with detailed specifications for each endpoint.
 
 ## Prioritized Endpoint Implementation Order:

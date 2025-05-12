@@ -6,29 +6,6 @@ This document outlines the suggested priorities for implementing the core compon
 
 Here are the recommended next 5 steps, ordered to build the system logically:
 
-1.  **Consul Configuration Service Implementation:**
-    * **Goal:** Enable the `PipeStreamEngine` to read and understand pipeline definitions stored in Consul.
-    * **Why First:** This is the absolute foundation. Without knowing *what* pipeline to run and *what steps* it contains, the engine cannot operate.
-    * **Tasks:**
-        * Implement a service/bean within the `PipeStreamEngine` application (e.g., `ConsulConfigurationService`).
-        * Use the Consul client library to connect to Consul KV store.
-        * Define Java DTOs (Data Transfer Objects) that map clearly to the structure of your pipeline configurations stored in Consul (e.g., `PipelineConfig`, `PipelineStepConfig` containing step name, parameters, target service name).
-        * Implement logic to fetch configuration data by `pipeline_name`.
-        * Deserialize the raw configuration data (e.g., JSON, YAML stored in Consul) into your Java DTOs.
-        * Implement caching (e.g., using Micronaut Cache annotations) with appropriate TTLs and invalidation mechanisms to avoid hitting Consul excessively.
-
-2.  **Kafka Config Sync Listener & Reload Logic:**
-    * **Goal:** Ensure all running `PipeStreamEngine` instances automatically update their configuration cache when changes are made in Consul (and signalled via Kafka).
-    * **Why Second:** Builds directly on Step 1. Ensures the configuration data remains consistent across a potentially distributed engine deployment. Tackling this early validates the config loading and update mechanism.
-    * **Tasks:**
-        * Define the Kafka topic name(s) for configuration change events (e.g., `pipeline-config-updates`).
-        * Implement a Kafka Listener bean (`@KafkaListener`) within the `PipeStreamEngine` application.
-        * Define the message format for the update topic (could use the `ReloadService` Protobuf messages you defined, or simpler JSON/String messages just containing the `pipeline_name` or `service_name` that changed).
-        * In the listener's handler method:
-            * Parse the incoming message to identify what changed (e.g., which `pipeline_name`).
-            * Call a method on the `ConsulConfigurationService` (from Step 1) to invalidate the specific cached entry (e.g., `invalidatePipelineConfig(pipelineName)`). The next time that config is requested, the service will reload it from Consul.
-        * Ensure appropriate Kafka consumer configuration (group ID, deserializers).
-
 3.  **`PipeStreamEngine` Core Orchestration Logic (`process` method):**
     * **Goal:** Implement the main loop within the engine that drives the execution of a pipeline based on the loaded configuration.
     * **Why Third:** With configuration loading and updating handled, you can now build the core state machine that executes a pipeline.

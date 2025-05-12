@@ -2,6 +2,8 @@
 
 This directory contains TestResourceProvider implementations for various containers used in tests.
 
+NOTE: we will refactor this to be 4 separate test resources.  This will take away all the configuration needs.
+
 ## Enabling/Disabling TestContainers
 
 You can enable or disable TestContainers globally or individually using configuration properties in your `application-test.yml` file.
