@@ -119,6 +119,7 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         );
     }
 
+    @SuppressWarnings("SameParameterValue")
     private SchemaVersionData createDummySchemaData(String subject, int version, String content) {
         Instant createdAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
         return new SchemaVersionData(
@@ -231,6 +232,7 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
         WatchCallbackResult receivedInitialResult = updates.poll(appWatchSeconds + 10, TimeUnit.SECONDS);
         assertNotNull(receivedInitialResult, "Handler should have received initial config from watch after PUT");
+        assertTrue(receivedInitialResult.config().isPresent(), "Handler should have received a config after watch started");
         assertEquals(initialConfig, receivedInitialResult.config().get());
         assertFalse(receivedInitialResult.deleted(), "Initial result should not be marked deleted");
         assertFalse(receivedInitialResult.hasError(), "Initial result should not have error");
@@ -254,7 +256,7 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         WatchCallbackResult receivedMalformedResult = updates.poll(appWatchSeconds + 10, TimeUnit.SECONDS);
         assertNotNull(receivedMalformedResult, "Handler should have received a result after malformed JSON update.");
         assertTrue(receivedMalformedResult.hasError(), "Result after malformed JSON should indicate an error.");
-        assertTrue(receivedMalformedResult.error().get() instanceof JsonProcessingException, "Error should be JsonProcessingException.");
+        assertInstanceOf(JsonProcessingException.class, receivedMalformedResult.error().get(), "Error should be JsonProcessingException.");
         LOG.info("Watch Test: Malformed JSON update resulted in error callback: {}", receivedMalformedResult);
 
         // 5. Delete the config
