@@ -1,8 +1,8 @@
-# RagSearch: a pipeline indexer made for vector search
+# YAPPY: Yet Another Pipeline Processor: YAPPY
 
 ## Abstract
 This is a full featured application that implements a dynamic pipeline for creating multiple indexes through a scabale container-based 
-microservice architecture.
+microservice architecture where the servi
 
 The goal is to have a low cost, free, enterprise-grade secure document index.
 
@@ -15,16 +15,6 @@ Here's an example chart of the pipeline:
 
 
 
-
-## What it is not
-
-The functionality is similar to a lot of other pipeline approaches, but the pipelines forward in
-
-### Apache NiFi
-
-* Apache Hop
-* Apache Fink
-* 
 
 ## Mission
 
