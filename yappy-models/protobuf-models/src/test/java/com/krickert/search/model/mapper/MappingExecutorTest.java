@@ -20,13 +20,9 @@ import static org.mockito.Mockito.*;
 
 class MappingExecutorTest {
 
-    @Mock
     private RuleParser mockRuleParser;
-    @Mock
     private PathResolver mockPathResolver; // Needed for deletion path resolution
-    @Mock
     private ValueHandler mockValueHandler;
-
     private MappingExecutor mappingExecutor;
 
     private PipeDoc sourceMessage;
@@ -75,24 +71,24 @@ class MappingExecutorTest {
 
      @Test
     void applyRulesToBuilder_MapPut() throws MappingException {
-        String ruleStr = "embeddings[\"new\"] = embeddings[\"old\"]";
+        String ruleStr = "named_embeddings[\"new\"] = named_embeddings[\"old\"]";
         List<String> ruleStrings = Collections.singletonList(ruleStr);
 
-        MappingRule rule = MappingRule.createMapPutRule("embeddings", "new", "embeddings[\"old\"]", ruleStr);
+        MappingRule rule = MappingRule.createMapPutRule("named_embeddings", "new", "named_embeddings[\"old\"]", ruleStr);
         List<MappingRule> parsedRules = Collections.singletonList(rule);
 
         Object mockEmbedding =
-                PipeDoc.newBuilder().putEmbeddings("mock", Embedding.newBuilder().addEmbedding(1f).build()).getEmbeddingsMap().get("mock"); // Example value
+                PipeDoc.newBuilder().putNamedEmbeddings("mock", Embedding.newBuilder().addVector(1f).build()).getNamedEmbeddingsMap().get("mock"); // Example value
 
         when(mockRuleParser.parseRules(ruleStrings)).thenReturn(parsedRules);
-        when(mockValueHandler.getValue(same(sourceMessage), eq("embeddings[\"old\"]"), eq(ruleStr))).thenReturn(mockEmbedding);
+        when(mockValueHandler.getValue(same(sourceMessage), eq("named_embeddings[\"old\"]"), eq(ruleStr))).thenReturn(mockEmbedding);
 
         mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, ruleStrings);
 
         verify(mockRuleParser).parseRules(ruleStrings);
-        verify(mockValueHandler).getValue(same(sourceMessage), eq("embeddings[\"old\"]"), eq(ruleStr));
+        verify(mockValueHandler).getValue(same(sourceMessage), eq("named_embeddings[\"old\"]"), eq(ruleStr));
         // Verify setValue called with the full target spec and special operator
-        verify(mockValueHandler).setValue(same(targetBuilder), eq("embeddings[\"new\"]"), same(mockEmbedding), eq("[]="), eq(ruleStr));
+        verify(mockValueHandler).setValue(same(targetBuilder), eq("named_embeddings[\"new\"]"), same(mockEmbedding), eq("[]="), eq(ruleStr));
         verifyNoMoreInteractions(mockRuleParser, mockValueHandler);
         verifyNoInteractions(mockPathResolver);
     }

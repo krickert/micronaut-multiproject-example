@@ -38,7 +38,7 @@ public class ProtoMapperPipeDocTest {
 
     // Helper to create an Embedding
     private Embedding createEmbedding(List<Float> values) {
-        return Embedding.newBuilder().addAllEmbedding(values).build();
+        return Embedding.newBuilder().addAllVector(values).build();
     }
 
     // --- Existing Tests (Unchanged as requested) ---
@@ -69,13 +69,13 @@ public class ProtoMapperPipeDocTest {
         PipeDoc source = PipeDoc.newBuilder()
                 .setCreationDate(ts)
                 .build();
-        List<String> rules = Collections.singletonList("last_modified = creation_date");
+        List<String> rules = Collections.singletonList("last_modified_date = creation_date");
 
         Message result = mapper.map(source, pipeDocDesc, rules);
         PipeDoc target = PipeDoc.parseFrom(result.toByteArray());
 
-        assertTrue(target.hasLastModified());
-        assertEquals(ts, target.getLastModified());
+        assertTrue(target.hasLastModifiedDate());
+        assertEquals(ts, target.getLastModifiedDate());
         assertFalse(target.hasCreationDate()); // Source field shouldn't be copied unless specified
     }
 
