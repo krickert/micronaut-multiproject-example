@@ -1,4 +1,4 @@
-# YAPPY: Yet Another Pipeline Processor: YAPPY
+# YAPPY: Another Pipeline Processor: YAPPY
 
 ## Abstract
 This is a full featured application that implements a dynamic pipeline for creating multiple indexes through a scabale container-based 
