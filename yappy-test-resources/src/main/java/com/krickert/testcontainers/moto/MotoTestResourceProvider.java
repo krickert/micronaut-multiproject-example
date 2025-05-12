@@ -1,17 +1,19 @@
 package com.krickert.testcontainers.moto;
+
 import io.micronaut.testresources.testcontainers.AbstractTestContainersProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.GenericContainer;
+// No longer need GenericContainer directly here, as MotoContainer extends it.
 import org.testcontainers.utility.DockerImageName;
 
 import java.util.*;
 
 /**
- * A test resource provider which will spawn a Moto server test container.
- * It provides properties for AWS Glue Schema Registry emulation.
+ * A test resource provider which will spawn a Moto server test container
+ * using the MotoContainer class.
+ * It provides properties for AWS service emulation, particularly for Glue Schema Registry.
  */
-public class MotoTestResourceProvider extends AbstractTestContainersProvider<GenericContainer<?>> {
+public class MotoTestResourceProvider extends AbstractTestContainersProvider<MotoContainer> { // Changed to MotoContainer
     private static final Logger LOG = LoggerFactory.getLogger(MotoTestResourceProvider.class);
 
     // TestContainers Properties
@@ -19,31 +21,31 @@ public class MotoTestResourceProvider extends AbstractTestContainersProvider<Gen
     public static final String PROPERTY_TESTCONTAINERS_ENABLED = TESTCONTAINERS_PREFIX + ".enabled";
     public static final String PROPERTY_TESTCONTAINERS_MOTO_ENABLED = TESTCONTAINERS_PREFIX + ".moto";
 
-    // Moto Properties
-    public static final String GLUE_PREFIX = "glue";
-    public static final String PROPERTY_MOTO_REGISTRY_URL = GLUE_PREFIX + ".registry.url";
-    public static final String PROPERTY_MOTO_REGISTRY_NAME = GLUE_PREFIX + ".registry.name";
+    // Moto Properties (often used as AWS service endpoint)
+    public static final String GLUE_PREFIX = "glue"; // Example prefix, could be generic AWS
+    public static final String PROPERTY_MOTO_REGISTRY_URL = GLUE_PREFIX + ".registry.url"; // Example specific property
+    public static final String PROPERTY_MOTO_REGISTRY_NAME = GLUE_PREFIX + ".registry.name"; // Example specific property
 
-    // AWS Properties
+    // AWS Generic Properties
     public static final String PROPERTY_AWS_ACCESS_KEY = "aws.access-key-id";
     public static final String PROPERTY_AWS_SECRET_KEY = "aws.secret-access-key";
     public static final String PROPERTY_AWS_SESSION_TOKEN = "aws.session-token";
     public static final String PROPERTY_AWS_REGION = "aws.region";
-    public static final String PROPERTY_AWS_ENDPOINT = "aws.endpoint";
+    public static final String PROPERTY_AWS_ENDPOINT = "aws.endpoint"; // Generic AWS endpoint
 
-    // AWS SDK Properties
+    // AWS SDK Specific Properties (often used by AWS SDK v2)
     public static final String PROPERTY_AWS_SDK_REGION = "software.amazon.awssdk.regions.region";
-    public static final String PROPERTY_AWS_SDK_ENDPOINT_URL = "software.amazon.awssdk.endpoints.endpoint-url";
-    public static final String PROPERTY_AWS_SDK_GLUE_ENDPOINT = "software.amazon.awssdk.glue.endpoint";
-    public static final String PROPERTY_AWS_SDK_GLUE_ENDPOINT_URL = "software.amazon.awssdk.glue.endpoint-url";
+    public static final String PROPERTY_AWS_SDK_ENDPOINT_URL = "software.amazon.awssdk.endpoints.endpoint-url"; // Generic SDK endpoint override
+    public static final String PROPERTY_AWS_SDK_GLUE_ENDPOINT = "software.amazon.awssdk.glue.endpoint"; // SDK Glue specific endpoint (less common, usually endpoint-url is used)
+    public static final String PROPERTY_AWS_SDK_GLUE_ENDPOINT_URL = "software.amazon.awssdk.glue.endpoint-url"; // SDK Glue specific endpoint override
 
-    // AWS Glue Properties
-    public static final String PROPERTY_AWS_GLUE_ENDPOINT = "aws.glue.endpoint";
-    public static final String PROPERTY_AWS_SERVICE_ENDPOINT = "aws.service-endpoint";
-    public static final String PROPERTY_AWS_ENDPOINT_URL = "aws.endpoint-url";
+    // Other AWS related properties that might point to Moto
+    public static final String PROPERTY_AWS_GLUE_ENDPOINT = "aws.glue.endpoint"; // Another form for Glue endpoint
+    public static final String PROPERTY_AWS_SERVICE_ENDPOINT = "aws.service-endpoint"; // Generic service endpoint
+    public static final String PROPERTY_AWS_ENDPOINT_URL = "aws.endpoint-url"; // Yet another generic endpoint URL form
     public static final String PROPERTY_AWS_ENDPOINT_DISCOVERY_ENABLED = "aws.endpoint-discover-enabled";
 
-    // Kafka Producer AWS Properties
+    // Kafka Producer AWS Properties (for AWS Glue Schema Registry via Kafka Connect or clients)
     public static final String KAFKA_PREFIX = "kafka";
     public static final String PRODUCER_PREFIX = KAFKA_PREFIX + ".producers.default";
     public static final String CONSUMER_PREFIX = KAFKA_PREFIX + ".consumers.default";
@@ -65,7 +67,6 @@ public class MotoTestResourceProvider extends AbstractTestContainersProvider<Gen
     public static final String PROPERTY_CONSUMER_COMPATIBILITY = CONSUMER_PREFIX + ".compatibility";
     public static final String PROPERTY_CONSUMER_AUTO_REGISTRATION = CONSUMER_PREFIX + ".auto.registration";
 
-    // Combined list of properties this provider can resolve
     public static final List<String> RESOLVABLE_PROPERTIES_LIST = Collections.unmodifiableList(Arrays.asList(
             PROPERTY_MOTO_REGISTRY_URL,
             PROPERTY_MOTO_REGISTRY_NAME,
@@ -98,15 +99,15 @@ public class MotoTestResourceProvider extends AbstractTestContainersProvider<Gen
             PROPERTY_CONSUMER_AUTO_REGISTRATION
     ));
 
+    // These can be sourced from MotoContainer.DEFAULT_IMAGE_NAME.asCanonicalNameString()
+    // and MotoContainer.MOTO_HTTP_PORT if preferred, to centralize defaults.
     public static final String DEFAULT_IMAGE = "motoserver/moto:latest";
-    public static final int MOTO_PORT = 5000;
     public static final String SIMPLE_NAME = "moto-server";
     public static final String DISPLAY_NAME = "Moto Server";
-    public static final String DEFAULT_REGISTRY_NAME = "default";
+    public static final String DEFAULT_REGISTRY_NAME = "default"; // For Glue Schema Registry name
 
     @Override
     public List<String> getResolvableProperties(Map<String, Collection<String>> propertyEntries, Map<String, Object> testResourcesConfig) {
-        // Return all properties we can resolve
         return RESOLVABLE_PROPERTIES_LIST;
     }
 
@@ -122,106 +123,101 @@ public class MotoTestResourceProvider extends AbstractTestContainersProvider<Gen
 
     @Override
     protected String getDefaultImageName() {
+        // return MotoContainer.DEFAULT_IMAGE_NAME.asCanonicalNameString(); // Alternative
         return DEFAULT_IMAGE;
     }
 
     @Override
-    protected GenericContainer<?> createContainer(DockerImageName imageName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
-        // Create a new Moto server container with the specified image
-        return new GenericContainer<>(imageName)
-                .withExposedPorts(MOTO_PORT)
-                .withAccessToHost(true)
-                .withCommand("-H0.0.0.0")
-                .withEnv(Map.of(
-                        "MOTO_SERVICE", "glue",
-                        "TEST_SERVER_MODE", "true"
-                ))
-                .withStartupTimeout(java.time.Duration.ofSeconds(30))
-                .withReuse(false);
+    protected MotoContainer createContainer(DockerImageName imageName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
+        LOG.info("Creating Moto container with image: {}", imageName);
+        // Instantiate MotoContainer directly.
+        // The MotoContainer constructor handles its specific setup (exposed ports, env, command, wait strategy).
+        // The withStartupTimeout from the previous GenericContainer setup is now part of MotoContainer's WaitStrategy.
+        // withReuse(false) is generally handled by the test resources framework.
+        return new MotoContainer(imageName);
     }
 
     @Override
-    protected Optional<String> resolveProperty(String propertyName, GenericContainer<?> container) {
-        // Get the Moto endpoint URL
-        String endpoint = String.format("http://%s:%d",
-                container.getHost(),
-                container.getMappedPort(MOTO_PORT));
+    protected Optional<String> resolveProperty(String propertyName, MotoContainer container) { // Changed to MotoContainer
+        LOG.debug("Resolving property '{}' for Moto container: {}", propertyName, container.getContainerName());
 
-        // Resolve Moto registry URL property
+        // Use the helper method from MotoContainer
+        String endpoint = container.getEndpointUrl();
+        Optional<String> resolvedValue = Optional.empty();
+
+        // Resolve Moto/AWS endpoint URL properties
         if (PROPERTY_MOTO_REGISTRY_URL.equals(propertyName) ||
             PROPERTY_AWS_ENDPOINT.equals(propertyName) ||
             PROPERTY_AWS_SDK_ENDPOINT_URL.equals(propertyName) ||
-            PROPERTY_AWS_SDK_GLUE_ENDPOINT.equals(propertyName) ||
+            PROPERTY_AWS_SDK_GLUE_ENDPOINT.equals(propertyName) || // Less common, usually endpoint-url is used
             PROPERTY_AWS_SDK_GLUE_ENDPOINT_URL.equals(propertyName) ||
             PROPERTY_AWS_GLUE_ENDPOINT.equals(propertyName) ||
             PROPERTY_AWS_SERVICE_ENDPOINT.equals(propertyName) ||
             PROPERTY_AWS_ENDPOINT_URL.equals(propertyName) ||
             PROPERTY_PRODUCER_AWS_ENDPOINT.equals(propertyName) ||
             PROPERTY_CONSUMER_AWS_ENDPOINT.equals(propertyName)) {
-            return Optional.of(endpoint);
+            resolvedValue = Optional.of(endpoint);
         }
-
-        // Resolve registry name
-        if (PROPERTY_MOTO_REGISTRY_NAME.equals(propertyName) ||
+        // Resolve registry name (for AWS Glue Schema Registry)
+        else if (PROPERTY_MOTO_REGISTRY_NAME.equals(propertyName) ||
             PROPERTY_PRODUCER_REGISTRY_NAME.equals(propertyName) ||
             PROPERTY_CONSUMER_REGISTRY_NAME.equals(propertyName)) {
-            return Optional.of(DEFAULT_REGISTRY_NAME);
+            resolvedValue = Optional.of(DEFAULT_REGISTRY_NAME);
         }
-
-        // Resolve AWS credentials
-        if (PROPERTY_AWS_ACCESS_KEY.equals(propertyName)) {
-            return Optional.of("test");
+        // Resolve AWS credentials (Moto uses dummy credentials by default)
+        else if (PROPERTY_AWS_ACCESS_KEY.equals(propertyName)) {
+            resolvedValue = Optional.of("test"); // Standard Moto dummy access key
         }
-        if (PROPERTY_AWS_SECRET_KEY.equals(propertyName)) {
-            return Optional.of("test");
+        else if (PROPERTY_AWS_SECRET_KEY.equals(propertyName)) {
+            resolvedValue = Optional.of("test"); // Standard Moto dummy secret key
         }
-        if (PROPERTY_AWS_SESSION_TOKEN.equals(propertyName)) {
-            return Optional.of("test-session");
+        else if (PROPERTY_AWS_SESSION_TOKEN.equals(propertyName)) {
+            resolvedValue = Optional.of("test-session"); // Standard Moto dummy session token
         }
-
         // Resolve AWS region
-        if (PROPERTY_AWS_REGION.equals(propertyName) ||
+        else if (PROPERTY_AWS_REGION.equals(propertyName) ||
             PROPERTY_AWS_SDK_REGION.equals(propertyName) ||
             PROPERTY_PRODUCER_AWS_REGION.equals(propertyName) ||
             PROPERTY_CONSUMER_AWS_REGION.equals(propertyName)) {
-            return Optional.of("us-east-1");
+            resolvedValue = Optional.of("us-east-1"); // Common default/dummy region
         }
-
-        // Resolve endpoint discovery
-        if (PROPERTY_AWS_ENDPOINT_DISCOVERY_ENABLED.equals(propertyName)) {
-            return Optional.of("false");
+        // Resolve endpoint discovery (should be disabled for local endpoints like Moto)
+        else if (PROPERTY_AWS_ENDPOINT_DISCOVERY_ENABLED.equals(propertyName)) {
+            resolvedValue = Optional.of("false");
         }
-
-        // Resolve data format
-        if (PROPERTY_PRODUCER_DATA_FORMAT.equals(propertyName) ||
+        // Resolve Kafka SerDe data format (if using Glue Schema Registry with Kafka)
+        else if (PROPERTY_PRODUCER_DATA_FORMAT.equals(propertyName) ||
             PROPERTY_CONSUMER_DATA_FORMAT.equals(propertyName)) {
-            return Optional.of("PROTOBUF");
+            resolvedValue = Optional.of("PROTOBUF"); // Example default, adjust as needed
         }
-
-        // Resolve protobuf message type
-        if (PROPERTY_PRODUCER_PROTOBUF_MESSAGE_TYPE.equals(propertyName) ||
+        // Resolve Kafka SerDe Protobuf message type
+        else if (PROPERTY_PRODUCER_PROTOBUF_MESSAGE_TYPE.equals(propertyName) ||
             PROPERTY_CONSUMER_PROTOBUF_MESSAGE_TYPE.equals(propertyName)) {
-            return Optional.of("POJO");
+            resolvedValue = Optional.of("POJO"); // Example default
         }
-
-        // Resolve compatibility
-        if (PROPERTY_PRODUCER_COMPATIBILITY.equals(propertyName) ||
+        // Resolve Kafka SerDe compatibility
+        else if (PROPERTY_PRODUCER_COMPATIBILITY.equals(propertyName) ||
             PROPERTY_CONSUMER_COMPATIBILITY.equals(propertyName)) {
-            return Optional.of("FULL");
+            resolvedValue = Optional.of("FULL"); // Example default
         }
-
-        // Resolve auto registration
-        if (PROPERTY_PRODUCER_AUTO_REGISTRATION.equals(propertyName) ||
+        // Resolve Kafka SerDe auto registration
+        else if (PROPERTY_PRODUCER_AUTO_REGISTRATION.equals(propertyName) ||
             PROPERTY_CONSUMER_AUTO_REGISTRATION.equals(propertyName)) {
-            return Optional.of("true");
+            resolvedValue = Optional.of("true"); // Example default
         }
 
-        return Optional.empty(); // Property not handled by this provider
+        if (resolvedValue.isPresent()) {
+            LOG.info("MotoTestResourceProvider resolved property '{}' to '{}'", propertyName, resolvedValue.get());
+        }
+        return resolvedValue;
     }
 
     @Override
     protected boolean shouldAnswer(String propertyName, Map<String, Object> properties, Map<String, Object> testResourcesConfig) {
-        // Answer if the property is one we can resolve
-        return propertyName != null && RESOLVABLE_PROPERTIES_LIST.contains(propertyName);
+        boolean canAnswer = propertyName != null && RESOLVABLE_PROPERTIES_LIST.contains(propertyName);
+        if (canAnswer) {
+            LOG.debug("MotoTestResourceProvider will attempt to answer for property: {}", propertyName);
+        }
+        return canAnswer;
     }
 }

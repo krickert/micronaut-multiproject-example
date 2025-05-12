@@ -1,21 +1,22 @@
 package com.krickert.testcontainers.apicurio;
 
-import io.apicurio.registry.serde.config.SerdeConfig; // Import SerdeConfig
+import io.apicurio.registry.serde.config.SerdeConfig;
 import io.micronaut.testresources.testcontainers.AbstractTestContainersProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.GenericContainer;
+// No longer need GenericContainer directly here, as ApicurioContainer extends it.
 import org.testcontainers.utility.DockerImageName;
 
 import java.util.*;
 
 /**
- * A test resource provider which will spawn an Apicurio Registry test container.
+ * A test resource provider which will spawn an Apicurio Registry test container
+ * using the ApicurioContainer class.
  * It provides properties for the Apicurio Registry URL, related Kafka SerDe configuration
  * (using constants from SerdeConfig where applicable), and sets default Kafka key/value
  * serializers/deserializers for Apicurio Protobuf usage.
  */
-public class ApicurioTestResourceProvider extends AbstractTestContainersProvider<GenericContainer<?>> {
+public class ApicurioTestResourceProvider extends AbstractTestContainersProvider<ApicurioContainer> { // Changed to ApicurioContainer
     private static final Logger LOG = LoggerFactory.getLogger(ApicurioTestResourceProvider.class);
 
     // TestContainers Properties
@@ -24,7 +25,6 @@ public class ApicurioTestResourceProvider extends AbstractTestContainersProvider
     public static final String PROPERTY_TESTCONTAINERS_APICURIO_ENABLED = TESTCONTAINERS_PREFIX + ".apicurio";
 
     // Apicurio Properties (direct, not Kafka-prefixed)
-    // public static final String APICURIO_PREFIX = "apicurio"; // Defined in SerdeConfig
     public static final String PROPERTY_APICURIO_REGISTRY_URL = SerdeConfig.REGISTRY_URL; // e.g., apicurio.registry.url
 
     // Kafka Common Prefixes
@@ -47,38 +47,30 @@ public class ApicurioTestResourceProvider extends AbstractTestContainersProvider
     public static final String APICURIO_PROTOBUF_VALUE_DESERIALIZER_CLASS = "io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer";
 
     // --- Kafka-prefixed Apicurio SerDe properties using SerdeConfig constants ---
-    // Generic registry URL properties (can be resolved to Apicurio endpoint for broader compatibility)
     public static final String PROPERTY_PRODUCER_GENERIC_REGISTRY_URL = PRODUCER_PREFIX + "." + SerdeConfig.REGISTRY_URL;
-    public static final String PROPERTY_CONSUMER_GENERIC_REGISTRY_URL = CONSUMER_PREFIX + "." + SerdeConfig.REGISTRY_URL;  // For users
-    // who might use a generic property
+    public static final String PROPERTY_CONSUMER_GENERIC_REGISTRY_URL = CONSUMER_PREFIX + "." + SerdeConfig.REGISTRY_URL;
 
-    // Apicurio specific registry URL for Kafka clients, using SerdeConfig.REGISTRY_URL
     public static final String PROPERTY_PRODUCER_APICURIO_REGISTRY_URL = PRODUCER_PREFIX + "." + SerdeConfig.REGISTRY_URL;
     public static final String PROPERTY_CONSUMER_APICURIO_REGISTRY_URL = CONSUMER_PREFIX + "." + SerdeConfig.REGISTRY_URL;
 
-    // Apicurio Auto Register Artifact, using SerdeConfig.AUTO_REGISTER_ARTIFACT
     public static final String PROPERTY_PRODUCER_APICURIO_AUTO_REGISTER_ARTIFACT = PRODUCER_PREFIX + "." + SerdeConfig.AUTO_REGISTER_ARTIFACT;
 
-    // Apicurio Artifact Resolver Strategy, using SerdeConfig.ARTIFACT_RESOLVER_STRATEGY (inherited from SchemaResolverConfig)
     public static final String PROPERTY_PRODUCER_APICURIO_ARTIFACT_RESOLVER_STRATEGY = PRODUCER_PREFIX + "." + SerdeConfig.ARTIFACT_RESOLVER_STRATEGY;
     public static final String PROPERTY_CONSUMER_APICURIO_ARTIFACT_RESOLVER_STRATEGY = CONSUMER_PREFIX + "." + SerdeConfig.ARTIFACT_RESOLVER_STRATEGY;
-    public static final String DEFAULT_ARTIFACT_RESOLVER_STRATEGY = io.apicurio.registry.serde.strategy.TopicIdStrategy.class.getName(); // SerdeConfig.ARTIFACT_RESOLVER_STRATEGY_DEFAULT;
+    public static final String DEFAULT_ARTIFACT_RESOLVER_STRATEGY = io.apicurio.registry.serde.strategy.TopicIdStrategy.class.getName();
 
-    // Apicurio Explicit Artifact Group ID, using SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID
     public static final String PROPERTY_PRODUCER_APICURIO_EXPLICIT_ARTIFACT_GROUP_ID = PRODUCER_PREFIX + "." + SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID;
     public static final String PROPERTY_CONSUMER_APICURIO_EXPLICIT_ARTIFACT_GROUP_ID = CONSUMER_PREFIX + "." + SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID;
-    public static final String DEFAULT_EXPLICIT_ARTIFACT_GROUP_ID = "default"; // Or use SerdeConfig if it has a default constant for this
+    public static final String DEFAULT_EXPLICIT_ARTIFACT_GROUP_ID = "default";
 
-    // Apicurio Deserializer Specific Value Return Class, using SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS
     public static final String PROPERTY_CONSUMER_APICURIO_DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS = CONSUMER_PREFIX + "." + SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS;
-    public static final String DEFAULT_DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS = "com.krickert.search.model.PipeStream"; // As per your example
+    public static final String DEFAULT_DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS = "com.krickert.search.model.PipeStream";
 
-    // Original property for broader compatibility if ".auto.register.artifact" is used without "apicurio." prefixing the SerdeConfig constant part
     public static final String PROPERTY_PRODUCER_GENERIC_AUTO_REGISTER_ARTIFACT = PRODUCER_PREFIX + ".auto.register.artifact";
 
 
     public static final List<String> RESOLVABLE_PROPERTIES_LIST = Collections.unmodifiableList(Arrays.asList(
-            PROPERTY_APICURIO_REGISTRY_URL, // Direct apicurio.registry.url
+            PROPERTY_APICURIO_REGISTRY_URL,
             PROPERTY_PRODUCER_GENERIC_REGISTRY_URL,
             PROPERTY_CONSUMER_GENERIC_REGISTRY_URL,
             PROPERTY_PRODUCER_APICURIO_REGISTRY_URL,
@@ -90,15 +82,19 @@ public class ApicurioTestResourceProvider extends AbstractTestContainersProvider
             PROPERTY_PRODUCER_APICURIO_EXPLICIT_ARTIFACT_GROUP_ID,
             PROPERTY_CONSUMER_APICURIO_EXPLICIT_ARTIFACT_GROUP_ID,
             PROPERTY_CONSUMER_APICURIO_DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS,
-            // Standard Kafka key/value serializer/deserializer properties
             PROPERTY_PRODUCER_KEY_SERIALIZER_CLASS,
             PROPERTY_PRODUCER_VALUE_SERIALIZER_CLASS,
             PROPERTY_CONSUMER_KEY_DESERIALIZER_CLASS,
             PROPERTY_CONSUMER_VALUE_DESERIALIZER_CLASS
     ));
 
-    public static final String DEFAULT_IMAGE = "apicurio/apicurio-registry:latest";
-    public static final int APICURIO_PORT = 8080;
+    // DEFAULT_IMAGE and APICURIO_PORT are now defined in ApicurioContainer,
+    // but we can keep them here for the provider's getDefaultImageName() or if needed elsewhere.
+    // Alternatively, access them via ApicurioContainer.DEFAULT_IMAGE_NAME.asCanonicalNameString()
+    // and ApicurioContainer.APICURIO_HTTP_PORT if you prefer.
+    public static final String DEFAULT_IMAGE = "apicurio/apicurio-registry:latest"; // Or ApicurioContainer.DEFAULT_IMAGE_NAME.asCanonicalNameString()
+    public static final int APICURIO_PORT = 8080; // Or ApicurioContainer.APICURIO_HTTP_PORT
+
     public static final String SIMPLE_NAME = "apicurio-registry";
     public static final String DISPLAY_NAME = "Apicurio Registry";
 
@@ -120,60 +116,56 @@ public class ApicurioTestResourceProvider extends AbstractTestContainersProvider
 
     @Override
     protected String getDefaultImageName() {
+        // You can get this from ApicurioContainer if you prefer to centralize it
+        // return ApicurioContainer.DEFAULT_IMAGE_NAME.asCanonicalNameString();
         return DEFAULT_IMAGE;
     }
 
     @Override
-    protected GenericContainer<?> createContainer(DockerImageName imageName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
+    protected ApicurioContainer createContainer(DockerImageName imageName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
         LOG.info("Creating Apicurio container with image: {}", imageName);
-        return new GenericContainer<>(imageName)
-                .withExposedPorts(APICURIO_PORT)
-                .withEnv("QUARKUS_PROFILE", "prod")
-                .withStartupTimeout(java.time.Duration.ofSeconds(120));
+        // Now instantiates ApicurioContainer directly.
+        // The ApicurioContainer constructor already handles withExposedPorts, withEnv, and wait strategy.
+        // The withStartupTimeout was part of the GenericContainer in your previous provider;
+        // it's now part of the WaitStrategy within ApicurioContainer.
+        return new ApicurioContainer(imageName);
     }
 
     @Override
-    protected Optional<String> resolveProperty(String propertyName, GenericContainer<?> container) {
+    protected Optional<String> resolveProperty(String propertyName, ApicurioContainer container) { // Changed to ApicurioContainer
         LOG.info("Resolving property '{}' for Apicurio container: {}", propertyName, container.getContainerName());
-        String registryUrl = String.format("http://%s:%d/apis/registry/v3",
-                container.getHost(),
-                container.getMappedPort(APICURIO_PORT));
+
+        // Use the helper method from ApicurioContainer
+        String registryUrl = container.getRegistryApiV3Url();
 
         LOG.info("ApicurioRegistry URL: {}", registryUrl);
 
         Optional<String> resolvedValue = Optional.empty();
 
-        // Direct Apicurio Registry URL (not Kafka prefixed)
-        if (PROPERTY_APICURIO_REGISTRY_URL.equals(propertyName)) { // This is SerdeConfig.REGISTRY_URL
+        if (PROPERTY_APICURIO_REGISTRY_URL.equals(propertyName)) {
             resolvedValue = Optional.of(registryUrl);
         }
-        // Kafka-prefixed Apicurio Registry URLs
         else if (PROPERTY_PRODUCER_GENERIC_REGISTRY_URL.equals(propertyName) ||
                 PROPERTY_CONSUMER_GENERIC_REGISTRY_URL.equals(propertyName) ||
-                PROPERTY_PRODUCER_APICURIO_REGISTRY_URL.equals(propertyName) || // Uses SerdeConfig.REGISTRY_URL
-                PROPERTY_CONSUMER_APICURIO_REGISTRY_URL.equals(propertyName)) {  // Uses SerdeConfig.REGISTRY_URL
+                PROPERTY_PRODUCER_APICURIO_REGISTRY_URL.equals(propertyName) ||
+                PROPERTY_CONSUMER_APICURIO_REGISTRY_URL.equals(propertyName)) {
             resolvedValue = Optional.of(registryUrl);
         }
-        // Auto Register Artifact
         else if (PROPERTY_PRODUCER_GENERIC_AUTO_REGISTER_ARTIFACT.equals(propertyName) ||
-                PROPERTY_PRODUCER_APICURIO_AUTO_REGISTER_ARTIFACT.equals(propertyName)) { // Uses SerdeConfig.AUTO_REGISTER_ARTIFACT
+                PROPERTY_PRODUCER_APICURIO_AUTO_REGISTER_ARTIFACT.equals(propertyName)) {
             resolvedValue = Optional.of("true");
         }
-        // Artifact Resolver Strategy
-        else if (PROPERTY_PRODUCER_APICURIO_ARTIFACT_RESOLVER_STRATEGY.equals(propertyName) || // Uses SerdeConfig.ARTIFACT_RESOLVER_STRATEGY
-                PROPERTY_CONSUMER_APICURIO_ARTIFACT_RESOLVER_STRATEGY.equals(propertyName)) {  // Uses SerdeConfig.ARTIFACT_RESOLVER_STRATEGY
+        else if (PROPERTY_PRODUCER_APICURIO_ARTIFACT_RESOLVER_STRATEGY.equals(propertyName) ||
+                PROPERTY_CONSUMER_APICURIO_ARTIFACT_RESOLVER_STRATEGY.equals(propertyName)) {
             resolvedValue = Optional.of(DEFAULT_ARTIFACT_RESOLVER_STRATEGY);
         }
-        // Explicit Artifact Group ID
-        else if (PROPERTY_PRODUCER_APICURIO_EXPLICIT_ARTIFACT_GROUP_ID.equals(propertyName) || // Uses SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID
-                PROPERTY_CONSUMER_APICURIO_EXPLICIT_ARTIFACT_GROUP_ID.equals(propertyName)) {  // Uses SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID
+        else if (PROPERTY_PRODUCER_APICURIO_EXPLICIT_ARTIFACT_GROUP_ID.equals(propertyName) ||
+                PROPERTY_CONSUMER_APICURIO_EXPLICIT_ARTIFACT_GROUP_ID.equals(propertyName)) {
             resolvedValue = Optional.of(DEFAULT_EXPLICIT_ARTIFACT_GROUP_ID);
         }
-        // Deserializer Specific Value Return Class
-        else if (PROPERTY_CONSUMER_APICURIO_DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS.equals(propertyName)) { // Uses SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS
+        else if (PROPERTY_CONSUMER_APICURIO_DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS.equals(propertyName)) {
             resolvedValue = Optional.of(DEFAULT_DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS);
         }
-        // Standard Kafka Key & Value Serializer/Deserializer (NOT from SerdeConfig, but set by this provider for Apicurio Protobuf)
         else if (PROPERTY_PRODUCER_KEY_SERIALIZER_CLASS.equals(propertyName)) {
             resolvedValue = Optional.of(DEFAULT_KEY_SERIALIZER_CLASS);
         } else if (PROPERTY_PRODUCER_VALUE_SERIALIZER_CLASS.equals(propertyName)) {
