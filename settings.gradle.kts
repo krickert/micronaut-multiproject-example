@@ -32,5 +32,6 @@ include(
     "yappy-models",
     "yappy-models:pipeline-config-models",
     "yappy-models:schema-registry-models",
-    "yappy-models:protobuf-models"
+    "yappy-models:protobuf-models",
+    "yappy-schema-registry"
 )
