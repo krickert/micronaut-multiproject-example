@@ -74,6 +74,8 @@ message PipeDoc {
   // Map for storing other named embeddings (e.g., whole document embeddings, image embeddings).
   // Key could be a descriptive name like "full_document_ada_002_embedding" or "header_image_clip_embedding".
   map<string, Embedding> named_embeddings = 14;
+
+  optional Blob blob = 15;
 }
 
 // --- Binary Data Handling ---

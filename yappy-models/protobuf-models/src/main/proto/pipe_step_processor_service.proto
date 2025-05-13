@@ -1,68 +1,91 @@
 syntax = "proto3";
 
-package com.krickert.search.model; // Using the same package as yappy_core_types for simplicity in imports
+// Assuming your yappy_core_types.proto is in com.krickert.search.model
+// and generates Java classes into com.krickert.search.model
+package com.krickert.search.model; // Or com.krickert.search.sdk if that's where PipeStepProcessor lives
 
 option java_package = "com.krickert.search.sdk"; // Or com.krickert.search.model - for generated Java
 option java_multiple_files = true;
 option java_outer_classname = "PipeStepProcessorServiceProto";
 
-import "yappy_core_types.proto"; // Contains PipeStream, PipeDoc, Blob
-import "google/protobuf/struct.proto";
+// Import definitions from your core types file
+import "yappy_core_types.proto"; // This file should contain PipeDoc, Blob, StepExecutionRecord, ErrorData etc.
+import "google/protobuf/struct.proto"; // For custom_json_config
 
 // Service definition for a pipeline step processor.
 // This interface is implemented by developer-created gRPC modules/services.
 service PipeStepProcessor {
-  // Processes a document (and/or blob) according to the step's configuration and logic.
-  // This is the primary RPC for custom processing within the YAPPY framework.
-  rpc ProcessDocument (ProcessPipeDocRequest) returns (ProcessResponse);
+  // Processes a document according to the step's configuration and logic.
+  rpc ProcessData(ProcessRequest) returns (ProcessResponse);
 }
 
-// Request message for the ProcessDocument RPC.
-// This is constructed and sent by the grpc-pipeline-engine to a specific gRPC module.
-message ProcessPipeDocRequest {
-  // Context: Identifies the pipeline this step execution is part of.
+// Contains metadata provided by the pipeline engine for context.
+// This data is generally for informational purposes, logging, tracing, or advanced conditional logic.
+message ServiceMetadata {
+  // The 'pipelineName' from PipelineConfig providing context for this call.
   string pipeline_name = 1;
 
-  // Context: Identifies the specific configured instance of the step being invoked.
-  // This is the 'stepName' from the PipelineStepConfig.
+  // The 'stepName' from PipelineStepConfig that this gRPC service instance is currently executing as.
   string pipe_step_name = 2;
 
-  // Configuration: The specific, validated custom JSON configuration for THIS pipe_step_name.
-  // The engine converts the jsonConfig string from PipelineStepConfig into this Struct.
-  google.protobuf.Struct custom_json_config = 3;
+  // Unique ID for the entire execution flow (equivalent to PipeStream.stream_id).
+  string stream_id = 3;
 
-  // Configuration: The 'configParams' map from PipelineStepConfig for THIS pipe_step_name.
-  map<string, string> config_params = 4;
+  // The current hop number in the pipeline for this step's execution.
+  int64 current_hop_number = 4;
 
-  // Data: The current state of the pipeline's data to be processed.
-  // The engine ensures:
-  // - pipe_stream_data.current_pipeline_name == this.pipeline_name
-  // - pipe_stream_data.target_step_name == this.pipe_step_name
-  // when sending this request, providing full context to the processor.
-  PipeStream pipe_stream_data = 5;
+  // History of previously executed steps in this stream.
+  // Note: This can be large. Modules should use it judiciously.
+  repeated StepExecutionRecord history = 5;
+
+  // If the overall stream was previously marked with a critical error.
+  // Modules might use this to alter behavior (e.g., skip processing if stream is already failed).
+  optional ErrorData stream_error_data = 6;
+
+  // Key-value parameters for the entire run's context (e.g., tenant_id, user_id, correlation_id).
+  // Equivalent to PipeStream.context_params.
+  map<string, string> context_params = 7;
 }
 
-// Response message for the ProcessDocument RPC.
+// Contains configuration specific to this instance of the pipeline step.
+message ProcessConfiguration {
+  // The specific, validated custom JSON configuration for this step,
+  // converted by the engine from PipelineStepConfig.customConfig.jsonConfig.
+  google.protobuf.Struct custom_json_config = 1;
+
+  // The 'configParams' map from PipelineStepConfig for this step.
+  map<string, string> config_params = 2;
+}
+
+// Request message for the ProcessData RPC.
+message ProcessRequest {
+  // The primary document data to be processed.
+  // The Blob is now expected to be within PipeDoc if used.
+  PipeDoc document = 1;
+
+  // Configuration for this specific processing step.
+  ProcessConfiguration config = 2;
+
+  // Engine-provided metadata for context and observability.
+  ServiceMetadata metadata = 3;
+}
+
+// Response message for the ProcessData RPC.
 // This is returned by the gRPC Service Implementation back to the engine.
+// This message can remain largely the same as your existing ProcessResponse.
 message ProcessResponse {
   // Outcome: True if this step's processing was successful, false otherwise.
   bool success = 1;
 
   // Output Data: The modified or newly created PipeDoc.
-  // If not provided, the engine assumes the PipeDoc within the original pipe_stream_data
   // either remains unchanged or that this step does not modify the PipeDoc directly.
+  // The Blob is part of the PipeDoc.
   optional PipeDoc output_doc = 2;
-
-  // Output Data: The modified or newly created Blob.
-  // If not provided, similar assumptions as for output_doc apply to the blob.
-  optional Blob output_blob = 3;
 
   // Error Details: Structured error information from *this processor* if success is false.
   // This is for errors specific to the processor's execution logic.
-  // The engine will use this to populate a StepExecutionRecord.
-  optional google.protobuf.Struct error_details = 4;
+  optional google.protobuf.Struct error_details = 3; // Using Struct for flexibility.
 
   // Logging: Logs or summary information generated by this processor step.
-  // The engine will typically add these to the StepExecutionRecord for this step.
-  repeated string processor_logs = 5;
+  repeated string processor_logs = 4;
 }
