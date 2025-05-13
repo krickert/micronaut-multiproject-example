@@ -1,207 +1,295 @@
-# YAPPY gRPC API Manual
+# **YAPPY gRPC API Manual**
 
-*(Last Updated: 2025-05-12)*
+*(Last Updated: 2025-05-13)*
 
-This document provides a reference for the gRPC services and messages used within the YAPPY platform. It is intended for developers creating new pipeline step processors (modules) and for clients interacting with the pipeline engine.
+This document provides a reference for the gRPC services and messages used within the YAPPY platform. It is intended for developers creating new pipeline step processors (modules) and for clients (connectors or other services) interacting with the pipeline engine.
 
-All Protobuf messages are defined within the `com.krickert.search.model` or `com.krickert.search.engine` packages as specified. For detailed field descriptions of common types like `PipeStream`, `PipeDoc`, etc., please refer to the `yappy_core_types.proto` definitions and the `architecture_overview.md`.
+All Protobuf messages are defined within the com.krickert.search.model (for core types) or com.krickert.search.engine (for engine service) and com.krickert.search.sdk (for processor service, if generated there) packages as specified. For detailed field descriptions of common types like PipeStream, PipeDoc, etc., please refer to the yappy\_core\_types.proto definitions and the architecture\_overview.md (which should also be updated to reflect these changes).
 
-## Table of Contents
+## **Table of Contents**
 
-1.  [PipeStepProcessor Service](#1-pipestepprocessor-service)
+1. [PipeStepProcessor Service](#PipeStepProcessor-Service)
     * 1.1. Overview
     * 1.2. RPC Methods
-        * 1.2.1. `ProcessDocument`
+        * 1.2.1. `ProcessData`
     * 1.3. Request Messages
-        * 1.3.1. `ProcessPipeDocRequest`
+        * 1.3.1. `ProcessRequest`
+        * 1.3.2. `ServiceMetadata`
+        * 1.3.3. `ProcessConfiguration`
     * 1.4. Response Messages
         * 1.4.1. `ProcessResponse`
-2.  [PipeStreamEngine Service](#2-pipestreamengine-service)
+2. [PipeStreamEngine Service](#PipeStreamEngine-Service)
     * 2.1. Overview
     * 2.2. RPC Methods
-        * 2.2.1. `process`
-        * 2.2.2. `processAsync`
-    * 2.3. Common Input/Output Messages
-        * 2.3.1. `PipeStream` (as input and output)
-        * 2.3.2. `google.protobuf.Empty` (as output)
-3.  [Core Data Types (Reference)](#3-core-data-types-reference)
-    * (Links or brief descriptions of `PipeStream`, `PipeDoc`, `Blob`, `ErrorData`, `StepExecutionRecord`, etc.)
+        * 2.2.1. `IngestDataAsync` (New Recommended Ingestion RPC)
+        * 2.2.2. `process` (Existing)
+        * 2.2.3. `processAsync` (Existing)
+    * 2.3. Request Messages
+        * 2.3.1. `IngestDataRequest`
+    * 2.4. Response Messages
+        * 2.4.1. `IngestDataResponse`
+    * 2.5. Common Input/Output Messages (for existing RPCs)
+        * 2.5.1. `PipeStream`
+        * 2.5.2. `google.protobuf.Empty`
+3. [Core Data Types (Reference)](#Core-Data-Types)
 
----
+## **1\. PipeStepProcessor Service**
 
-## 1. PipeStepProcessor Service
+Package (Example for generated SDK): `com.krickert.search.sdk`  
+Proto File: `pipe_step_processor_service.proto`
 
-**Package:** `com.krickert.search.model` (or `com.krickert.search.sdk` for generated client/server code if preferred)
-**Proto File:** `pipe_step_processor_service.proto`
+### **1.1. Overview**
 
-### 1.1. Overview
+The `PipeStepProcessor` service defines the standard interface that all gRPC-based custom pipeline step processors (modules) must implement. The grpc-pipeline-engine calls this service to delegate the processing of data to a specific module based on the pipeline configuration.
 
-The `PipeStepProcessor` service defines the standard interface that all gRPC-based custom pipeline step processors (modules) must implement. The `grpc-pipeline-engine` calls this service to delegate the processing of a `PipeStream` to a specific module based on the pipeline configuration.
+### **1.2. RPC Methods**
 
-### 1.2. RPC Methods
+#### **1.2.1. ProcessData**
 
-#### 1.2.1. `ProcessDocument`
+Processes document data according to the step's specific configuration and logic. This is the primary method for custom data transformation, enrichment, or analysis within the YAPPY framework.
 
-Processes a document (contained within a `PipeStream`) according to the step's specific configuration and logic. This is the primary method for custom data transformation and enrichment.
-
-* **Request:** `ProcessPipeDocRequest`
+* **Request:** `ProcessRequest`
 * **Response:** `ProcessResponse`
 
 **Flow:**
-1.  The `grpc-pipeline-engine` constructs a `ProcessPipeDocRequest`. This request includes:
-    * The specific configuration for the step instance being invoked (`custom_json_config`, `config_params`).
-    * Contextual identifiers (`pipeline_name`, `pipe_step_name`).
-    * The current `PipeStream` data payload (`pipe_stream_data`), with its `current_pipeline_name` and `target_step_name` fields set by the engine to match the context of this call.
-2.  The engine sends this request to the appropriate gRPC module.
-3.  The gRPC module performs its processing logic.
-4.  The gRPC module returns a `ProcessResponse` indicating success/failure and any output data or errors specific to its processing.
-5.  The engine uses this response to update its master `PipeStream` and determine the next step in the pipeline.
 
-### 1.3. Request Messages
+1. The `grpc-pipeline-engine` constructs a `ProcessRequest`. This request includes:
+    * The primary data to be processed (`PipeDoc` document, which now contains the Blob).
+    * The specific configuration for this step instance (`ProcessConfiguration` config).
+    * Engine-provided contextual metadata (`ServiceMetadata` metadata).
+2. The engine sends this request to the appropriate gRPC module.
+3. The gRPC module performs its processing logic using the provided document, configuration, and optionally, the metadata.
+4. The gRPC module returns a ProcessResponse indicating success/failure and any output data or errors specific to its processing.
+5. The engine uses this response to update its master `PipeStream` and determine the next step in the pipeline.
 
-#### 1.3.1. `ProcessPipeDocRequest`
+### **1.3. Request Messages**
 
+#### **1.3.1. ProcessRequest**
 ```protobuf
-message ProcessPipeDocRequest {
-  // Context: Identifies the pipeline this step execution is part of.
-  string pipeline_name = 1;        
-  
-  // Context: Identifies the specific configured instance of the step being invoked.
-  // This is the 'stepName' from the PipelineStepConfig.
-  string pipe_step_name = 2;        
-  
-  // Configuration: The specific, validated custom JSON configuration for THIS pipe_step_name.
-  // The engine converts the jsonConfig string from PipelineStepConfig into this Struct.
-  google.protobuf.Struct custom_json_config = 3; 
-  
-  // Configuration: The 'configParams' map from PipelineStepConfig for THIS pipe_step_name.
-  map<string, string> config_params = 4;        
-  
-  // Data: The current state of the pipeline's data to be processed.
-  // The engine ensures:
-  // - pipe_stream_data.current_pipeline_name == this.pipeline_name 
-  // - pipe_stream_data.target_step_name == this.pipe_step_name
-  // when sending this request, providing full context to the processor.
-  PipeStream pipe_stream_data = 5;         
+// Request message for the ProcessData RPC.
+message ProcessRequest {
+  // The primary document data to be processed.
+  // The Blob is now expected to be within PipeDoc if used.
+  PipeDoc document = 1;
+
+  // Configuration for this specific processing step.
+  ProcessConfiguration config = 2;
+
+  // Engine-provided metadata for context and observability.
+  ServiceMetadata metadata = 3;
 }
 ```
 
-* **`pipeline_name` (string):** The `pipelineName` from `PipelineConfig` providing the overarching pipeline context for this call. (Populated by Engine)
-* **`pipe_step_name` (string):** The `stepName` from `PipelineStepConfig` that this gRPC service instance is currently executing as. This identifies the specific configured instance of the processing logic. (Populated by Engine)
-* **`custom_json_config` (google.protobuf.Struct):** The specific, validated custom JSON configuration for this `pipe_step_name`. The engine converts the `jsonConfig` string (from `PipelineStepConfig.customConfig.jsonConfig`) into this `Struct` after validating it against the schema defined in `PipelineModuleConfiguration.schemaReference`. Developers use the `grpc-developer-sdk` helpers to parse this `Struct` into native objects. (Populated by Engine)
-* **`config_params` (map<string, string>):** The `configParams` map directly from `PipelineStepConfig` for this `pipe_step_name`. (Populated by Engine)
-* **`pipe_stream_data` (PipeStream):** The actual data payload to be processed. The `PipeStream` message (defined in `yappy_core_types.proto`) contains the `document`, `blob`, `history`, etc. The engine ensures that `pipe_stream_data.current_pipeline_name` matches `this.pipeline_name`, and `pipe_stream_data.target_step_name` matches `this.pipe_step_name` for contextual alignment when this request is dispatched. (Populated by Engine)
+* **`document` (`com.krickert.search.model.PipeDoc`):** **REQUIRED**. The primary document being processed. As per the updated `yappy_core_types.proto`, this `PipeDoc` message now includes an optional Blob blob field.
+* **`config` (`ProcessConfiguration`):** **REQUIRED**. Contains the specific configuration for this instance of the pipeline step.
+* **`metadata` (`ServiceMetadata`):** **REQUIRED**. Contains engine-provided contextual information about the pipeline execution.
 
-### 1.4. Response Messages
-
-#### 1.4.1. `ProcessResponse`
-
+#### **1.3.2. ServiceMetadata**
 ```protobuf
+// Contains metadata provided by the pipeline engine for context.
+// This data is generally for informational purposes, logging, tracing, or advanced conditional logic.
+message ServiceMetadata {
+  // The 'pipelineName' from PipelineConfig providing context for this call.
+  string pipeline_name = 1;
+
+  // The 'stepName' from PipelineStepConfig that this gRPC service instance is currently executing as.
+  string pipe_step_name = 2;
+
+  // Unique ID for the entire execution flow (equivalent to PipeStream.stream_id).
+  string stream_id = 3;
+
+  // The current hop number in the pipeline for this step's execution.
+  int64 current_hop_number = 4;
+
+  // History of previously executed steps in this stream.
+  // Note: This can be large. Modules should use it judiciously.
+  repeated StepExecutionRecord history = 5;
+
+  // If the overall stream was previously marked with a critical error.
+  // Modules might use this to alter behavior (e.g., skip processing if stream is already failed).
+  optional ErrorData stream_error_data = 6;
+
+  // Key-value parameters for the entire run's context (e.g., tenant_id, user_id, correlation_id).
+  // Equivalent to PipeStream.context_params.
+  map<string, string> context_params = 7;
+}
+```
+
+* **`pipeline_name` (string):** The name of the PipelineConfig being executed. (Populated by Engine)
+* **`pipe_step_name` (string):** The stepName of the PipelineStepConfig this module is currently executing as. (Populated by Engine)
+* **`stream_id` (string):** The unique identifier for the overall PipeStream execution flow. (Populated by Engine)
+* **`current_hop_number` (int64):** The sequence number of this step in the current PipeStream execution. (Populated by Engine)
+* **`history` (repeated com.krickert.search.model.StepExecutionRecord):** A list of records for steps already executed on this PipeStream. (Populated by Engine)
+* **`stream_error_data` (optional com.krickert.search.model.ErrorData):** If the PipeStream was previously marked with a critical error. (Populated by Engine)
+* **`context_params` (map<string, string>):** Global key-value parameters for this PipeStream's execution context. (Populated by Engine)
+
+#### **1.3.3. ProcessConfiguration**
+```protobuf
+// Contains configuration specific to this instance of the pipeline step.
+message ProcessConfiguration {
+  // The specific, validated custom JSON configuration for this step,
+  // converted by the engine from PipelineStepConfig.customConfig.jsonConfig.
+  google.protobuf.Struct custom_json_config = 1;
+
+  // The 'configParams' map from PipelineStepConfig for this step.
+  map<string, string> config_params = 2;
+}
+```
+
+* **`custom_json_config` (`google.protobuf.Struct`):** The specific, validated custom JSON configuration for this `pipe_step_name`. The engine converts the `jsonConfig` `string` (from `PipelineStepConfig.customConfig.jsonConfig`) into this `Struct` after validating it against the schema defined in `PipelineModuleConfiguration.schemaReference`. (Populated by `Engine`)
+* **`config_params` (`map<string, string>`):** The configParams map directly from PipelineStepConfig for this `pipe_step_name`. (Populated by `Engine`)
+
+### **1.4. Response Messages**
+
+#### **1.4.1. ProcessResponse**
+```protobuf
+// Response message for the ProcessData RPC.
+// This is returned by the gRPC Service Implementation back to the engine.
+// This message can remain largely the same as your existing ProcessResponse.
 message ProcessResponse {
   // Outcome: True if this step's processing was successful, false otherwise.
-  bool success = 1;                     
-  
+  bool success = 1;
+
   // Output Data: The modified or newly created PipeDoc.
-  // If not provided, the engine assumes the PipeDoc within the original pipe_stream_data
   // either remains unchanged or that this step does not modify the PipeDoc directly.
-  optional PipeDoc output_doc = 2;              
-  
-  // Output Data: The modified or newly created Blob.
-  // If not provided, similar assumptions as for output_doc apply to the blob.
-  optional Blob output_blob = 3;               
-  
+  // The Blob is part of the PipeDoc.
+  optional PipeDoc output_doc = 2;
+
   // Error Details: Structured error information from *this processor* if success is false.
   // This is for errors specific to the processor's execution logic.
-  // The engine will use this to populate a StepExecutionRecord.
-  optional google.protobuf.Struct error_details = 4; 
-  
+  optional google.protobuf.Struct error_details = 3; // Using Struct for flexibility.
+
   // Logging: Logs or summary information generated by this processor step.
-  // The engine will typically add these to the StepExecutionRecord for this step.
-  repeated string processor_logs = 5;  
+  repeated string processor_logs = 4;
 }
 ```
 
-* **`success` (bool):** REQUIRED. Must be set to `true` if the step's processing was successful, `false` otherwise. The engine uses this to determine routing to `nextSteps` or `errorSteps`.
-* **`output_doc` (optional PipeDoc):** If the processor modifies the `PipeDoc` or creates a new one, it should be returned here. If omitted, the engine assumes the `PipeDoc` in the input `PipeStream` is unchanged by this step.
-* **`output_blob` (optional Blob):** If the processor modifies the `Blob` or creates a new one. If omitted, the input `Blob` is assumed unchanged.
-* **`error_details` (optional google.protobuf.Struct):** If `success` is `false`, this field can provide structured details about the error that occurred within the processor. This allows for richer, machine-parseable error information beyond a simple message.
-* **`processor_logs` (repeated string):** Any specific logs or summary messages generated by the processor during its execution. The engine will typically capture these and add them to the `StepExecutionRecord` for this step in the `PipeStream`'s history.
+* **`success` (`bool`):** REQUIRED. Must be set to true if the step's processing was successful, false otherwise.
+* **`output_doc` (`optional com.krickert.search.model.PipeDoc`):** If the processor modifies the `PipeDoc` or creates a new one, it should be returned here. The `Blob` is now contained within this `PipeDoc`.
+* **`error_details` (`optional google.protobuf.Struct`):** If `success` is `false`, this field can provide structured details about the error that occurred within the processor.
+* **`processor_logs` (`repeated string`):** Any specific logs or summary messages generated by the processor.
 
----
+## **2. PipeStreamEngine Service**
 
-## 2. PipeStreamEngine Service
+Package: `com.krickert.search.engine`  
+Proto File: `engine_service.proto`
 
-**Package:** `com.krickert.search.engine`
-**Proto File:** `engine_service.proto`
+### **2.1. Overview**
 
-### 2.1. Overview
+The `PipeStreamEngine` service is the central entry point for initiating and orchestrating pipeline executions. Connectors and other client applications call this service to start processing data through a defined pipeline.
 
-The `PipeStreamEngine` service is the central entry point for initiating and orchestrating pipeline executions. Clients (e.g., an API gateway, a batch job scheduler, or test harnesses) call this service to start processing data through a defined pipeline.
+### **2.2. RPC Methods**
 
-### 2.2. RPC Methods
+#### **2.2.1. `IngestDataAsync` (New Recommended Ingestion RPC)**
 
-#### 2.2.1. `process`
+Ingests new data (as a `PipeDoc` identified by a `source_identifier`) into the system to start a pipeline asynchronously. The engine will use the source\_identifier to look up the configured target pipeline and initial step from its administrative configuration (e.g., `Consul`), create the `PipeStream`, generate a `stream_id`, and initiate the pipeline.
 
-Initiates a pipeline run and waits for its complete execution (synchronous pattern). The final state of the `PipeStream` (after all steps have run or a terminal error occurs) is returned.
+* **Request:** `IngestDataRequest`
+* **Response:** `IngestDataResponse`
+
+**Flow:**
+
+1. A Connector service prepares an `IngestDataRequest` containing the `source_identifier` and the `PipeDoc` (which includes the `Blob`).
+2. The Connector calls `PipeStreamEngine.IngestDataAsync()`.
+3. The Engine:
+    * Validates the `source_identifier`.
+    * Looks up the associated `targetPipelineName` and `targetInitialStepName` from its configuration.
+    * Generates a unique `stream_id`.
+    * Creates a new `PipeStream` object, populating it with the input `PipeDoc`, `initial_context_params` (if any), and the determined pipeline/step targets.
+    * Queues or begins the pipeline execution.
+    * Returns an `IngestDataResponse` to the Connector with the `stream_id` and acceptance status.
+4. The pipeline then proceeds as orchestrated by the engine, calling `PipeStepProcessor` services.
+
+#### **2.2.2. `process` (Existing)**
+
+Initiates a pipeline run with a pre-formed `PipeStream` and waits for its complete execution (synchronous pattern). The final state of the `PipeStream` is returned. *This method may be used for specific advanced use cases or internal processes where a `PipeStream` is already fully constructed.*
 
 * **Request:** `com.krickert.search.model.PipeStream`
 * **Response:** `com.krickert.search.model.PipeStream`
 
-**Client Responsibilities for Input `PipeStream`:**
-* **`stream_id`:** Optional. If provided, it will be used. If empty, the engine may generate one.
-* **`document` / `blob`:** Should contain the initial data payload to be processed.
-* **`current_pipeline_name`:** REQUIRED. Specifies the `pipelineName` of the `PipelineConfig` definition to execute.
-* **`target_step_name`:** REQUIRED. Specifies the `stepName` of the *first* step within the `current_pipeline_name` to execute.
-* **`context_params`:** Optional map for providing global context for the entire pipeline run.
-* `history` and `stream_error_data` should typically be empty/null on this initial call.
+#### **2.2.3. `processAsync` (Existing)**
 
-#### 2.2.2. `processAsync`
+Initiates a pipeline run with a pre-formed `PipeStream` in a fire-and-forget manner (asynchronous pattern). Returns `google.protobuf.Empty` on successful *initiation*. *This method may be used for specific advanced use cases or internal processes.*
 
-Initiates a pipeline run in a fire-and-forget manner (asynchronous pattern). The call returns immediately after the engine has successfully accepted the request for processing.
-
-* **Request:** `com.krickert.search.model.PipeStream` (same input requirements as for the `process` RPC)
+* **Request:** `com.krickert.search.model.PipeStream`
 * **Response:** `google.protobuf.Empty`
 
-**Notes:**
-* A `google.protobuf.Empty` response indicates successful *initiation*.
-* Errors encountered *during* the asynchronous pipeline execution will be handled according to the pipeline's error routing configuration and will not be directly returned by this RPC.
-* Errors during the *initiation phase itself* (e.g., `current_pipeline_name` not found in configuration, invalid initial `PipeStream`) may still be returned via gRPC status codes.
+### **2.3. Request Messages (for New Ingestion RPC)**
 
-### 2.3. Common Input/Output Messages
+#### **2.3.1. `IngestDataRequest`**
 
-#### 2.3.1. `PipeStream`
-* **Definition:** See `yappy_core_types.proto` and Section 4.1.1 of `architecture_overview.md`.
-* **Role:** As input, it provides the initial data and targeting for the pipeline run. As output (for the `process` RPC), it represents the final state of the data and execution history after the pipeline has completed or terminally failed.
+```protobuf
+message IngestDataRequest {
+  // REQUIRED. An identifier for the connector or data source submitting this data.
+  // The engine will use this ID to look up the pre-configured target pipeline and initial step.
+  // Example: "s3-landing-bucket-connector", "customer-api-ingest-v1".
+  string source_identifier = 1;
 
-#### 2.3.2. `google.protobuf.Empty`
-* Standard Protobuf message indicating an empty response, used by `processAsync` for acknowledgement.
+  // REQUIRED. The initial document data to be processed.
+  // The Blob is expected to be within this PipeDoc as per your updated yappy_core_types.proto.
+  com.krickert.search.model.PipeDoc document = 2;
 
----
+  // Optional. Key-value parameters to be included in the PipeStream's context_params.
+  // Useful for passing global run context like tenant_id, user_id, correlation_id from the connector.
+  map<string, string> initial_context_params = 3;
 
-## 3. Core Data Types (Reference)
+  // Optional. If the connector wants to suggest a stream_id.
+  // If empty, the engine MUST generate a unique one.
+  // If provided, the engine MAY use it or generate its own if there's a conflict or policy.
+  optional string suggested_stream_id = 4;
+}
+```
 
-The following core data types are used extensively by the services above. Their detailed definitions can be found in `yappy_core_types.proto` (package `com.krickert.search.model`) and are described in the `architecture_overview.md`.
+* **`source_identifier` (`string`):** **REQUIRED**. Identifies the calling connector/source. Used by the engine to look up pipeline routing configuration.
+* **`document` (`com.krickert.search.model.PipeDoc`):** **REQUIRED**. The data payload.
+* **`initial_context_params` (`map<string, string>`):** Optional. Global context for the pipeline run.
+* **`suggested_stream_id` (`optional string`):** Optional. Connector can suggest an ID.
 
-* **`PipeStream`**: The central data carrier. Includes `document`, `blob`, `current_pipeline_name`, `target_step_name`, `history`, `stream_error_data`, `context_params`.
-* **`PipeDoc`**: Represents the structured document being processed. Includes `id`, `source_uri`, `source_mime_type`, `title`, `body`, `keywords`, `document_type`, `custom_data`, `semantic_results` (list of `SemanticProcessingResult`), `named_embeddings`.
-    * **`SemanticProcessingResult`**: Holds the output of a specific chunking/embedding configuration run, including `result_set_name`, `chunk_config_id`, `embedding_config_id`, and a list of `SemanticChunk`s.
-    * **`SemanticChunk`**: Contains `chunk_id`, `chunk_number`, and `embedding_info` (`ChunkEmbedding`).
-    * **`ChunkEmbedding`**: Contains `text_content` and `vector`.
-    * **`Embedding`**: Contains a `vector` and optional `model_id`.
-* **`Blob`**: Represents binary data, with `blob_id`, `data`, `mime_type`, `filename`.
-* **`ErrorData`**: Structured error information, including `error_message`, `error_code`, `originating_step_name`, `input_state_at_failure`.
-* **`StepExecutionRecord`**: Records the details of a single step's execution within the `PipeStream.history`.
-* **`google.protobuf.Struct`**: Used for flexible, JSON-like structured data in `PipeDoc.custom_data`, `ProcessPipeDocRequest.custom_json_config`, and `ProcessResponse.error_details`.
-* **`google.protobuf.Timestamp`**: Used for various date/time fields.
+### **2.4. Response Messages (for New Ingestion RPC)**
 
-This document should serve as the primary reference for understanding and interacting with YAPPY's gRPC services.
+#### **2.4.1. `IngestDataResponse`**
+```protobuf
+message IngestDataResponse {
+  // The unique stream_id assigned by the engine to this ingestion flow.
+  // This allows the connector to correlate this ingestion with the pipeline execution.
+  string stream_id = 1;
 
+  // Indicates if the ingestion request was successfully accepted and queued by the engine.
+  // This does not guarantee the pipeline itself will succeed, only that ingestion was accepted.
+  bool accepted = 2;
 
-**Next Steps Before Updating Tests:**
+  // Optional message, e.g., "Ingestion accepted for stream ID [stream_id], targeting configured pipeline."
+  string message = 3;
+}
+```
 
-1.  **Review this `gRPC_API_Manual.md`:** Ensure it accurately reflects the Protobuf definitions and the intended interactions.
-2.  **Place it in your repository:** Likely in `yappy-models/protobuf-models/docs/gRPC_API_Manual.md`.
-3.  **Ensure your actual `.proto` files in `yappy-models/protobuf-models/src/main/proto/` are updated** to match the definitions we discussed (as outlined in my previous message showing the split proto files).
-4.  **Regenerate Protobuf Java classes:** Run the appropriate Gradle task (e.g., `./gradlew :yappy-models:protobuf-models:generateProto` or a clean build of that submodule).
+* **`stream_id` (`string`):** The unique ID assigned by the engine for this pipeline run.
+* **`accepted` (`bool`):** `True` if the engine accepted the request for processing.
+* **`message` (`string)`:** Optional informational message.
 
-Once these steps are done, your codebase's understanding of the gRPC contracts will be aligned with the documentation, and you'll be ready to tackle the test updates.
+### **2.5. Common Input/Output Messages (for existing process / processAsync RPCs)**
+
+#### **2.5.1. `PipeStream`**
+
+* **Definition:** See `yappy_core_types.proto`.
+* **Role:** Used by the older process and processAsync RPCs. Requires the client to pre-construct the entire `PipeStream`.
+
+#### **2.5.2. `google.protobuf.Empty`**
+
+* Standard Protobuf message indicating an empty response, used by the older processAsync RPC.
+
+## **3. Core Data Types (Reference)**
+
+The following core data types are used extensively. Their detailed definitions are in `yappy_core_types.proto` (package `com.krickert.search.model`).
+
+* **`PipeDoc`**: Represents the structured document. Now includes an optional Blob blob field. Other fields include `id`, `title`, `body`, `semantic_results`, `named_embeddings`, `custom_data`, etc.
+* **`Blob`**: (Now part of `PipeDoc`) Represents binary `data`, with `blob_id`, `data`, `mime_type`, `filename`.
+* **`PipeStream`**: The central data carrier for pipeline state when using the process or processAsync RPCs. Contains `stream_id`, `document` (which includes blob), `current_pipeline_name`, `target_pipeline_name`, `step_name`, `history`, `stream_error_data`, `context_params`.
+* **`ServiceMetadata`**: (New, part of `ProcessRequest`) Contains engine-provided context for processing modules.
+* **`ProcessConfiguration`**: (New, part of `ProcessRequest`) Contains step-specific configuration for processing modules.
+* **`ErrorData`**: Structured error information.
+* **`StepExecutionRecord`**: Records details of a single step's execution.
+* **`google.protobuf.Struct`**: Used for flexible JSON-like structured data.
+* **`google.protobuf.Timestamp`**: Used for date/time fields.
+
+This document should serve as the primary reference for understanding and interacting with YAPPY's gRPC services. Ensure `yappy_core_types.proto`, `pipe_step_processor_service.proto`, and `engine_service.proto` are updated in your codebase and stubs are regenerated.
