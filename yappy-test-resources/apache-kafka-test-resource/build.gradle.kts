@@ -9,7 +9,7 @@ dependencies {
     api("org.testcontainers:testcontainers")
     api("org.testcontainers:kafka:1.21.0") // Specific Kafka Testcontainer
 
-    api("ch.qos.logback:logback-classic:1.5.6")
+    api(mn.logback.classic)
 }
 
 publishing {

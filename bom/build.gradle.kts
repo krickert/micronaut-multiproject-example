@@ -42,14 +42,6 @@ dependencies {
 
         // Constrain own modules
         api("${rootProject.group}:util:${rootProject.version}")
-        api("${rootProject.group}:pipeline-service-core:${rootProject.version}")
-        api("${rootProject.group}:pipeline-service-test-utils:${rootProject.version}")
-        // Kafka registry modules
-        api("${rootProject.group}:pipeline-service-test-utils.micronaut-kafka-registry-core:${rootProject.version}")
-        api("${rootProject.group}:pipeline-service-test-utils.micronaut-kafka-registry-moto:${rootProject.version}")
-        api("${rootProject.group}:pipeline-service-test-utils.micronaut-kafka-registry-apicurio:${rootProject.version}")
-        // Yappy models modules
-        api("${rootProject.group}:yappy-models:${rootProject.version}")
         api("${rootProject.group}:pipeline-config-models:${rootProject.version}")
         api("${rootProject.group}:schema-registry-models:${rootProject.version}")
         api("${rootProject.group}:protobuf-models:${rootProject.version}")
