@@ -22,6 +22,11 @@ message Embedding {
 message ChunkEmbedding {
   string text_content = 1;        // The actual text content of the chunk.
   repeated float vector = 2;       // The vector embedding for this chunk's text.
+  optional string chunk_id = 3;     // Unique identifier for this chunk.
+  optional int32 original_char_start_offset = 4; // Optional: start offset in original document.
+  optional int32 original_char_end_offset = 5;   // Optional: end offset in original document.
+  optional string chunk_group_id = 6; // Optional: Identifier for a group of related chunks.
+  optional string chunk_config_id = 7; // Optional: Identifier for the chunking configuration used.
 }
 
 // Represents a single semantic chunk of text with its embedding.
