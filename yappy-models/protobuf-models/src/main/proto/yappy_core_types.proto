@@ -136,16 +136,18 @@ message StepExecutionRecord {
 message PipeStream {
   string stream_id = 1;                       // REQUIRED. Unique ID for this execution flow instance.
   PipeDoc document = 2;                       // REQUIRED (can be an empty message initially). The primary document being processed.
-  optional Blob blob = 3;                    // Optional. Associated binary data for the current state of the stream.
-  string current_pipeline_name = 4;           // REQUIRED. Name of the PipelineConfig being executed.
+  string current_pipeline_name = 3;           // REQUIRED. Name of the PipelineConfig being executed.
 
   // REQUIRED by the sender (Engine or Kafka Framework).
   // The 'stepName' (key from PipelineConfig.steps map) of the PipelineStepConfig
   // that is the intended next recipient/processor of this PipeStream.
-  string target_step_name = 5;
+  string target_step_name = 4;
 
-  int64 current_hop_number = 6;               // For logging/tracing; incremented by the engine/framework *before* dispatching to target_step_name.
-  repeated StepExecutionRecord history = 7;     // History of executed steps in this stream.
-  optional ErrorData stream_error_data = 8;     // Holds the first critical error that puts the *entire stream* into a general error state, possibly halting further processing unless handled by an error pipeline.
-  map<string, string> context_params = 9;     // Optional. Key-value parameters for the entire run's context (e.g., tenant_id, user_id, correlation_id).
+  int64 current_hop_number = 5;               // For logging/tracing; incremented by the engine/framework *before* dispatching to
+  // target_step_name.
+  repeated StepExecutionRecord history = 6;     // History of executed steps in this stream.
+  optional ErrorData stream_error_data = 7;     // Holds the first critical error that puts the *entire stream* into a general error
+  // state, possibly halting further processing unless handled by an error pipeline.
+  map<string, string> context_params = 8;     // Optional. Key-value parameters for the entire run's context (e.g., tenant_id, user_id,
+  // correlation_id).
 }
