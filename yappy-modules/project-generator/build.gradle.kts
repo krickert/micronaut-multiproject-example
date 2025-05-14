@@ -16,6 +16,7 @@ tasks.register("generateNewModule") {
     val basePackageRoot = (project.findProperty("basePackageRoot") ?: "com.krickert.yappy.modules").toString()
     val basePackage = project.findProperty("basePackage")?.toString() ?: "$basePackageRoot.${moduleNameLowerHyphen.replace("-", "")}"
     val groupId = (project.findProperty("groupId") ?: basePackageRoot).toString()
+    val micronautVersion = (project.findProperty("micronautVersionProp") ?: "4.8.2").toString()
 
     doLast {
         val templateDir = project.projectDir.resolve("template-files")
@@ -44,6 +45,7 @@ tasks.register("generateNewModule") {
                         "MODULE_NAME_LOWER_HYPHEN" to moduleNameLowerHyphen,
                         "APPLICATION_NAME" to applicationName,
                         "BASE_PACKAGE" to basePackage,
+                        "MICRONAUT_VERSION" to micronautVersion,
                         "GROUP_ID" to groupId
                     )
                 ),

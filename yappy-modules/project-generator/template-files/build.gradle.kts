@@ -6,10 +6,6 @@ plugins {
 version = "1.0.0-SNAPSHOT"
 group = "@@GROUP_ID@@"
 
-repositories {
-    mavenCentral()
-}
-
 dependencies {
     annotationProcessor(mn.micronaut.serde.processor)
     implementation(mn.micronaut.discovery.core)

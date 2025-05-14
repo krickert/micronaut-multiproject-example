@@ -2,9 +2,9 @@ package @@BASE_PACKAGE@@;
 
 import io.micronaut.runtime.Micronaut;
 
-public class Application {
+public class @@APPLICATION_NAME@@ {
 
     public static void main(String[] args) {
-        Micronaut.run(Application.class, args);
+        Micronaut.run(@@APPLICATION_NAME@@.class, args);
     }
 }
