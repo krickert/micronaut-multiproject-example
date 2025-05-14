@@ -1,0 +1,49 @@
+{
+  "clusterName": "loaded-cluster",
+  "pipelineGraphConfig": {
+    "pipelines": {
+      "dataPipeline1": {
+        "name": "dataPipeline1",
+        "pipelineSteps": {
+          "kafkaIngest": {
+            "pipelineStepId": "kafkaIngest",
+            "pipelineImplementationId": "ingestMod",
+            "customConfig": {"jsonConfig": "{}"},
+            "nextSteps": ["processInternal"],
+            "errorSteps": [],
+            "transportType": "KAFKA",
+            "kafkaConfig": {
+              "listenTopics": ["rawInput"],
+              "publishTopicPattern": "p1.ingest.out",
+              "kafkaProperties": {}
+            }
+          },
+          "processInternal": {
+            "pipelineStepId": "processInternal",
+            "pipelineImplementationId": "procMod",
+            "customConfig": null,
+            "nextSteps": [],
+            "errorSteps": [],
+            "transportType": "INTERNAL"
+          }
+        }
+      }
+    }
+  },
+  "pipelineModuleMap": {
+    "availableModules": {
+      "ingestMod": {
+        "implementationName": "Ingest Module",
+        "implementationId": "ingestMod",
+        "customConfigSchemaReference": {"subject": "ingestSchema", "version": 1}
+      },
+      "procMod": {
+        "implementationName": "Processing Module",
+        "implementationId": "procMod",
+        "customConfigSchemaReference": {"subject": "procSchema", "version": 1}
+      }
+    }
+  },
+  "allowedKafkaTopics": ["rawInput", "p1.ingest.out"],
+  "allowedGrpcServices": []
+}

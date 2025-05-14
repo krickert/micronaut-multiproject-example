@@ -1,205 +1,277 @@
 package com.krickert.search.config.pipeline.model;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineStepConfigTest {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private ObjectMapper objectMapper;
+
+    @BeforeEach
+    void setUp() {
+        objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new ParameterNamesModule()); // For record deserialization
+        objectMapper.registerModule(new Jdk8Module());           // For readable JSON output
+    }
 
     @Test
-    void testSerializationDeserialization() throws Exception {
-        // Create a JsonConfigOptions for the test
-        JsonConfigOptions customConfig = new JsonConfigOptions("{\"key\": \"value\"}");
-
-        // Create a list of KafkaPublishTopic for the test
-        List<KafkaPublishTopic> kafkaPublishTopics = new ArrayList<>();
-        kafkaPublishTopics.add(new KafkaPublishTopic("test-output-topic"));
-
-        // Create a PipelineStepConfig instance
-        PipelineStepConfig config = new PipelineStepConfig(
-                "test-step",
-                "test-module",
-                customConfig,
+    void testSerializationDeserialization_KafkaStep() throws Exception {
+        JsonConfigOptions customConfig = new JsonConfigOptions("{\"key\":\"value\"}");
+        KafkaTransportConfig kafkaConfig = new KafkaTransportConfig(
                 List.of("test-input-topic"),
-                kafkaPublishTopics,
-                List.of("test-grpc-service"),
-                List.of("next-step-1"),      // nextSteps
-                List.of("error-step-1")       // errorSteps
+                "pipeline.step.out",
+                Map.of("retries", "3")
         );
 
-        // Serialize to JSON
-        String json = objectMapper.writeValueAsString(config);
+        PipelineStepConfig config = new PipelineStepConfig(
+                "test-kafka-step",
+                "kafka-test-module",
+                customConfig,
+                List.of("next-step-1"),
+                List.of("error-step-1"),
+                TransportType.KAFKA,
+                kafkaConfig,
+                null // grpcConfig must be null for KAFKA
+        );
 
-        // Deserialize from JSON
+        String json = objectMapper.writeValueAsString(config);
+        System.out.println("Serialized KAFKA PipelineStepConfig JSON:\n" + json);
+
         PipelineStepConfig deserialized = objectMapper.readValue(json, PipelineStepConfig.class);
 
-        // Verify the values
-        assertEquals("test-step", deserialized.pipelineStepId());
-        assertEquals("test-module", deserialized.pipelineImplementationId());
-        assertEquals("{\"key\": \"value\"}", deserialized.customConfig().jsonConfig());
-        assertEquals(1, deserialized.kafkaListenTopics().size());
-        assertEquals("test-input-topic", deserialized.kafkaListenTopics().getFirst());
-        assertEquals(1, deserialized.kafkaPublishTopics().size());
-        assertEquals("test-output-topic", deserialized.kafkaPublishTopics().getFirst().topic());
-        assertEquals(1, deserialized.grpcForwardTo().size());
-        assertEquals("test-grpc-service", deserialized.grpcForwardTo().getFirst());
-        assertEquals(1, deserialized.nextSteps().size());
-        assertEquals("next-step-1", deserialized.nextSteps().getFirst());
-        assertEquals(1, deserialized.errorSteps().size());
-        assertEquals("error-step-1", deserialized.errorSteps().getFirst());
+        assertEquals("test-kafka-step", deserialized.pipelineStepId());
+        assertEquals("kafka-test-module", deserialized.pipelineImplementationId());
+        assertEquals("{\"key\":\"value\"}", deserialized.customConfig().jsonConfig());
+        assertEquals(List.of("next-step-1"), deserialized.nextSteps());
+        assertEquals(List.of("error-step-1"), deserialized.errorSteps());
+        assertEquals(TransportType.KAFKA, deserialized.transportType());
+
+        assertNotNull(deserialized.kafkaConfig());
+        assertNull(deserialized.grpcConfig());
+
+        assertEquals(List.of("test-input-topic"), deserialized.kafkaConfig().listenTopics());
+        assertEquals("pipeline.step.out", deserialized.kafkaConfig().publishTopicPattern());
+        assertEquals(Map.of("retries", "3"), deserialized.kafkaConfig().kafkaProperties());
     }
 
     @Test
-    void testValidation() {
-        // Test null pipelineStepId validation
-        assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                null, "test-module", null, null, null, null, null, null));
-
-        // Test blank pipelineStepId validation
-        assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                "", "test-module", null, null, null, null, null, null));
-
-        // Test null pipelineImplementationId validation
-        assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                "test-step", null, null, null, null, null, null, null));
-
-        // Test blank pipelineImplementationId validation
-        assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                "test-step", "", null, null, null, null, null, null));
-
-        // Test null collections handling (should not throw, converts to empty collections)
-        PipelineStepConfig config = new PipelineStepConfig(
-                "test-step", "test-module", null, null, null, null, null, null);
-        assertTrue(config.kafkaListenTopics().isEmpty());
-        assertTrue(config.kafkaPublishTopics().isEmpty());
-        assertTrue(config.grpcForwardTo().isEmpty());
-        assertTrue(config.nextSteps().isEmpty());
-        assertTrue(config.errorSteps().isEmpty());
-
-        // Test validation for elements within new lists
-        List<String> nextStepsWithNull = new ArrayList<>();
-        nextStepsWithNull.add("valid");
-        nextStepsWithNull.add(null); // Add null to a mutable list
-        assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                        "test-step", "test-module", null, null, null, null, nextStepsWithNull, null),
-                "nextSteps should not allow null elements");
-
-        List<String> nextStepsWithBlank = new ArrayList<>();
-        nextStepsWithBlank.add("valid");
-        nextStepsWithBlank.add(""); // Add blank to a mutable list
-        assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                        "test-step", "test-module", null, null, null, null, nextStepsWithBlank, null),
-                "nextSteps should not allow blank elements");
-
-        List<String> errorStepsWithNull = new ArrayList<>();
-        errorStepsWithNull.add("valid");
-        errorStepsWithNull.add(null); // Add null to a mutable list
-        assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                        "test-step", "test-module", null, null, null, null, null, errorStepsWithNull),
-                "errorSteps should not allow null elements");
-
-        List<String> errorStepsWithBlank = new ArrayList<>();
-        errorStepsWithBlank.add("valid");
-        errorStepsWithBlank.add(""); // Add blank to a mutable list
-        assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                        "test-step", "test-module", null, null, null, null, null, errorStepsWithBlank),
-                "errorSteps should not allow blank elements");
-    }
-
-    @Test
-    void testJsonPropertyNames() throws Exception {
-        // Create a JsonConfigOptions for the test
-        JsonConfigOptions customConfig = new JsonConfigOptions("{\"key\": \"value\"}");
-
-        // Create a list of KafkaPublishTopic for the test
-        List<KafkaPublishTopic> kafkaPublishTopics = new ArrayList<>();
-        kafkaPublishTopics.add(new KafkaPublishTopic("test-output-topic"));
-
-        // Create a PipelineStepConfig instance
-        PipelineStepConfig config = new PipelineStepConfig(
-                "test-step",
-                "test-module",
-                customConfig,
-                List.of("test-input-topic"),
-                kafkaPublishTopics,
-                List.of("test-grpc-service"),
-                List.of("next-step-1"),      // nextSteps
-                List.of("error-step-1")       // errorSteps
+    void testSerializationDeserialization_GrpcStep() throws Exception {
+        JsonConfigOptions customConfig = new JsonConfigOptions("{\"serviceSpecific\":\"config\"}");
+        GrpcTransportConfig grpcConfig = new GrpcTransportConfig(
+                "my-grpc-service",
+                Map.of("deadlineMs", "5000")
         );
 
-        // Serialize to JSON
-        String json = objectMapper.writeValueAsString(config);
+        PipelineStepConfig config = new PipelineStepConfig(
+                "test-grpc-step",
+                "grpc-test-module",
+                customConfig,
+                List.of("next-grpc-target"),
+                Collections.emptyList(),
+                TransportType.GRPC,
+                null, // kafkaConfig must be null for GRPC
+                grpcConfig
+        );
 
-        // Verify the JSON contains the expected property names
-        assertTrue(json.contains("\"pipelineStepId\":\"test-step\""));
-        assertTrue(json.contains("\"pipelineImplementationId\":\"test-module\""));
-        assertTrue(json.contains("\"customConfig\":"));
-        assertTrue(json.contains("\"kafkaListenTopics\":"));
-        assertTrue(json.contains("\"kafkaPublishTopics\":"));
-        assertTrue(json.contains("\"grpcForwardTo\":"));
-        assertTrue(json.contains("\"nextSteps\":[\"next-step-1\"]"));
-        assertTrue(json.contains("\"errorSteps\":[\"error-step-1\"]"));
+        String json = objectMapper.writeValueAsString(config);
+        System.out.println("Serialized GRPC PipelineStepConfig JSON:\n" + json);
+
+        PipelineStepConfig deserialized = objectMapper.readValue(json, PipelineStepConfig.class);
+
+        assertEquals("test-grpc-step", deserialized.pipelineStepId());
+        assertEquals("grpc-test-module", deserialized.pipelineImplementationId());
+        assertEquals("{\"serviceSpecific\":\"config\"}", deserialized.customConfig().jsonConfig());
+        assertEquals(List.of("next-grpc-target"), deserialized.nextSteps());
+        assertTrue(deserialized.errorSteps().isEmpty());
+        assertEquals(TransportType.GRPC, deserialized.transportType());
+
+        assertNull(deserialized.kafkaConfig());
+        assertNotNull(deserialized.grpcConfig());
+
+        assertEquals("my-grpc-service", deserialized.grpcConfig().serviceId());
+        assertEquals(Map.of("deadlineMs", "5000"), deserialized.grpcConfig().grpcProperties());
     }
 
     @Test
-    void testLoadFromJsonFile() throws Exception {
-        // Load JSON from resources
-        // Assuming your pipeline-step-config.json might also include nextSteps and errorSteps
-        // If not, this part of the test might need adjustment or the JSON file needs an update.
-        try (InputStream is = getClass().getResourceAsStream("/pipeline-step-config.json")) {
-            assertNotNull(is, "Could not load resource /pipeline-step-config.json");
-            // Deserialize from JSON
+    void testSerializationDeserialization_InternalStep() throws Exception {
+        PipelineStepConfig config = new PipelineStepConfig(
+                "test-internal-step",
+                "internal-test-module",
+                null, // No custom config
+                List.of("next-internal-action"),
+                null, // errorSteps defaults to empty
+                TransportType.INTERNAL,
+                null, // kafkaConfig must be null
+                null  // grpcConfig must be null
+        );
+
+        String json = objectMapper.writeValueAsString(config);
+        System.out.println("Serialized INTERNAL PipelineStepConfig JSON:\n" + json);
+
+        PipelineStepConfig deserialized = objectMapper.readValue(json, PipelineStepConfig.class);
+
+        assertEquals("test-internal-step", deserialized.pipelineStepId());
+        assertEquals("internal-test-module", deserialized.pipelineImplementationId());
+        assertNull(deserialized.customConfig());
+        assertEquals(List.of("next-internal-action"), deserialized.nextSteps());
+        assertTrue(deserialized.errorSteps().isEmpty()); // Defaulted to empty
+        assertEquals(TransportType.INTERNAL, deserialized.transportType());
+        assertNull(deserialized.kafkaConfig());
+        assertNull(deserialized.grpcConfig());
+    }
+
+    @Test
+    void testValidation_ConstructorArgs() {
+        // Test null pipelineStepId validation
+        Exception e1 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                null, "m", null, null, null, TransportType.INTERNAL, null, null));
+        assertTrue(e1.getMessage().contains("pipelineStepId cannot be null or blank"));
+
+        // Test blank pipelineStepId validation
+        Exception e2 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                " ", "m", null, null, null, TransportType.INTERNAL, null, null));
+        assertTrue(e2.getMessage().contains("pipelineStepId cannot be null or blank"));
+
+        // Test null pipelineImplementationId validation
+        Exception e3 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                "s", null, null, null, null, TransportType.INTERNAL, null, null));
+        assertTrue(e3.getMessage().contains("pipelineImplementationId cannot be null or blank"));
+
+        // Test null transportType validation
+        Exception e4 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                "s", "m", null, null, null, null, null, null));
+        assertTrue(e4.getMessage().contains("transportType cannot be null"));
+
+        // Test null collections handling (implicitly tested by constructors above and their defaulting)
+        PipelineStepConfig configWithNullLists = new PipelineStepConfig(
+                "test-step", "test-module", null, null, null, TransportType.INTERNAL, null, null);
+        assertTrue(configWithNullLists.nextSteps().isEmpty());
+        assertTrue(configWithNullLists.errorSteps().isEmpty());
+
+        List<String> nextStepsWithNullEl = new ArrayList<>();
+        nextStepsWithNullEl.add("valid");
+        nextStepsWithNullEl.add(null);
+        Exception e5 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                "s", "m", null, nextStepsWithNullEl, null, TransportType.INTERNAL, null, null));
+        assertTrue(e5.getMessage().contains("nextSteps cannot contain null or blank step IDs: [valid, null]"));
+
+        List<String> errorStepsWithBlankEl = List.of("");
+        Exception e6 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                "s", "m", null, null, errorStepsWithBlankEl, TransportType.INTERNAL, null, null));
+        assertTrue(e6.getMessage().contains("errorSteps cannot contain null or blank step IDs"));
+    }
+
+    @Test
+    void testValidation_TransportSpecificConfigs() {
+        KafkaTransportConfig kCfg = new KafkaTransportConfig(Collections.emptyList(), null, null);
+        GrpcTransportConfig gCfg = new GrpcTransportConfig("service1", null);
+
+        // KAFKA type but missing kafkaConfig
+        Exception e1 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                "s", "m", null, null, null, TransportType.KAFKA, null, null));
+        assertTrue(e1.getMessage().contains("KafkaTransportConfig must be provided"));
+
+        // KAFKA type but grpcConfig is present
+        Exception e2 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                "s", "m", null, null, null, TransportType.KAFKA, kCfg, gCfg));
+        assertTrue(e2.getMessage().contains("GrpcTransportConfig should only be provided"));
+
+        // GRPC type but missing grpcConfig
+        Exception e3 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                "s", "m", null, null, null, TransportType.GRPC, null, null));
+        assertTrue(e3.getMessage().contains("GrpcTransportConfig must be provided"));
+
+        // GRPC type but kafkaConfig is present
+        Exception e4 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                "s", "m", null, null, null, TransportType.GRPC, kCfg, gCfg));
+        assertTrue(e4.getMessage().contains("KafkaTransportConfig should only be provided"));
+
+        // INTERNAL type but kafkaConfig is present
+        Exception e5 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                "s", "m", null, null, null, TransportType.INTERNAL, kCfg, null));
+        assertTrue(e5.getMessage().contains("KafkaTransportConfig should only be provided"));
+
+        // INTERNAL type but grpcConfig is present
+        Exception e6 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
+                "s", "m", null, null, null, TransportType.INTERNAL, null, gCfg));
+        assertTrue(e6.getMessage().contains("GrpcTransportConfig should only be provided"));
+    }
+
+
+    @Test
+    void testJsonPropertyNames_WithNewModel() throws Exception {
+        KafkaTransportConfig kafkaConfig = new KafkaTransportConfig(
+                List.of("input1"), "pattern.out", Map.of("prop","val")
+        );
+        PipelineStepConfig config = new PipelineStepConfig(
+                "test-step-json",
+                "test-module-json",
+                new JsonConfigOptions("{\"mode\":\"test\"}"),
+                List.of("next-json"),
+                List.of("error-json"),
+                TransportType.KAFKA,
+                kafkaConfig,
+                null
+        );
+
+        String json = objectMapper.writeValueAsString(config);
+
+        assertTrue(json.contains("\"pipelineStepId\":\"test-step-json\""));
+        assertTrue(json.contains("\"pipelineImplementationId\":\"test-module-json\""));
+        assertTrue(json.contains("\"customConfig\":{\"jsonConfig\":\"{\\\"mode\\\":\\\"test\\\"}\"}"));
+        assertTrue(json.contains("\"nextSteps\":[\"next-json\"]"));
+        assertTrue(json.contains("\"errorSteps\":[\"error-json\"]"));
+        assertTrue(json.contains("\"transportType\":\"KAFKA\""));
+        assertTrue(json.contains("\"kafkaConfig\":{"));
+        assertTrue(json.contains("\"listenTopics\":[\"input1\"]"));
+        assertTrue(json.contains("\"publishTopicPattern\":\"pattern.out\""));
+        assertTrue(json.contains("\"kafkaProperties\":{\"prop\":\"val\"}"));
+        assertTrue(json.contains("\"grpcConfig\":null") || !json.contains("\"grpcConfig\":"));
+
+        // Verify old direct properties are gone
+        assertTrue(!json.contains("\"kafkaListenTopics\"") || json.contains("\"kafkaListenTopics\":null"), "Old kafkaListenTopics field should not exist or be null");
+        assertTrue(!json.contains("\"kafkaPublishTopics\"") || json.contains("\"kafkaPublishTopics\":null"), "Old kafkaPublishTopics field should not exist or be null");
+        assertTrue(!json.contains("\"grpcForwardTo\"") || json.contains("\"grpcForwardTo\":null"), "Old grpcForwardTo field should not exist or be null");
+    }
+
+    @Test
+    void testLoadFromJsonFile_WithNewModel() throws Exception {
+        // Assuming pipeline-step-config-new-model.json contains the Kafka step example
+        try (InputStream is = getClass().getResourceAsStream("/pipeline-step-config-new-model.json")) {
+            assertNotNull(is, "Could not load resource /pipeline-step-config-new-model.json. Please create it with the new model.");
             PipelineStepConfig config = objectMapper.readValue(is, PipelineStepConfig.class);
 
-            // Verify the values
-            assertEquals("test-step-1", config.pipelineStepId());
-            assertEquals("test-module-1", config.pipelineImplementationId());
+            // Assertions for the Kafka Step Example
+            assertEquals("imageProcessorKafka", config.pipelineStepId());
+            assertEquals("image-processing-module-v2", config.pipelineImplementationId());
             assertNotNull(config.customConfig());
-            assertEquals("{\"key\": \"value\", \"threshold\": 0.75}", config.customConfig().jsonConfig());
+            assertEquals("{\"format\":\"jpeg\", \"quality\":90, \"targetSize\":\"1024x768\"}", config.customConfig().jsonConfig());
+            assertEquals(List.of("storeImageMetadata", "notifyCompletion"), config.nextSteps());
+            assertEquals(List.of("logImageProcessingError", "quarantineImage"), config.errorSteps());
+            assertEquals(TransportType.KAFKA, config.transportType());
 
-            assertNotNull(config.kafkaListenTopics());
-            assertEquals(2, config.kafkaListenTopics().size());
-            assertEquals("test-input-topic-1", config.kafkaListenTopics().get(0));
-            assertEquals("test-input-topic-2", config.kafkaListenTopics().get(1));
+            assertNotNull(config.kafkaConfig(), "KafkaConfig should not be null for KAFKA type");
+            assertNull(config.grpcConfig(), "GrpcConfig should be null for KAFKA type");
 
-            assertNotNull(config.kafkaPublishTopics());
-            assertEquals(2, config.kafkaPublishTopics().size());
-            assertEquals("test-output-topic-1", config.kafkaPublishTopics().get(0).topic());
-            assertEquals("test-output-topic-2", config.kafkaPublishTopics().get(1).topic());
-
-            assertNotNull(config.grpcForwardTo());
-            assertEquals(2, config.grpcForwardTo().size());
-            assertEquals("test-grpc-service-1", config.grpcForwardTo().get(0));
-            assertEquals("test-grpc-service-2", config.grpcForwardTo().get(1));
-
-            // Verify new fields - these will be empty if not in the JSON and NON_NULL include is used
-            // Or they will be null if NON_NULL is not strictly hiding them and they are absent
-            // The canonical constructor initializes them to empty lists if null is passed during construction,
-            // and Jackson should do similarly if the fields are absent in JSON.
-            assertNotNull(config.nextSteps(), "nextSteps should not be null after deserialization");
-            assertNotNull(config.errorSteps(), "errorSteps should not be null after deserialization");
-
-            // Example: If your JSON file *does* contain these:
-            // assertEquals(1, config.nextSteps().size());
-            // assertEquals("next-step-from-json", config.nextSteps().get(0));
-            // assertEquals(1, config.errorSteps().size());
-            // assertEquals("error-step-from-json", config.errorSteps().get(0));
-
-            // If your JSON file *does not* contain these, they should be empty lists due to the canonical constructor's logic
-            // if Jackson calls it or a similar default for missing collection fields.
-            assertTrue(config.nextSteps().isEmpty(), "Expected nextSteps to be empty if not in JSON");
-            assertTrue(config.errorSteps().isEmpty(), "Expected errorSteps to be empty if not in JSON");
+            assertEquals(List.of("pending-images-topic", "retry-images-topic"), config.kafkaConfig().listenTopics());
+            assertEquals("processed.images.${stepId}.output", config.kafkaConfig().publishTopicPattern());
+            assertNotNull(config.kafkaConfig().kafkaProperties());
+            assertEquals("all", config.kafkaConfig().kafkaProperties().get("acks"));
+            assertEquals("snappy", config.kafkaConfig().kafkaProperties().get("compression.type"));
+            assertEquals("50", config.kafkaConfig().kafkaProperties().get("max.poll.records"));
         }
     }
 }

@@ -1,0 +1,19 @@
+{
+  "pipelineStepId": "userValidatorGrpc",
+  "pipelineImplementationId": "user-validation-service-module",
+  "customConfig": {
+    "jsonConfig": "{\"validationLevel\":\"strict\", \"checkBlacklist\":true}"
+  },
+  "nextSteps": ["updateUserRecord"],
+  "errorSteps": ["suspendUserAccount"],
+  "transportType": "GRPC",
+  "kafkaConfig": null,
+  "grpcConfig": {
+    "serviceId": "consul-user-validator-v3",
+    "grpcProperties": {
+      "io.grpc.internal. zowel.maxRetryAttempts": "3",
+      "io.grpc.internal. zowel.retryBufferSize": "16777216",
+      "io.grpc.internal. zowel.perRpcBufferLimit": "1048576"
+    }
+  }
+}

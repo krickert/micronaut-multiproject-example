@@ -1,0 +1,161 @@
+{
+  "pipelines": {
+    "dataIngestionPipeline": {
+      "name": "dataIngestionPipeline",
+      "pipelineSteps": {
+        "receiveRawData": {
+          "pipelineStepId": "receiveRawData",
+          "pipelineImplementationId": "kafka-generic-ingestor",
+          "customConfig": {
+            "jsonConfig": "{\"validationSchemaId\":\"rawDocEventSchema_v1\"}"
+          },
+          "nextSteps": ["normalizeData"],
+          "errorSteps": ["logIngestionError"],
+          "transportType": "KAFKA",
+          "kafkaConfig": {
+            "listenTopics": ["topic-raw-documents", "topic-other-source"],
+            "publishTopicPattern": "ingestion.receiveRawData.processed",
+            "kafkaProperties": {"group.id":"ingestion-group-1"}
+          }
+        },
+        "normalizeData": {
+          "pipelineStepId": "normalizeData",
+          "pipelineImplementationId": "data-normalizer-module",
+          "customConfig": {
+            "jsonConfig": "{\"targetFormat\":\"internalCanonicalV2\"}"
+          },
+          "nextSteps": ["enrichData"],
+          "errorSteps": ["logNormalizationError"],
+          "transportType": "INTERNAL"
+        },
+        "enrichData": {
+          "pipelineStepId": "enrichData",
+          "pipelineImplementationId": "external-enrichment-service-caller",
+          "customConfig": {
+            "jsonConfig": "{\"serviceType\":\"geolocation\", \"timeoutMillis\":500}"
+          },
+          "nextSteps": ["routeToProcessing"],
+          "errorSteps": ["logEnrichmentError"],
+          "transportType": "GRPC",
+          "grpcConfig": {
+            "serviceId": "geo-enrichment-grpc-service",
+            "grpcProperties": {"loadBalancingPolicy":"round_robin"}
+          }
+        },
+        "routeToProcessing": {
+          "pipelineStepId": "routeToProcessing",
+          "pipelineImplementationId": "content-based-router",
+          "customConfig": {"jsonConfig":"{\"routingField\":\"document_type\"}"},
+          "nextSteps": ["publishToDocProcessing", "publishToImageProcessing"],
+          "errorSteps": ["logRoutingError"],
+          "transportType": "INTERNAL"
+        },
+        "publishToDocProcessing": {
+          "pipelineStepId": "publishToDocProcessing",
+          "pipelineImplementationId": "kafka-selective-publisher",
+          "customConfig": {"jsonConfig":"{\"condition\":\"document_type == 'TEXT_DOCUMENT'\"}"},
+          "transportType": "KAFKA",
+          "kafkaConfig": {
+            "listenTopics": [],
+            "publishTopicPattern": "documents.forTextProcessing.v1"
+          }
+        },
+        "publishToImageProcessing": {
+          "pipelineStepId": "publishToImageProcessing",
+          "pipelineImplementationId": "kafka-selective-publisher",
+          "customConfig": {"jsonConfig":"{\"condition\":\"document_type == 'IMAGE_DOCUMENT'\"}"},
+          "transportType": "KAFKA",
+          "kafkaConfig": {
+            "listenTopics": [],
+            "publishTopicPattern": "documents.forImageProcessing.v1"
+          }
+        },
+        "logIngestionError": {
+          "pipelineStepId": "logIngestionError",
+          "pipelineImplementationId": "error-logging-module",
+          "transportType": "INTERNAL"
+        },
+        "logNormalizationError": {
+          "pipelineStepId": "logNormalizationError",
+          "pipelineImplementationId": "error-logging-module",
+          "transportType": "INTERNAL"
+        },
+        "logEnrichmentError": {
+          "pipelineStepId": "logEnrichmentError",
+          "pipelineImplementationId": "error-logging-module",
+          "transportType": "INTERNAL"
+        },
+        "logRoutingError": {
+          "pipelineStepId": "logRoutingError",
+          "pipelineImplementationId": "error-logging-module",
+          "transportType": "INTERNAL"
+        }
+      }
+    },
+    "documentProcessingPipeline": {
+      "name": "documentProcessingPipeline",
+      "pipelineSteps": {
+        "ocrContent": {
+          "pipelineStepId": "ocrContent",
+          "pipelineImplementationId": "ocr-extraction-module",
+          "customConfig": {
+            "jsonConfig": "{\"languages\":[\"eng\",\"fra\"], \"minConfidence\":0.7}"
+          },
+          "nextSteps": ["chunkText"],
+          "errorSteps": ["logOcrError"],
+          "transportType": "KAFKA",
+          "kafkaConfig": {
+            "listenTopics": ["documents.forTextProcessing.v1"],
+            "publishTopicPattern": "processing.ocrContent.textOutput"
+          }
+        },
+        "chunkText": {
+          "pipelineStepId": "chunkText",
+          "pipelineImplementationId": "text-chunker-module",
+          "customConfig": {
+            "jsonConfig": "{\"strategy\":\"fixedTokenSize\", \"size\":500, \"overlap\":50}"
+          },
+          "nextSteps": ["generateEmbeddings"],
+          "errorSteps": ["logChunkingError"],
+          "transportType": "INTERNAL"
+        },
+        "generateEmbeddings": {
+          "pipelineStepId": "generateEmbeddings",
+          "pipelineImplementationId": "embedding-generator-grpc",
+          "customConfig": {
+            "jsonConfig": "{\"modelId\":\"text-embedding-ada-002\"}"
+          },
+          "nextSteps": ["indexDocument"],
+          "errorSteps": ["logEmbeddingError"],
+          "transportType": "GRPC",
+          "grpcConfig": {
+            "serviceId": "embedding-service-v2"
+          }
+        },
+        "indexDocument": {
+          "pipelineStepId": "indexDocument",
+          "pipelineImplementationId": "search-indexer-module",
+          "customConfig": {
+            "jsonConfig": "{\"indexName\":\"main_documents\", \"targetSearchEngine\":\"opensearch_cluster_1\"}"
+          },
+          "transportType": "INTERNAL"
+        },
+        "logOcrError": {
+          "pipelineStepId": "logOcrError",
+          "pipelineImplementationId": "error-logging-module",
+          "transportType": "INTERNAL"
+        },
+        "logChunkingError": {
+          "pipelineStepId": "logChunkingError",
+          "pipelineImplementationId": "error-logging-module",
+          "transportType": "INTERNAL"
+        },
+        "logEmbeddingError": {
+          "pipelineStepId": "logEmbeddingError",
+          "pipelineImplementationId": "error-logging-module",
+          "transportType": "INTERNAL"
+        }
+      }
+    }
+  }
+}

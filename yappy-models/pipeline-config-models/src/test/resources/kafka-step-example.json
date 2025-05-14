@@ -1,0 +1,20 @@
+{
+  "pipelineStepId": "imageProcessorKafka",
+  "pipelineImplementationId": "image-processing-module-v2",
+  "customConfig": {
+    "jsonConfig": "{\"format\":\"jpeg\", \"quality\":90, \"targetSize\":\"1024x768\"}"
+  },
+  "nextSteps": ["storeImageMetadata", "notifyCompletion"],
+  "errorSteps": ["logImageProcessingError", "quarantineImage"],
+  "transportType": "KAFKA",
+  "kafkaConfig": {
+    "listenTopics": ["pending-images-topic", "retry-images-topic"],
+    "publishTopicPattern": "processed.images.${stepId}.output",
+    "kafkaProperties": {
+      "acks": "all",
+      "compression.type": "snappy",
+      "max.poll.records": "50"
+    }
+  },
+  "grpcConfig": null
+}

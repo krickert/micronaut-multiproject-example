@@ -1,0 +1,12 @@
+{
+  "pipelineStepId": "simpleCounterInternal",
+  "pipelineImplementationId": "internal-metrics-counter",
+  "customConfig": {
+    "jsonConfig": "{\"metricName\":\"processedDocuments\", \"incrementBy\":1}"
+  },
+  "nextSteps": ["logCurrentCount"],
+  "errorSteps": [],
+  "transportType": "INTERNAL",
+  "kafkaConfig": null,
+  "grpcConfig": null
+}

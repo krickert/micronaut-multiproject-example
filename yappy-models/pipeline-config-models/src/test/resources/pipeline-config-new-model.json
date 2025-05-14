@@ -1,0 +1,31 @@
+{
+  "name": "loaded-pipeline",
+  "pipelineSteps": {
+    "kafka-entry-step": {
+      "pipelineStepId": "kafka-entry-step",
+      "pipelineImplementationId": "entry-module",
+      "customConfig": {"jsonConfig": "{\"entryParam\":\"start\"}"},
+      "nextSteps": ["processing-step"],
+      "errorSteps": ["error-handler-step"],
+      "transportType": "KAFKA",
+      "kafkaConfig": {
+        "listenTopics": ["raw-data-input"],
+        "publishTopicPattern": "pipeline.kafka-entry-step.processed",
+        "kafkaProperties": {}
+      }
+    },
+    "processing-step": {
+      "pipelineStepId": "processing-step",
+      "pipelineImplementationId": "processor-module",
+      "customConfig": null,
+      "nextSteps": [],
+      "errorSteps": [],
+      "transportType": "INTERNAL"
+    },
+    "error-handler-step": {
+      "pipelineStepId": "error-handler-step",
+      "pipelineImplementationId": "error-module",
+      "transportType": "INTERNAL"
+    }
+  }
+}

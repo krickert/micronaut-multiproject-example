@@ -1,74 +1,60 @@
-package com.krickert.search.config.pipeline.model;
+package com.krickert.search.config.pipeline.model; // Or your actual package
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Set;
-import java.util.Collections; // For unmodifiable set
-// No Lombok needed
+import java.util.Map;
+import java.util.Collections;
+// import java.util.stream.Collectors; // Not needed for this version
 
-/**
- * The top-level configuration for a "cluster" of pipelines.
- * Contains the graph of all pipelines, a map of available module types,
- * and whitelists for Kafka topics and gRPC services.
- * This record is immutable.
- *
- * @param clusterName The name of the application cluster. Must not be null or blank.
- * @param pipelineGraphConfig The full pipeline graph configuration. Can be null.
- * @param pipelineModuleMap The mapping of available pipeline modules. Can be null.
- * @param allowedKafkaTopics A whitelist of Kafka topic names allowed within this cluster.
- * Can be null (treated as empty). If provided, elements cannot be null/blank.
- * @param allowedGrpcServices A whitelist of gRPC service identifiers allowed within this cluster.
- * Can be null (treated as empty). If provided, elements cannot be null/blank.
- */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record PipelineClusterConfig(
         @JsonProperty("clusterName") String clusterName,
         @JsonProperty("pipelineGraphConfig") PipelineGraphConfig pipelineGraphConfig,
         @JsonProperty("pipelineModuleMap") PipelineModuleMap pipelineModuleMap,
-        @JsonProperty("allowedKafkaTopics") Set<String> allowedKafkaTopics,
-        @JsonProperty("allowedGrpcServices") Set<String> allowedGrpcServices
+        @JsonProperty("allowedKafkaTopics") Set<String> allowedKafkaTopics, // Correct annotation
+        @JsonProperty("allowedGrpcServices") Set<String> allowedGrpcServices // Correct annotation
 ) {
-    // Canonical constructor with validation and making collections unmodifiable
-    public PipelineClusterConfig {
+    // This is an EXPLICIT CANONICAL CONSTRUCTOR
+    @JsonCreator
+    public PipelineClusterConfig(
+            @JsonProperty("clusterName") String clusterName,
+            @JsonProperty("pipelineGraphConfig") PipelineGraphConfig pipelineGraphConfig,
+            @JsonProperty("pipelineModuleMap") PipelineModuleMap pipelineModuleMap,
+            @JsonProperty("allowedKafkaTopics") Set<String> allowedKafkaTopics, // This is the input parameter
+            @JsonProperty("allowedGrpcServices") Set<String> allowedGrpcServices // This is the input parameter
+    ) {
         if (clusterName == null || clusterName.isBlank()) {
             throw new IllegalArgumentException("PipelineClusterConfig clusterName cannot be null or blank.");
         }
-        // pipelineGraphConfig and pipelineModuleMap can be null
+        this.clusterName = clusterName; // Assign validated parameter to the record component
 
-        // Validate and make allowedKafkaTopics unmodifiable
+        this.pipelineGraphConfig = pipelineGraphConfig; // Can be null, assigned directly
+        this.pipelineModuleMap = pipelineModuleMap;     // Can be null, assigned directly
+
+        // Validate and normalize allowedKafkaTopics
         if (allowedKafkaTopics == null) {
-            allowedKafkaTopics = Collections.emptySet();
+            this.allowedKafkaTopics = Collections.emptySet(); // Assign default to the record component
         } else {
-            // First, validate elements in the provided set
             for (String topic : allowedKafkaTopics) {
                 if (topic == null || topic.isBlank()) {
-                    throw new IllegalArgumentException("allowedKafkaTopics cannot contain null or blank topics.");
+                    throw new IllegalArgumentException("allowedKafkaTopics cannot contain null or blank strings.");
                 }
             }
-            // If validation passes, then create an immutable copy
-            allowedKafkaTopics = Set.copyOf(allowedKafkaTopics);
+            this.allowedKafkaTopics = Set.copyOf(allowedKafkaTopics); // Assign immutable copy to the record component
         }
 
-        // Validate and make allowedGrpcServices unmodifiable
+        // Validate and normalize allowedGrpcServices
         if (allowedGrpcServices == null) {
-            allowedGrpcServices = Collections.emptySet();
+            this.allowedGrpcServices = Collections.emptySet(); // Assign default to the record component
         } else {
-            // First, validate elements in the provided set
             for (String service : allowedGrpcServices) {
                 if (service == null || service.isBlank()) {
-                    throw new IllegalArgumentException("allowedGrpcServices cannot contain null or blank service identifiers.");
+                    throw new IllegalArgumentException("allowedGrpcServices cannot contain null or blank strings.");
                 }
             }
-            // If validation passes, then create an immutable copy
-            allowedGrpcServices = Set.copyOf(allowedGrpcServices);
+            this.allowedGrpcServices = Set.copyOf(allowedGrpcServices); // Assign immutable copy to the record component
         }
-    }
-
-    /**
-     * Convenience constructor for minimal valid configuration.
-     * @param clusterName The name of the cluster.
-     */
-    public PipelineClusterConfig(String clusterName) {
-        this(clusterName, null, null, Collections.emptySet(), Collections.emptySet());
     }
 }

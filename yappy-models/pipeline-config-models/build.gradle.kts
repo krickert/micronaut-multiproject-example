@@ -30,6 +30,11 @@ dependencies {
 
     // Test dependencies
     testImplementation(libs.bundles.testing.jvm)
+    // https://mvnrepository.com/artifact/com.fasterxml.jackson.datatype/jackson-datatype-jdk8
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.19.0")
+    // https://mvnrepository.com/artifact/com.fasterxml.jackson.module/jackson-module-parameter-names
+    implementation("com.fasterxml.jackson.module:jackson-module-parameter-names:2.19.0")
+
 }
 
 // Create test source directories

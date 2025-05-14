@@ -1,107 +1,140 @@
-package com.krickert.search.config.pipeline.model;
+package com.krickert.search.config.pipeline.model; // Assuming this is where JsonConfigOptions exists
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import java.util.List;
-import java.util.Collections; // For unmodifiable lists
 
-// No Lombok needed
+import java.util.List;
+import java.util.Map;
+import java.util.Collections;
+import java.util.Objects;
 
 /**
  * Configuration for a single processing unit (a "step") within a pipeline.
- * This record is immutable.
+ * This record is immutable and uses the new routing model.
  *
- * @param pipelineStepId The ID of the pipeline step (unique within a pipeline). Must not be null or blank.
- * @param pipelineImplementationId The ID of the pipeline module implementation (references a key in
- * PipelineModuleMap.availableModules). Must not be null or blank.
- * @param customConfig Custom configuration options for this pipeline step. Can be null.
- * @param kafkaListenTopics List of Kafka topic names this step should listen to for input.
- * Can be null (treated as empty). If provided, elements cannot be null/blank.
- * @param kafkaPublishTopics List of Kafka topics this step will publish its output to.
- * Can be null (treated as empty). If provided, elements cannot be null.
- * @param grpcForwardTo List of gRPC service identifiers this step may forward requests or data to.
- * Can be null (treated as empty). If provided, elements cannot be null/blank.
- * @param nextSteps List of IDs of the next pipeline steps to execute on successful completion.
- * Can be null (treated as empty). If provided, elements cannot be null/blank.
- * @param errorSteps List of IDs of the pipeline steps to execute if this step encounters an error.
- * Can be null (treated as empty). If provided, elements cannot be null/blank.
+ * @param pipelineStepId Unique ID of this step instance within the pipeline.
+ * @param pipelineImplementationId Links to PipelineModuleConfiguration, defining the step's logic.
+ * @param customConfig Custom JSON configuration specific to this step instance.
+ * @param nextSteps List of target pipelineStepIds to execute on successful completion.
+ * @param errorSteps List of target pipelineStepIds to execute if this step encounters an error.
+ * @param transportType The transport mechanism (KAFKA, GRPC, INTERNAL) for this step.
+ * @param kafkaConfig Configuration for Kafka transport, used if transportType is KAFKA.
+ * @param grpcConfig Configuration for gRPC transport, used if transportType is GRPC.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record PipelineStepConfig(
+    @JsonProperty("pipelineStepId") String pipelineStepId,
+    @JsonProperty("pipelineImplementationId") String pipelineImplementationId,
+    @JsonProperty("customConfig") JsonConfigOptions customConfig, // Assuming JsonConfigOptions is an existing record
+
+    // Logical flow definition
+    @JsonProperty("nextSteps") List<String> nextSteps,
+    @JsonProperty("errorSteps") List<String> errorSteps,
+
+    // Physical transport configuration
+    @JsonProperty("transportType") TransportType transportType,
+    @JsonProperty("kafkaConfig") KafkaTransportConfig kafkaConfig,
+    @JsonProperty("grpcConfig") GrpcTransportConfig grpcConfig
+) {
+    @JsonCreator
+    public PipelineStepConfig(
         @JsonProperty("pipelineStepId") String pipelineStepId,
         @JsonProperty("pipelineImplementationId") String pipelineImplementationId,
         @JsonProperty("customConfig") JsonConfigOptions customConfig,
-        @JsonProperty("kafkaListenTopics") List<String> kafkaListenTopics,
-        @JsonProperty("kafkaPublishTopics") List<KafkaPublishTopic> kafkaPublishTopics,
-        @JsonProperty("grpcForwardTo") List<String> grpcForwardTo,
-        @JsonProperty("nextSteps") List<String> nextSteps,         // Added
-        @JsonProperty("errorSteps") List<String> errorSteps        // Added
-) {
-    // Canonical constructor making collections unmodifiable and handling nulls
-    public PipelineStepConfig {
+        @JsonProperty("nextSteps") List<String> nextSteps,
+        @JsonProperty("errorSteps") List<String> errorSteps,
+        @JsonProperty("transportType") TransportType transportType,
+        @JsonProperty("kafkaConfig") KafkaTransportConfig kafkaConfig,
+        @JsonProperty("grpcConfig") GrpcTransportConfig grpcConfig
+    ) {
+        // --- Essential Validations ---
         if (pipelineStepId == null || pipelineStepId.isBlank()) {
             throw new IllegalArgumentException("PipelineStepConfig pipelineStepId cannot be null or blank.");
         }
+        this.pipelineStepId = pipelineStepId;
+
         if (pipelineImplementationId == null || pipelineImplementationId.isBlank()) {
             throw new IllegalArgumentException("PipelineStepConfig pipelineImplementationId cannot be null or blank.");
         }
-        // customConfig can be null
+        this.pipelineImplementationId = pipelineImplementationId;
 
-        // Validate and normalize kafkaListenTopics
-        if (kafkaListenTopics == null) {
-            kafkaListenTopics = Collections.emptyList();
-        } else {
-            for (String topic : kafkaListenTopics) {
-                if (topic == null || topic.isBlank()) {
-                    throw new IllegalArgumentException("kafkaListenTopics cannot contain null or blank topics.");
-                }
-            }
-            kafkaListenTopics = List.copyOf(kafkaListenTopics);
+        if (transportType == null) {
+            throw new IllegalArgumentException("PipelineStepConfig transportType cannot be null.");
         }
+        this.transportType = transportType;
 
-        // Validate and normalize kafkaPublishTopics
-        if (kafkaPublishTopics == null) {
-            kafkaPublishTopics = Collections.emptyList();
-        } else {
-            // List.copyOf will throw NullPointerException if any element in kafkaPublishTopics is null.
-            // KafkaPublishTopic record itself should validate its internal fields.
-            kafkaPublishTopics = List.copyOf(kafkaPublishTopics);
+        // --- Conditional Validations for Transport Configs ---
+        if (this.transportType == TransportType.KAFKA && kafkaConfig == null) {
+            throw new IllegalArgumentException("KafkaTransportConfig must be provided when transportType is KAFKA.");
         }
-
-        // Validate and normalize grpcForwardTo
-        if (grpcForwardTo == null) {
-            grpcForwardTo = Collections.emptyList();
-        } else {
-            for (String service : grpcForwardTo) {
-                if (service == null || service.isBlank()) {
-                    throw new IllegalArgumentException("grpcForwardTo cannot contain null or blank service identifiers.");
-                }
-            }
-            grpcForwardTo = List.copyOf(grpcForwardTo);
+        if (this.transportType != TransportType.KAFKA && kafkaConfig != null) {
+            throw new IllegalArgumentException("KafkaTransportConfig should only be provided when transportType is KAFKA (found type: " + this.transportType + ").");
         }
+        this.kafkaConfig = kafkaConfig;
 
-        // Validate and normalize nextSteps (Added)
-        if (nextSteps == null) {
-            nextSteps = Collections.emptyList();
-        } else {
-            for (String stepId : nextSteps) {
-                if (stepId == null || stepId.isBlank()) {
-                    throw new IllegalArgumentException("nextSteps cannot contain null or blank step IDs.");
-                }
-            }
-            nextSteps = List.copyOf(nextSteps);
+        if (this.transportType == TransportType.GRPC && grpcConfig == null) {
+            throw new IllegalArgumentException("GrpcTransportConfig must be provided when transportType is GRPC.");
         }
+        if (this.transportType != TransportType.GRPC && grpcConfig != null) {
+            throw new IllegalArgumentException("GrpcTransportConfig should only be provided when transportType is GRPC (found type: " + this.transportType + ").");
+        }
+        this.grpcConfig = grpcConfig;
 
-        // Validate and normalize errorSteps (Added)
-        if (errorSteps == null) {
-            errorSteps = Collections.emptyList();
-        } else {
-            for (String stepId : errorSteps) {
-                if (stepId == null || stepId.isBlank()) {
-                    throw new IllegalArgumentException("errorSteps cannot contain null or blank step IDs.");
-                }
+        // --- Custom Config can be null ---
+        this.customConfig = customConfig;
+
+        // --- Defensive Copies for Lists ---
+        this.nextSteps = (nextSteps == null) ? Collections.emptyList() : List.copyOf(nextSteps);
+        this.errorSteps = (errorSteps == null) ? Collections.emptyList() : List.copyOf(errorSteps);
+
+        // --- Validate List Contents (no null/blank step IDs) ---
+        for (String stepId : this.nextSteps) {
+            if (stepId == null || stepId.isBlank()) {
+                throw new IllegalArgumentException("nextSteps cannot contain null or blank step IDs.");
             }
-            errorSteps = List.copyOf(errorSteps);
+        }
+        for (String stepId : this.errorSteps) {
+            if (stepId == null || stepId.isBlank()) {
+                throw new IllegalArgumentException("errorSteps cannot contain null or blank step IDs.");
+            }
         }
     }
 }
+
+// You'll also need to ensure JsonConfigOptions record is defined.
+// Assuming it's something like:
+// package com.krickert.search.config.pipeline.model;
+//
+// import com.fasterxml.jackson.annotation.JsonInclude;
+// import com.fasterxml.jackson.annotation.JsonProperty;
+//
+// @JsonInclude(JsonInclude.Include.NON_NULL)
+// public record JsonConfigOptions(
+//    @JsonProperty("jsonConfig") String jsonConfig, // The actual JSON string
+//    @JsonProperty("schemaReference") SchemaReference schemaReference // Reference to its schema
+// ) {
+//    public JsonConfigOptions {
+//        // jsonConfig can be null or empty
+//        // schemaReference can be null
+//    }
+// }
+
+// And SchemaReference:
+// package com.krickert.search.config.pipeline.model;
+//
+// import com.fasterxml.jackson.annotation.JsonInclude;
+// import com.fasterxml.jackson.annotation.JsonProperty;
+//
+// @JsonInclude(JsonInclude.Include.NON_NULL)
+// public record SchemaReference(
+//    @JsonProperty("subject") String subject, // Or schemaId, artifactId etc.
+//    @JsonProperty("version") Integer version // Can be Integer or String depending on your registry
+// ) {
+//    public SchemaReference {
+//        if (subject == null || subject.isBlank()) {
+//            throw new IllegalArgumentException("SchemaReference subject cannot be null or blank.");
+//        }
+//        // version can be null if it means "latest" or is not applicable
+//    }
+// }
