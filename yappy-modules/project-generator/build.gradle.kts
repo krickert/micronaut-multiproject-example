@@ -19,13 +19,15 @@ tasks.register("generateNewModule") {
 
     doLast {
         val templateDir = project.projectDir.resolve("template-files")
-        val targetRootDir = project.projectDir.parentFile.resolve("modules")
-        val newModuleDir = targetRootDir.resolve(moduleNameLowerHyphen)
+        val targetRootDir = project.projectDir.parentFile
+        val newModuleDir = targetRootDir.resolve(moduleNameLowerHyphen) // Use the String version
 
         if (newModuleDir.exists()) {
             throw GradleException("Target directory $newModuleDir already exists.")
         }
         targetRootDir.mkdirs()
+
+        println("Generating new module in: $newModuleDir") // Added for clarity
 
         project.copy {
             from(templateDir)
