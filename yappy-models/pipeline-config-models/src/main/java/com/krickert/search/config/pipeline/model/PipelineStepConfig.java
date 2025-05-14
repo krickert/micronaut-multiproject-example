@@ -84,57 +84,38 @@ public record PipelineStepConfig(
         // --- Custom Config can be null ---
         this.customConfig = customConfig;
 
+        // --- Validate List Contents (no null elements) ---
+        if (nextSteps != null) {
+            for (String step : nextSteps) {
+                if (step == null) {
+                    throw new IllegalArgumentException("nextSteps cannot contain null or blank step IDs: " + nextSteps);
+                }
+            }
+        }
+
+        if (errorSteps != null) {
+            for (String step : errorSteps) {
+                if (step == null) {
+                    throw new IllegalArgumentException("errorSteps cannot contain null or blank step IDs: " + errorSteps);
+                }
+            }
+        }
+
         // --- Defensive Copies for Lists ---
         this.nextSteps = (nextSteps == null) ? Collections.emptyList() : List.copyOf(nextSteps);
         this.errorSteps = (errorSteps == null) ? Collections.emptyList() : List.copyOf(errorSteps);
 
-        // --- Validate List Contents (no null/blank step IDs) ---
+        // --- Validate for blank step IDs ---
         for (String stepId : this.nextSteps) {
-            if (stepId == null || stepId.isBlank()) {
-                throw new IllegalArgumentException("nextSteps cannot contain null or blank step IDs.");
+            if (stepId.isBlank()) {
+                throw new IllegalArgumentException("nextSteps cannot contain null or blank step IDs: " + nextSteps);
             }
         }
+
         for (String stepId : this.errorSteps) {
-            if (stepId == null || stepId.isBlank()) {
-                throw new IllegalArgumentException("errorSteps cannot contain null or blank step IDs.");
+            if (stepId.isBlank()) {
+                throw new IllegalArgumentException("errorSteps cannot contain null or blank step IDs: " + errorSteps);
             }
         }
     }
 }
-
-// You'll also need to ensure JsonConfigOptions record is defined.
-// Assuming it's something like:
-// package com.krickert.search.config.pipeline.model;
-//
-// import com.fasterxml.jackson.annotation.JsonInclude;
-// import com.fasterxml.jackson.annotation.JsonProperty;
-//
-// @JsonInclude(JsonInclude.Include.NON_NULL)
-// public record JsonConfigOptions(
-//    @JsonProperty("jsonConfig") String jsonConfig, // The actual JSON string
-//    @JsonProperty("schemaReference") SchemaReference schemaReference // Reference to its schema
-// ) {
-//    public JsonConfigOptions {
-//        // jsonConfig can be null or empty
-//        // schemaReference can be null
-//    }
-// }
-
-// And SchemaReference:
-// package com.krickert.search.config.pipeline.model;
-//
-// import com.fasterxml.jackson.annotation.JsonInclude;
-// import com.fasterxml.jackson.annotation.JsonProperty;
-//
-// @JsonInclude(JsonInclude.Include.NON_NULL)
-// public record SchemaReference(
-//    @JsonProperty("subject") String subject, // Or schemaId, artifactId etc.
-//    @JsonProperty("version") Integer version // Can be Integer or String depending on your registry
-// ) {
-//    public SchemaReference {
-//        if (subject == null || subject.isBlank()) {
-//            throw new IllegalArgumentException("SchemaReference subject cannot be null or blank.");
-//        }
-//        // version can be null if it means "latest" or is not applicable
-//    }
-// }

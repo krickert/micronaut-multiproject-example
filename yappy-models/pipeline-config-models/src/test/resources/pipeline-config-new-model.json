@@ -6,12 +6,12 @@
       "pipelineImplementationId": "entry-module",
       "customConfig": {"jsonConfig": "{\"entryParam\":\"start\"}"},
       "nextSteps": ["processing-step"],
-      "errorSteps": ["error-handler-step"],
+      "errorSteps": ["error-handler-for-kafka-entry"],
       "transportType": "KAFKA",
       "kafkaConfig": {
         "listenTopics": ["raw-data-input"],
         "publishTopicPattern": "pipeline.kafka-entry-step.processed",
-        "kafkaProperties": {}
+        "kafkaProperties": {"acks":"all"}
       }
     },
     "processing-step": {
@@ -22,10 +22,17 @@
       "errorSteps": [],
       "transportType": "INTERNAL"
     },
-    "error-handler-step": {
-      "pipelineStepId": "error-handler-step",
-      "pipelineImplementationId": "error-module",
-      "transportType": "INTERNAL"
+    "grpc-service-step": {
+      "pipelineStepId": "grpc-service-step",
+      "pipelineImplementationId": "external-validator",
+      "customConfig": {"jsonConfig":"{\"mode\":\"strict\"}"},
+      "nextSteps": [],
+      "errorSteps": [],
+      "transportType": "GRPC",
+      "grpcConfig": {
+        "serviceId": "validator-service-v1",
+        "grpcProperties": {"timeout":"3s"}
+      }
     }
   }
 }
