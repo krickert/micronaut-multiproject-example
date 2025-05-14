@@ -63,7 +63,7 @@ public class PathResolverResult {
         return parentField;
     }
 
-    Descriptors.FieldDescriptor getTargetField() {
+    public Descriptors.FieldDescriptor getTargetField() {
         return targetField;
     }
 
