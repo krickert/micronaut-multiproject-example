@@ -64,7 +64,7 @@ class DefaultConfigurationValidatorMicronautTest {
     @Test
     void testValidatorInjectedAndValidatesSimpleConfig() {
         assertNotNull(validator, "DefaultConfigurationValidator should be injected");
-        PipelineClusterConfig config = new PipelineClusterConfig("TestClusterSimple");
+        PipelineClusterConfig config = new PipelineClusterConfig("TestClusterSimple", null, null, null, null);
         Function<SchemaReference, Optional<String>> schemaContentProvider = ref -> Optional.of("{}");
         ValidationResult result = validator.validate(config, schemaContentProvider); // Use the injected validator
         assertTrue(result.isValid(), "Validation should succeed for a simple valid configuration. Errors: " + result.errors());
@@ -99,8 +99,8 @@ class DefaultConfigurationValidatorMicronautTest {
     void testValidateInvalidConfigFromInjectedRule() {
         Map<String, PipelineStepConfig> steps = new HashMap<>();
         PipelineStepConfig step = new PipelineStepConfig(
-                "step1", "non-existent-module", null, null, null, null,
-                null, null
+                "step1", "non-existent-module", null, null, null, 
+                TransportType.INTERNAL, null, null
         );
         steps.put("step1", step);
         PipelineConfig pipeline = new PipelineConfig("pipeline1", steps);
@@ -123,17 +123,23 @@ class DefaultConfigurationValidatorMicronautTest {
     void testValidateConfigWithMultipleRuleViolations() {
         Map<String, PipelineStepConfig> stepsInvalidModule = new HashMap<>();
         PipelineStepConfig stepInvalidModule = new PipelineStepConfig(
-                "stepBadModule", "unknown-module-id", null, null, null, null, null, null
+                "stepBadModule", "unknown-module-id", null, null, null, 
+                TransportType.INTERNAL, null, null
         );
         stepsInvalidModule.put(stepInvalidModule.pipelineStepId(), stepInvalidModule);
         PipelineConfig pipeline1 = new PipelineConfig("pipelineWithBadModule", stepsInvalidModule);
 
         Map<String, PipelineStepConfig> stepsInvalidTopic = new HashMap<>();
+        // Create a KafkaTransportConfig with a non-whitelisted listen topic
+        KafkaTransportConfig kafkaConfig = new KafkaTransportConfig(
+                List.of("non-whitelisted-listen-topic"), 
+                null, 
+                null
+        );
+
         PipelineStepConfig stepInvalidTopic = new PipelineStepConfig(
-                "stepBadTopic", "actual-module-id",
-                null,
-                List.of("non-whitelisted-listen-topic"),
-                null, null, null, null
+                "stepBadTopic", "actual-module-id", null, null, null,
+                TransportType.KAFKA, kafkaConfig, null
         );
         stepsInvalidTopic.put(stepInvalidTopic.pipelineStepId(), stepInvalidTopic);
         PipelineConfig pipeline2 = new PipelineConfig("pipelineWithBadTopic", stepsInvalidTopic);
@@ -159,10 +165,16 @@ class DefaultConfigurationValidatorMicronautTest {
         assertFalse(result.isValid(), "Validation should fail due to multiple errors. Errors: " + result.errors());
         assertTrue(result.errors().size() >= 2, "Expected at least two errors from different rules.");
 
+        // Print all errors for debugging
+        System.out.println("[DEBUG_LOG] All errors: " + result.errors());
+
         boolean unknownModuleErrorFound = result.errors().stream()
                 .anyMatch(e -> e.contains("references unknown pipelineImplementationId 'unknown-module-id'"));
         boolean whitelistErrorFound = result.errors().stream()
-                .anyMatch(e -> e.contains("listens to non-whitelisted Kafka topic 'non-whitelisted-listen-topic'"));
+                .anyMatch(e -> e.contains("listens to non-whitelisted topic 'non-whitelisted-listen-topic'"));
+
+        System.out.println("[DEBUG_LOG] unknownModuleErrorFound: " + unknownModuleErrorFound);
+        System.out.println("[DEBUG_LOG] whitelistErrorFound: " + whitelistErrorFound);
 
         assertTrue(unknownModuleErrorFound, "Should find error for unknown module ID.");
         assertTrue(whitelistErrorFound, "Should find error for non-whitelisted Kafka topic.");
@@ -178,7 +190,7 @@ class DefaultConfigurationValidatorMicronautTest {
 
         DefaultConfigurationValidator testSpecificValidator = new DefaultConfigurationValidator(rulesForThisTest);
 
-        PipelineClusterConfig config = new PipelineClusterConfig("TestClusterForException");
+        PipelineClusterConfig config = new PipelineClusterConfig("TestClusterForException", null, null, null, null);
         ValidationResult result = testSpecificValidator.validate(config, ref -> Optional.empty());
 
         assertFalse(result.isValid(), "Validation should fail when a rule throws an exception.");
@@ -206,30 +218,65 @@ class DefaultConfigurationValidatorMicronautTest {
         Set<String> allowedKafkaTopics = Set.of("input-topic", "p1s1-produces-topic", "p1s2-listens-topic", "output-topic");
         Set<String> allowedGrpcServices = Set.of("grpc-service-A");
 
-        // --- Pipeline 1 Steps (Modified to avoid InterPipelineLoopValidator self-loop) ---
+        // --- Pipeline 1 Steps (Modified to use the new transport model) ---
         Map<String, PipelineStepConfig> p1Steps = new HashMap<>();
-        p1Steps.put("p1s1", new PipelineStepConfig("p1s1", "mod1_impl",
+
+        // Create KafkaTransportConfig for p1s1
+        KafkaTransportConfig p1s1KafkaConfig = new KafkaTransportConfig(
+                List.of("input-topic"),
+                "p1s1-produces-topic",
+                null
+        );
+
+        p1Steps.put("p1s1", new PipelineStepConfig(
+                "p1s1", 
+                "mod1_impl",
                 new JsonConfigOptions("{\"key\":\"value\"}"), // Has custom config
-                List.of("input-topic"), // Listens
-                List.of(new KafkaPublishTopic("p1s1-produces-topic")), // Publishes to a distinct topic for p1s1
-                null, // grpcForwardTo
                 List.of("p1s2"), // nextSteps
-                null  // errorSteps
+                null,  // errorSteps
+                TransportType.KAFKA, 
+                p1s1KafkaConfig,
+                null // No gRPC config
         ));
-        // p1s2 now listens to a *different* topic than what p1s1 produces,
-        // or no Kafka topic if the data flow is purely logical via nextSteps.
-        // To make it clearly distinct for InterPipelineLoopValidator:
-        p1Steps.put("p1s2", new PipelineStepConfig("p1s2", "mod2_impl", null,
-                List.of("p1s2-listens-topic"), // Listens to its own distinct input topic
-                List.of(new KafkaPublishTopic("output-topic")),
-                List.of("grpc-service-A"),
-                null, // no next Kafka step modeled here
-                null));
+
+        // Create KafkaTransportConfig for p1s2
+        KafkaTransportConfig p1s2KafkaConfig = new KafkaTransportConfig(
+                List.of("p1s2-listens-topic"),
+                "output-topic",
+                null
+        );
+
+        // Create GrpcTransportConfig for p1s2
+        GrpcTransportConfig p1s2GrpcConfig = new GrpcTransportConfig(
+                "grpc-service-A",
+                null
+        );
+
+        p1Steps.put("p1s2", new PipelineStepConfig(
+                "p1s2", 
+                "mod2_impl", 
+                null, // No custom config
+                null, // No next steps
+                null, // No error steps
+                TransportType.KAFKA, // Using Kafka as the primary transport
+                p1s2KafkaConfig,
+                null // No gRPC config for this test
+        ));
+
         PipelineConfig pipeline1 = new PipelineConfig("pipelineOne", p1Steps);
 
-        // --- Pipeline 2 Steps (simple, no kafka/grpc) ---
+        // --- Pipeline 2 Steps (simple, using INTERNAL transport) ---
         Map<String, PipelineStepConfig> p2Steps = new HashMap<>();
-        p2Steps.put("p2s1", new PipelineStepConfig("p2s1", "mod2_impl", null, null, null, null, null, null));
+        p2Steps.put("p2s1", new PipelineStepConfig(
+                "p2s1", 
+                "mod2_impl", 
+                null, 
+                null, 
+                null, 
+                TransportType.INTERNAL, 
+                null, 
+                null
+        ));
         PipelineConfig pipeline2 = new PipelineConfig("pipelineTwo", p2Steps);
 
         // --- Graph ---

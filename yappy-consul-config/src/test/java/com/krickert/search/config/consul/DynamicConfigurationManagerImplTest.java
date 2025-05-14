@@ -118,7 +118,7 @@ class DynamicConfigurationManagerImplTest {
 
     @Test
     void initialize_initialValidationFails_doesNotUpdateCacheOrPublishEventAndStartsWatch() {
-        PipelineClusterConfig mockClusterConfig = new PipelineClusterConfig(TEST_CLUSTER_NAME);
+        PipelineClusterConfig mockClusterConfig = new PipelineClusterConfig(TEST_CLUSTER_NAME, null, null, null, null);
         when(mockConsulConfigFetcher.fetchPipelineClusterConfig(TEST_CLUSTER_NAME))
                 .thenReturn(Optional.of(mockClusterConfig));
         when(mockConfigurationValidator.validate(eq(mockClusterConfig), any()))
@@ -134,7 +134,7 @@ class DynamicConfigurationManagerImplTest {
 
     @Test
     void handleConsulClusterConfigUpdate_successfulUpdate_validatesAndCachesAndPublishes() {
-        PipelineClusterConfig oldMockConfig = new PipelineClusterConfig("old-cluster-config-name");
+        PipelineClusterConfig oldMockConfig = new PipelineClusterConfig("old-cluster-config-name", null, null, null, null);
         // This is what will be in the cache *before* the new config from watch is processed.
         // This will become the 'oldConfig' in the update event.
         when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldMockConfig));
@@ -192,7 +192,7 @@ class DynamicConfigurationManagerImplTest {
 
     @Test
     void handleConsulClusterConfigUpdate_configDeleted_clearsCacheAndPublishes() {
-        PipelineClusterConfig oldMockConfig = new PipelineClusterConfig(TEST_CLUSTER_NAME);
+        PipelineClusterConfig oldMockConfig = new PipelineClusterConfig(TEST_CLUSTER_NAME, null, null, null, null);
 
         // --- Initialisation Phase Stubs ---
         // This is what initialize() will fetch and process
@@ -233,9 +233,9 @@ class DynamicConfigurationManagerImplTest {
 
     @Test
     void handleConsulClusterConfigUpdate_validationFails_keepsOldConfigAndDoesNotPublishSuccessEvent() {
-        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config");
+        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config", null, null, null, null);
         when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
-        PipelineClusterConfig newInvalidConfigFromWatch = new PipelineClusterConfig("new-invalid-config");
+        PipelineClusterConfig newInvalidConfigFromWatch = new PipelineClusterConfig("new-invalid-config", null, null, null, null);
 
         // Simulate initial load and watch setup
         when(mockConsulConfigFetcher.fetchPipelineClusterConfig(TEST_CLUSTER_NAME)).thenReturn(Optional.of(oldValidConfig));
@@ -286,7 +286,7 @@ class DynamicConfigurationManagerImplTest {
 
     @Test
     void handleConsulClusterConfigUpdate_fetchSchemaThrowsException_handlesGracefullyKeepsOldConfig() {
-        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config");
+        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config", null, null, null, null);
         when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
 
         SchemaReference schemaRefNew = new SchemaReference("moduleNew-schema", 1);
@@ -360,7 +360,7 @@ class DynamicConfigurationManagerImplTest {
 
     @Test
     void handleConsulWatchUpdate_watchResultHasError_logsAndKeepsOldConfig() {
-        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config");
+        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config", null, null, null, null);
         when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
 
         // Initial setup
@@ -388,8 +388,8 @@ class DynamicConfigurationManagerImplTest {
     }
     @Test
     void handleConsulWatchUpdate_validationItselfThrowsRuntimeException_logsAndKeepsOldConfig() {
-        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config");
-        PipelineClusterConfig newConfigFromWatch = new PipelineClusterConfig("new-config-causes-validator-error");
+        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config", null, null, null, null);
+        PipelineClusterConfig newConfigFromWatch = new PipelineClusterConfig("new-config-causes-validator-error", null, null, null, null);
         when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
 
         dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
@@ -412,8 +412,8 @@ class DynamicConfigurationManagerImplTest {
     }
     @Test
     void handleConsulWatchUpdate_cacheUpdateThrowsRuntimeException_logsError_eventNotPublished() {
-        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config");
-        PipelineClusterConfig newConfigFromWatch = new PipelineClusterConfig("new-config-causes-cache-error");
+        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config", null, null, null, null);
+        PipelineClusterConfig newConfigFromWatch = new PipelineClusterConfig("new-config-causes-cache-error", null, null, null, null);
         when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
 
         dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
@@ -437,8 +437,8 @@ class DynamicConfigurationManagerImplTest {
     }
     @Test
     void publishEvent_directListenerThrows_continuesNotifyingOtherListenersAndMicronautPublisher() {
-        PipelineClusterConfig currentConfig = new PipelineClusterConfig("current");
-        PipelineClusterConfig newConfig = new PipelineClusterConfig("new-valid-config");
+        PipelineClusterConfig currentConfig = new PipelineClusterConfig("current", null, null, null, null);
+        PipelineClusterConfig newConfig = new PipelineClusterConfig("new-valid-config", null, null, null, null);
 
         Consumer<ClusterConfigUpdateEvent> misbehavingListener = Mockito.mock(Consumer.class);
         doThrow(new RuntimeException("Listener failed!")).when(misbehavingListener).accept(any());
@@ -492,7 +492,7 @@ class DynamicConfigurationManagerImplTest {
     }
     @Test
     void handleConsulWatchUpdate_ambiguousWatchResult_logsAndNoAction() {
-        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config");
+        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config", null, null, null, null);
         when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
 
         dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);

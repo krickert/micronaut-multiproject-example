@@ -207,7 +207,7 @@ class KiwiprojectConsulConfigFetcherTest {
         String clusterConfigKey = consulConfigFetcher.getClusterConfigKey(TEST_CLUSTER_NAME);
         @SuppressWarnings("unchecked")
         Consumer<WatchCallbackResult> mockUpdateHandler = mock(Consumer.class);
-        PipelineClusterConfig testConfig = new PipelineClusterConfig(TEST_CLUSTER_NAME);
+        PipelineClusterConfig testConfig = new PipelineClusterConfig(TEST_CLUSTER_NAME, null, null, null, null);
         String testConfigJson = "{\"clusterName\":\"" + TEST_CLUSTER_NAME + "\"}";
 
         org.kiwiproject.consul.model.kv.Value consulApiValue = mock(org.kiwiproject.consul.model.kv.Value.class);

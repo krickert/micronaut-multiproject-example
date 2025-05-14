@@ -1,7 +1,11 @@
 # **YAPPY gRPC API Manual**
 
 *(Last Updated: 2025-05-13)*
+NOTE FOR READERS:
 
+Please see bottom appendix on refactoring we have done.
+
+## **Introduction**
 This document provides a reference for the gRPC services and messages used within the YAPPY platform. It is intended for developers creating new pipeline step processors (modules) and for clients (connectors or other services) interacting with the pipeline engine.
 
 All Protobuf messages are defined within the com.krickert.search.model (for core types) or com.krickert.search.engine (for engine service) and com.krickert.search.sdk (for processor service, if generated there) packages as specified. For detailed field descriptions of common types like PipeStream, PipeDoc, etc., please refer to the yappy\_core\_types.proto definitions and the architecture\_overview.md (which should also be updated to reflect these changes).
@@ -293,3 +297,211 @@ The following core data types are used extensively. Their detailed definitions a
 * **`google.protobuf.Timestamp`**: Used for date/time fields.
 
 This document should serve as the primary reference for understanding and interacting with YAPPY's gRPC services. Ensure `yappy_core_types.proto`, `pipe_step_processor_service.proto`, and `engine_service.proto` are updated in your codebase and stubs are regenerated.
+
+
+## YAPPY's Unified Routing Model: A Refined Approach
+
+The core idea behind the refactoring was to address the confusion arising from multiple, sometimes overlapping, ways to define routing and transport for pipeline steps. The old model had explicit step routing (`nextSteps`/`errorSteps`), Kafka-specific topic definitions (`kafkaListenTopics`/`kafkaPublishTopics`), and gRPC forwarding (`grpcForwardTo`) all at the same level within `PipelineStepConfig`.
+
+The new model simplifies this by clearly separating **logical flow** from **physical transport**.
+
+### 1\. Core Principle: Separation of Concerns
+
+* **Logical Flow (The "What"):** Defined exclusively by `nextSteps` and `errorSteps` within `PipelineStepConfig`. These fields are lists of `pipelineStepId` strings, indicating the next step to execute upon success or failure, respectively.
+* **Physical Transport (The "How"):** Each `PipelineStepConfig` now has a `transportType` field (an enum: `KAFKA`, `GRPC`, `INTERNAL`). Based on this type, specific transport configuration is provided.
+
+### 2\. Refactored Java Configuration Models
+
+The primary changes were made to `PipelineStepConfig` and the introduction of new records for transport-specific details:
+
+* **`TransportType.java` (Enum):**
+
+  ```java
+  public enum TransportType {
+      KAFKA,
+      GRPC,
+      INTERNAL
+  }
+  ```
+
+* **`KafkaTransportConfig.java` (Record):**
+
+  ```java
+  public record KafkaTransportConfig(
+      List<String> listenTopics,      // Topics this step consumes from
+      String publishTopicPattern,   // Pattern for topics this step publishes to (e.g., "${pipelineId}.${stepId}.output")
+      Map<String, String> kafkaProperties // Consumer/Producer specific Kafka props
+  ) { /* constructor with validation */ }
+  ```
+
+* **`GrpcTransportConfig.java` (Record):**
+
+  ```java
+  public record GrpcTransportConfig(
+      String serviceId,             // Consul serviceId or other resolvable gRPC target
+      Map<String, String> grpcProperties // e.g., timeout, retry policies
+  ) { /* constructor with validation */ }
+  ```
+
+* **`PipelineStepConfig.java` (Refactored Record):**
+
+  ```java
+  public record PipelineStepConfig(
+      String pipelineStepId,
+      String pipelineImplementationId,
+      JsonConfigOptions customConfig,
+
+      // Logical flow definition
+      List<String> nextSteps,
+      List<String> errorSteps,
+
+      // Physical transport configuration
+      TransportType transportType,
+      KafkaTransportConfig kafkaConfig,    // Only used if transportType is KAFKA
+      GrpcTransportConfig grpcConfig       // Only used if transportType is GRPC
+  ) { /* constructor with validation */ }
+  ```
+
+   * **Removed old fields:** `kafkaListenTopics` (list of strings), `kafkaPublishTopics` (list of `KafkaPublishTopic` records), and `grpcForwardTo` (list of strings) are no longer direct members of `PipelineStepConfig`.
+
+### 3\. How the New Routing Works
+
+The YAPPY engine and the Kafka consumer framework will use these new models as follows:
+
+#### a. Determining the Next Logical Step
+
+* After a step (let's call it `CurrentStep`) completes, the engine (or Kafka framework for a Kafka-based `CurrentStep`) consults `CurrentStep.nextSteps()` if successful, or `CurrentStep.errorSteps()` if failed.
+* This gives the `pipelineStepId` of the `NextStep`.
+
+#### b. Dispatching to the `NextStep`
+
+1.  **Fetch `NextStep`'s Configuration:** The engine retrieves the full `PipelineStepConfig` for `NextStep` using its `pipelineStepId` (and its parent `pipelineName`).
+2.  **Examine `NextStep.transportType()`:**
+   * **If `TransportType.KAFKA`:**
+      * The engine (or `CurrentStep`'s framework if `CurrentStep` is also Kafka and responsible for publishing to the next hop) needs to send the `PipeStream` to one of the topics `NextStep` is listening on.
+      * It will look at `NextStep.kafkaConfig().listenTopics()`.
+      * The `PipeStream` message, with its `current_pipeline_name` and `target_step_name` fields updated to point to `NextStep`, is published to one of these designated `listenTopics`.
+      * When `NextStep` (as a Kafka consumer) eventually processes its *own* output, if it's a producer, it will use *its own* `kafkaConfig().publishTopicPattern()` to determine the name of the Kafka topic to publish its results to. This pattern (e.g., `"${pipelineId}.${stepId}.output"`) ensures deterministic and manageable output topic naming.
+   * **If `TransportType.GRPC`:**
+      * The engine looks at `NextStep.grpcConfig().serviceId()`.
+      * It uses this `serviceId` (e.g., via Consul service discovery) to find and invoke the gRPC service implementing `NextStep`.
+      * The request to the gRPC service will be populated using data from the `PipeStream` and the `customConfig`/`configParams` from `NextStep`'s `PipelineStepConfig`.
+   * **If `TransportType.INTERNAL`:**
+      * The engine directly executes the logic for `NextStep` (identified by `NextStep.pipelineImplementationId()`) within its own process.
+
+#### Visualizing the Model Change
+
+```mermaid
+graph TD
+    subgraph Old Model (Conceptual Fields in PipelineStepConfig)
+        PSC_Old[PipelineStepConfig]
+        PSC_Old --> Old_NextSteps["nextSteps (logical)"]
+        PSC_Old --> Old_ErrorSteps["errorSteps (logical)"]
+        PSC_Old --> Old_KafkaListen["kafkaListenTopics (physical)"]
+        PSC_Old --> Old_KafkaPublish["kafkaPublishTopics (physical)"]
+        PSC_Old --> Old_GrpcForward["grpcForwardTo (physical)"]
+    end
+
+    subgraph New Model (Refactored)
+        PSC_New[PipelineStepConfig]
+        PSC_New --> New_NextSteps["nextSteps (logical)"]
+        PSC_New --> New_ErrorSteps["errorSteps (logical)"]
+        PSC_New --> New_TransportType["transportType (enum)"]
+        New_TransportType --> KConfig["KafkaTransportConfig (if KAFKA)"]
+        New_TransportType --> GConfig["GrpcTransportConfig (if GRPC)"]
+        New_TransportType --> IConfig["(no extra config if INTERNAL)"]
+        KConfig --> KListen["listenTopics"]
+        KConfig --> KPublishPattern["publishTopicPattern"]
+        KConfig --> KProps["kafkaProperties"]
+        GConfig --> GServiceId["serviceId"]
+        GConfig --> GProps["grpcProperties"]
+    end
+
+    style PSC_Old fill:#f99,stroke:#333,stroke-width:2px
+    style PSC_New fill:#9cf,stroke:#333,stroke-width:2px
+```
+
+### 4\. Data Flow for Different Transport Types
+
+Let's illustrate how data moves with the new model:
+
+**Scenario A: Kafka to Kafka**
+
+```mermaid
+sequenceDiagram
+    participant Engine/Framework as Eng/Fw
+    participant KafkaBroker as Kafka
+    participant StepA_Config [PipelineStepConfig for StepA <br/> type: KAFKA <br/> publishTopicPattern: stepA.out]
+    participant StepB_Config [PipelineStepConfig for StepB <br/> type: KAFKA <br/> listenTopics: [stepA.out]]
+
+    Note over Eng/Fw: StepA (Kafka Producer) processes data.
+    Eng/Fw ->> StepA_Config: Get publishTopicPattern (resolves to "stepA.out")
+    Eng/Fw ->> Kafka: Publish PipeStream (target_step_name=StepB) to "stepA.out"
+    Kafka -->> Eng/Fw: (Kafka Consumer for StepB) Receives PipeStream from "stepA.out"
+    Eng/Fw ->> StepB_Config: Get config for StepB (using target_step_name)
+    Note over Eng/Fw: StepB processes data...
+```
+
+**Scenario B: gRPC to Kafka**
+
+```mermaid
+sequenceDiagram
+    participant Engine as Eng
+    participant GrpcModuleA as StepA_Impl (gRPC)
+    participant StepA_Config [PipelineStepConfig for StepA <br/> type: GRPC <br/> nextSteps: [StepB]]
+    participant KafkaBroker as Kafka
+    participant StepB_Config [PipelineStepConfig for StepB <br/> type: KAFKA <br/> listenTopics: [topicForB]]
+
+    Eng ->> StepA_Config: Get config for StepA
+    Eng ->> GrpcModuleA: Invoke StepA (gRPC call)
+    GrpcModuleA -->> Eng: Return result
+    Eng ->> StepA_Config: Get nextSteps (finds StepB)
+    Eng ->> StepB_Config: Get config for StepB (type KAFKA)
+    Eng ->> StepB_Config: Get listenTopics (e.g., "topicForB")
+    Eng ->> Kafka: Publish PipeStream (target_step_name=StepB) to "topicForB"
+```
+
+**Scenario C: Kafka to gRPC**
+
+```mermaid
+sequenceDiagram
+    participant KafkaFramework as KFw
+    participant KafkaBroker as Kafka
+    participant StepA_Config [PipelineStepConfig for StepA <br/> type: KAFKA <br/> nextSteps: [StepB]]
+    participant Engine as Eng
+    participant StepB_Config [PipelineStepConfig for StepB <br/> type: GRPC <br/> serviceId: serviceB_Id]
+    participant GrpcModuleB as StepB_Impl (gRPC)
+
+
+    KafkaBroker -->> KFw: (Consumer for StepA) Receives PipeStream
+    KFw ->> StepA_Config: Get config for StepA
+    Note over KFw: StepA processes data.
+    KFw ->> StepA_Config: Get nextSteps (finds StepB)
+    KFw ->> Eng: Handoff PipeStream (target_step_name=StepB) to Engine for gRPC call
+    Eng ->> StepB_Config: Get config for StepB (type GRPC)
+    Eng ->> StepB_Config: Get serviceId ("serviceB_Id")
+    Eng ->> GrpcModuleB: Invoke StepB (gRPC call)
+    GrpcModuleB -->> Eng: Return result
+```
+
+### 5\. Benefits of the Refactored Model
+
+This new approach brings several key advantages:
+
+1.  **Improved Clarity:** The separation of logical flow (`nextSteps`/`errorSteps`) from the physical transport mechanism (`transportType` and its specific configuration) makes pipeline definitions much easier to understand and reason about.
+2.  **Reduced Redundancy & Complexity:** `PipelineStepConfig` is leaner. Transport-specific details are neatly encapsulated. There's no ambiguity about which Kafka topics a step publishes to versus which gRPC service it forwards to.
+3.  **Enhanced Maintainability:** Changes to how a step communicates (e.g., switching from an internal process to a Kafka topic) primarily involve changing the `transportType` and providing the relevant new transport configuration, without altering the logical `nextSteps`.
+4.  **Deterministic Kafka Topic Naming:** The `publishTopicPattern` in `KafkaTransportConfig` allows for consistent and predictable naming of output topics, simplifying topic management and inter-step connections.
+5.  **Better Validation:**
+   * The configuration loader can now perform more precise validation. For example, it can ensure that if `transportType` is `KAFKA`, a `kafkaConfig` is present and `grpcConfig` is absent.
+   * Referential integrity checks (e.g., ensuring `nextSteps` point to valid step IDs) remain crucial and are clearly separated from transport concerns.
+6.  **Extensibility:** Adding a new transport type in the future (e.g., RabbitMQ, HTTP endpoint) would involve adding a new value to the `TransportType` enum and creating a corresponding configuration record, fitting cleanly into the existing model.
+
+### 6\. Impact on Other Components
+
+* **Protobuf (`PipeStream`):** Unchanged. The `PipeStream` already carried `current_pipeline_name` and `target_step_name`, which are essential for routing, especially in Kafka-based decoupled steps. The removal of the auxiliary `Blob` from `PipeStream` (consolidating it into `PipeDoc`) was a related cleanup.
+* **Validators (`ReferentialIntegrityValidator`, `WhitelistValidator`, Loop Validators):** These needed updates to understand how to find Kafka topic names (from `kafkaConfig.listenTopics` and resolved `kafkaConfig.publishTopicPattern`) and gRPC service IDs (from `grpcConfig.serviceId`) by first checking the `transportType`.
+* **Engine & Kafka Consumer Framework:** The internal logic of these components changes to interpret the new `PipelineStepConfig` structure for dispatching work and determining publish destinations.
+* **`DynamicConfigurationManagerImpl`:** Largely unaffected in its core logic, as it deals with `PipelineClusterConfig` as a whole and relies on the `ConfigurationValidator` for detailed rule application.
+
+This refactoring establishes a more robust and intuitive foundation for YAPPY's pipeline configuration, paving the way for easier development, clearer definitions, and better long-term maintainability.

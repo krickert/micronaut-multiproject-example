@@ -256,11 +256,11 @@
                     "step1_uses_missing_schema", // pipelineStepId
                     moduleImplementationId,      // pipelineImplementationId (links to moduleWithMissingSchema)
                     new JsonConfigOptions("{\"someKey\":\"someValue\"}"), // customConfig
-                    null, // kafkaListenTopics
-                    null, // kafkaPublishTopics
-                    null, // grpcForwardTo
                     null, // nextSteps
-                    null  // errorSteps
+                    null, // errorSteps
+                    TransportType.INTERNAL, // transportType
+                    null, // kafkaConfig
+                    null  // grpcConfig
             );
 
             // Create a pipeline containing this step
@@ -303,4 +303,3 @@
         }
 
     }
-    

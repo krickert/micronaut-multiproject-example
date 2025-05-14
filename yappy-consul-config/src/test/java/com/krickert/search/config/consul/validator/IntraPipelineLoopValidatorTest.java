@@ -39,7 +39,7 @@ class IntraPipelineLoopValidatorTest {
     @Test
     void validate_noPipelines_returnsNoErrors() {
         // Create a cluster config with no pipelines
-        PipelineClusterConfig clusterConfig = new PipelineClusterConfig("test-cluster");
+        PipelineClusterConfig clusterConfig = new PipelineClusterConfig("test-cluster", null, null, null, null);
 
         List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
 
@@ -49,8 +49,30 @@ class IntraPipelineLoopValidatorTest {
     @Test
     void validate_directLoop_returnsError() {
         Map<String, PipelineStepConfig> steps = new HashMap<>();
-        steps.put("stepA", new PipelineStepConfig("stepA", "test-module", null, List.of("topic2"), List.of(new KafkaPublishTopic("topic1")), null, null, null));
-        steps.put("stepB", new PipelineStepConfig("stepB", "test-module", null, List.of("topic1"), List.of(new KafkaPublishTopic("topic2")), null, null, null));
+        
+        // Create KafkaTransportConfig for stepA
+        KafkaTransportConfig stepAKafkaConfig = new KafkaTransportConfig(
+                List.of("topic2"), // listenTopics
+                "topic1", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        // Create KafkaTransportConfig for stepB
+        KafkaTransportConfig stepBKafkaConfig = new KafkaTransportConfig(
+                List.of("topic1"), // listenTopics
+                "topic2", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        steps.put("stepA", new PipelineStepConfig(
+                "stepA", "test-module", null, null, null, 
+                TransportType.KAFKA, stepAKafkaConfig, null
+        ));
+        
+        steps.put("stepB", new PipelineStepConfig(
+                "stepB", "test-module", null, null, null, 
+                TransportType.KAFKA, stepBKafkaConfig, null
+        ));
 
         PipelineConfig pipeline = new PipelineConfig("pipeline1", steps);
         PipelineClusterConfig clusterConfig = createClusterConfig(pipeline);
@@ -67,12 +89,78 @@ class IntraPipelineLoopValidatorTest {
     @Test
     void validate_multipleDistinctLoopsInSamePipeline_returnsAllErrors() {
         Map<String, PipelineStepConfig> steps = new HashMap<>();
-        steps.put("stepA", new PipelineStepConfig("stepA", "m", null, List.of("T2"), List.of(new KafkaPublishTopic("T1")), null, null, null));
-        steps.put("stepB", new PipelineStepConfig("stepB", "m", null, List.of("T1"), List.of(new KafkaPublishTopic("T2")), null, null, null));
-        steps.put("stepC", new PipelineStepConfig("stepC", "m", null, List.of("T4"), List.of(new KafkaPublishTopic("T3")), null, null, null));
-        steps.put("stepD", new PipelineStepConfig("stepD", "m", null, List.of("T3"), List.of(new KafkaPublishTopic("T4")), null, null, null));
-        steps.put("stepE", new PipelineStepConfig("stepE", "m", null, null, List.of(new KafkaPublishTopic("T5")), null, null, null));
-        steps.put("stepF", new PipelineStepConfig("stepF", "m", null, List.of("T5"), null, null, null, null));
+        
+        // Create KafkaTransportConfig for stepA
+        KafkaTransportConfig stepAKafkaConfig = new KafkaTransportConfig(
+                List.of("T2"), // listenTopics
+                "T1", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        // Create KafkaTransportConfig for stepB
+        KafkaTransportConfig stepBKafkaConfig = new KafkaTransportConfig(
+                List.of("T1"), // listenTopics
+                "T2", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        // Create KafkaTransportConfig for stepC
+        KafkaTransportConfig stepCKafkaConfig = new KafkaTransportConfig(
+                List.of("T4"), // listenTopics
+                "T3", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        // Create KafkaTransportConfig for stepD
+        KafkaTransportConfig stepDKafkaConfig = new KafkaTransportConfig(
+                List.of("T3"), // listenTopics
+                "T4", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        // Create KafkaTransportConfig for stepE
+        KafkaTransportConfig stepEKafkaConfig = new KafkaTransportConfig(
+                null, // listenTopics
+                "T5", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        // Create KafkaTransportConfig for stepF
+        KafkaTransportConfig stepFKafkaConfig = new KafkaTransportConfig(
+                List.of("T5"), // listenTopics
+                null, // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        steps.put("stepA", new PipelineStepConfig(
+                "stepA", "m", null, null, null, 
+                TransportType.KAFKA, stepAKafkaConfig, null
+        ));
+        
+        steps.put("stepB", new PipelineStepConfig(
+                "stepB", "m", null, null, null, 
+                TransportType.KAFKA, stepBKafkaConfig, null
+        ));
+        
+        steps.put("stepC", new PipelineStepConfig(
+                "stepC", "m", null, null, null, 
+                TransportType.KAFKA, stepCKafkaConfig, null
+        ));
+        
+        steps.put("stepD", new PipelineStepConfig(
+                "stepD", "m", null, null, null, 
+                TransportType.KAFKA, stepDKafkaConfig, null
+        ));
+        
+        steps.put("stepE", new PipelineStepConfig(
+                "stepE", "m", null, null, null, 
+                TransportType.KAFKA, stepEKafkaConfig, null
+        ));
+        
+        steps.put("stepF", new PipelineStepConfig(
+                "stepF", "m", null, null, null, 
+                TransportType.KAFKA, stepFKafkaConfig, null
+        ));
 
         PipelineConfig pipeline = new PipelineConfig("pipelineWithMultipleLoops", steps);
         PipelineClusterConfig clusterConfig = createClusterConfig(pipeline, "test-cluster-multi-internal-loop");
@@ -108,7 +196,18 @@ class IntraPipelineLoopValidatorTest {
     @Test
     void validate_selfLoop_returnsError() {
         Map<String, PipelineStepConfig> steps = new HashMap<>();
-        steps.put("stepA", new PipelineStepConfig("stepA", "test-module", null, List.of("topic1"), List.of(new KafkaPublishTopic("topic1")), null, null, null));
+        
+        // Create KafkaTransportConfig for stepA with self-loop
+        KafkaTransportConfig stepAKafkaConfig = new KafkaTransportConfig(
+                List.of("topic1"), // listenTopics
+                "topic1", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        steps.put("stepA", new PipelineStepConfig(
+                "stepA", "test-module", null, null, null, 
+                TransportType.KAFKA, stepAKafkaConfig, null
+        ));
 
         PipelineConfig pipeline = new PipelineConfig("pipeline1", steps);
         PipelineClusterConfig clusterConfig = createClusterConfig(pipeline);
@@ -124,9 +223,42 @@ class IntraPipelineLoopValidatorTest {
     @Test
     void validate_longerLoop_returnsError() {
         Map<String, PipelineStepConfig> steps = new HashMap<>();
-        steps.put("stepA", new PipelineStepConfig("stepA", "test-module", null, List.of("topic3"), List.of(new KafkaPublishTopic("topic1")), null, null, null));
-        steps.put("stepB", new PipelineStepConfig("stepB", "test-module", null, List.of("topic1"), List.of(new KafkaPublishTopic("topic2")), null, null, null));
-        steps.put("stepC", new PipelineStepConfig("stepC", "test-module", null, List.of("topic2"), List.of(new KafkaPublishTopic("topic3")), null, null, null));
+        
+        // Create KafkaTransportConfig for stepA
+        KafkaTransportConfig stepAKafkaConfig = new KafkaTransportConfig(
+                List.of("topic3"), // listenTopics
+                "topic1", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        // Create KafkaTransportConfig for stepB
+        KafkaTransportConfig stepBKafkaConfig = new KafkaTransportConfig(
+                List.of("topic1"), // listenTopics
+                "topic2", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        // Create KafkaTransportConfig for stepC
+        KafkaTransportConfig stepCKafkaConfig = new KafkaTransportConfig(
+                List.of("topic2"), // listenTopics
+                "topic3", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        steps.put("stepA", new PipelineStepConfig(
+                "stepA", "test-module", null, null, null, 
+                TransportType.KAFKA, stepAKafkaConfig, null
+        ));
+        
+        steps.put("stepB", new PipelineStepConfig(
+                "stepB", "test-module", null, null, null, 
+                TransportType.KAFKA, stepBKafkaConfig, null
+        ));
+        
+        steps.put("stepC", new PipelineStepConfig(
+                "stepC", "test-module", null, null, null, 
+                TransportType.KAFKA, stepCKafkaConfig, null
+        ));
 
         PipelineConfig pipeline = new PipelineConfig("pipeline1", steps);
         PipelineClusterConfig clusterConfig = createClusterConfig(pipeline);
@@ -150,14 +282,60 @@ class IntraPipelineLoopValidatorTest {
 
         // Pipeline 1: Linear (no loop)
         Map<String, PipelineStepConfig> steps1 = new HashMap<>();
-        steps1.put("step1A", new PipelineStepConfig("step1A", "test-module", null, null, List.of(new KafkaPublishTopic("topic1")), null, null, null));
-        steps1.put("step1B", new PipelineStepConfig("step1B", "test-module", null, List.of("topic1"), null, null, null, null));
+        
+        // Create KafkaTransportConfig for step1A
+        KafkaTransportConfig step1AKafkaConfig = new KafkaTransportConfig(
+                null, // listenTopics
+                "topic1", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        // Create KafkaTransportConfig for step1B
+        KafkaTransportConfig step1BKafkaConfig = new KafkaTransportConfig(
+                List.of("topic1"), // listenTopics
+                null, // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        steps1.put("step1A", new PipelineStepConfig(
+                "step1A", "test-module", null, null, null, 
+                TransportType.KAFKA, step1AKafkaConfig, null
+        ));
+        
+        steps1.put("step1B", new PipelineStepConfig(
+                "step1B", "test-module", null, null, null, 
+                TransportType.KAFKA, step1BKafkaConfig, null
+        ));
+        
         pipelines.put("pipeline1", new PipelineConfig("pipeline1", steps1));
 
         // Pipeline 2: With a loop
         Map<String, PipelineStepConfig> steps2 = new HashMap<>();
-        steps2.put("step2A", new PipelineStepConfig("step2A", "test-module", null, List.of("topic2B"), List.of(new KafkaPublishTopic("topic2A")), null, null, null));
-        steps2.put("step2B", new PipelineStepConfig("step2B", "test-module", null, List.of("topic2A"), List.of(new KafkaPublishTopic("topic2B")), null, null, null));
+        
+        // Create KafkaTransportConfig for step2A
+        KafkaTransportConfig step2AKafkaConfig = new KafkaTransportConfig(
+                List.of("topic2B"), // listenTopics
+                "topic2A", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        // Create KafkaTransportConfig for step2B
+        KafkaTransportConfig step2BKafkaConfig = new KafkaTransportConfig(
+                List.of("topic2A"), // listenTopics
+                "topic2B", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        steps2.put("step2A", new PipelineStepConfig(
+                "step2A", "test-module", null, null, null, 
+                TransportType.KAFKA, step2AKafkaConfig, null
+        ));
+        
+        steps2.put("step2B", new PipelineStepConfig(
+                "step2B", "test-module", null, null, null, 
+                TransportType.KAFKA, step2BKafkaConfig, null
+        ));
+        
         pipelines.put("pipeline2", new PipelineConfig("pipeline2", steps2));
 
         PipelineGraphConfig graphConfig = new PipelineGraphConfig(pipelines);
@@ -171,13 +349,33 @@ class IntraPipelineLoopValidatorTest {
                 "Error should contain the correct cycle path for pipeline2. Actual: " + error);
     }
 
-
-
     @Test
     void validate_topicNameCaseSensitivity_noLoopExpected() {
         Map<String, PipelineStepConfig> steps = new HashMap<>();
-        steps.put("stepX", new PipelineStepConfig("stepX", "m", null, null, List.of(new KafkaPublishTopic("TopicA")), null, null, null));
-        steps.put("stepY", new PipelineStepConfig("stepY", "m", null, List.of("topica"), List.of(new KafkaPublishTopic("TopicA")), null, null, null));
+        
+        // Create KafkaTransportConfig for stepX
+        KafkaTransportConfig stepXKafkaConfig = new KafkaTransportConfig(
+                null, // listenTopics
+                "TopicA", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        // Create KafkaTransportConfig for stepY
+        KafkaTransportConfig stepYKafkaConfig = new KafkaTransportConfig(
+                List.of("topica"), // listenTopics
+                "TopicA", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        steps.put("stepX", new PipelineStepConfig(
+                "stepX", "m", null, null, null, 
+                TransportType.KAFKA, stepXKafkaConfig, null
+        ));
+        
+        steps.put("stepY", new PipelineStepConfig(
+                "stepY", "m", null, null, null, 
+                TransportType.KAFKA, stepYKafkaConfig, null
+        ));
 
         PipelineConfig pipeline = new PipelineConfig("caseSensitivePipeline", steps);
         PipelineClusterConfig clusterConfig = createClusterConfig(pipeline, "test-cluster-case-sensitive");
@@ -191,16 +389,30 @@ class IntraPipelineLoopValidatorTest {
         // Create a simple linear pipeline: StepA -> Topic1 -> StepB
         Map<String, PipelineStepConfig> steps = new HashMap<>();
 
+        // Create KafkaTransportConfig for stepA
+        KafkaTransportConfig stepAKafkaConfig = new KafkaTransportConfig(
+                null, // listenTopics
+                "topic1", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
+        // Create KafkaTransportConfig for stepB
+        KafkaTransportConfig stepBKafkaConfig = new KafkaTransportConfig(
+                List.of("topic1"), // listenTopics
+                null, // publishTopicPattern
+                null // kafkaProperties
+        );
+        
         // Create StepA that publishes to Topic1
-        List<KafkaPublishTopic> stepAPublishTopics = List.of(new KafkaPublishTopic("topic1"));
         PipelineStepConfig stepA = new PipelineStepConfig(
-                "stepA", "test-module", null, null, stepAPublishTopics, null, null, null // Added nulls
+                "stepA", "test-module", null, null, null, 
+                TransportType.KAFKA, stepAKafkaConfig, null
         );
 
         // Create StepB that listens to Topic1
-        List<String> stepBListenTopics = List.of("topic1");
         PipelineStepConfig stepB = new PipelineStepConfig(
-                "stepB", "test-module", null, stepBListenTopics, null, null, null, null // Added nulls
+                "stepB", "test-module", null, null, null, 
+                TransportType.KAFKA, stepBKafkaConfig, null
         );
 
         steps.put("stepA", stepA);
@@ -209,11 +421,11 @@ class IntraPipelineLoopValidatorTest {
         PipelineConfig pipeline = new PipelineConfig("pipeline1", steps);
         PipelineClusterConfig clusterConfig = createClusterConfig(pipeline);
 
-
         List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
 
         assertTrue(errors.isEmpty(), "Linear pipeline should not have loops");
     }
+    
     @Test
     void validate_crossPipelineTopics_noLoops() {
         // Create two pipelines that share topic names but should not create loops
@@ -222,17 +434,37 @@ class IntraPipelineLoopValidatorTest {
 
         // Pipeline 1: StepA publishes to Topic1
         Map<String, PipelineStepConfig> steps1 = new HashMap<>();
-        PipelineStepConfig stepA = new PipelineStepConfig(
-                "stepA", "test-module", null, null, List.of(new KafkaPublishTopic("shared-topic")), null, null, null // Added nulls
+        
+        // Create KafkaTransportConfig for stepA
+        KafkaTransportConfig stepAKafkaConfig = new KafkaTransportConfig(
+                null, // listenTopics
+                "shared-topic", // publishTopicPattern
+                null // kafkaProperties
         );
+        
+        PipelineStepConfig stepA = new PipelineStepConfig(
+                "stepA", "test-module", null, null, null, 
+                TransportType.KAFKA, stepAKafkaConfig, null
+        );
+        
         steps1.put("stepA", stepA);
         pipelines.put("pipeline1", new PipelineConfig("pipeline1", steps1));
 
         // Pipeline 2: StepB listens to Topic1
         Map<String, PipelineStepConfig> steps2 = new HashMap<>();
-        PipelineStepConfig stepB = new PipelineStepConfig(
-                "stepB", "test-module", null, List.of("shared-topic"), null, null, null, null // Added nulls
+        
+        // Create KafkaTransportConfig for stepB
+        KafkaTransportConfig stepBKafkaConfig = new KafkaTransportConfig(
+                List.of("shared-topic"), // listenTopics
+                null, // publishTopicPattern
+                null // kafkaProperties
         );
+        
+        PipelineStepConfig stepB = new PipelineStepConfig(
+                "stepB", "test-module", null, null, null, 
+                TransportType.KAFKA, stepBKafkaConfig, null
+        );
+        
         steps2.put("stepB", stepB);
         pipelines.put("pipeline2", new PipelineConfig("pipeline2", steps2));
 
@@ -252,15 +484,23 @@ class IntraPipelineLoopValidatorTest {
         // This tests the error handling in the graph construction
         Map<String, PipelineStepConfig> steps = new HashMap<>();
 
+        // Create KafkaTransportConfig for validStep
+        KafkaTransportConfig validStepKafkaConfig = new KafkaTransportConfig(
+                null, // listenTopics
+                "topic1", // publishTopicPattern
+                null // kafkaProperties
+        );
+        
         // Create a step with a valid ID that publishes to a topic
         PipelineStepConfig validStep = new PipelineStepConfig(
-                "validStep", "test-module", null, null, List.of(new KafkaPublishTopic("topic1")), null, null, null // Added nulls
+                "validStep", "test-module", null, null, null, 
+                TransportType.KAFKA, validStepKafkaConfig, null
         );
+        
         steps.put("validStep", validStep);
 
         PipelineConfig pipeline = new PipelineConfig("pipeline1", steps);
         PipelineClusterConfig clusterConfig = createClusterConfig(pipeline);
-
 
         // The validator should handle this gracefully without throwing exceptions
         List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
@@ -268,6 +508,7 @@ class IntraPipelineLoopValidatorTest {
         // No loops, so no errors expected
         assertTrue(errors.isEmpty(), "Invalid step IDs (in terms of map keys) should be handled gracefully");
     }
+    
     @Test
     void validate_pipelineWithNoSteps_returnsNoErrors() {
         // Create a pipeline with no steps

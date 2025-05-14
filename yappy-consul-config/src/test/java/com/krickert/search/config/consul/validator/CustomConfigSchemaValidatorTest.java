@@ -218,7 +218,7 @@ class CustomConfigSchemaValidatorTest {
         Map<String, PipelineStepConfig> steps = new HashMap<>();
         PipelineStepConfig step = new PipelineStepConfig(
                 "step1", "test-module", new JsonConfigOptions(jsonConfig),
-                null, null, null, null, null // Added null for nextSteps and errorSteps
+                null, null, TransportType.INTERNAL, null, null
         );
         steps.put("step1", step);
 
@@ -251,7 +251,7 @@ class CustomConfigSchemaValidatorTest {
         Map<String, PipelineStepConfig> steps = new HashMap<>();
         PipelineStepConfig step = new PipelineStepConfig(
                 "step1", "test-module", null,
-                null, null, null, null, null // Added null for nextSteps and errorSteps
+                null, null, TransportType.INTERNAL, null, null
         );
         steps.put("step1", step);
 
@@ -284,7 +284,7 @@ class CustomConfigSchemaValidatorTest {
         Map<String, PipelineStepConfig> steps = new HashMap<>();
         PipelineStepConfig step = new PipelineStepConfig(
                 "step1", "test-module", new JsonConfigOptions(jsonConfig),
-                null, null, null, null, null // Added null for nextSteps and errorSteps
+                null, null, TransportType.INTERNAL, null, null
         );
         steps.put("step1", step);
 
@@ -330,12 +330,12 @@ class CustomConfigSchemaValidatorTest {
         // Step 1: Valid config for module A
         PipelineStepConfig step1 = new PipelineStepConfig(
                 "step1-valid", "module-a-id", new JsonConfigOptions(VALID_CONFIG),
-                null, null, null, null, null
+                null, null, TransportType.INTERNAL, null, null
         );
         // Step 2: Invalid config (missing required field 'age') for module B (which uses VALID_SCHEMA)
         PipelineStepConfig step2 = new PipelineStepConfig(
                 "step2-invalid", "module-b-id", new JsonConfigOptions(INVALID_CONFIG_MISSING_REQUIRED),
-                null, null, null, null, null
+                null, null, TransportType.INTERNAL, null, null
         );
         steps.put(step1.pipelineStepId(), step1);
         steps.put(step2.pipelineStepId(), step2);

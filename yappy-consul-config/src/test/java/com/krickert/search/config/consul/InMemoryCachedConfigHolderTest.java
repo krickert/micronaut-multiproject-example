@@ -37,7 +37,7 @@ class InMemoryCachedConfigHolderTest {
 
     @Test
     void updateConfiguration_withValidConfig_storesAndReturnsConfigAndSchemas() {
-        PipelineClusterConfig config1 = new PipelineClusterConfig("cluster1");
+        PipelineClusterConfig config1 = new PipelineClusterConfig("cluster1", null, null, null, null);
         SchemaReference ref1 = new SchemaReference("subject1", 1);
         String schemaContent1 = "{\"type\":\"string\"}";
         Map<SchemaReference, String> schemaMap1 = Map.of(ref1, schemaContent1);
@@ -51,7 +51,7 @@ class InMemoryCachedConfigHolderTest {
 
     @Test
     void updateConfiguration_withNullConfig_clearsExistingConfig() {
-        PipelineClusterConfig config1 = new PipelineClusterConfig("cluster1");
+        PipelineClusterConfig config1 = new PipelineClusterConfig("cluster1", null, null, null, null);
         SchemaReference ref1 = new SchemaReference("subject1", 1);
         Map<SchemaReference, String> schemaMap1 = Map.of(ref1, "{}");
         cachedConfigHolder.updateConfiguration(config1, schemaMap1); // Pre-populate
@@ -66,7 +66,7 @@ class InMemoryCachedConfigHolderTest {
 
     @Test
     void updateConfiguration_withNullSchemaMap_storesConfigWithEffectivelyEmptySchemaCache() {
-        PipelineClusterConfig config1 = new PipelineClusterConfig("cluster1");
+        PipelineClusterConfig config1 = new PipelineClusterConfig("cluster1", null, null, null, null);
         SchemaReference ref1 = new SchemaReference("subject1", 1);
 
         cachedConfigHolder.updateConfiguration(config1, null);
@@ -77,7 +77,7 @@ class InMemoryCachedConfigHolderTest {
 
     @Test
     void updateConfiguration_internalSchemaMapIsCopyAndUnmodifiable() {
-        PipelineClusterConfig config1 = new PipelineClusterConfig("cluster1");
+        PipelineClusterConfig config1 = new PipelineClusterConfig("cluster1", null, null, null, null);
         SchemaReference ref1 = new SchemaReference("subject1", 1);
         String schemaContent1 = "{\"type\":\"string\"}";
         Map<SchemaReference, String> mutableSchemaMap = new HashMap<>();
@@ -96,12 +96,12 @@ class InMemoryCachedConfigHolderTest {
 
     @Test
     void updateConfiguration_calledSequentially_reflectsLatestConfig() {
-        PipelineClusterConfig config1 = new PipelineClusterConfig("cluster1");
+        PipelineClusterConfig config1 = new PipelineClusterConfig("cluster1", null, null, null, null);
         SchemaReference ref1 = new SchemaReference("subject1", 1);
         String schemaContent1 = "{\"type\":\"string\"}";
         Map<SchemaReference, String> schemaMap1 = Map.of(ref1, schemaContent1);
 
-        PipelineClusterConfig config2 = new PipelineClusterConfig("cluster2");
+        PipelineClusterConfig config2 = new PipelineClusterConfig("cluster2", null, null, null, null);
         SchemaReference ref2 = new SchemaReference("subject2", 2);
         String schemaContent2 = "{\"type\":\"integer\"}";
         Map<SchemaReference, String> schemaMap2 = Map.of(ref2, schemaContent2);
@@ -116,7 +116,7 @@ class InMemoryCachedConfigHolderTest {
 
     @Test
     void clearConfiguration_whenConfigExists_clearsConfigAndSchemas() {
-        PipelineClusterConfig config1 = new PipelineClusterConfig("cluster1");
+        PipelineClusterConfig config1 = new PipelineClusterConfig("cluster1", null, null, null, null);
         SchemaReference ref1 = new SchemaReference("subject1", 1);
         Map<SchemaReference, String> schemaMap1 = Map.of(ref1, "{}");
         cachedConfigHolder.updateConfiguration(config1, schemaMap1);
@@ -146,9 +146,9 @@ class InMemoryCachedConfigHolderTest {
         try (ExecutorService executor = Executors.newFixedThreadPool(numWriterThreads + numReaderThreads)) {
             CountDownLatch latch = new CountDownLatch(numWriterThreads + numReaderThreads);
 
-            PipelineClusterConfig configA = new PipelineClusterConfig("configA");
+            PipelineClusterConfig configA = new PipelineClusterConfig("configA", null, null, null, null);
             Map<SchemaReference, String> schemasA = Map.of(new SchemaReference("sA", 1), "sa_content");
-            PipelineClusterConfig configB = new PipelineClusterConfig("configB");
+            PipelineClusterConfig configB = new PipelineClusterConfig("configB", null, null, null, null);
             Map<SchemaReference, String> schemasB = Map.of(new SchemaReference("sB", 1), "sb_content");
 
             // Writer Threads

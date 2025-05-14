@@ -33,7 +33,7 @@ class DefaultConfigurationValidatorTest {
         when(mockRule.validate(any(), any())).thenReturn(Collections.emptyList());
 
         DefaultConfigurationValidator validator = new DefaultConfigurationValidator(List.of(mockRule));
-        PipelineClusterConfig config = new PipelineClusterConfig("TestCluster");
+        PipelineClusterConfig config = new PipelineClusterConfig("TestCluster", null, null, null, null);
 
         ValidationResult result = validator.validate(config, schemaReference -> Optional.empty());
 
@@ -47,7 +47,7 @@ class DefaultConfigurationValidatorTest {
         when(mockRule.validate(any(), any())).thenReturn(List.of("Validation error"));
 
         DefaultConfigurationValidator validator = new DefaultConfigurationValidator(List.of(mockRule));
-        PipelineClusterConfig config = new PipelineClusterConfig("TestCluster");
+        PipelineClusterConfig config = new PipelineClusterConfig("TestCluster", null, null, null, null);
 
         ValidationResult result = validator.validate(config, schemaReference -> Optional.empty());
 
@@ -66,7 +66,7 @@ class DefaultConfigurationValidatorTest {
         when(mockRule2.validate(any(), any())).thenReturn(List.of("Error 3"));
 
         DefaultConfigurationValidator validator = new DefaultConfigurationValidator(List.of(mockRule1, mockRule2));
-        PipelineClusterConfig config = new PipelineClusterConfig("TestCluster");
+        PipelineClusterConfig config = new PipelineClusterConfig("TestCluster", null, null, null, null);
 
         ValidationResult result = validator.validate(config, schemaReference -> Optional.empty());
 
@@ -87,7 +87,7 @@ class DefaultConfigurationValidatorTest {
         when(mockRule2.validate(any(), any())).thenReturn(Collections.emptyList());
 
         DefaultConfigurationValidator validator = new DefaultConfigurationValidator(List.of(mockRule1, mockRule2));
-        PipelineClusterConfig config = new PipelineClusterConfig("TestCluster");
+        PipelineClusterConfig config = new PipelineClusterConfig("TestCluster", null, null, null, null);
 
         ValidationResult result = validator.validate(config, schemaReference -> Optional.empty());
 
@@ -103,7 +103,7 @@ class DefaultConfigurationValidatorTest {
     void validate_emptyRulesList_returnsValidResult() {
         // Create a validator with an empty list of rules
         DefaultConfigurationValidator validator = new DefaultConfigurationValidator(Collections.emptyList());
-        PipelineClusterConfig config = new PipelineClusterConfig("TestCluster");
+        PipelineClusterConfig config = new PipelineClusterConfig("TestCluster", null, null, null, null);
 
         ValidationResult result = validator.validate(config, schemaReference -> Optional.empty());
 
@@ -123,7 +123,7 @@ class DefaultConfigurationValidatorTest {
                 List.of(referentialIntegrityValidator, whitelistValidator));
 
         // Create a valid config
-        PipelineClusterConfig config = new PipelineClusterConfig("TestCluster");
+        PipelineClusterConfig config = new PipelineClusterConfig("TestCluster", null, null, null, null);
 
         // Validate the config
         ValidationResult result = validator.validate(config, schemaReference -> Optional.empty());
@@ -151,7 +151,7 @@ class DefaultConfigurationValidatorTest {
                 List.of(mockRule1, mockRule2, mockRule3));
 
         // Create a config and validate it
-        PipelineClusterConfig config = new PipelineClusterConfig("TestCluster");
+        PipelineClusterConfig config = new PipelineClusterConfig("TestCluster", null, null, null, null);
         validator.validate(config, schemaReference -> Optional.empty());
 
         // Create an InOrder verifier to check the order of execution

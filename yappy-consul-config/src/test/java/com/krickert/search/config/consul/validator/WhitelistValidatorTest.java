@@ -32,127 +32,139 @@ class WhitelistValidatorTest {
 
     @Test
     void validate_allWhitelisted_returnsNoErrors() {
-        // Create a pipeline configuration with all topics and services in the whitelist
-        Set<String> allowedKafkaTopics = new HashSet<>(Arrays.asList("topic1", "topic2"));
-        Set<String> allowedGrpcServices = new HashSet<>(Arrays.asList("service1", "service2"));
+        Set<String> allowedKafkaTopics = Set.of("topic1", "publish-topic-from-pattern");
+        Set<String> allowedGrpcServices = Set.of("service1");
 
-        List<String> kafkaListenTopics = List.of("topic1");
-        List<KafkaPublishTopic> kafkaPublishTopics = List.of(new KafkaPublishTopic("topic2"));
-        List<String> grpcForwardTo = List.of("service1");
-
-        PipelineClusterConfig clusterConfig = createTestClusterConfig(
-                allowedKafkaTopics, allowedGrpcServices, kafkaListenTopics, kafkaPublishTopics, grpcForwardTo
+        // Test a Kafka step
+        PipelineClusterConfig clusterConfigKafka = createTestClusterConfig(
+                allowedKafkaTopics, allowedGrpcServices,
+                TransportType.KAFKA,
+                List.of("topic1"),                          // listenTopics
+                "publish-topic-from-pattern",              // publishTopicPattern
+                null,                                       // kafkaProps
+                null,                                       // grpcServiceId (not used for Kafka)
+                null                                        // grpcProps (not used for Kafka)
         );
+        List<String> errorsKafka = validator.validate(clusterConfigKafka, schemaContentProvider);
+        assertTrue(errorsKafka.isEmpty(), "Valid Kafka config should not produce errors. Errors: " + errorsKafka);
 
-        List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
-
-        assertTrue(errors.isEmpty(), "Valid configuration should not produce any errors");
+        // Test a gRPC step
+        PipelineClusterConfig clusterConfigGrpc = createTestClusterConfig(
+                allowedKafkaTopics, allowedGrpcServices,
+                TransportType.GRPC,
+                null, null, null,                           // Kafka params null
+                "service1",                                 // grpcServiceId
+                null                                        // grpcProps
+        );
+        List<String> errorsGrpc = validator.validate(clusterConfigGrpc, schemaContentProvider);
+        assertTrue(errorsGrpc.isEmpty(), "Valid gRPC config should not produce errors. Errors: " + errorsGrpc);
     }
 
     @Test
     void validate_nonWhitelistedKafkaListenTopic_returnsError() {
-        // Create a pipeline configuration with a non-whitelisted Kafka listen topic
-        Set<String> allowedKafkaTopics = new HashSet<>(Arrays.asList("topic1", "topic2"));
-        Set<String> allowedGrpcServices = new HashSet<>(Arrays.asList("service1", "service2"));
-
-        List<String> kafkaListenTopics = List.of("non-whitelisted-topic");
-        List<KafkaPublishTopic> kafkaPublishTopics = List.of(new KafkaPublishTopic("topic2"));
-        List<String> grpcForwardTo = List.of("service1");
+        Set<String> allowedKafkaTopics = Set.of("topic1");
+        Set<String> allowedGrpcServices = Set.of("service1");
 
         PipelineClusterConfig clusterConfig = createTestClusterConfig(
-                allowedKafkaTopics, allowedGrpcServices, kafkaListenTopics, kafkaPublishTopics, grpcForwardTo
+                allowedKafkaTopics, allowedGrpcServices,
+                TransportType.KAFKA,
+                List.of("non-whitelisted-listen"), // The non-whitelisted topic
+                "topic1",                           // A valid publish pattern/topic
+                null, null, null
         );
-
         List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
-
-        assertFalse(errors.isEmpty(), "Non-whitelisted Kafka listen topic should produce errors");
-        assertTrue(errors.stream().anyMatch(e -> e.contains("listens to non-whitelisted Kafka topic 'non-whitelisted-topic'")),
-                "Error should indicate non-whitelisted Kafka listen topic");
+        assertFalse(errors.isEmpty());
+        assertTrue(errors.stream().anyMatch(e -> e.contains("listens to non-whitelisted topic 'non-whitelisted-listen'")), errors.toString());
     }
 
     @Test
     void validate_nonWhitelistedKafkaPublishTopic_returnsError() {
-        // Create a pipeline configuration with a non-whitelisted Kafka publish topic
-        Set<String> allowedKafkaTopics = new HashSet<>(Arrays.asList("topic1", "topic2"));
-        Set<String> allowedGrpcServices = new HashSet<>(Arrays.asList("service1", "service2"));
-
-        List<String> kafkaListenTopics = List.of("topic1");
-        List<KafkaPublishTopic> kafkaPublishTopics = List.of(new KafkaPublishTopic("non-whitelisted-topic"));
-        List<String> grpcForwardTo = List.of("service1");
+        // This test assumes the publishTopicPattern is treated as a direct topic name for whitelisting
+        Set<String> allowedKafkaTopics = Set.of("topic1");
+        Set<String> allowedGrpcServices = Set.of("service1");
 
         PipelineClusterConfig clusterConfig = createTestClusterConfig(
-                allowedKafkaTopics, allowedGrpcServices, kafkaListenTopics, kafkaPublishTopics, grpcForwardTo
+                allowedKafkaTopics, allowedGrpcServices,
+                TransportType.KAFKA,
+                List.of("topic1"),
+                "non-whitelisted-publish", // The non-whitelisted publish pattern/topic
+                null, null, null
         );
-
         List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
-
-        assertFalse(errors.isEmpty(), "Non-whitelisted Kafka publish topic should produce errors");
-        assertTrue(errors.stream().anyMatch(e -> e.contains("publishes to non-whitelisted Kafka topic 'non-whitelisted-topic'")),
-                "Error should indicate non-whitelisted Kafka publish topic");
+        assertFalse(errors.isEmpty());
+        // The error message will now refer to publishTopicPattern
+        assertTrue(errors.stream().anyMatch(e -> e.contains("uses a publishTopicPattern 'non-whitelisted-publish'")), errors.toString());
     }
 
     @Test
     void validate_nonWhitelistedGrpcForwardTo_returnsError() {
-        // Create a pipeline configuration with a non-whitelisted gRPC service
-        Set<String> allowedKafkaTopics = new HashSet<>(Arrays.asList("topic1", "topic2"));
-        Set<String> allowedGrpcServices = new HashSet<>(Arrays.asList("service1", "service2"));
-
-        List<String> kafkaListenTopics = List.of("topic1");
-        List<KafkaPublishTopic> kafkaPublishTopics = List.of(new KafkaPublishTopic("topic2"));
-        List<String> grpcForwardTo = List.of("non-whitelisted-service");
+        Set<String> allowedKafkaTopics = Set.of("topic1");
+        Set<String> allowedGrpcServices = Set.of("service1");
 
         PipelineClusterConfig clusterConfig = createTestClusterConfig(
-                allowedKafkaTopics, allowedGrpcServices, kafkaListenTopics, kafkaPublishTopics, grpcForwardTo
+                allowedKafkaTopics, allowedGrpcServices,
+                TransportType.GRPC,
+                null, null, null,
+                "non-whitelisted-service", // The non-whitelisted gRPC serviceId
+                null
         );
-
         List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
-
-        assertFalse(errors.isEmpty(), "Non-whitelisted gRPC service should produce errors");
-        assertTrue(errors.stream().anyMatch(e -> e.contains("forwards to non-whitelisted gRPC service 'non-whitelisted-service'")),
-                "Error should indicate non-whitelisted gRPC service");
+        assertFalse(errors.isEmpty());
+        assertTrue(errors.stream().anyMatch(e -> e.contains("uses non-whitelisted serviceId 'non-whitelisted-service'")), errors.toString());
     }
 
     @Test
     void validate_emptyWhitelists_anyTopicOrServiceIsError() {
-        // Create a pipeline configuration with empty whitelists
         Set<String> allowedKafkaTopics = Collections.emptySet();
         Set<String> allowedGrpcServices = Collections.emptySet();
 
-        List<String> kafkaListenTopics = List.of("topic1");
-        List<KafkaPublishTopic> kafkaPublishTopics = List.of(new KafkaPublishTopic("topic2"));
-        List<String> grpcForwardTo = List.of("service1");
-
-        PipelineClusterConfig clusterConfig = createTestClusterConfig(
-                allowedKafkaTopics, allowedGrpcServices, kafkaListenTopics, kafkaPublishTopics, grpcForwardTo
+        // Scenario 1: Test a Kafka step with topics against empty Kafka whitelist
+        KafkaTransportConfig kafkaConfigForTest = new KafkaTransportConfig(
+                List.of("listenTopicAgainstEmptyWhitelist"),
+                "publishPatternAgainstEmptyWhitelist",
+                null);
+        PipelineClusterConfig clusterConfigKafka = createTestClusterConfig(
+                allowedKafkaTopics, allowedGrpcServices, // Empty whitelists
+                TransportType.KAFKA,
+                kafkaConfigForTest.listenTopics(),
+                kafkaConfigForTest.publishTopicPattern(),
+                kafkaConfigForTest.kafkaProperties(),
+                null, null // No gRPC for this step
         );
 
-        List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
+        List<String> errorsKafka = validator.validate(clusterConfigKafka, schemaContentProvider);
+        assertEquals(2, errorsKafka.size(), "Empty Kafka whitelist should produce 2 errors for a Kafka step with listen and publish. Errors: " + errorsKafka);
+        assertTrue(errorsKafka.stream().anyMatch(e -> e.contains("listens to non-whitelisted topic 'listenTopicAgainstEmptyWhitelist'")), errorsKafka.toString());
+        assertTrue(errorsKafka.stream().anyMatch(e -> e.contains("uses a publishTopicPattern 'publishPatternAgainstEmptyWhitelist'")), errorsKafka.toString());
 
-        assertEquals(3, errors.size(), "Empty whitelists should produce errors for all topics and services");
-        assertTrue(errors.stream().anyMatch(e -> e.contains("listens to non-whitelisted Kafka topic 'topic1'")),
-                "Error should indicate non-whitelisted Kafka listen topic");
-        assertTrue(errors.stream().anyMatch(e -> e.contains("publishes to non-whitelisted Kafka topic 'topic2'")),
-                "Error should indicate non-whitelisted Kafka publish topic");
-        assertTrue(errors.stream().anyMatch(e -> e.contains("forwards to non-whitelisted gRPC service 'service1'")),
-                "Error should indicate non-whitelisted gRPC service");
+
+        // Scenario 2: Test a gRPC step with a serviceId against empty gRPC whitelist
+        GrpcTransportConfig grpcConfigForTest = new GrpcTransportConfig("serviceAgainstEmptyWhitelist", null);
+        PipelineClusterConfig clusterConfigGrpc = createTestClusterConfig(
+                allowedKafkaTopics, allowedGrpcServices, // Empty whitelists
+                TransportType.GRPC,
+                null, null, null, // No Kafka for this step
+                grpcConfigForTest.serviceId(),
+                grpcConfigForTest.grpcProperties()
+        );
+        List<String> errorsGrpc = validator.validate(clusterConfigGrpc, schemaContentProvider);
+        assertEquals(1, errorsGrpc.size(), "Empty gRPC whitelist should produce 1 error for a gRPC step. Errors: " + errorsGrpc);
+        assertTrue(errorsGrpc.stream().anyMatch(e -> e.contains("uses non-whitelisted serviceId 'serviceAgainstEmptyWhitelist'")), errorsGrpc.toString());
     }
 
     @Test
-    void validate_stepHasNoKafkaOrGrpc_returnsNoErrors() {
-        // Create a pipeline configuration with no Kafka topics or gRPC services in the step
-        Set<String> allowedKafkaTopics = new HashSet<>(Arrays.asList("topic1", "topic2"));
-        Set<String> allowedGrpcServices = new HashSet<>(Arrays.asList("service1", "service2"));
+    void validate_stepHasNoKafkaOrGrpc_InternalStep_returnsNoErrors() {
+        Set<String> allowedKafkaTopics = Set.of("topic1");
+        Set<String> allowedGrpcServices = Set.of("service1");
 
         PipelineClusterConfig clusterConfig = createTestClusterConfig(
                 allowedKafkaTopics, allowedGrpcServices,
-                null, // kafkaListenTopics
-                null, // kafkaPublishTopics
-                null  // grpcForwardTo
+                TransportType.INTERNAL, // Type
+                null, null, null,     // Kafka params
+                null, null            // Grpc params
         );
-
         List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
-
-        assertTrue(errors.isEmpty(), "Configuration with no Kafka topics or gRPC services in steps should not produce errors");
+        assertTrue(errors.isEmpty());
     }
 
     @Test
@@ -206,39 +218,52 @@ class WhitelistValidatorTest {
     // The WhitelistValidator's internal null/blank checks for these are still good for robustness,
     // especially if PipelineStepConfig instances could somehow be created bypassing its own validation.
 
-    /**
-     * Helper method to create a test cluster configuration with specified whitelists and topics/services.
-     */
+    // In WhitelistValidatorTest.java
     private PipelineClusterConfig createTestClusterConfig(
             Set<String> allowedKafkaTopics,
             Set<String> allowedGrpcServices,
-            List<String> kafkaListenTopics,
-            List<KafkaPublishTopic> kafkaPublishTopics,
-            List<String> grpcForwardTo) {
+            // Parameters now reflect the new model for a single step's transport for simplicity in this helper
+            TransportType stepTransportType,
+            List<String> stepKafkaListenTopics,    // Only if KAFKA
+            String stepKafkaPublishPattern,  // Only if KAFKA
+            Map<String, String> stepKafkaProps,    // Only if KAFKA
+            String stepGrpcServiceId,        // Only if GRPC
+            Map<String, String> stepGrpcProps      // Only if GRPC
+    ) {
 
-        // Create a module that will be referenced by the step
         Map<String, PipelineModuleConfiguration> modules = new HashMap<>();
         PipelineModuleConfiguration module = new PipelineModuleConfiguration(
                 "Test Module", "test-module", new SchemaReference("test-schema", 1)
         );
         modules.put("test-module", module);
+        PipelineModuleMap moduleMap = new PipelineModuleMap(modules);
 
-        // Create a step with the specified topics and services
         Map<String, PipelineStepConfig> steps = new HashMap<>();
+        KafkaTransportConfig kafkaConfig = null;
+        GrpcTransportConfig grpcConfig = null;
+
+        if (stepTransportType == TransportType.KAFKA) {
+            kafkaConfig = new KafkaTransportConfig(stepKafkaListenTopics, stepKafkaPublishPattern, stepKafkaProps);
+        } else if (stepTransportType == TransportType.GRPC) {
+            grpcConfig = new GrpcTransportConfig(stepGrpcServiceId, stepGrpcProps);
+        }
+
         PipelineStepConfig step = new PipelineStepConfig(
-                "step1", "test-module", null, kafkaListenTopics, kafkaPublishTopics, grpcForwardTo,
-                null, null // Added null for nextSteps and errorSteps
+                "step1",
+                "test-module",
+                null, // customConfig
+                Collections.singletonList("nextStep"), // nextSteps
+                Collections.emptyList(),              // errorSteps
+                stepTransportType,
+                kafkaConfig,
+                grpcConfig
         );
         steps.put("step1", step);
 
-        // Create a pipeline with the step
         PipelineConfig pipeline = new PipelineConfig("pipeline1", steps);
         Map<String, PipelineConfig> pipelines = new HashMap<>();
         pipelines.put("pipeline1", pipeline);
-
-        // Create a cluster config with the pipeline, module, and whitelists
         PipelineGraphConfig graphConfig = new PipelineGraphConfig(pipelines);
-        PipelineModuleMap moduleMap = new PipelineModuleMap(modules);
 
         return new PipelineClusterConfig(
                 "test-cluster", graphConfig, moduleMap, allowedKafkaTopics, allowedGrpcServices

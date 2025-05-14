@@ -11,14 +11,14 @@ The foundational configuration management subsystem is now fully implemented, co
 
 * `pipeline-config-models` (including `PipelineStepConfig` with `nextSteps` and `errorSteps`) and `schema-registry-models` are 
 implemented as framework-agnostic Java records/enums.
-* **Status**: **COMPLETE**
+* **Status**: **REFACTORED - NEEDS UPDATING**
 
 #### Dynamic Configuration Loading & Management (DynamicConfigurationManagerImpl):
 
 * Orchestrates loading, validation, caching, and live updates from Consul.
 * Handles `WatchCallbackResult` for robust error propagation from the fetcher.
 * Publishes `ClusterConfigUpdateEvent`.
-* **Status**: **COMPLETE** 
+* **Status**: **NEEDS ATTENTION** 
   * (Unit and Full End-to-End Integration Tested with all real dependencies via MicronautTest and Testcontainers).
 
 #### Consul Interaction (KiwiprojectConsulConfigFetcher):
@@ -26,7 +26,7 @@ implemented as framework-agnostic Java records/enums.
 * Connects to Consul, fetches KVs, deserializes JSON.
 * Implements live watches using `KVCache`.
 * Correctly propagates success, deletion, or errors (e.g., deserialization failures) via WatchCallbackResult.
-* **Status**: **COMPLETE** 
+* **Status**: **NEEDS RE-TESTING AFTER ABOVE IS DONE** 
   * Unit and Integration Tested with Testcontainers Consul).
   
 #### Configuration Validation (DefaultConfigurationValidator and ClusterValidationRules):
@@ -40,7 +40,7 @@ implemented as framework-agnostic Java records/enums.
 * `InterPipelineLoopValidator` (detects loops between pipelines via Kafka, using `JGraphT`).
 
 #### Orchestrator (DefaultConfigurationValidator) unit-tested (mock rules) and integration-tested (real rules via Micronaut DI).
-* **Status**: **COMPLETE**.
+* **Status**: **NEEDS RE-TESTING AFTER ABOVE IS DONE**.
 
 #### In-Memory Caching (InMemoryCachedConfigHolder):
 
@@ -50,13 +50,13 @@ implemented as framework-agnostic Java records/enums.
 #### Eventing & Test Utilities:
 
 * `ClusterConfigUpdateEvent` and `TestApplicationEventListener`.
-* **Status**: **COMPLETE**.
+* **Status**: **NEEDS RE-TESTING AFTER ABOVE IS DONE**.
 
 #### Micronaut Integration & Testing Infrastructure:
 
 * `ConsulClientFactory`, `ConsulCacheConfigFactory`.
 * `ConsulTestResourceProvider` for `Testcontainers`.
-* **Status**: **COMPLETE**.
+* **Status**: **NEEDS RE-TESTING AFTER ABOVE IS DONE**.
 
 #### Conclusion
 
