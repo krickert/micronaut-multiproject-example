@@ -1,4 +1,4 @@
-package com.krickert.yappy.modules.echo;
+package @@BASE_PACKAGE@@;
 
 import io.micronaut.runtime.Micronaut;
 

@@ -1,4 +1,4 @@
-package com.krickert.yappy.modules.echo; // Match the package of your EchoService
+package @@BASE_PACKAGE@@; // Match the package of your @@MODULE_NAME_PASCAL_CASE@@Service
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Struct;
@@ -37,9 +37,9 @@ import static org.junit.jupiter.api.Assertions.*;
 @MicronautTest
 @Property(name = "grpc.client.plaintext", value = "true")
 @Property(name = "micronaut.test.resources.enabled", value = "false")
-class EchoServiceTest {
+class @@MODULE_NAME_PASCAL_CASE@@ServiceTest {
 
-    private static final Logger LOG = LoggerFactory.getLogger(EchoServiceTest.class);
+    private static final Logger LOG = LoggerFactory.getLogger(@@MODULE_NAME_PASCAL_CASE@@ServiceTest.class);
 
     @Inject
     @GrpcChannel(GrpcServerChannel.NAME)
@@ -106,12 +106,12 @@ class EchoServiceTest {
 
         ProcessRequest request = createTestProcessRequest(pipelineName, stepName, streamId, docId, hopNumber, inputDoc, null, null);
 
-        LOG.info("Sending request to EchoService (Blocking): {}", stepName);
+        LOG.info("Sending request to @@MODULE_NAME_PASCAL_CASE@@Service (Blocking): {}", stepName);
 
         // 2. Call the gRPC service (method name changed to processData)
         ProcessResponse response = blockingClient.processData(request);
 
-        LOG.info("Received response from EchoService (Blocking). Success: {}", response.getSuccess());
+        LOG.info("Received response from @@MODULE_NAME_PASCAL_CASE@@Service (Blocking). Success: {}", response.getSuccess());
 
         // 3. Assert the response
         assertNotNull(response, "Response should not be null");
@@ -125,7 +125,7 @@ class EchoServiceTest {
         assertEquals(inputBlob, response.getOutputDoc().getBlob(), "Blob in output document should match input blob");
 
         assertFalse(response.getProcessorLogsList().isEmpty(), "Processor logs should not be empty");
-        String expectedLogMessagePart = String.format("EchoService (Unary) successfully processed step '%s' for pipeline '%s'. Stream ID: %s, Doc ID: %s",
+        String expectedLogMessagePart = String.format("@@MODULE_NAME_PASCAL_CASE@@Service (Unary) successfully processed step '%s' for pipeline '%s'. Stream ID: %s, Doc ID: %s",
                 stepName, pipelineName, streamId, docId);
         assertTrue(response.getProcessorLogs(0).contains(expectedLogMessagePart),
                 "Processor log message mismatch. Expected to contain: '" + expectedLogMessagePart + "', Actual: '" + response.getProcessorLogs(0) + "'");
@@ -151,7 +151,7 @@ class EchoServiceTest {
 
         ProcessRequest request = createTestProcessRequest(pipelineName, stepName, streamId, docId, hopNumber, inputDoc, customJsonConfig, null);
 
-        LOG.info("Sending request with custom config to EchoService (Blocking): {}", stepName);
+        LOG.info("Sending request with custom config to @@MODULE_NAME_PASCAL_CASE@@Service (Blocking): {}", stepName);
         ProcessResponse response = blockingClient.processData(request);
         LOG.info("Received response with custom config (Blocking). Success: {}", response.getSuccess());
 
@@ -163,7 +163,7 @@ class EchoServiceTest {
 
 
         assertFalse(response.getProcessorLogsList().isEmpty());
-        String expectedLogMessage = String.format("%sEchoService (Unary) successfully processed step '%s' for pipeline '%s'. Stream ID: %s, Doc ID: %s",
+        String expectedLogMessage = String.format("%s@@MODULE_NAME_PASCAL_CASE@@Service (Unary) successfully processed step '%s' for pipeline '%s'. Stream ID: %s, Doc ID: %s",
                 logPrefix, stepName, pipelineName, streamId, docId);
         assertEquals(expectedLogMessage, response.getProcessorLogs(0), "Processor log message mismatch with custom prefix.");
     }
@@ -181,7 +181,7 @@ class EchoServiceTest {
 
         ProcessRequest request = createTestProcessRequest(pipelineName, stepName, streamId, docId, hopNumber, inputDoc, null, null);
 
-        LOG.info("Sending request with empty document to EchoService (Blocking): {}", stepName);
+        LOG.info("Sending request with empty document to @@MODULE_NAME_PASCAL_CASE@@Service (Blocking): {}", stepName);
         ProcessResponse response = blockingClient.processData(request);
         LOG.info("Received response for empty document request (Blocking). Success: {}", response.getSuccess());
 
@@ -193,8 +193,8 @@ class EchoServiceTest {
 
 
         assertFalse(response.getProcessorLogsList().isEmpty());
-        // The EchoService uses document.getId() for the log, which is "doc-empty" here.
-        String expectedLogMessagePart = String.format("EchoService (Unary) successfully processed step '%s' for pipeline '%s'. Stream ID: %s, Doc ID: %s",
+        // The @@MODULE_NAME_PASCAL_CASE@@Service uses document.getId() for the log, which is "doc-empty" here.
+        String expectedLogMessagePart = String.format("@@MODULE_NAME_PASCAL_CASE@@Service (Unary) successfully processed step '%s' for pipeline '%s'. Stream ID: %s, Doc ID: %s",
                 stepName, pipelineName, streamId, docId);
         assertTrue(response.getProcessorLogs(0).contains(expectedLogMessagePart),
                 "Processor log message mismatch for empty request. Expected to contain: '" + expectedLogMessagePart + "', Actual: '" + response.getProcessorLogs(0) + "'");
@@ -218,7 +218,7 @@ class EchoServiceTest {
 
         ProcessRequest request = createTestProcessRequest(pipelineName, stepName, streamId, docId, hopNumber, inputDoc, null, null);
 
-        LOG.info("Sending request to EchoService (Async): {}", stepName);
+        LOG.info("Sending request to @@MODULE_NAME_PASCAL_CASE@@Service (Async): {}", stepName);
 
         // 2. Setup for async call
         final CountDownLatch latch = new CountDownLatch(1);
@@ -261,7 +261,7 @@ class EchoServiceTest {
         assertEquals(inputBlob, response.getOutputDoc().getBlob(), "Blob in output document should match input blob (Async)");
 
         assertFalse(response.getProcessorLogsList().isEmpty(), "Processor logs should not be empty (Async)");
-        String expectedLogMessagePart = String.format("EchoService (Unary) successfully processed step '%s' for pipeline '%s'. Stream ID: %s, Doc ID: %s",
+        String expectedLogMessagePart = String.format("@@MODULE_NAME_PASCAL_CASE@@Service (Unary) successfully processed step '%s' for pipeline '%s'. Stream ID: %s, Doc ID: %s",
                 stepName, pipelineName, streamId, docId);
         assertTrue(response.getProcessorLogs(0).contains(expectedLogMessagePart),
                 "Processor log message mismatch (Async). Expected to contain: '" + expectedLogMessagePart + "', Actual: '" + response.getProcessorLogs(0) + "'");

@@ -4,7 +4,7 @@ plugins {
 }
 
 version = "1.0.0-SNAPSHOT"
-group = "com.krickert.yappy.modules.echo"
+group = "@@GROUP_ID@@"
 
 repositories {
     mavenCentral()
@@ -23,7 +23,7 @@ dependencies {
 
 
 application {
-    mainClass = "com.krickert.yappy.modules.echo.EchoApplication"
+    mainClass = "@@BASE_PACKAGE@@.@@MODULE_NAME_PASCAL_CASE@@Application"
 }
 java {
     sourceCompatibility = JavaVersion.toVersion("21")
@@ -44,9 +44,6 @@ micronaut {
     testRuntime("junit5")
     processing {
         incremental(true)
-        annotations("com.krickert.yappy.modules.echo.*")
+        annotations("@@BASE_PACKAGE@@.*")
     }
 }
-
-
-

@@ -1,4 +1,4 @@
-package com.krickert.yappy.modules.echo;
+package @@BASE_PACKAGE@@;
 
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
@@ -24,9 +24,9 @@ import org.slf4j.LoggerFactory;
 
 @Singleton
 @GrpcService
-public class EchoService extends PipeStepProcessorGrpc.PipeStepProcessorImplBase {
+public class @@MODULE_NAME_PASCAL_CASE@@Service extends PipeStepProcessorGrpc.PipeStepProcessorImplBase {
 
-    private static final Logger LOG = LoggerFactory.getLogger(EchoService.class);
+    private static final Logger LOG = LoggerFactory.getLogger(@@MODULE_NAME_PASCAL_CASE@@Service.class);
 
     @Override
     public void processData(ProcessRequest request, StreamObserver<ProcessResponse> responseObserver) {
@@ -34,7 +34,7 @@ public class EchoService extends PipeStepProcessorGrpc.PipeStepProcessorImplBase
         ProcessConfiguration config = request.getConfig();
         PipeDoc document = request.getDocument(); // Document now contains the blob
 
-        LOG.info("EchoService (Unary) received request for pipeline: {}, step: {}",
+        LOG.info("@@MODULE_NAME_PASCAL_CASE@@Service (Unary) received request for pipeline: {}, step: {}",
                 metadata.getPipelineName(), metadata.getPipeStepName());
 
         String streamId = metadata.getStreamId();
@@ -69,7 +69,7 @@ public class EchoService extends PipeStepProcessorGrpc.PipeStepProcessorImplBase
         }
 
 
-        String logMessage = String.format("%sEchoService (Unary) successfully processed step '%s' for pipeline '%s'. Stream ID: %s, Doc ID: %s",
+        String logMessage = String.format("%s@@MODULE_NAME_PASCAL_CASE@@Service (Unary) successfully processed step '%s' for pipeline '%s'. Stream ID: %s, Doc ID: %s",
                                           logPrefix,
                                           metadata.getPipeStepName(),   // From ServiceMetadata
                                           metadata.getPipelineName(),  // From ServiceMetadata

@@ -1,5 +1,5 @@
 applicationType: grpc
-defaultPackage: com.krickert.yappy.modules.echo
+defaultPackage: @@BASE_PACKAGE@@
 testFramework: junit
 sourceLanguage: java
 buildTool: gradle_kotlin

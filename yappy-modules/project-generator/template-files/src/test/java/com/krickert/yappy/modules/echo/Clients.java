@@ -1,4 +1,4 @@
-package com.krickert.yappy.modules.echo;
+package @@BASE_PACKAGE@@;
 
 import com.krickert.search.schema.registry.SchemaRegistryServiceGrpc;
 import com.krickert.search.sdk.PipeStepProcessorGrpc;

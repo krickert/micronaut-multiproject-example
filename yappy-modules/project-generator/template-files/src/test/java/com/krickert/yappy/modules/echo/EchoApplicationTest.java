@@ -1,4 +1,4 @@
-package com.krickert.yappy.modules.echo;
+package @@BASE_PACKAGE@@;
 
 import io.micronaut.runtime.EmbeddedApplication;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Assertions;
 import jakarta.inject.Inject;
 
 @MicronautTest
-class EchoApplicationTest {
+class @@MODULE_NAME_PASCAL_CASE@@ApplicationTest {
 
     @Inject
     EmbeddedApplication<?> application;
