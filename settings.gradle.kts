@@ -35,5 +35,6 @@ include(
     "yappy-models:protobuf-models",
     "yappy-schema-registry",
     "yappy-modules:echo",
+    "yappy-modules:my-new-service",
     "yappy-modules:chunker"
 )
