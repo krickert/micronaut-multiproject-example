@@ -1,5 +1,0 @@
-micronaut:
-  application:
-    name: consul-config-service
-  config-client:
-    enabled: true

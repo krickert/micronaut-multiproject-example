@@ -23,7 +23,7 @@ micronaut {
     testRuntime("junit5")
     processing {
         incremental(true)
-        annotations("com.krickert.search.config.consul.**", "com.krickert.search.schema.registry.**", "com.krickert.search.consul.**","com.krickert.testcontainers.consul.*")
+        annotations("com.krickert.search..**", "com.krickert.testcontainers.consul.*")
     }
     testResources {
         enabled.set(true)
