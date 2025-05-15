@@ -1,202 +1,203 @@
-# Configurable Pipeline Architecture: Model Overview
-This document outlines the architecture of the configuration models for a highly configurable and extensible data processing pipeline system. The system is designed to be modular, allowing for clear separation of concerns and enabling language-agnostic development of individual processing steps.
+# YAPPY Pipeline Schema Design
 
-## Core Principles
-* **Decoupled Configuration**: Pipeline structure, module definitions, and schema definitions are managed as distinct but related data models.
-* **Centralized Schema Management**: Custom configuration schemas for pipeline modules are stored and versioned in a dedicated "Schema Registry," promoting reuse and controlled evolution.
-* **Modularity**: The system is divided into logical modules:
-  * `pipeline-config-models`: Defines the structure of pipelines, steps, and their configurations.
-  * `schema-registry-models`: Defines the structure of schema artifacts and their versions.
-  * `config-service` (Service): Manages the storage, retrieval, and validation of configurations and schemas.
-  * `grpc-pipeline-engine` (Service): Executes pipelines by orchestrating gRPC-based developer modules.
-  * `grpc-developer-sdk` (Library): Provides tools and contracts for developers to build pipeline step modules.
-  * `developer-pipeline-step-module` (External Service): User-implemented processing logic.
-* **Framework Agnostic Models**: The core data models (pipeline-config-models, schema-registry-models) are plain Java objects (POJOs) using Jackson for JSON serialization and Lombok for boilerplate reduction, ensuring portability.
-* **Live Configuration**: The system is designed to allow for live updates to configurations (details to be discussed further).
-  
-## I. System Modules Overview
-This diagram illustrates the high-level modules and their primary interaction points.
+**Version:** 1.3
+**Last Updated:** 2025-05-15
+
+## 1. Introduction
+
+This document details the schema design and usage within the YAPPY (Yet Another Pipeline Processor) platform, with a primary focus on how Pipeline Module Processors declare and validate their specific runtime configurations (`custom_json_config`). Effective schema management is crucial for ensuring configuration integrity, facilitating robust module development, and enabling clear contracts between pipeline components.
+
+YAPPY utilizes two distinct categories of schemas and registries:
+
+1.  **Protobuf Schemas & External Registry (e.g., Apicurio, AWS Glue):**
+    * **Purpose:** Govern the structure of core data messages like `PipeStream`, `PipeDoc`, and `Blob` (defined in `yappy_core_types.proto`).
+    * **Management:** These Protobuf schemas, especially when `PipeStream` messages are transported via Kafka, are typically managed and validated by an external, enterprise-grade Schema Registry (like Apicurio or AWS Glue Schema Registry, as per existing setup).
+    * **Interaction:** YAPPY Kafka serializers/deserializers (within Module Frameworks, Connector Service) interact with this external registry to ensure `PipeStream` data compatibility and handle schema evolution for Kafka transport.
+    * **Scope of this Document:** While essential, the detailed management of these Protobuf schemas and the external registry is outside the primary scope of this document, which focuses on JSON schemas for module configuration.
+
+2.  **JSON Schemas & YAPPY Custom JSON Schema Registry:**
+    * **Purpose:** Define the expected structure, data types, and constraints for the `custom_json_config` string. This JSON string is provided within a `PipelineStepConfig` to specifically parameterize an instance of a Pipeline Module Processor.
+    * **Management:** These JSON schemas are managed by a **dedicated YAPPY gRPC service: the Custom JSON Schema Registry**. This service implements the gRPC interface defined in `SchemaRegistryService.proto` (detailed in the YAPPY gRPC API Manual).
+    * **This document primarily details the design, registration, validation, and usage of these JSON schemas.**
+
+The YAPPY Custom JSON Schema Registry service is a gRPC service that registers itself with Consul for discovery by YAPPY components like Module Frameworks (for runtime validation) and administrative tools (for schema management). This allows developers to look up default configurations (if defined within the schemas) and for future automated registration of new module schemas.
+
+## 2. Core Principles for `custom_json_config` JSON Schema Design
+
+The use of JSON schemas for `custom_json_config` provides:
+
+* **Clear Contracts:** Defines the parameters a Pipeline Module Processor expects.
+* **Automated Validation:** Enables Module Frameworks to validate `custom_json_config` before processor invocation.
+* **Modularity & Versioning:** Supports versioned schemas for controlled evolution of module configurations.
+* **Discoverability & Tooling:** Allows introspection for UI generation and developer guidance.
+
+## 3. System and Data Model Overview for JSON Schema Configuration
+
+### 3.1. System Modules Involved in JSON Schema Management
+
+The following diagram shows the YAPPY system modules and their interactions related to the Custom JSON Schema Registry and the `custom_json_config` for modules.
 
 ```mermaid
 graph TD
-subgraph User/Admin Interaction
-AdminUI[Admin UI/Tooling]
+subgraph Admin & Design Time
+AdminUI[Admin UI/Tooling / CI/CD]
 end
 
-    subgraph Core Configuration & Services
-        ConfigService["config-service (Micronaut)"]
-        Consul[Consul KV Store]
-        SchemaRegistryService["Schema Registry Logic (within ConfigService or separate)"]
+    subgraph YAPPY Services - Consul Registered
+        ConnectorService["Connector Service"]
+        MF_StepX["Module Framework for Step X"]
+        CustomJsonSR["Custom JSON Schema Registry Service<br/>(Implements SchemaRegistryService.proto)"]
+    end
+    
+    subgraph Configuration & Storage
+        ConsulKV["Consul KV Store<br/>(Stores PipelineClusterConfig & SchemaRegistryArtifacts/SchemaVersionData via CustomJsonSR)"]
     end
 
-    subgraph Pipeline Execution
-        GRPCPipelineEngine["grpc-pipeline-engine (Micronaut)"]
+    subgraph Pipeline Module Processors
+        PMP_X["Pipeline Module Processor X<br/>(Implements PipeStepProcessor.proto)"]
     end
 
-    subgraph Developer Implementation
-        DeveloperSDK["grpc-developer-sdk (Java, Python, etc.)"]
-        DevModuleA["Developer Module A (gRPC Service)"]
-        DevModuleB["Developer Module B (gRPC Service)"]
+    subgraph Model & SDK Libraries
+        PipelineConfigModels["pipeline-config-models (Java Records)"]
+        SchemaRegistryInternalModels["schema-registry-models (Java Records for Registry's internal use, e.g., SchemaVersionData)"]
+        GRPCSDK["grpc-developer-sdk (Protobufs, Stubs)"]
     end
 
-    subgraph Model Libraries
-        PipelineConfigModels["pipeline-config-models (JAR)"]
-        SchemaRegistryModels["schema-registry-models (JAR)"]
-    end
+    AdminUI -- "1. Register/Manage JSON Schemas" --> CustomJsonSR
+    AdminUI -- "2. Define PipelineModuleConfig (with SchemaReference)" --> AdminAPI -- "Writes to" --> ConsulKV
+    AdminUI -- "3. Define PipelineStepConfig (with customConfig)" --> AdminAPI -- "Writes to" --> ConsulKV
 
-    AdminUI --> ConfigService
-    ConfigService --> Consul
-    ConfigService --> PipelineConfigModels
-    ConfigService o-- SchemaRegistryService
-    SchemaRegistryService --> Consul
-    SchemaRegistryService --> SchemaRegistryModels
-
-    GRPCPipelineEngine --> ConfigService
-    GRPCPipelineEngine --> SchemaRegistryService
-    GRPCPipelineEngine --> DevModuleA
-    GRPCPipelineEngine --> DevModuleB
-
-    DevModuleA --> DeveloperSDK
-    DevModuleB --> DeveloperSDK
-
-    DeveloperSDK -.-> PipelineConfigModels
-    DeveloperSDK -.-> SchemaRegistryModels
-
+    CustomJsonSR -- "Stores/Retrieves Schemas as SchemaVersionData" --> ConsulKV
+    CustomJsonSR -- "Uses for internal representation" --> SchemaRegistryInternalModels
+    CustomJsonSR -- "Exposes gRPC interface" --> GRPCSDK
+    
+    MF_StepX -- "4. Reads PipelineStepConfig (incl. pipelineImplId -> ModuleConfig -> SchemaReference)" --- DCM[DynamicConfigurationManager] -- Reads --> ConsulKV
+    MF_StepX -- "5. Calls GetSchema(schema_id)" --> CustomJsonSR
+    CustomJsonSR -- "6. Returns SchemaInfo (schema_content)" --> MF_StepX
+    MF_StepX -- "7. Validates custom_json_config" --> PConfModelsRef1[PipelineConfigModels]
+    MF_StepX -- "8. Invokes (passing parsed config)" --> PMP_X
+    
+    PMP_X -.->|Implements Contract| GRPCSDK
+    MF_StepX -.->|Uses Contracts & Models| GRPCSDK
+    MF_StepX -.->|Uses| PipelineConfigModels
+    
     classDef lib fill:#daf,stroke:#333,stroke-width:2px;
     classDef service fill:#adf,stroke:#333,stroke-width:2px;
     classDef extService fill:#fad,stroke:#333,stroke-width:2px;
     classDef storage fill:#faf,stroke:#333,stroke-width:2px;
     classDef ui fill:#ffa,stroke:#333,stroke-width:2px;
 
-    class PipelineConfigModels,SchemaRegistryModels lib;
-    class ConfigService,GRPCPipelineEngine,SchemaRegistryService service;
-    class DevModuleA,DevModuleB extService;
-    class Consul storage;
+    class PipelineConfigModels,SchemaRegistryInternalModels,GRPCSDK lib;
+    class ConnectorService,MF_StepX,CustomJsonSR,AdminAPI service;
+    class PMP_X extService;
+    class ConsulKV storage;
     class AdminUI ui;
 ```
 
-## II. Pipeline Configuration Model Relationships
-This diagram shows the primary entities within the pipeline-config-models module and their relationships. The PipelineClusterConfig is the root object for a given cluster's pipeline definitions.
+### 3.2. Pipeline Configuration Model Relationships (Java Records from `com.krickert.search.config.pipeline.model`)
+
+These Java records define the structure of pipeline configurations, typically stored in Consul. The ER diagram below is based on the provided Java classes.
 
 ```mermaid
 erDiagram
     PipelineClusterConfig {
-        string clusterName
+        String clusterName
         PipelineGraphConfig pipelineGraphConfig
         PipelineModuleMap pipelineModuleMap
-        Set_string_ allowedKafkaTopics
-        Set_string_ allowedGrpcServices
+        Set_String_ allowedKafkaTopics
+        Set_String_ allowedGrpcServices
     }
 
     PipelineGraphConfig {
-        Map_string_PipelineConfig_ pipelines
+        Map_String_PipelineConfig_ pipelines
     }
 
     PipelineConfig {
-        string name
-        Map_string_PipelineStepConfig_ pipelineSteps
+        String name
+        Map_String_PipelineStepConfig_ pipelineSteps
     }
 
     PipelineStepConfig {
-        string pipelineStepId
-        string pipelineImplementationId
-        JsonConfigOptions customConfig
-        List_string_ kafkaListenTopics
-        List_KafkaPublishTopic_ kafkaPublishTopics
-        List_string_ grpcForwardTo
+        String pipelineStepId PK
+        String pipelineImplementationId FK
+        JsonConfigOptions customConfig "nullable"
+        TransportType transportType "e.g., KAFKA, GRPC, INTERNAL (for ingress)"
+        KafkaTransportConfig kafkaConfig "nullable"
+        GrpcTransportConfig grpcConfig "nullable"
+        List_String_ nextSteps "step IDs"
+        List_String_ errorSteps "step IDs"
     }
 
     JsonConfigOptions {
-        string jsonConfig
-    }
-
-    KafkaPublishTopic {
-        string topic
+        String jsonConfig
     }
 
     PipelineModuleMap {
-        Map_string_PipelineModuleConfiguration_ availableModules
+        Map_String_PipelineModuleConfiguration_ availableModules
     }
 
     PipelineModuleConfiguration {
-        string implementationName
-        string implementationId
-        SchemaReference customConfigSchemaReference
+        String implementationId PK
+        String implementationName
+        SchemaReference customConfigSchemaReference "nullable"
+        String processorInvocationType "INTERNAL_JAVA_GRPC or REMOTE_GRPC_SERVICE"
+        String javaClassName "for INTERNAL_JAVA_GRPC"
+        String grpcProcessorServiceId "Consul ID for REMOTE_GRPC_SERVICE"
     }
 
     SchemaReference {
-        string subject
-        int version
+        String subject
+        Integer version
+    }
+
+    TransportType {
+        ENUM KAFKA
+        ENUM GRPC
+        ENUM INTERNAL
+    }
+
+    KafkaTransportConfig {
+        List_String_ listenTopics
+        String publishTopicPattern
+        Map_String_String_ kafkaProperties
+    }
+
+    GrpcTransportConfig {
+        String serviceId "Consul serviceId of target Module Framework's gRPC Ingress OR Processor's"
+        Map_String_String_ grpcProperties
     }
 
     PipelineClusterConfig ||--o{ PipelineGraphConfig : contains
     PipelineClusterConfig ||--o{ PipelineModuleMap : defines
     PipelineGraphConfig ||--o{ PipelineConfig : "has multiple"
     PipelineConfig ||--o{ PipelineStepConfig : "has multiple"
-    PipelineStepConfig ||--o{ JsonConfigOptions : "uses for custom"
-    PipelineStepConfig ||--o{ KafkaPublishTopic : "publishes to multiple"
-    PipelineStepConfig }|--|| PipelineModuleConfiguration : "implemented by"
+    PipelineStepConfig }o--|| JsonConfigOptions : "uses custom (optional)"
+    PipelineStepConfig }o--|| KafkaTransportConfig : "uses if KAFKA (optional, for ingress)"
+    PipelineStepConfig }o--|| GrpcTransportConfig : "uses if GRPC (optional, for ingress)"
+    PipelineStepConfig }|..|| PipelineModuleConfiguration : "implemented by (via ID)"
     PipelineModuleMap ||--o{ PipelineModuleConfiguration : "lists available"
-    PipelineModuleConfiguration ||--o{ SchemaReference : "references schema"
-
-    %% Cardinality notes:
-    %% PipelineClusterConfig <-> PipelineGraphConfig : 1 -- 1
-    %% PipelineClusterConfig <-> PipelineModuleMap : 1 -- 1
-    %% PipelineGraphConfig <-> PipelineConfig : 1 -- M (Map)
-    %% PipelineConfig <-> PipelineStepConfig : 1 -- M (Map)
-    %% PipelineStepConfig <-> PipelineModuleConfiguration : M -- 1 (pipelineImplementationId links to implementationId)
-    %% PipelineModuleMap <-> PipelineModuleConfiguration : 1 -- M (Map)
-    %% PipelineModuleConfiguration <-> SchemaReference : 1 -- 1 (can be null)
+    PipelineModuleConfiguration }o--|| SchemaReference : "references schema (optional)"
 ```
 
-### Description of Pipeline Configuration Model Entities:
+* **`PipelineModuleConfiguration.customConfigSchemaReference` (`SchemaReference`):** This is the key link. It indicates that instances of this module type should have their `customConfig.jsonConfig` validated against the specified schema (`subject` and `version`).
+* **`SchemaReference(String subject, Integer version)`:** Your Java model.
+    * **Translation to `schema_id` for `SchemaRegistryService.proto`:** The `SchemaRegistryService` gRPC interface uses a `string schema_id`. Client components (Module Framework, Admin API) must translate `SchemaReference(subject, version)` into this `schema_id`. The established convention in `ConsulSchemaRegistryDelegate` and `SchemaRegistryServiceImpl` is that the `schema_id` used in the gRPC contract is a string like **`<subject>:v<version>`** (e.g., `"com.example.MyModule:v1"`). This `schema_id` is the public identifier for the schema version in the gRPC API.
+* **`JsonConfigOptions(String jsonConfig)`:** Holds the raw JSON string in `PipelineStepConfig`.
 
-* `PipelineClusterConfig`:
-  * The top-level configuration for a "cluster" of pipelines.
-  * Contains the graph of all pipelines (`pipelineGraphConfig`), a map of all available module types and their schema references (`pipelineModuleMap`), and whitelists for Kafka topics and gRPC services allowed within this cluster.
-  * **How it's used**: Loaded by the `config-service` and provided to the `grpc-pipeline-engine` to define the entire operational scope of pipelines within a cluster.
+### 3.3. Custom JSON Schema Registry: Internal Models and gRPC Service
 
-* `PipelineGraphConfig`:
-  * The graph of all pipelines within a cluster.
-  * Holds a collection of named `PipelineConfig` objects, representing all pipelines defined within the cluster.
-  * **How it's used**:  Allows the engine to look up specific pipelines by their name/ID.
+The Custom JSON Schema Registry service (implementing `SchemaRegistryService.proto`) uses internal Java models (from `com.krickert.search.config.schema.registry.model`) for its persistence layer (e.g., via `ConsulSchemaRegistryDelegate`).
 
-* `PipelineConfig`:
-  * Defines a single named pipeline, comprising a map of its constituent `PipelineStepConfig` objects.
-  * **How it's used**: Represents an end-to-end processing flow.
+* **`SchemaRegistryArtifact(String subject, ...)`**: Represents a schema subject, grouping versions.
+* **`SchemaVersionData(String subject, Integer version, String schemaContent, SchemaType schemaType, SchemaCompatibility compatibility, ...)`**: Represents a specific schema version with its content. `schemaType` will be `SchemaType.JSON_SCHEMA`.
+* The gRPC service (`SchemaRegistryService.proto`) exposes operations like `RegisterSchema`, `GetSchema` using Protobuf messages like `SchemaInfo` (which contains `schema_id` and `schema_content`).
 
-* `PipelineStepConfig`:
-  * Configuration for a single processing unit (a "step") within a pipeline.
-  * Specifies its unique `pipelineStepId`, the `pipelineImplementationId` (which links to a `PipelineModuleConfiguration` defining the type of gRPC service to call), its custom configuration (`customConfig`), and its Kafka/gRPC I/O settings.
-  * **How it's used**: The `grpc-pipeline-engine` uses this to know which gRPC developer module to invoke, what configuration to pass to it, and how it interacts with Kafka/other gRPC services.
-
-* `JsonConfigOptions`:
-  * A simple data holder for the `jsonConfig` string, which contains custom parameters for a `PipelineStepConfig`.
-  * **How it's used**: The raw JSON string is passed to the `config-service` (or `grpc-pipeline-engine`) which then uses the schema (referenced by `PipelineModuleConfiguration.customConfigSchemaReference`) to validate this JSON before it's used by the developer module. The developer module receives this validated JSON string (or a parsed map representation).
-
-* `KafkaPublishTopic`:
-  * Specifies the name of a Kafka topic a step will publish to.
-
-* `PipelineModuleMap`:
-  * A catalog (`availableModules`) mapping a module's `implementationId` to its `PipelineModuleConfiguration`.
-  * **How it's used**: Allows the system to look up the definition (name, schema reference) of any available pipeline module type.
-
-* `PipelineModuleConfiguration`:
-  * Defines a type of pipeline module (which corresponds to a specific gRPC service implementation).
-  * Includes its display name, unique `implementationId`, and a `SchemaReference` pointing to the versioned schema for its custom configuration.
-  * **How it's used**: Provides the blueprint for a module type. The `grpc-pipeline-engine` uses `pipelineImplementationId` from a `PipelineStepConfig` to find the corresponding `PipelineModuleConfiguration` and thus its schema reference.
-
-* `SchemaReference`:
-  * A pointer (subject/name + version) to a specific schema stored in the Schema Registry.
-  * **How it's used**: Allows `PipelineModuleConfiguration` to decouple itself from carrying the raw schema string, instead referring to a centrally managed and versioned schema.
-
-## III. Schema Registry Model Relationships
-This diagram shows the entities within the `schema-registry-models` module. These models represent how schemas are stored and versioned in the central registry.
+<!-- end list -->
 
 ```mermaid
 erDiagram
   SchemaRegistryArtifact {
-    string subject "PK"
+    string subject PK
     string description
     SchemaType schemaType
     timestamp createdAt
@@ -205,53 +206,124 @@ erDiagram
   }
 
   SchemaVersionData {
-    string subject "PK, FK"
-    int version "PK"
-    long globalId
+    string subject PK, FK
+    int version PK
+    long globalId "nullable"
     string schemaContent
     SchemaType schemaType
-    SchemaCompatibility compatibility
+    SchemaCompatibility compatibility "nullable"
     timestamp createdAt
-    string versionDescription
+    string versionDescription "nullable"
   }
 
-  SchemaRegistryArtifact ||--o{ SchemaVersionData : "has versions"
+  SchemaRegistryArtifact ||--|{ SchemaVersionData : "has versions"
+
+  %% SchemaType and SchemaCompatibility are Enums
+  SchemaType {
+      ENUM JSON_SCHEMA
+      ENUM AVRO
+      ENUM PROTOBUF
+      ENUM OTHER
+  }
+  SchemaCompatibility {
+      ENUM NONE
+      ENUM BACKWARD
+      ENUM FORWARD
+      ENUM FULL
+      ENUM BACKWARD_TRANSITIVE
+      ENUM FORWARD_TRANSITIVE
+      ENUM FULL_TRANSITIVE
+  }
+  SchemaVersionData }|--|| SchemaType : uses
+  SchemaVersionData }o--|| SchemaCompatibility : uses
 ```
 
-## Description of Schema Registry Model Entities:
-* `SchemaRegistryArtifact`:
-  * Represents a "subject" or an artifact in the schema registry (e.g., "custom-config-for-module-X"). The `subject` is its unique identifier.
-  * Contains metadata about the schema artifact itself, like its description, overall schema type, and creation/update times. It may also point to its latest version number.
-  * **How it's used**: Acts as the parent container for all versions of a particular schema. The `subject` is typically the `PipelineModuleConfiguration.implementationId`.
-* `SchemaVersionData`:
-  * Represents a specific, immutable version of a `SchemaRegistryArtifact`.
-  * Contains the actual `schemaContent` (the JSON schema string), its version number (unique within its subject), schema type, compatibility information with its predecessor, and creation time.
-  * **How it's used**: This is the object retrieved by the config-service (via its schema registry component) when a specific schema version is requested (using subject + version from SchemaReference). The schemaContent is then used for validating JsonConfigOptions.
-* `SchemaType` (Enum): Defines the type of schema (e.g., `JSON_SCHEMA`).
-* `SchemaCompatibility` (Enum): Defines the compatibility level of a schema version (e.g., `BACKWARD`, `FULL`).
+## 4\. Workflow: JSON Schema Registration, Referencing, and Runtime Validation
 
-## V. How Models are Used - A Typical Flow
-1. **Admin Defines Configuration**:
-  * An administrator uses an Admin UI (or direct API calls) to interact with the `config-service`.
-  * **Schema Registration**: For a new or updated `PipelineModuleConfiguration`, its `customConfigJsonSchema` (as a string) is registered with the schema registry component of the `config-service`.
-    * This creates/updates a `SchemaRegistryArtifact` (identified by the module's `implementationId` as the `subject`).
-    * A new `SchemaVersionData` entry is created with the schema string and a new version number.
-  * **Pipeline Definition**: The administrator defines/updates `PipelineClusterConfig`, including:
-    * Adding/updating `PipelineModuleConfiguration` entries in the `PipelineModuleMap`, ensuring their `customConfigSchemaReference` points to the correct `subject` (module `implementationId`) and `version` in the schema registry.
-    * Defining `PipelineGraphConfig`, `PipelineConfig`, and `PipelineStepConfig` objects.
-  * The `config-service` validates these configurations (e.g., ensuring `pipelineImplementationIds` exist, schema references are valid) and persists them (e.g., to Consul).
-2. **Pipeline Engine Initialization/Execution**:
-  * The `grpc-pipeline-engine` starts up or receives a request to run a pipeline.
-  * It fetches the relevant `PipelineClusterConfig` from the `config-service`.
-  * For each `PipelineStepConfig` to be executed:
-    * It identifies the `pipelineImplementationId`.
-    * It uses this ID to look up the `PipelineModuleConfiguration` in `PipelineClusterConfig.pipelineModuleMap.availableModules`.
-    * From `PipelineModuleConfiguration`, it gets the `customConfigSchemaReference`.
-    * It requests the actual schema string (`SchemaVersionData.schemaContent`) from the `config-service`'s schema registry component using the `subject` and `version` from the `SchemaReference`.
-    * The engine (or the `config-service` as a utility) uses this schema string to validate the `PipelineStepConfig.customConfig.jsonConfig`.
-    * If valid, `the grpc-pipeline-engine` invokes the appropriate gRPC developer module, passing the (potentially parsed from JSON) custom configuration and other necessary context.
-    * The engine also uses `allowedKafkaTopics` and `allowedGrpcServices` from `PipelineClusterConfig` to enforce communication policies for the step.
-3. **Developer Module Execution**:
-  * The gRPC developer module (written in any language using the `grpc-developer-sdk`) receives its invocation.
-  * It parses its custom configuration (which it knows is valid according to its advertised schema).
-  * It performs its processing logic.
+1.  **Schema Definition & Registration:**
+
+    * A module developer defines a JSON schema for their module's `custom_json_config`.
+    * This schema is registered with the **Custom JSON Schema Registry Service** (e.g., by an Admin API calling `SchemaRegistryService.RegisterSchema`). The `RegisterSchemaRequest` includes the `schema_id` (e.g., `"com.example.MyModule:v1"`), the `schema_content`, description, etc.
+    * Internally, `SchemaRegistryServiceImpl` uses `ConsulSchemaRegistryDelegate` to validate the `schema_content` against a meta-schema (e.g., JSON Schema Draft-07, from `draft7.json`) and then stores it (e.g., as `SchemaVersionData` in Consul).
+    * The `PipelineModuleConfiguration` for this module type is updated in Consul with a `SchemaReference` (e.g., `subject="com.example.MyModule"`, `version=1`).
+
+2.  **Pipeline Configuration:**
+
+    * A pipeline designer configures a `PipelineStepConfig`, linking it to the `PipelineModuleConfiguration` (via `pipelineImplementationId`) and providing the `customConfig.jsonConfig` string.
+
+3.  **Runtime Validation by Module Framework:**
+
+    * When a Module Framework executes a `PipelineStepConfig`:
+        1.  It fetches `PipelineStepConfig` and its associated `PipelineModuleConfiguration`.
+        2.  It retrieves `SchemaReference(subject, version)` from `PipelineModuleConfiguration.customConfigSchemaReference`.
+        3.  If `SchemaReference` is present:
+            a.  Constructs the `schema_id` string (e.g., `subject + ":v" + version`).
+            b.  Calls `SchemaRegistryService.GetSchema(GetSchemaRequest{schema_id = ...})` on the Custom JSON Schema Registry service (discovered via Consul).
+            c.  The service returns `SchemaInfo` containing `schema_content`.
+            d.  The Module Framework validates `PipelineStepConfig.customConfig.jsonConfig` against this `schema_content`.
+            e.  On failure, error handling occurs. On success, the `jsonConfig` is parsed to `google.protobuf.Struct`.
+        4.  If no `SchemaReference`, validation may be skipped or a default (e.g., empty Struct) is used.
+        5.  The `google.protobuf.Struct` is passed to the Pipeline Module Processor in `ProcessRequest.config.custom_json_config`.
+
+## 5\. Designing Effective JSON Schemas for `custom_json_config`
+
+To create effective JSON schemas for module configurations:
+
+* **Clarity and Specificity:** Define data types (`string`, `integer`, `number`, `boolean`, `object`, `array`) and formats (e.g., `date-time`, `uri`) clearly.
+* **Required Fields:** Use the `required` keyword for mandatory properties.
+* **Constraints:** Utilize JSON Schema keywords for constraints (e.g., `minimum`, `maximum`, `pattern`, `enum`, `minLength`, `maxLength`, `minItems`, `maxItems`).
+* **Nesting & Objects:** Use nested `object` types for complex configurations.
+* **Defaults:** Specify `default` values in schemas. These serve as documentation and can guide UI tools. The Pipeline Module Processor is typically responsible for applying operational defaults if a parameter is truly optional and omitted from the provided `jsonConfig`.
+* **Descriptions:** Include `title` and `description` for the schema and its properties to make it self-documenting.
+* **Versioning:** Use the `version` in `SchemaReference`. Schema changes should lead to new versions.
+* **Example:**
+  ```json
+  // Schema for a module with subject "com.example.DataTransformer", version 1
+  // Corresponds to schema_id "com.example.DataTransformer:v1"
+  {
+    "$schema": "[http://json-schema.org/draft-07/schema#](http://json-schema.org/draft-07/schema#)",
+    "title": "DataTransformerConfig_v1",
+    "description": "Configuration for the Data Transformer Module, version 1.",
+    "type": "object",
+    "properties": {
+      "transformationMode": {
+        "description": "The mode of transformation to apply.",
+        "type": "string",
+        "enum": ["UPPERCASE", "LOWERCASE", "STRIP_HTML"],
+        "default": "LOWERCASE"
+      },
+      "targetField": {
+        "description": "The field in PipeDoc.custom_data to apply the transformation to.",
+        "type": "string"
+      },
+      "maxOutputLength": {
+          "description": "Optional maximum length for the transformed output string.",
+          "type": "integer",
+          "minimum": 1
+      }
+    },
+    "required": [
+      "transformationMode",
+      "targetField"
+    ]
+  }
+  ```
+
+## 6\. Interaction with `SchemaRegistryService.proto`
+
+The Custom JSON Schema Registry is a gRPC service defined by `SchemaRegistryService.proto`. Key interactions:
+
+* **Module Frameworks:** Call `GetSchema` to retrieve `schema_content` for validation.
+* **Administrative Tools/APIs:** Use `RegisterSchema`, `DeleteSchema`, `ListSchemas`, `ValidateSchemaContent` for schema lifecycle management.
+* The service implementation (e.g., `SchemaRegistryServiceImpl` backed by `ConsulSchemaRegistryDelegate`) handles persistence and validates incoming schema content against a meta-schema (like JSON Schema Draft-07 via `draft7.json`) to ensure the schemas themselves are valid.
+
+*(Refer to the **YAPPY gRPC API Manual** for full RPC details.)*
+
+## 7\. Future Considerations
+
+* **Unified Schema Registry:** While distinct now, exploring a single system (like Apicurio) for both Protobuf `PipeStream` schemas and JSON `custom_json_config` schemas remains a possibility if functional and operational needs align.
+* **UI Integration:** Dynamically generating configuration forms in an Admin/Pipeline Editor UI based on these registered JSON schemas.
+* **Advanced Schema Evolution:** Implementing more sophisticated schema compatibility checks (e.g., using the `SchemaCompatibility` model) within the `SchemaRegistryService`.
+* **Developer Tooling:** Enhanced tools for creating, testing, and versioning module JSON schemas.
+* **Programmatic Schema Registration:** CI/CD integration for automated schema registration when new module versions are deployed.
+
