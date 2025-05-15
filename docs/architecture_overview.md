@@ -1,443 +1,294 @@
 # YAPPY Architecture Overview
 
-*(Last Updated: 2025-05-14 based on architectural evolution to decentralized step execution)*
+*(Last Updated: 2025-05-15 incorporating refined module definitions, dual inter-step transport, precise Consul roles, and clarification of gRPC service interfaces)*
 
 ## 1. Introduction
 
 YAPPY (Yet Another Pipeline Processor) is a dynamic, decentralized, and streaming data processing platform. It is designed to build flexible data pipelines primarily focused on document indexing, A/B testing of pipeline configurations, and versatile data processing tasks.
 
 The core technologies underpinning YAPPY are:
-* **Micronaut:** For building efficient, lightweight microservices, including pluggable gRPC processing modules and the services that host the "Module Framework/Embedded Engine" logic.
-* **Apache Kafka:** As the primary asynchronous, resilient data flow mechanism between pipeline steps, enabling decoupling, scalability, and the decentralized orchestration model.
-* **gRPC:** For efficient, cross-language inter-service communication, primarily for the interaction between a step's "Module Framework/Embedded Engine" and its dedicated processing logic (Pipeline Module Processor), especially if the processor is a distinct gRPC service.
-* **Consul:** As a dynamic configuration store for all pipeline definitions (`PipelineClusterConfig`) and for service discovery of gRPC-based Pipeline Module Processors.
-* **Schema Registry (e.g., Apicurio Registry or `SchemaRegistryService.proto` implementation):** For managing JSON Schemas that define the structure of custom configurations (`custom_json_config`) for pipeline steps, ensuring configuration integrity.
+* **Micronaut:** Leveraged for building efficient, lightweight microservices. This typically includes the services that embody the **"Module Framework / Embedded Engine"** logic. For Pipeline Module Processors implemented in Java and designed for optimal in-JVM execution, Micronaut can also manage their lifecycle as part of the Module Framework service. The Module Framework benefits from Micronaut's capabilities for streamlined integration with Kafka and Consul, standardized observability (metrics, tracing, logging), simplified service lifecycle management, and establishing foundational security measures.
+* **Apache Kafka:** Provides an **asynchronous**, resilient data transport mechanism for `PipeStream` objects when this mode is chosen for communication between logical pipeline steps (i.e., from one Module Framework to the next). This enables highly decoupled and scalable pipeline flows.
+* **gRPC:**
+    1.  Defines the **universal service interface contract (`PipeStepProcessor.ProcessData` in `pipe_step_processor.proto`) for all Pipeline Module Processors** (the business logic units), regardless of their implementation language or deployment strategy.
+    2.  Provides a **synchronous**, resilient data transport mechanism for `PipeStream` objects when this mode is chosen for communication between logical pipeline steps (Module Framework to Module Framework). This involves one Module Framework making a gRPC call to another Module Framework's designated `PipeStream` ingress endpoint (e.g., an RPC defined in `PipeStreamEngine.proto`).
+* **Consul:**
+    1.  Acts as the dynamic and authoritative configuration store for all pipeline definitions (`PipelineClusterConfig`), dictating pipeline structure, individual step configurations, and routing logic (including inter-step transport choices).
+    2.  Provides service discovery for YAPPY's gRPC services, including:
+        * The **Connector Service** (Initial Ingest Service).
+        * **Module Framework instances** that expose gRPC endpoints to receive `PipeStream`s directly from other Module Frameworks.
+        * Separately deployed, remote **gRPC-based Pipeline Module Processors** (e.g., written in Python, Rust, or as distinct Java services).
+        * The **Custom JSON Schema Registry service**.
+    3.  All active, long-running YAPPY service instances mentioned above are expected to register with Consul for health checking and operational visibility.
+* **Schema Registries (Two Distinct Types):**
+    * **Protobuf Schema Registry (e.g., Apicurio, Amazon Glue, Confluent Registry):** For managing and validating the Protobuf schemas of the `PipeStream` message itself and its constituent Protobuf messages (like `PipeDoc`). This is crucial for ensuring data compatibility when `PipeStream`s are serialized, particularly for transport over Kafka.
+    * **Custom JSON Schema Registry (`SchemaRegistryService.proto` implementation):** A dedicated YAPPY gRPC service that stores and validates JSON Schemas for the `custom_json_config` parameters specific to each Pipeline Module Processor. This allows the Module Framework to perform strict validation of module-specific configurations and can facilitate UI generation for pipeline design. This service registers itself with Consul. *(Future: The potential use of a unified system like Apicurio for both Protobuf and JSON schema validation may be explored.)*
 
 ## 2. Architectural Principles
 
 YAPPY's design is guided by the following principles:
 
-* **Dynamic Configuration:** All aspects of pipeline structure (`PipelineConfig`), step definitions (`PipelineStepConfig`), module mappings (`PipelineModuleConfiguration`), and custom parameters are stored externally in Consul. This configuration is fetched dynamically by each step's "Module Framework/Embedded Engine" at runtime. Updates in Consul can lead to changes in pipeline behavior for new `PipeStream`s without service redeployments.
-* **Schema-Driven Design:**
-    * Data in transit (`PipeStream`, `PipeDoc`, `Blob`) is defined using Protocol Buffers (Protobuf) for strong typing and efficiency.
-    * Custom configurations for pipeline steps (`custom_json_config` within `PipelineStepConfig`) are validated by the "Module Framework/Embedded Engine" against their declared JSON Schemas (fetched from the Schema Registry) before being passed to the Pipeline Module Processor.
-* **Decentralized Orchestration and Execution Model:**
-    * Pipeline flow is primarily managed through Kafka topics. Each step in a pipeline is typically associated with an input Kafka topic.
-    * A **"Module Framework/Embedded Engine"** is responsible for each step's execution. This framework:
-        1. Consumes a `PipeStream` from its designated input Kafka topic.
-        2. Extracts routing information (`current_pipeline_name`, `target_step_name`) from the `PipeStream`.
-        3. Dynamically fetches its specific `PipelineStepConfig` and associated `PipelineModuleConfiguration` from Consul using the `DynamicConfigurationManager`.
-        4. Validates the `custom_json_config` from the fetched `PipelineStepConfig` against the relevant schema from the Schema Registry.
-        5. Invokes the actual business logic (the **Pipeline Module Processor**) with the `PipeStream` data and the validated configuration.
-        6. Based on the processor's result and the `nextSteps` or `errorSteps` defined in its `PipelineStepConfig`, it updates the `PipeStream` (e.g., `target_step_name` for the next hop, adds to history) and publishes it to the appropriate Kafka topic for the subsequent step.
-    * An **Initial Engine Logic / Ingest Service** is responsible for creating the initial `PipeStream` from an `IngestDataRequest` and publishing it to the Kafka topic of the first step in a pipeline.
-* **Extensibility:** The system is designed for developers to easily create and integrate new processing logic as Pipeline Module Processors (often gRPC services, or direct Java/.NET/Python logic callable by the framework). The "Module Framework/Embedded Engine" handles the boilerplate of Kafka consumption, configuration fetching, and routing.
-* **Clear Separation of Concerns:** Pipeline definition (Consul), schema management (Schema Registry), data transport (Kafka), actual processing logic (Pipeline Module Processors), and step orchestration logic (Module Framework/Embedded Engine) are distinct concerns.
+* **Standardized Module Interface (gRPC - `PipeStepProcessor.proto`):** All Pipeline Module Processors (business logic units) implement the common `PipeStepProcessor.ProcessData` gRPC service interface. This defines how a Module Framework invokes the processor and receives results, promoting consistency and enabling polyglot module development.
+* **Flexible Pipeline Module Processor Invocation by Module Framework:** The Module Framework invokes its configured processor based on `PipelineModuleConfiguration`:
+    * **Internal Java/gRPC Modules (Optimized Same-JVM Execution):** A Java-based Pipeline Module Processor (which implements the standard `PipeStepProcessor` gRPC interface) can run within the same JVM as its Java-based Module Framework. The Module Framework invokes this processor via a **direct, in-process Java method call to the gRPC service implementation object.** This strategy maintains strict adherence to the gRPC interface contract while bypassing network overhead for optimal performance, suitable for trusted, high-performance Java modules. These internal modules are part of the Module Framework's service instance and thus do not register *separately* in Consul (their Module Framework host does, for its own health and visibility).
+    * **Localhost/Remote gRPC Modules (Separate Processes - Polyglot Support):** Pipeline Module Processors (implemented in Java, Python, Rust, or any other gRPC-supported language) run as separate gRPC services. The Module Framework makes a standard network gRPC call (to `localhost` or a remote host, typically discovered via Consul using a `serviceId`) to interact with these processors. These separate gRPC services register themselves with Consul.
+* **Dynamic Module Configuration:** Each Pipeline Module Processor can define its runtime parameters via a JSON schema registered in the **Custom JSON Schema Registry**. The Module Framework uses this schema to validate the `custom_json_config` from `PipelineStepConfig`. If no schema is registered for a module, its `custom_json_config` handling follows a default behavior.
+* **Dynamic Pipeline Configuration:** The overall pipeline definition (`PipelineClusterConfig` in Consul) specifies the sequence of steps, the **choice of inter-step `PipeStream` transport (Kafka or gRPC)** between Module Frameworks, module processor assignments, and `custom_json_config`. This is dynamically accessed by Module Frameworks.
+* **Schema-Driven Design (Dual Registries):** `PipeStream` (Protobuf) integrity benefits from a Protobuf Schema Registry. `custom_json_config` (JSON) integrity is ensured by the Custom JSON Schema Registry.
+* **Decentralized Orchestration with Configurable `PipeStream` Transport:**
+    * The flow of `PipeStream`s between logical pipeline steps (Module Framework to Module Framework) is specified in the `PipelineStepConfig`.
+    * A **"Module Framework / Embedded Engine"** is the lightweight engine responsible for each step.
+    * The Module Framework:
+        1.  **Receives `PipeStream`:** Via Kafka consumption OR a direct gRPC call from an upstream Module Framework (if the current Module Framework exposes a registered gRPC ingress endpoint for `PipeStream`s, e.g., implementing an RPC from the `PipeStreamEngine` service like `process` or `processAsync`, and this transport was chosen).
+        2.  Fetches its `PipelineStepConfig` from Consul.
+        3.  Validates `custom_json_config` against the Custom JSON Schema Registry.
+        4.  Invokes its configured Pipeline Module Processor.
+        5.  Based on the result and `nextSteps`/`errorSteps` (which specify `target_step_name` and **transport details** to the *next Module Framework*), updates and sends the `PipeStream`.
+* **Developer Enablement (Leveraging Platform Capabilities):**
+    * Developers of Pipeline Module Processors primarily focus on implementing the `PipeStepProcessor.ProcessData` gRPC interface.
+    * The Module Framework handles platform integration: Kafka/gRPC I/O for `PipeStream` transport, dynamic configuration, JSON schema validation, observability, and security foundations.
+* **Resilience:** Service instance resilience is primarily managed by the container orchestration platform. *(Future: Advanced application-level resilience patterns may be considered.)*
 
 ## 3. Core Components & Responsibilities
 
 ### 3.1. Configuration Subsystem (`DynamicConfigurationManager` & Consul)
 * **Responsibilities:**
-    * **Consul:** Stores the entire `PipelineClusterConfig` (and its constituent parts like `PipelineConfig`, `PipelineStepConfig`, `PipelineModuleConfiguration`) as JSON or YAML. Acts as the central source of truth for pipeline definitions.
-    * **`DynamicConfigurationManager`:** A library/component used by each "Module Framework/Embedded Engine" and the "Initial Engine Logic / Ingest Service".
-        * Loads the `PipelineClusterConfig` (or relevant parts of it) from Consul.
-        * Performs comprehensive validation on the loaded configuration *if responsible for pre-flight checks or admin operations*. Runtime validation of a step's specific config is typically handled by the Module Framework.
-        * Caches configuration for fast access.
-        * Can listen for changes in Consul to facilitate dynamic updates (though how live updates affect in-flight `PipeStream`s needs careful consideration, typically applying to new streams).
-* **Key Interaction:** Consul is the definitive source of truth for pipeline definitions. The `DynamicConfigurationManager` provides access to this configuration for all runtime components that need it.
+    * **Consul:** Stores `PipelineClusterConfig`.
+    * **`DynamicConfigurationManager`:** Library used by Module Frameworks and the Connector Service to load, cache, and access pipeline configurations from Consul.
+* **Key Interaction:** Consul is the source of truth for pipeline definitions. `DynamicConfigurationManager` provides runtime access.
 
-### 3.2. Initial Engine Logic / Ingest Service
+### 3.2. Connector Service (Initial Ingest Service - Implements `PipeStreamEngine.IngestDataAsync`)
 * **Responsibilities:**
-    * Implements an entry point for starting pipeline executions, typically by handling an `IngestDataRequest` (as defined in `engine_service.proto`).
-    * Uses the `source_identifier` from the request to look up the configured target pipeline name and the name of its first step from the `PipelineClusterConfig` (via `DynamicConfigurationManager`).
-    * Creates the initial `PipeStream` object, populating it with a unique `stream_id`, the provided `PipeDoc`, `source_identifier`, `initial_context_params`, `current_pipeline_name`, and `target_step_name` (pointing to the first step).
-    * Publishes this initial `PipeStream` to the Kafka topic designated for the first step of the pipeline.
-* **Key Interaction:** Receives external requests; interacts with `DynamicConfigurationManager` to get initial pipeline information; produces the first `PipeStream` message to Kafka.
+    * Provides the primary entry point for external systems ("connectors") to submit data and initiate pipeline executions using the `IngestDataRequest` message and `IngestDataAsync` RPC defined in `engine_service.proto`.
+    * Uses `IngestDataRequest.source_identifier` to determine the initial pipeline and first step from `PipelineClusterConfig`.
+    * Creates the initial `PipeStream`.
+    * **Initiates Pipeline Flow:** Routes the initial `PipeStream` to the first Module Framework either by publishing to a Kafka topic or, if configured, by making a gRPC call to the first Module Framework's `PipeStream` ingress endpoint (e.g., its implementation of an RPC from `PipeStreamEngine.proto`, discovered via Consul).
+    * Registers itself with Consul for health checking and operational visibility.
+* **Key Interaction:** Receives `IngestDataRequest`; interacts with `DynamicConfigurationManager`; initiates `PipeStream` flow via Kafka or gRPC.
 
 ### 3.3. Module Framework / Embedded Engine
 * **Responsibilities:**
-    * This is the runtime environment or framework hosting/managing the execution of individual pipeline steps. It can be part of a dedicated microservice per module type or a shared framework.
-    * **Kafka Consumption:** Consumes `PipeStream` messages from a Kafka topic specific to the step it manages.
-    * **Configuration Fetching & Validation:**
-        1. Extracts `current_pipeline_name` and `target_step_name` from the incoming `PipeStream`.
-        2. Uses these identifiers to query the `DynamicConfigurationManager` to fetch its specific `PipelineStepConfig` and the associated `PipelineModuleConfiguration`.
-        3. Retrieves the `custom_json_config` (string) and `config_params` from the `PipelineStepConfig`.
-        4. Fetches the relevant JSON Schema (using `SchemaReference` in `JsonConfigOptions`) from the Pipeline Schema Registry.
-        5. Validates the `custom_json_config` string against this schema.
-    * **Processor Invocation:**
-        1. Constructs the `ProcessRequest` (as defined in `pipe_step_processor.proto`). This includes:
-            * `document`: The `PipeDoc` from the `PipeStream`.
-            * `config.custom_json_config`: The validated and parsed `custom_json_config` (as `google.protobuf.Struct`).
-            * `config.config_params`: The `config_params` map.
-            * `metadata`: Contextual information like `pipeline_name`, `pipe_step_name` (which is `target_step_name` from the stream), `stream_id`, etc.
-        2. Invokes the **Pipeline Module Processor** (see 3.4) associated with this step (e.g., by making a gRPC call to the processor service discovered via Consul, or by directly calling local code if the processor is embedded).
-    * **Response Handling & Routing:**
-        1. Receives the `ProcessResponse` from the Pipeline Module Processor.
-        2. Updates the `PipeStream`:
-            * Modifies `PipeDoc` with `output_doc` from the response.
-            * Adds a `StepExecutionRecord` to the `history`, detailing execution time, status (SUCCESS/FAILURE), logs from `processor_logs`, and `error_info` if applicable (from `ProcessResponse.error_details`).
-        3. Determines the next step(s) by consulting the `nextSteps` (on success) or `errorSteps` (on failure) lists in its `PipelineStepConfig`. These lists contain the `stepName`(s) of the subsequent step(s).
-        4. For each next step, updates `PipeStream.target_step_name` to the determined next step's name.
-        5. Publishes the updated `PipeStream` to the Kafka topic designated for that *next* `target_step_name`. (Topic naming conventions like `<pipelineName>_<targetStepName>_In` could be used).
-    * **State Management & Logging:** Manages Kafka consumer offsets, logs its activities, and handles errors during its own processing (e.g., failure to fetch config, schema validation failure).
-* **Key Interaction:** Consumes from its input Kafka topic; interacts with `DynamicConfigurationManager` and Schema Registry; invokes a Pipeline Module Processor; produces to output Kafka topic(s) for the next step(s).
+    * Lightweight engine executing a single pipeline step.
+    * **`PipeStream` Ingress/Egress (Configurable Transport):**
+        * **Receiving `PipeStream`:**
+            * Consumes from a configured input Kafka topic.
+            * OR, implements a gRPC service endpoint (e.g., an RPC from `PipeStreamEngine.proto` like `process` or `processAsync`) to accept `PipeStream`s from an upstream Module Framework. This gRPC service is registered in Consul if this Module Framework instance is a target for gRPC-based inter-step communication.
+        * **Sending `PipeStream`:** Based on `PipelineStepConfig.nextSteps`/`errorSteps` (defining target step and `TransportConfig`):
+            * Publishes to the designated Kafka topic.
+            * OR, makes a gRPC call to the next Module Framework's `PipeStream` ingress gRPC endpoint (discovered via Consul using `targetModuleFrameworkServiceId` from `GrpcTransportConfig`).
+    * **Configuration & Validation:** Fetches `PipelineStepConfig`; validates `custom_json_config` against Custom JSON Schema Registry.
+    * **Pipeline Module Processor Invocation (of the `PipeStepProcessor` gRPC interface):**
+        * Prepares `ProcessRequest`.
+        * Based on `PipelineModuleConfiguration`:
+            * **Internal Java/gRPC Module:** Direct, in-process Java method call to the co-deployed Java object implementing `PipeStepProcessor`.
+            * **Localhost/Remote gRPC Module Processor:** Network gRPC call (discovered via Consul if remote) to `ProcessData`.
+    * **State Update & Routing:** Updates `PipeStream`; determines next hop; routes.
+    * **Consul Registration:** Each Module Framework instance registers with Consul for health, visibility, and discovery (if offering gRPC `PipeStream` ingress).
+* **Key Interaction:** Kafka, gRPC (for `PipeStream` I/O & Processor calls), Consul, Custom JSON Schema Registry, Pipeline Module Processor.
 
-### 3.4. Pipeline Module Processor (Business Logic Implementations)
+### 3.4. Pipeline Module Processor (Business Logic)
 * **Responsibilities:**
-    * These are the components containing the actual business logic for a pipeline step (e.g., "Echo", "TextExtractor", "Chunker", "EmbeddingGenerator").
-    * Typically implemented as standalone, deployable gRPC services (e.g., Micronaut applications) that implement the `com.krickert.search.sdk.PipeStepProcessor` gRPC interface (defined in `pipe_step_processor.proto`). Alternatively, for simpler modules or different deployment strategies, the logic might be directly embedded or called by the Module Framework.
-    * Each gRPC service implementation is responsible for one or more `pipelineImplementationId`s (a logical type of processing, e.g., "com.example.AdvancedOcr", "com.example.TextSummarizer").
-    * It receives a `ProcessRequest` from its "Module Framework/Embedded Engine".
-    * Its primary job is to perform its configured processing task on the `ProcessRequest.document` using `ProcessRequest.config.custom_json_config` and `ProcessRequest.config.config_params`.
-    * It returns a `ProcessResponse` indicating `success` or failure, and providing any `output_doc`, `error_details` (as `google.protobuf.Struct`), and `processor_logs`.
-    * **Crucially, these processors are "simple" data-in, data-out components. They do not handle routing logic, do not decide which step is next, and do not directly interact with Kafka or Consul for pipeline flow.** Their "Module Framework/Embedded Engine" manages these concerns.
-* **Key Interaction:** Called by its "Module Framework/Embedded Engine"; uses the `grpc-developer-sdk` for Protobuf definitions and potentially helper utilities. Its gRPC endpoint is discoverable via Consul if it's a separate service.
+    * Contains business logic, **always implementing the `PipeStepProcessor.proto` gRPC interface.**
+    * **Deployment & Invocation Variants:**
+        * **Internal Java/gRPC Module:** Java class implementing `PipeStepProcessor`, co-deployed in Module Framework's JVM, invoked via direct Java method call. Not separately Consul-registered (Module Framework is).
+        * **Localhost/Remote gRPC Service (Polyglot):** Standalone gRPC service implementing `PipeStepProcessor`. Deployed separately, registers with Consul via its own `serviceId`.
+    * Receives `ProcessRequest`, returns `ProcessResponse`.
+* **Key Interaction:** Invoked by Module Framework. Remote gRPC services register with Consul.
 
 ### 3.5. `grpc-developer-sdk`
 * **Responsibilities:**
-    * Provides the necessary tools and libraries for developers creating new **Pipeline Module Processors**, especially those implemented as gRPC services.
-    * Includes:
-        * The official Protobuf definitions for all shared messages (`PipeStream`, `PipeDoc`, `Blob`, `ProcessRequest`, `ProcessResponse`, `ErrorData`, `StepExecutionRecord`, `ServiceMetadata`, `ProcessConfiguration` etc. from `yappy_core_types.proto` and `pipe_step_processor.proto`).
-        * Generated gRPC service stubs and base classes in supported languages (e.g., Java).
-        * Language-specific helper utilities, for example, to easily parse the `google.protobuf.Struct custom_json_config` received in `ProcessRequest.config` into native data structures (like Java Maps or POJOs).
-* **Key Interaction:** Used by developers of new Pipeline Module Processor logic.
+    * Provides Protobuf definitions (including `PipeStepProcessor.proto`, `PipeStream.proto`, `SchemaRegistryService.proto`, `EngineService.proto`) and generated gRPC stubs.
+* **Key Interaction:** Used by developers of Module Processors, Module Frameworks, Connector Service.
 
-### 3.6. Schema Registry (e.g., Apicurio Registry or `SchemaRegistryService.proto` Implementation)
-* **Responsibilities:**
-    * Stores and versions JSON Schemas.
-    * Each `PipelineStepConfig` that uses a `customConfig` (via `JsonConfigOptions`) references a schema in this registry (via `SchemaReference`).
-    * The "Module Framework/Embedded Engine" for each step uses these schemas to validate the `jsonConfig` strings at runtime before invoking the Pipeline Module Processor.
-    * The Admin UI/API can also use it for pre-flight validation when pipeline configurations are being defined.
-    * The `schema_registry.proto` defines a gRPC service for managing these schemas (register, get, list, delete, validate content).
-* **Key Interaction:** Queried by "Module Framework/Embedded Engines" and potentially by Admin tooling. Pipeline administrators/developers manage schemas here.
+### 3.6. Schema Registries (Two Distinct Types)
+* **Responsibilities (Protobuf Schema Registry - e.g., Apicurio):** Manages `PipeStream` Protobuf schemas, for Kafka transport.
+* **Responsibilities (Custom JSON Schema Registry - `SchemaRegistryService.proto` based):** Manages JSON Schemas for `custom_json_config`. This is a gRPC service that registers itself with Consul.
+* **Key Interaction:** As previously described.
 
-### 3.7. Consul
+### 3.7. Consul (Expanded Role Summary)
 * **Responsibilities:**
-    * **Configuration Store:** Persists the entire `PipelineClusterConfig` (and its sub-components) as JSON or YAML. This is the source from which `DynamicConfigurationManager` (used by Module Frameworks) loads step configurations.
-    * **Service Discovery:** gRPC-based Pipeline Module Processors register themselves with Consul. The "Module Framework/Embedded Engine" for a step queries Consul to discover active instances of the gRPC processor it needs to invoke (based on `serviceId` from `PipelineModuleConfiguration`).
-* **Key Interaction:** Read by `DynamicConfigurationManager` (within Module Frameworks) for configuration and service discovery. Written to by an Admin API/UI for configuration changes and by gRPC processor services for registration.
+    1.  **Pipeline Configuration Store.**
+    2.  **Service Discovery For:**
+        * Connector Service (Initial Ingest).
+        * Remote gRPC Pipeline Module Processors.
+        * Module Framework instances (for their own gRPC `PipeStream` ingress endpoints and for general visibility).
+        * Custom JSON Schema Registry service.
+    3.  **Service Registration & Health Checking:** All YAPPY services register.
+* **Key Interaction:** Central for configuration and discovering various gRPC endpoints.
 
 ## 4. Key Data Structures
 
-### 4.1. Protobuf Messages (Core Data in Motion via Kafka and gRPC)
+### 4.1. Protobuf Messages
+*(The `PipeStreamEngine` service in `engine_service.proto` defines `IngestDataAsync` for the Connector Service. The `process` and `processAsync` RPCs within this same `PipeStreamEngine` service can serve as the standardized gRPC contract for Module Frameworks to receive `PipeStream`s directly from other Module Frameworks or from the Connector Service. A Module Framework configured for gRPC ingress would implement these methods.)*
 
-These define the structure of data passed between components.
-
-#### 4.1.1. `PipeStream` (`yappy_core_types.proto`)
-The central message carrying data and state through a pipeline execution flow, primarily over Kafka between steps.
-```protobuf
-message PipeStream {
-  string stream_id = 1;                       // REQUIRED. Unique ID for this execution flow instance.
-  PipeDoc document = 2;                       // REQUIRED (can be an empty message initially). The primary document being processed.
-  string current_pipeline_name = 3;           // REQUIRED. Name of the PipelineConfig being executed.
-
-  // REQUIRED by the sender (Module Framework/Embedded Engine or Initial Engine Logic).
-  // The 'stepName' (key from PipelineConfig.steps map) of the PipelineStepConfig
-  // that is the intended next recipient/processor of this PipeStream.
-  string target_step_name = 4;
-
-  int64 current_hop_number = 5;               // For logging/tracing; incremented by the Module Framework/Embedded Engine *before* dispatching.
-  repeated StepExecutionRecord history = 6;     // History of executed steps in this stream.
-  optional ErrorData stream_error_data = 7;     // Holds the first critical error that puts the *entire stream* into a general error state.
-  map<string, string> context_params = 8;     // Optional. Key-value parameters for the entire run's context.
-}
-````
-
-**Note:** `PipeStream` acts as a data carrier with *routing pointers* (`current_pipeline_name`, `target_step_name`). It does **not** carry the full operational configuration for the `target_step_name`; that configuration is fetched dynamically by the "Module Framework/Embedded Engine" of the target step.
-
-#### 4.1.2. `PipeDoc` & `Blob` (`yappy_core_types.proto`)
-
-* **`PipeDoc`**: The primary structured document, containing fields for `id`, `title`, `body`, `keywords`, timestamps, `custom_data` (Struct), `semantic_results` (for chunking/embedding outputs), `named_embeddings`, and an optional `Blob`.
-* **`Blob`**: Represents binary data (e.g., original file), with `mime_type`, `filename`, etc.
-
-#### 4.1.3. `ProcessRequest` (`pipe_step_processor.proto`)
-
-Used by a "Module Framework/Embedded Engine" to invoke its associated Pipeline Module Processor (typically via gRPC).
-
-```protobuf
-message ProcessRequest {
-  PipeDoc document = 1;             // The primary document data (from PipeStream).
-  ProcessConfiguration config = 2;    // Configuration for this specific processing step.
-  ServiceMetadata metadata = 3;       // Engine-provided metadata for context and observability.
-}
-
-message ProcessConfiguration {
-  google.protobuf.Struct custom_json_config = 1; // Validated and parsed custom config from PipelineStepConfig.
-  map<string, string> config_params = 2;        // 'configParams' map from PipelineStepConfig.
-}
-
-message ServiceMetadata {
-  string pipeline_name = 1;        // Current pipeline's name.
-  string pipe_step_name = 2;        // 'stepName' of the PipelineStepConfig being executed.
-  string stream_id = 3;              // PipeStream.stream_id.
-  int64 current_hop_number = 4;    // PipeStream.current_hop_number.
-  repeated StepExecutionRecord history = 5; // PipeStream.history.
-  optional ErrorData stream_error_data = 6; // PipeStream.stream_error_data.
-  map<string, string> context_params = 7; // PipeStream.context_params.
-}
-```
-
-#### 4.1.4. `ProcessResponse` (`pipe_step_processor.proto`)
-
-Returned by a Pipeline Module Processor to its "Module Framework/Embedded Engine".
-
-```protobuf
-message ProcessResponse {
-  bool success = 1;                     // True if processing was successful, false otherwise.
-  optional PipeDoc output_doc = 2;      // Optional: The modified or newly created PipeDoc.
-  optional google.protobuf.Struct error_details = 3; // Optional: Structured error information if success is false.
-  repeated string processor_logs = 4;   // Optional: Any specific logs generated by this processor step.
-}
-```
-
-#### 4.1.5. `ErrorData` & `StepExecutionRecord` (`yappy_core_types.proto`)
-
-* **`ErrorData`**: (Part of `PipeStream` and `StepExecutionRecord`) Holds details about an error (message, code, technical details, originating step).
-* **`StepExecutionRecord`**: (Part of `PipeStream.history`) Records information about each step that has processed the `PipeStream` (hop number, step name, start/end time, status, logs, error info).
+*(Definitions of `PipeStream`, `PipeDoc`, `Blob`, `ProcessRequest`, `ProcessResponse`, `ErrorData`, `StepExecutionRecord` remain consistent.)*
 
 ### 4.2. Configuration Models (Java Records, stored as JSON/YAML in Consul)
 
-These define the structure of the pipeline configurations stored in Consul. (Refer to `yappy-models/pipeline-config-models` for detailed Java record definitions).
-
-* **`PipelineClusterConfig`**: The root configuration. Contains a map of `PipelineConfig`s and a `PipelineModuleMap`.
-* **`PipelineConfig`**: Defines a single pipeline (e.g., `pipelineName`, `version`, map of `PipelineStepConfig`s).
-* **`PipelineStepConfig`**: Defines a specific configured instance of a processing unit.
-    * `pipelineName`, `stepName` (unique within pipeline).
-    * `pipelineImplementationId`: Links to a `PipelineModuleConfiguration`.
-    * `customConfig` (`JsonConfigOptions`): Holds `jsonConfig` string and `schemaReference`.
-    * `configParams`: `Map<String, String>` for simple parameters.
-    * `nextSteps`: List of `String` (target `stepName`s) or `KafkaPublishTopic` objects for success routing.
-    * `errorSteps`: Similar, for failure routing.
-    * `kafkaConsumeTopic` (or derived by convention): The Kafka topic its Module Framework listens to.
-* **`PipelineModuleConfiguration`**: Defines an "Implementation Type."
-    * Keyed by `pipelineImplementationId`.
-    * `implementationType`: e.g., "GRPC", "KAFKA_EMBEDDED_JAVA_LOGIC".
-    * `serviceId` (if "GRPC"): Consul `serviceId` for discovering the gRPC Pipeline Module Processor.
-    * (Other fields defining how the Module Framework should run/interact with this type of processor).
-* **`JsonConfigOptions`**: Contains `String jsonConfig` and `SchemaReference`.
-* **`SchemaReference`**: Points to a schema in the Schema Registry.
-* **`PipelineModuleMap`**: Map of `pipelineImplementationId` to `PipelineModuleConfiguration`.
+* **`PipelineStepConfig`**: Contains `nextSteps`/`errorSteps` as a list of `StepTransition` objects.
+* **`StepTransition` (Model in `pipeline-config-models`):**
+    * `targetStepName`: `String`
+    * `transportConfig`: An instance of either:
+        * `KafkaTransportConfig`: Specifies `targetTopic`.
+        * `GrpcTransportConfig`: Specifies `targetModuleFrameworkServiceId` (Consul `serviceId` of the *next Module Framework's* gRPC ingress endpoint, which implements part of the `PipeStreamEngine` service like `processAsync`) and `rpcMethodName` (e.g., "processAsync").
+* **`PipelineModuleConfiguration`**:
+    * `processorInvocationType`: "INTERNAL\_JAVA\_GRPC", "REMOTE\_GRPC\_SERVICE".
+    * `grpcProcessorServiceId` (if "REMOTE\_GRPC\_SERVICE"): Consul `serviceId` of the Pipeline Module Processor.
+    * `javaClassName` (if "INTERNAL\_JAVA\_GRPC"): Class implementing `PipeStepProcessor`.
+    * `grpcIngressServiceIdPattern` (Optional): If Module Framework instances of this type expose a gRPC endpoint (e.g., by implementing `PipeStreamEngine` methods) to receive `PipeStream`s, this helps derive their Consul `serviceId`.
+    * `listensOnKafkaTopics` (Optional): Kafka topics this Module Framework type might consume `PipeStream`s from.
 
 ## 5. Core Workflows & Data Flows
 
-Mermaid diagrams illustrating the primary interaction patterns in the decentralized model.
+Mermaid diagrams illustrating the primary interaction patterns, including the choice of inter-framework transport.
 
 ### 5.1. Pipeline Definition & Configuration Access
-
-Administrators define configurations in Consul. Each Module Framework/Embedded Engine fetches its relevant `PipelineStepConfig` at runtime.
-
+*(Admin defines `PipelineClusterConfig` in Consul. Each Module Framework dynamically fetches its relevant `PipelineStepConfig` and `PipelineModuleConfiguration` at runtime when it receives a `PipeStream` for a step it handles. It also fetches JSON schemas for `custom_json_config` from the Custom JSON Schema Registry.)*
 ```mermaid
 sequenceDiagram
     participant Admin
     participant AdminAPI_UI as Admin UI/API
-    participant Consul
-    participant SchemaRegistry as Apicurio/SchemaService
+    participant Consul_KV as Consul KV Store
+    participant CustomJsonSR as Custom JSON Schema Registry
     participant ModuleStepX_Framework as Module Framework (for Step X)
-    participant DCM as DynamicConfigurationManager (used by Framework)
+    participant DCM as DynamicConfigurationManager (lib)
 
-    Admin->>AdminAPI_UI: Define/Update PipelineClusterConfig
-    AdminAPI_UI->>Consul: Store PipelineClusterConfig (JSON/YAML)
-    AdminAPI_UI->>SchemaRegistry: Register/Update JSON Schemas for custom configs
+    Admin->>AdminAPI_UI: Define/Update PipelineClusterConfig & Module JSON Schemas
+    AdminAPI_UI->>Consul_KV: Store PipelineClusterConfig
+    AdminAPI_UI->>CustomJsonSR: Register/Update Module JSON Schemas
 
     Note over ModuleStepX_Framework: Receives PipeStream for target_step_name = "StepX"
-    ModuleStepX_Framework->>DCM: Get PipelineStepConfig for "CurrentPipeline"."StepX"
-    DCM->>Consul: Load relevant part of PipelineClusterConfig
-    DCM-->>ModuleStepX_Framework: Return stepConfig_StepX
-
-    alt If stepConfig_StepX has customConfig with schemaReference
-        ModuleStepX_Framework->>SchemaRegistry: Fetch JSON Schema (using schemaReference from stepConfig_StepX)
-        ModuleStepX_Framework->>ModuleStepX_Framework: Validate stepConfig_StepX.customConfig.jsonConfig against fetched schema
+    ModuleStepX_Framework->>DCM: Get PipelineStepConfig ("PipelineA"."StepX")
+    DCM->>Consul_KV: Load config for "PipelineA"."StepX"
+    DCM-->>ModuleStepX_Framework: Return stepConfig_X
+    
+    alt stepConfig_X has custom_json_config with schemaReference
+        ModuleStepX_Framework->>CustomJsonSR: Get JSON Schema (using schemaReference from stepConfig_X)
+        CustomJsonSR-->>ModuleStepX_Framework: Return JSON Schema
+        ModuleStepX_Framework->>ModuleStepX_Framework: Validate custom_json_config
     end
-    Note over ModuleStepX_Framework: Now has validated config to proceed with processor invocation.
-```
+    Note over ModuleStepX_Framework: Proceeds to invoke its Pipeline Module Processor.
+````
 
-### 5.2. Pipeline Initiation & First Step Execution
+### 5.2. Pipeline Initiation (Connector Service to First Module Framework)
 
-A new pipeline run is triggered, and the first step processes the `PipeStream`.
+A new pipeline run is triggered. The Connector Service can use Kafka or gRPC to send the initial `PipeStream` to the first Module Framework.
 
 ```mermaid
 sequenceDiagram
-    participant ExternalClient as Client
-    participant InitialEngineLogic as Ingest Service
-    participant DCM_Initial as DynamicConfigurationManager (used by Ingest)
+    participant ExtConnector as External Connector
+    participant ConnectorService as Connector Service (IngestDataAsync)
+    participant DCM_CS as DynamicConfigurationManager (lib)
+    participant Consul_SD as Consul Service Discovery
     participant Kafka
-    participant Step1_Framework as Module Framework (Step 1)
-    participant DCM1 as DynamicConfigurationManager (used by Step 1 FW)
-    participant SchemaRegistry1 as Schema Registry (used by Step 1 FW)
-    participant Processor1 as Pipeline Module Processor (Step 1)
+    participant MF_Step1 as Module Framework (Step 1)
 
-    Client->>InitialEngineLogic: IngestDataRequest (source_identifier="src_A", initialPipeDoc)
-    InitialEngineLogic->>DCM_Initial: Get first step ("P1_S1") for "src_A" pipeline ("Pipeline1")
-    DCM_Initial-->>InitialEngineLogic: Return firstStepName="P1_S1", pipelineName="Pipeline1"
-    InitialEngineLogic->>InitialEngineLogic: Create PipeStream (stream_id, PipeDoc, current_pipeline_name="Pipeline1", target_step_name="P1_S1")
-    InitialEngineLogic->>Kafka: Publish PipeStream to topic "Pipeline1_P1_S1_In"
+    ExtConnector->>ConnectorService: IngestDataRequest (source_identifier="src_A", ...)
+    ConnectorService->>DCM_CS: Get first step ("S1") & transport for "Pipeline_P1" (from src_A)
+    DCM_CS-->>ConnectorService: Return firstStepName="S1", pipelineName="P1", transportConfig_S1
+    ConnectorService->>ConnectorService: Create PipeStream (target_step_name="S1")
 
-    Kafka-->>Step1_Framework: Consume PipeStream (target_step_name="P1_S1")
-    Step1_Framework->>DCM1: Get PipelineStepConfig for "Pipeline1"."P1_S1"
-    DCM1-->>Step1_Framework: Return stepConfig_S1 (custom_config, nextSteps, etc.)
-    Step1_Framework->>SchemaRegistry1: Get Schema (for stepConfig_S1.customConfig)
-    SchemaRegistry1-->>Step1_Framework: Return JSON Schema
-    Step1_Framework->>Step1_Framework: Validate custom_config
-    Step1_Framework->>Processor1: ProcessRequest(PipeDoc from PipeStream, validated_custom_config_S1, metadata)
-    Processor1-->>Step1_Framework: ProcessResponse (success, output_doc)
-    
-    Step1_Framework->>Step1_Framework: Update PipeStream (history, output_doc, new target_step_name="P1_S2" from stepConfig_S1.nextSteps)
-    Step1_Framework->>Kafka: Publish updated PipeStream to topic "Pipeline1_P1_S2_In"
+    alt transportConfig_S1 is KAFKA
+        ConnectorService->>Kafka: Publish PipeStream to topic "P1_S1_In"
+    else transportConfig_S1 is GRPC
+        ConnectorService->>Consul_SD: Discover MF_Step1 gRPC Ingress (using transportConfig_S1.targetModuleFrameworkServiceId)
+        Consul_SD-->>ConnectorService: MF_Step1_address
+        ConnectorService->>MF_Step1: gRPC: processAsync(PipeStream)
+        MF_Step1-->>ConnectorService: Ack
+    end
 ```
 
-### 5.3. Generic Step Execution (Module Framework invoking its Processor)
+### 5.3. Generic Step Execution & Routing (Module Framework to Module Framework)
 
-This flow details how any given step's framework operates.
+Illustrates a Module Framework processing a `PipeStream` and routing it to the next Module Framework via either Kafka or gRPC.
 
 ```mermaid
 sequenceDiagram
-    participant KafkaInTopic as Kafka Input Topic for StepX
-    participant StepX_Framework as Module Framework (Step X)
-    participant DCMX as DynamicConfigurationManager (used by Step X FW)
-    participant Consul
-    participant SchemaRegistryX as Schema Registry (used by Step X FW)
-    participant ProcessorX as Pipeline Module Processor (Step X - gRPC service)
-    participant KafkaOutTopic as Kafka Output Topic for NextStepY
-
-    KafkaInTopic-->>StepX_Framework: Consume PipeStream (target_step_name="StepX")
-    StepX_Framework->>DCMX: Get PipelineStepConfig for "CurrentPipeline"."StepX"
-    DCMX->>Consul: Load config if not cached
-    Consul-->>DCMX: Raw Config
-    DCMX-->>StepX_Framework: Return stepConfig_StepX (contains custom_json_config, config_params, pipelineImplementationId, nextSteps, errorSteps)
-
-    StepX_Framework->>DCMX: Get PipelineModuleConfiguration for stepConfig_StepX.pipelineImplementationId
-    DCMX-->>StepX_Framework: Return moduleConfig_StepX (contains serviceId for ProcessorX)
+    participant IngressMF_X as PipeStream Ingress (Kafka Topic OR gRPC Endpoint of MF_X)
+    participant MF_X as Module Framework X
+    participant DCM_X as DynamicConfigurationManager (lib)
+    participant Consul_SD as Consul Service Discovery
+    participant JsonSR_X as Custom JSON Schema Registry
+    participant Processor_X as Pipeline Module Processor X (implements PipeStepProcessor)
     
-    alt stepConfig_StepX.customConfig has schemaReference
-        StepX_Framework->>SchemaRegistryX: Get Schema (for stepConfig_StepX.customConfig.schemaReference)
-        SchemaRegistryX-->>StepX_Framework: Return JSON Schema
-        StepX_Framework->>StepX_Framework: Validate stepConfig_StepX.customConfig.jsonConfig
+    participant Kafka_Out_Y as Kafka Output Topic for MF_Y (if next is Kafka)
+    participant MF_Y_gRPC as Module Framework Y gRPC Ingress (if next is gRPC)
+
+    IngressMF_X-->>MF_X: Receive PipeStream (target_step_name="StepX")
+    MF_X->>DCM_X: Get PipelineStepConfig for "CurrentPipeline"."StepX"
+    DCM_X-->>MF_X: Return stepConfig_X (incl. moduleConfig_X, nextSteps_config)
+    
+    alt stepConfig_X.customConfig.schemaReference exists
+        MF_X->>JsonSR_X: Get JSON Schema
+        JsonSR_X-->>MF_X: Return JSON Schema
+        MF_X->>MF_X: Validate custom_json_config
     end
 
-    Note over StepX_Framework, ProcessorX: StepX_Framework discovers ProcessorX via Consul using moduleConfig_StepX.serviceId
-
-    StepX_Framework->>StepX_Framework: Construct ProcessRequest (PipeDoc from PipeStream, validated_custom_config as Struct, config_params, metadata)
-    StepX_Framework->>ProcessorX: ProcessData(request)
-    ProcessorX-->>StepX_Framework: ProcessResponse (success, output_doc, error_details, logs)
+    MF_X->>MF_X: Construct ProcessRequest for Processor_X
     
-    StepX_Framework->>StepX_Framework: Update PipeStream (add StepExecutionRecord, update PipeDoc with output_doc, handle error_details)
-    alt ProcessResponse.success is true
-        StepX_Framework->>StepX_Framework: Determine next_target_step_name="StepY" from stepConfig_StepX.nextSteps
-    else ProcessResponse.success is false
-        StepX_Framework->>StepX_Framework: Determine next_target_step_name="ErrorStepZ" from stepConfig_StepX.errorSteps
+    alt moduleConfig_X.processorInvocationType is REMOTE_GRPC_SERVICE
+        MF_X->>Consul_SD: Discover Processor_X (using moduleConfig_X.grpcProcessorServiceId)
+        Consul_SD-->>MF_X: Processor_X_address
+        MF_X->>Processor_X: gRPC: ProcessData(ProcessRequest)
+        Processor_X-->>MF_X: ProcessResponse
+    else moduleConfig_X.processorInvocationType is INTERNAL_JAVA_GRPC
+        MF_X->>Processor_X: Direct Java Call: processData(ProcessRequest)
+        Processor_X-->>MF_X: ProcessResponse
     end
-    StepX_Framework->>StepX_Framework: Set PipeStream.target_step_name = determined_next_step
-    StepX_Framework->>KafkaOutTopic: Publish updated PipeStream to topic for determined_next_step
+        
+    MF_X->>MF_X: Update PipeStream from ProcessResponse (history, output_doc, errors)
+    MF_X->>MF_X: Determine next_hop (targetStepName_Y, transportConfig_Y) from stepConfig_X.nextSteps/errorSteps
+
+    alt transportConfig_Y is KAFKA
+        MF_X->>Kafka_Out_Y: Publish PipeStream to transportConfig_Y.targetTopic
+    else transportConfig_Y is GRPC
+        MF_X->>Consul_SD: Discover MF_Y_gRPC Ingress (using transportConfig_Y.targetModuleFrameworkServiceId)
+        Consul_SD-->>MF_X: MF_Y_address
+        MF_X->>MF_Y_gRPC: gRPC: processAsync(PipeStream) (or similar PipeStreamEngine RPC)
+        MF_Y_gRPC-->>MF_X: Ack
+    end
 ```
 
-## 6. Developer Workflow: Creating a New Pipeline Module Processor
+## 6\. Developer Workflow: Creating a New Pipeline Module Processor
 
-This outlines the process for a developer to add new, reusable processing logic to YAPPY.
+1.  **Define `custom_json_config` Schema (JSON Schema):** If needed for module parameters. Register this schema with the Custom JSON Schema Registry service.
+2.  **Implement `PipeStepProcessor` gRPC Interface:** This is the universal contract for the module's business logic.
+    * **For Internal Java/gRPC Module:** Create a Java class that implements the `com.krickert.search.sdk.PipeStepProcessor` gRPC interface. This class will be instantiated within its hosting Module Framework's JVM and invoked via direct Java method calls.
+    * **For Localhost/Remote gRPC Service (Polyglot):** Create a standard gRPC service in the chosen language (Java, Python, Rust, etc.) that implements `PipeStepProcessor.proto`. This service will be deployed as a separate process and must register itself with Consul using a unique `serviceId`.
+3.  **Define `PipelineModuleConfiguration` (Admin Task via Admin API/Consul):**
+    * Create an entry keyed by a unique `pipelineImplementationId`.
+    * Specify `processorInvocationType` ("INTERNAL\_JAVA\_GRPC" or "REMOTE\_GRPC\_SERVICE").
+    * If "REMOTE\_GRPC\_SERVICE", provide the `grpcProcessorServiceId` (Consul `serviceId` of the gRPC Processor created in step 2).
+    * If "INTERNAL\_JAVA\_GRPC", provide the fully qualified `javaClassName` of the class implementing `PipeStepProcessor`.
+4.  **Usage in `PipelineStepConfig` (Pipeline Designer Task via Admin API/Consul):**
+    * In a `PipelineConfig`, create or update a `PipelineStepConfig`.
+    * Set its `pipelineImplementationId` to the one defined in step 3.
+    * Provide the `customConfig.jsonConfig` string (if any) and the corresponding `schemaReference` (pointing to the schema in the Custom JSON Schema Registry).
+    * Define `nextSteps` and `errorSteps` as lists of `StepTransition` objects, each specifying the `targetStepName` of the next step and the `TransportConfig` (either `KafkaTransportConfig` with a topic, or `GrpcTransportConfig` with the `targetModuleFrameworkServiceId` of the next Module Framework's `PipeStreamEngine` gRPC ingress and the RPC method like "processAsync").
 
-1.  **Define Configuration Schema (JSON Schema):**
+## 7\. Glossary of Key Terms
 
-    * Determine parameters needed for the new processing logic.
-    * Create a JSON Schema for these parameters (this will guide the `custom_json_config`).
-    * Example: For a "SentimentAnalyzer", schema might define `model_id` (string), `confidence_threshold` (number).
+*(Ensure these definitions are precise based on the final model)*
 
-2.  **Register Schema in Schema Registry:**
+* **Module Framework / Embedded Engine:** The runtime component/service executing a single `PipelineStepConfig`. It receives a `PipeStream` (via Kafka consumer or its own gRPC `PipeStreamEngine` ingress endpoint), fetches its configuration from Consul, validates module parameters against the Custom JSON Schema Registry, invokes its configured Pipeline Module Processor (via in-process Java call or network gRPC), updates the `PipeStream`, and then sends the `PipeStream` to the next step's Module Framework (via Kafka publish or a gRPC call to the next Module Framework's `PipeStreamEngine` ingress, discovered via Consul). Each instance of a Module Framework service registers with Consul.
+* **Pipeline Module Processor:** The business logic unit that **implements the `PipeStepProcessor.proto` gRPC interface.** Invoked by a Module Framework. Can be an "Internal Java/gRPC Module" (called in-process) or a "Localhost/Remote gRPC Service" (called via network, registers with Consul).
+* **Connector Service (Initial Ingest Service):** The service implementing `PipeStreamEngine.IngestDataAsync` RPC. It's the designated entry point for creating the initial `PipeStream` and dispatching it to the first Module Framework of a pipeline. Registers with Consul.
+* **Pipestream Engine (Distributed gRPC Service Interface):** This refers to the gRPC service contract(s) for handling `PipeStream`s:
+    * The `PipeStreamEngine` service defined in `engine_service.proto` provides the `IngestDataAsync` RPC for the Connector Service.
+    * The same `PipeStreamEngine` service (specifically methods like `process` or `processAsync`) can also be implemented by Module Frameworks to serve as their gRPC ingress endpoint for receiving `PipeStream`s directly from other Module Frameworks or the Connector Service when gRPC is chosen as the inter-step transport.
+* **Custom JSON Schema Registry:** The YAPPY gRPC service (implementing `SchemaRegistryService.proto`) for managing JSON Schemas used to validate `custom_json_config` for Pipeline Module Processors. Registers with Consul.
 
-    * Upload the JSON Schema to the configured Schema Registry (e.g., Apicurio, or a service implementing `SchemaRegistryService.proto`).
-    * The schema gets a unique identifier (`schema_id` or group/artifact/version).
+## 8\. Security Considerations (High Level)
 
-3.  **Implement `PipeStepProcessor` gRPC Service (using `grpc-developer-sdk`):**
+* The Module Framework, by leveraging platforms like Micronaut, can more easily incorporate security best practices such as mTLS configuration for its outgoing gRPC calls (to remote Pipeline Module Processors *or* to other Module Frameworks' `PipeStreamEngine` ingress endpoints).
+* Standard container orchestration platform features are relied upon for instance-level security and resilience.
+* Access to Consul, Kafka, and Schema Registries should be secured with appropriate ACLs and authentication/authorization mechanisms.
 
-    * Create a new gRPC service project (e.g., using Micronaut).
-    * Use the YAPPY `grpc-developer-sdk` for Protobuf definitions (`ProcessRequest`, `ProcessResponse`, `PipeDoc`, etc.) and generated gRPC stubs.
-    * Implement the `ProcessData(ProcessRequest request)` method:
-        * Access `request.document` (`PipeDoc`).
-        * Access `request.config.custom_json_config` (a `google.protobuf.Struct`). Use SDK helpers or standard Protobuf utilities to convert this `Struct` into a usable format (e.g., Jackson `JsonNode`, Map, or a specific POJO if you deserialize it).
-        * Access `request.config.config_params`.
-        * Access contextual metadata from `request.metadata`.
-        * Perform the core business logic.
-        * Construct and return a `ProcessResponse` with `output_doc` (if `PipeDoc` is modified), `success` status, `error_details`, and `processor_logs`.
-    * The gRPC service should register with Consul for discovery using a defined `serviceId`.
+## 9\. Future Considerations / Advanced Topics
 
-4.  **Define `PipelineModuleConfiguration` (Admin Task in Consul):**
+* **Unified Schema Management:** Evaluate using a single system like Apicurio for both Protobuf (`PipeStream`) and JSON (`custom_json_config`) schema validation if its capabilities for JSON Schema are robust and suitable.
+* **Application-Level Resilience:** Post-V1, explore adding more sophisticated resilience patterns within the Module Framework, such as configurable retry strategies with backoff for invoking processors or routing `PipeStream`s, or potentially dynamic failover to alternative processor instances if primary ones are unavailable (though primarily this is the role of the orchestrator).
 
-    * An administrator defines a new `PipelineModuleConfiguration` entry in Consul.
-    * This entry is keyed by a new, unique `pipelineImplementationId` (e.g., "com.mycompany.SentimentAnalyzer-v1").
-    * It specifies:
-        * `implementationType: "GRPC"` (or a similar identifier indicating it's a gRPC-based processor).
-        * `serviceId`: The Consul `serviceId` under which the newly developed gRPC service (from step 3) registers (e.g., "sentiment-analyzer-service"). This `serviceId` is used by the "Module Framework/Embedded Engine" to discover and call the processor.
-        * (Optionally, other metadata about this module type).
-
-5.  **Usage in `PipelineStepConfig` (Pipeline Designer Task in Consul):**
-
-    * Pipeline designers can now create `PipelineStepConfig` entries in their `PipelineConfig` definitions.
-    * These entries will use `pipelineImplementationId: "com.mycompany.SentimentAnalyzer-v1"`.
-    * They will provide a specific `customConfig.jsonConfig` (a JSON string) that conforms to the schema defined in Step 1. The `customConfig.schemaReference` will point to the schema in the Schema Registry.
-    * They will define `nextSteps` and `errorSteps` to indicate the `stepName`(s) of subsequent steps (which implies the Kafka topics the Module Framework should publish to).
-    * Example `PipelineStepConfig`:
-      ```json
-      {
-        "stepName": "analyzeProductReviewSentiment",
-        "pipelineImplementationId": "com.mycompany.SentimentAnalyzer-v1",
-        "customConfig": {
-          "jsonConfig": "{"model_id": "BERT-large-sentiment", "confidence_threshold": 0.75}",
-          "schemaReference": { "schemaId": "com.mycompany.sentimentconfig.v1" } // Or other schema identifier
-        },
-        "configParams": { "timeout_ms": "5000" },
-        "nextSteps": ["storeSentimentResults"], // stepName of the next step
-        "errorSteps": ["logSentimentError"]   // stepName for error routing
-      }
-      ```
-
-6.  **Module Framework/Embedded Engine Role:**
-
-    * When a `PipeStream` targets `analyzeProductReviewSentiment`, its Module Framework:
-        1.  Consumes the `PipeStream`.
-        2.  Fetches the above `PipelineStepConfig` and the `PipelineModuleConfiguration` for "com.mycompany.SentimentAnalyzer-v1".
-        3.  Validates `customConfig.jsonConfig` against the schema from `schemaReference`.
-        4.  Discovers the "sentiment-analyzer-service" via Consul using the `serviceId`.
-        5.  Calls the `ProcessData` RPC on the discovered service.
-        6.  Based on the response, updates the `PipeStream`'s `target_step_name` to "storeSentimentResults" (or "logSentimentError") and publishes it to the corresponding Kafka topic.
-
-## 7. Glossary of Key Terms
-
-* **Pipeline (`PipelineConfig`):** A defined sequence or graph of processing steps, identified by a `pipelineName`.
-* **Pipeline Step (`PipelineStepConfig`):** A specific, configured instance of a processing unit within a `PipelineConfig`. Uniquely identified by `pipelineName + stepName`. It defines its business logic via `pipelineImplementationId`, its parameters via `customConfig` & `configParams`, and its onward routing via `nextSteps`/`errorSteps`.
-* **Pipeline Implementation ID (`pipelineImplementationId`):** A logical identifier for a reusable type of processing logic (e.g., "com.example.OcrProcessor"). It links a `PipelineStepConfig` to a `PipelineModuleConfiguration`.
-* **Pipeline Module Processor:** The actual code (e.g., a gRPC service implementing `PipeStepProcessor.proto`) that performs the business logic for a `pipelineImplementationId`.
-* **Module Framework / Embedded Engine:** The runtime component responsible for orchestrating a single `PipelineStepConfig`. It consumes `PipeStream`s (usually from Kafka), fetches its configuration, validates it, invokes its associated Pipeline Module Processor, and routes the `PipeStream` to the next step(s) via Kafka.
-* **Initial Engine Logic / Ingest Service:** The entry point that creates the first `PipeStream` from an external request and starts the pipeline flow by publishing to the first step's Kafka topic.
-* **SDK (`grpc-developer-sdk`):** Libraries and tools (primarily Protobuf definitions and generated code) for developers creating new Pipeline Module Processors.
-* **`PipeStream`:** The core Protobuf message carrying data (`PipeDoc`), state (`history`, `error_data`), and routing pointers (`current_pipeline_name`, `target_step_name`) through the pipeline, primarily via Kafka between Module Frameworks.
-* **`PipeDoc`:** The Protobuf message for structured document data, including text, metadata, blobs, and semantic processing results like chunks and embeddings.
-* **`custom_json_config`:** A JSON string within `PipelineStepConfig.customConfig` providing specific parameters for that configured step instance. Its structure is defined by a JSON Schema and validated by the Module Framework. Passed to the processor as `google.protobuf.Struct`.
-
-## 8. Security Considerations (High Level)
-
-*(This section remains largely the same as the previous centralized engine model, but applies to interactions between Module Frameworks, Processors, and other services.)*
-
-Security is a critical aspect of YAPPY. The following are foundational considerations:
-
-* **mTLS (Mutual TLS):** Should be enforced for all gRPC communication (e.g., between a Module Framework and its gRPC Pipeline Module Processor if they are separate services), as well as between any YAPPY platform components that communicate via gRPC (like Schema Registry service calls).
-* **Kafka Security:**
-    * **Encryption in Transit:** TLS should be enabled for Kafka brokers.
-    * **Authentication:** SASL or mTLS should be used for client (Module Frameworks, Initial Engine Logic) authentication to Kafka.
-    * **Authorization:** Kafka ACLs should be configured to restrict produce/consume permissions on topics to only authorized Module Frameworks/services.
-* **Consul Security:**
-    * **ACLs:** Consul's Access Control List system should be enabled to protect the K/V store (where `PipelineClusterConfig` is stored) and service registration/discovery endpoints.
-    * **Encryption:** RPC and Serf gossip encryption should be enabled for Consul.
-* **Schema Registry Security:** Access to the Schema Registry service should be controlled via authentication and authorization mechanisms.
-* **Secrets Management:** For sensitive configuration values needed by Pipeline Module Processors (e.g., API keys, passwords), integration with a secrets manager (like HashiCorp Vault) is recommended. `PipelineStepConfig.configParams` or `custom_json_config` might store references to secrets rather than the secrets themselves, to be resolved by the Module Framework or Processor at runtime.
-
-## 9. Future Considerations / Advanced Topics
-
-*(Largely similar, but with a decentralized execution context)*
-
-* **Polyglot Module Frameworks:** While initial frameworks might be Java-based (e.g., using Micronaut for Kafka consumption and gRPC client/server capabilities), developing lightweight framework libraries or sidecar patterns for other languages (Python, Go, .NET) would broaden module development.
-* **Dead Letter Queue (DLQ) per Step:** Each Module Framework should implement robust error handling, including routing unrecoverable `PipeStream` messages (after retries for its processor) to a DLQ specific to that step or pipeline.
-* **Distributed Tracing & Monitoring:** Essential for visibility in a decentralized system. OpenTelemetry should be integrated into Module Frameworks and Processors to trace `PipeStream`s across Kafka topics and gRPC calls. Metrics on processing times, queue depths, and error rates per step are vital.
-* **Dynamic Scaling of Module Framework Instances:** Based on Kafka topic queue depths or processing load for a particular `pipelineImplementationId`.
-* **Admin API/UI Enhancements:** Tools for visualizing pipeline flow across Kafka topics, monitoring individual step framework instances, and managing configurations in the decentralized model.
-
-<!-- end list -->
+*(Other points like Polyglot Module Frameworks, DLQ per Step, Distributed Tracing, Dynamic Scaling, Admin Enhancements remain relevant).*
 
 ```

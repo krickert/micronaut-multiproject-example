@@ -1,158 +1,143 @@
-# Pipeline Platform: Remaining Tasks & Architecture Checkpoint 
+# YAPPY Pipeline Platform: Remaining Tasks & Architecture Alignment
 
-This document outlines the current status and remaining high-level tasks for the development of the configurable pipeline platform.
+**Last Updated**: 2025-05-15 (Reflecting universal gRPC interface for modules, dual inter-framework transport, and precise Consul roles)
 
-## I. Current Status: Configuration Management Subsystem - COMPLETE & TESTED
-The foundational configuration management subsystem is now fully implemented, comprehensively tested (unit, integration, and concurrency), and validated. This critical phase is complete.
+## Component Status Summary
 
-### Key Components & Status:
+| Component                                     | Description                                                                                                                                                              | Status Highlights                                  | Details Section                                                              |
+| :-------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------- | :--------------------------------------------------------------------------- |
+| **Core Data Models** | Protobufs & Java records for pipeline/schema configs.                                                                                                                      | LARGELY STABLE                                     | [I. Foundational Components Status](#i-foundational-components-status)       |
+| **Dynamic Configuration Management** | Loads, validates, caches, & watches pipeline configs from Consul.                                                                                                          | LARGELY STABLE, Needs Validator/Retest             | [I. Foundational Components Status](#i-foundational-components-status)       |
+| **Connector Service (Initial Ingest)** | Implements `PipeStreamEngine.IngestDataAsync`; starts pipelines via Kafka/gRPC. Registers with Consul.                                                                   | REFACTOR/IMPLEMENT                                 | [II.A. Connector Service (Initial Ingest Logic)](#a-connector-service-initial-ingest-logic) |
+| **Module Framework (Step Engine)** | Runtime for step execution: `PipeStream` I/O (Kafka/gRPC), step config, **universal gRPC `PipeStepProcessor` invocation (in-process/network)**, routing. Registers with Consul. | **PRIORITY DEVELOPMENT** | [II.B. Module Framework (Step Engine)](#b-module-framework-step-engine)         |
+| **SDK for Pipeline Module Processors** | Tools for implementing the universal `PipeStepProcessor` gRPC interface (local Java or polyglot remote gRPC).                                                              | NEEDS REFINEMENT                                   | [III. SDK for Pipeline Module Processors](#iii-sdk-for-pipeline-module-processors) |
+| **Example Pipeline Module Processors** | Reference modules (internal Java/gRPC & remote gRPC) demonstrating `PipeStepProcessor`. Remote gRPC ones register with Consul.                                               | DEVELOPMENT/ALIGNMENT NEEDED                       | [IV. Example Pipeline Module Processors](#iv-example-pipeline-module-processors) |
+| **Custom JSON Schema Registry Service** | gRPC service (`SchemaRegistryService.proto`) for module `custom_json_config` schemas. Registers with Consul.                                                              | IMPLEMENTED (per previous status), Verify Integration | [V. Custom JSON Schema Registry Service](#v-custom-json-schema-registry-service) |
+| **Admin API Service** | Service for CRUD on `PipelineClusterConfig` (Consul) & potentially schemas. Registers with Consul.                                                                         | CONCEPTUAL, NEEDS IMPLEMENTATION                   | [VI. Admin API Service](#vi-admin-api-service)                               |
+| **Operational Considerations & Security** | Logging, metrics, tracing, health checks (Consul for all services), ACLs, mTLS.                                                                                            | ONGOING for all components                         | [VII. Operational Considerations & Security](#vii-operational-considerations--security) |
 
-#### Core Data Models:
+---
 
-* `pipeline-config-models` (including `PipelineStepConfig` with `nextSteps` and `errorSteps`) and `schema-registry-models` are 
-implemented as framework-agnostic Java records/enums.
-* **Status**: **REFACTORED - NEEDS UPDATING**
+This document outlines remaining tasks for YAPPY, reflecting a decentralized architecture where each step is managed by a **Module Framework** (a lightweight step engine). Module Frameworks route **`PipeStream`s** via **Kafka (async) or gRPC (sync to another Module Framework's `PipeStreamEngine` gRPC endpoint)**, as configured. All **Pipeline Module Processors** (business logic) implement a **universal gRPC interface (`PipeStepProcessor.proto`)** but can be invoked by their Module Framework either as an **in-process Java call (for internal Java/gRPC modules) or a network gRPC call (for localhost/remote modules).** Consul is key for configuration, service discovery (for gRPC interactions), and health monitoring of all YAPPY services.
 
-#### Dynamic Configuration Loading & Management (DynamicConfigurationManagerImpl):
+## I. Foundational Components Status
 
-* Orchestrates loading, validation, caching, and live updates from Consul.
-* Handles `WatchCallbackResult` for robust error propagation from the fetcher.
-* Publishes `ClusterConfigUpdateEvent`.
-* **Status**: **NEEDS ATTENTION** 
-  * (Unit and Full End-to-End Integration Tested with all real dependencies via MicronautTest and Testcontainers).
+### Core Data Models (`pipeline-config-models`, `schema-registry-models`, Protobufs):
+* **Status**: LARGELY STABLE.
+* **Protobufs**: `yappy_core_types.proto`, `pipe_step_processor.proto` (universal module interface), `engine_service.proto` (for `IngestDataAsync` and inter-framework `PipeStream` gRPC transport), `schema_registry.proto` (for Custom JSON Schema Registry).
+* **Java Config Models**: Records in `pipeline-config-models` define `PipelineClusterConfig`, `PipelineConfig`, `PipelineStepConfig`, `PipelineModuleConfiguration`, `StepTransition` (with `KafkaTransportConfig` / `GrpcTransportConfig`).
+* **Action**:
+  * Ensure `PipelineModuleConfiguration` robustly defines `processorInvocationType` ("INTERNAL\_JAVA\_GRPC", "REMOTE\_GRPC\_SERVICE") and associated details (`javaClassName` for internal, `grpcProcessorServiceId` for remote).
+  * Ensure `StepTransition` and its `TransportConfig` clearly define routing to the *next Module Framework's* Kafka topic or its `PipeStreamEngine` gRPC ingress endpoint (including `targetModuleFrameworkServiceId` for gRPC).
 
-#### Consul Interaction (KiwiprojectConsulConfigFetcher):
+### Dynamic Configuration Management (`yappy-consul-config` module):
+* **Status**: LARGELY STABLE and TESTED.
+* **Action**: Confirm validators correctly interpret `StepTransition` with dual transport options for loop detection and referential integrity. Retest.
 
-* Connects to Consul, fetches KVs, deserializes JSON.
-* Implements live watches using `KVCache`.
-* Correctly propagates success, deletion, or errors (e.g., deserialization failures) via WatchCallbackResult.
-* **Status**: **NEEDS RE-TESTING AFTER ABOVE IS DONE** 
-  * Unit and Integration Tested with Testcontainers Consul).
-  
-#### Configuration Validation (DefaultConfigurationValidator and ClusterValidationRules):
+---
 
-* Modular validation framework in place.
-* Implemented and Tested Rules:
-`ReferentialIntegrityValidator` (ID/name uniqueness, valid references including nextSteps/errorSteps, null/blank checks in lists).
-* `CustomConfigSchemaValidator` (JSON schema validation for `JsonConfigOptions`).
-* `WhitelistValidator` (Kafka topic and gRPC service whitelisting).
-* `IntraPipelineLoopValidator` (detects loops within single pipelines via Kafka and/or nextSteps/errorSteps, using `JGraphT`).
-* `InterPipelineLoopValidator` (detects loops between pipelines via Kafka, using `JGraphT`).
+## II. Core Runtime Development: Decentralized Step Execution
 
-#### Orchestrator (DefaultConfigurationValidator) unit-tested (mock rules) and integration-tested (real rules via Micronaut DI).
-* **Status**: **NEEDS RE-TESTING AFTER ABOVE IS DONE**.
+### A. Connector Service (Initial Ingest Logic - Implements `PipeStreamEngine.IngestDataAsync`)
 
-#### In-Memory Caching (InMemoryCachedConfigHolder):
+* **Goal**: Standardized, robust entry point for all pipeline initiations.
+* **Tasks**:
+  1.  **Implement `IngestDataAsync` RPC**: (Uses `IngestDataRequest` from `engine_service.proto`).
+    * Determines initial `pipelineName` & `target_step_name` for the first Module Framework from `PipelineClusterConfig` via `DynamicConfigurationManager`.
+    * Creates initial `PipeStream`.
+  2.  **Initial `PipeStream` Dispatch**:
+    * If first step's `TransportConfig` is Kafka: Publish `PipeStream` to the first step's Kafka topic.
+    * If first step's `TransportConfig` is gRPC: Discover the first Module Framework's `PipeStreamEngine` gRPC ingress endpoint via Consul (using `targetModuleFrameworkServiceId`) and send `PipeStream` (e.g., via `processAsync` RPC).
+  3.  **Configuration & Consul Registration**: Bootstrap with Kafka/gRPC client settings, `DynamicConfigurationManager`. Register this service with Consul for health/visibility.
+* **Notes**: This is the primary "engine interface" for starting pipelines.
 
-* Thread-safe, atomic caching.
-* **Status**: **COMPLETE** (Unit and Concurrency Tested).
+### B. Module Framework (Step Engine - Hosts/Proxies Module Processors)
 
-#### Eventing & Test Utilities:
+* **Goal**: Reusable, lightweight engine executing a single `PipelineStepConfig`.
+* **Core Responsibilities & Tasks**:
+  1.  **`PipeStream` Ingress (Dual Mode)**:
+    * Implement Kafka consumer logic to receive `PipeStream`s.
+    * Implement a gRPC service endpoint (e.g., methods from `PipeStreamEngine.proto` like `process` or `processAsync`) to receive `PipeStream`s from other Module Frameworks or the Connector Service. This gRPC service endpoint is registered with Consul.
+  2.  **Configuration & Validation**: Fetch `PipelineStepConfig` & `PipelineModuleConfiguration` from Consul; validate `custom_json_config` against Custom JSON Schema Registry.
+  3.  **Pipeline Module Processor Invocation (Universal `PipeStepProcessor` gRPC Interface)**:
+    * Prepare `ProcessRequest`.
+    * Based on `PipelineModuleConfiguration.processorInvocationType`:
+      * **"INTERNAL\_JAVA\_GRPC"**: Make a direct, in-process Java method call to the co-deployed Java object that implements the `PipeStepProcessor` gRPC interface.
+      * **"REMOTE\_GRPC\_SERVICE"**: Act as gRPC client. Use Consul to discover the target Pipeline Module Processor service (via `grpcProcessorServiceId`) and make a network gRPC call to its `ProcessData` method. Implement client-side resilience (retries, circuit breakers).
+    * Handle `ProcessResponse`.
+  4.  **PipeStream State Update & History**: Update `PipeStream` from `ProcessResponse`, append `StepExecutionRecord`.
+  5.  **`PipeStream` Egress (Dual Mode Routing)**:
+    * Based on `ProcessResponse.success` and `nextSteps`/`errorSteps` (containing `StepTransition` with `TransportConfig`) from `PipelineStepConfig`:
+      * If next transport is Kafka: Publish updated `PipeStream` to target Kafka topic.
+      * If next transport is gRPC: Discover the next Module Framework's `PipeStreamEngine` gRPC ingress endpoint via Consul (using `targetModuleFrameworkServiceId`) and send `PipeStream`.
+  6.  **Consul Registration**: Each Module Framework service instance registers with Consul for its own health, visibility, and for discovery of its gRPC `PipeStream` ingress endpoint (if offered).
+* **Development**: Build as a core Java library/Micronaut application.
 
-* `ClusterConfigUpdateEvent` and `TestApplicationEventListener`.
-* **Status**: **NEEDS RE-TESTING AFTER ABOVE IS DONE**.
+### C. Concurrency & Resource Management (for Module Frameworks)
+* Manage thread pools for Kafka consumers and gRPC server handlers (for `PipeStream` ingress).
 
-#### Micronaut Integration & Testing Infrastructure:
+---
 
-* `ConsulClientFactory`, `ConsulCacheConfigFactory`.
-* `ConsulTestResourceProvider` for `Testcontainers`.
-* **Status**: **NEEDS RE-TESTING AFTER ABOVE IS DONE**.
+## III. SDK for Pipeline Module Processors
 
-#### Conclusion
+* **Goal**: Enable easy development of business logic units (Pipeline Module Processors) that conform to the universal `PipeStepProcessor` gRPC interface.
+* **Tasks**:
+  1.  **Finalize `pipe_step_processor.proto`**: Ensure `ProcessRequest` (`document`, `config`, `metadata`) and `ProcessResponse` are comprehensive for all invocation types.
+  2.  **Java Support**:
+    * Provide clear guidance and/or base classes for implementing the `PipeStepProcessor` gRPC interface as a standard Java class intended for **in-process invocation** by a Java Module Framework.
+    * Standard Java gRPC service generation for **remote Java gRPC Processors**.
+    * Helper library for parsing `ProcessRequest.config.custom_json_config` (Struct).
+  3.  **Polyglot Support (Python, Rust, etc.)**:
+    * Provide `.proto` files and instructions for generating gRPC stubs in other languages.
+    * Clear examples of implementing the `PipeStepProcessor` service.
+    * Emphasize that the Module Framework provides the platform integration benefits (Kafka, Consul config access, routing, observability hooks from Micronaut, etc.), allowing polyglot developers to focus solely on the `ProcessData` logic.
+  4.  **Schema Usage Documentation**: Clarify handling of optional `custom_json_config` and schema references.
 
-The system is now confirmed to load a complex `PipelineClusterConfig` from Consul, perform deep static validation (including loop detection and schema validation), cache it thread-safely, and react to live updates (including errors and deletions) from Consul in a robust and observable manner.
+---
 
-## II. Immediate Follow-up Tasks (Finalizing Validator Updates for PipelineStepConfig)
+## IV. Example Pipeline Module Processors
 
-While the core logic is in place, ensure the following are fully completed and tested based on the addition of `nextSteps` and `errorSteps` to `PipelineStepConfig`:
+* **Goal**: Reference implementations for testing and developer guidance.
+* **Tasks**:
+  1.  **Echo Module**:
+    * **Internal Java/gRPC Type**: Java class implementing `PipeStepProcessor`, invoked in-process by a test Module Framework.
+    * **Remote gRPC Type**: Python gRPC service implementing `PipeStepProcessor`, registers with Consul, invoked over network by a test Module Framework.
+  2.  **FieldMapper Module (e.g., as a Remote Java gRPC Service)**: Registers with Consul.
+  3.  **Chunker Module (Align `yappy-modules/chunker` as a Remote Java gRPC Service)**: Registers with Consul.
+* **Note on Registration**: Separately deployed remote gRPC Pipeline Module Processors manage their own Consul registration. Module Frameworks also register themselves. Internal Java/gRPC modules do not register separately.
 
-### `ReferentialIntegrityValidator`:
+---
 
-* **Verify Task**: Confirm that it robustly validates that all step IDs listed in `PipelineStepConfig.nextSteps()` and `PipelineStepConfig.
-errorSteps()` exist as valid step IDs within the same `PipelineConfig`.
-* **Verify Testing**: Confirm unit tests in `ReferentialIntegrityValidatorTest`.java cover these specific scenarios (valid/invalid 
-  `nextSteps`/`errorSteps` references, empty lists).
+## V. Custom JSON Schema Registry Service (`SchemaRegistryService.proto` implementation)
 
-### `IntraPipelineLoopValidator`:
+* **Status**: Marked as "Implemented" in previous architecture diagrams. (Verify current implementation status and ensure it aligns with being a gRPC service that registers with Consul).
+* **Tasks**:
+  1.  Ensure service implements `SchemaRegistryService.proto` for CRUD and validation of module JSON schemas.
+  2.  Ensure it registers with Consul for discovery by Module Frameworks and Admin API.
+  3.  Develop client libraries or usage patterns for Module Frameworks and Admin API to interact with it.
 
-* **Verify Task**: Confirm its graph construction logic now correctly uses nextSteps and errorSteps as the primary sources for directed edges.
-* Re-evaluate and confirm the strategy for handling Kafka-mediated flows within the same pipeline if `nextSteps`/`errorSteps` are also 
-  present (recommendation: explicit flow via `nextSteps`/`errorSteps` takes precedence for loop detection by this validator).
-* **Verify Testing**: Confirm `IntraPipelineLoopValidatorTest.java` has been updated to reflect the new graph logic, thoroughly testing loops 
-formed by these explicit execution paths.
+---
 
-## III. Next Major Phase: grpc-pipeline-engine - Core Runtime Logic
-This is the largest remaining piece, responsible for executing pipelines based on the validated and loaded configurations.
+## VI. Admin API Service
 
-#### 3.1. Engine Configuration & Bootstrap:
-Define static application.yml properties for the engine node (Kafka brokers, gRPC client defaults, thread pool sizes).
-Ensure `DynamicConfigurationManager` is utilized to access the active `PipelineClusterConfig`.
+* **Status**: Conceptual.
+* **Tasks**:
+  1.  **API Design**: For CRUD on `PipelineClusterConfig` (in Consul) and interaction with Custom JSON Schema Registry Service.
+  2.  **Service Logic**: Use `DefaultConfigurationValidator` *before* writing to Consul.
+  3.  **Consul Registration**: Registers this service with Consul.
+  4.  **Security**: AuthN/AuthZ.
 
-### 3.2. Pipeline Instance Lifecycle & Context:
-* Design and implement `PipelineInstanceContext` for runtime execution tracking (e.g., trace ID, current data, step history).
-* Create `PipelineExecutionManager` to manage pipeline instances based on triggers (e.g., Kafka messages, API calls) and configuration 
-  updates from `DynamicConfigurationManager`.
+---
 
-### 3.3. Step Execution Orchestration (StepExecutor Service):
+## VII. Operational Considerations & Security
 
-* **Data Flow Management**: Implement logic to route data/control based on `PipelineStepConfig.nextSteps()` (on success from gRPC module) and 
-`PipelineStepConfig.errorSteps()` (on failure from gRPC module).
-* **gRPC Client Integration**:
-Use Micronaut's `DiscoveryClient` (backed by Consul) to find developer module instances based on `PipelineStepConfig.pipelineImplementationId()`.
-* Manage gRPC client stubs, channels, incorporating deadlines, retries (for idempotent operations), and circuit breakers (e.g., using 
-  `Resilience4j`).
-* Construct `ProcessRequest` (from SDK) including customConfig, input data, and context. Handle `ProcessResponse`.
-
-### 3.4. Kafka Integration (for steps with Kafka I/O):
-
-* Publish to kafkaPublishTopics based on step output (if defined in PipelineStepConfig and after successful gRPC call if applicable).
-
-### 3.4. Kafka Integration (Data Plane Entry/Exit Points):
-
-* `PipelineEntryKafkaListener`: Dynamically manage/create Micronaut Kafka `Listener`s for `kafkaListenTopics` that act as pipeline entry points.
-Pass consumed messages to `PipelineExecutionManager`/`StepExecutor`. Manage Kafka consumer groups and offset commits robustly.
-* `KafkaOutputProducer`: A service/utility for the `StepExecutor` to publish messages, handling serialization and producer errors.
-
-### 3.5. Runtime Error Handling (Engine Level):
-* Define comprehensive strategies for unrecoverable Kafka errors (e.g., poison pills post-DLQ, persistent connection failures) and gRPC 
-errors (e.g., service permanently unavailable post-retries/circuit breaker open).
-
-### 3.6. Concurrency Model & Resource Management:
-
-* Configure and manage thread pools for Kafka message processing, gRPC client calls, and asynchronous step transitions. Implement 
-backpressure strategies. 
-
-## grpc-developer-sdk (Software Development Kit)
-   
-### 4.1. Finalize .proto Service Contract: (e.g., PipelineStepProcessor.Process(ProcessRequest) returns (ProcessResponse)). 
-
-* Ensure `ProcessRequest` includes `custom_config_json` and `ProcessResponse` allows clear success/failure indication and output.
-   
-### 4.2. Java Helper Library: Utilities for parsing custom_config_json, standardized error/response construction.
-   
-### 4.3. Documentation & Examples: Clear guides for module developers.
-
-## Example developer-pipeline-step-modules
-   
-* **Task**: Implement and deploy (locally for testing) simple gRPC services (Echo, Transform, Filter) using the SDK. These are vital for 
-testing the engine.
-
-## 6. Admin API Service (Dedicated Micronaut Service)
-   
-### 6.1. API Endpoints Design (RESTful): For CRUD on PipelineClusterConfig and Schemas in Consul.
-   
-### 6.2. Service Logic:
-* Use your ConsulKvService for writes to Consul.
-* **Mandatory**: Use the `DefaultConfigurationValidator` (as a library/dependency) to validate any `PipelineClusterConfig` before writing it to 
-  Consul.
-* **Optional**: Pre-write checks for Kafka topic existence (using Kafka `AdminClient`) or schema compatibility.
-### 6.3. Security: Implement authentication and authorization.
-
-## 7. Operational Considerations & Security Hardening (Ongoing)
-   
-* Structured Logging, Metrics (`Micrometer`), Alerting, Distributed Tracing, Health Checks.
-* Consul & Kafka ACLs, gRPC security (e.g., mTLS).
-
-## Conclusion - next steps
-
-This detailed plan, starting with the final validator updates and then moving to the engine, sets a clear path forward. The configuration subsystem is exceptionally well-prepared for these next stages.
+* **Consul Registrations**: Explicitly list all YAPPY services that register with Consul:
+  1.  Connector Service (Initial Ingest)
+  2.  Module Framework instances (for own health/visibility, and for gRPC `PipeStream` ingress if offered)
+  3.  Remote gRPC Pipeline Module Processor services
+  4.  Custom JSON Schema Registry service
+  5.  Admin API service
+* **Health Checks**: Define health check mechanisms for all registered services.
+* **Observability**: Structured Logging, Metrics, Distributed Tracing across all components and transport hops (Kafka & gRPC).
+* **Security**: ACLs for Consul/Kafka; mTLS for all inter-service gRPC calls (Framework-to-Framework, Framework-to-RemoteProcessor, calls to SchemaRegistry/AdminAPI).
+* **Module Service Registration Lifecycle**: Define processes for deploying and registering/deregistering remote gRPC Pipeline Module Processors in Consul.
