@@ -50,7 +50,8 @@ class PipelineClusterConfigTest {
                 error != null ? List.of(error) : Collections.emptyList(),
                 TransportType.KAFKA,
                 kafkaConfig,
-                null
+                null,
+                null  // stepType defaults to PIPELINE
         );
     }
 
@@ -68,7 +69,8 @@ class PipelineClusterConfigTest {
                 error != null ? List.of(error) : Collections.emptyList(),
                 TransportType.GRPC,
                 null,
-                grpcConfig
+                grpcConfig,
+                null  // stepType defaults to PIPELINE
         );
     }
     private PipelineStepConfig createSampleInternalStep(String id, String moduleId, String next, String error) {
@@ -80,7 +82,8 @@ class PipelineClusterConfigTest {
                 error != null ? List.of(error) : Collections.emptyList(),
                 TransportType.INTERNAL,
                 null,
-                null
+                null,
+                null  // stepType defaults to PIPELINE
         );
     }
 
@@ -121,6 +124,7 @@ class PipelineClusterConfigTest {
                 "test-cluster-001",
                 pipelineGraphConfig,
                 pipelineModuleMap,
+                null, // defaultPipelineName
                 allowedKafkaTopics,
                 allowedGrpcServices
         );
@@ -160,16 +164,16 @@ class PipelineClusterConfigTest {
     @Test
     void testValidation() {
         Exception eNullName = assertThrows(IllegalArgumentException.class, () -> new PipelineClusterConfig(
-                null, null, null, null, null));
+                null, null, null, null, null, null));
         assertTrue(eNullName.getMessage().contains("clusterName cannot be null or blank"));
 
         Exception eBlankName = assertThrows(IllegalArgumentException.class, () -> new PipelineClusterConfig(
-                " ", null, null, null, null));
+                " ", null, null, null, null, null));
         assertTrue(eBlankName.getMessage().contains("clusterName cannot be null or blank"));
 
 
         PipelineClusterConfig configWithNulls = new PipelineClusterConfig(
-                "test-cluster-with-nulls", null, null, null, null);
+                "test-cluster-with-nulls", null, null, null, null, null);
         assertNull(configWithNulls.pipelineGraphConfig()); // Allowed to be null
         assertNull(configWithNulls.pipelineModuleMap());   // Allowed to be null
 
@@ -184,14 +188,14 @@ class PipelineClusterConfigTest {
         Set<String> topicsWithNullEl = new HashSet<>();
         topicsWithNullEl.add(null);
         Exception eTopicNull = assertThrows(IllegalArgumentException.class, () -> new PipelineClusterConfig(
-                "c1", null, null, topicsWithNullEl, null));
+                "c1", null, null, null, topicsWithNullEl, null));
         assertTrue(eTopicNull.getMessage().contains("allowedKafkaTopics cannot contain null or blank strings"));
 
 
         Set<String> servicesWithBlankEl = new HashSet<>();
         servicesWithBlankEl.add("");
         Exception eServiceBlank = assertThrows(IllegalArgumentException.class, () -> new PipelineClusterConfig(
-                "c1", null, null, null, servicesWithBlankEl));
+                "c1", null, null, null, null, servicesWithBlankEl));
         assertTrue(eServiceBlank.getMessage().contains("allowedGrpcServices cannot contain null or blank strings"));
     }
 
@@ -201,6 +205,7 @@ class PipelineClusterConfigTest {
                 "json-prop-cluster",
                 new PipelineGraphConfig(Collections.emptyMap()),
                 new PipelineModuleMap(Collections.emptyMap()),
+                null, // defaultPipelineName
                 Set.of("topicA"),
                 Set.of("serviceX")
         );
@@ -303,7 +308,7 @@ class PipelineClusterConfigTest {
         Set<String> services = new HashSet<>(List.of("serviceA"));
 
         PipelineClusterConfig config = new PipelineClusterConfig(
-                "immutable-cluster", graphConfig, moduleMap, topics, services);
+                "immutable-cluster", graphConfig, moduleMap, null, topics, services);
 
         assertThrows(UnsupportedOperationException.class, () -> config.allowedKafkaTopics().add("newTopic"));
         assertThrows(UnsupportedOperationException.class, () -> config.allowedGrpcServices().add("newService"));
@@ -353,9 +358,9 @@ class PipelineClusterConfigTest {
         );
 
 
-        PipelineClusterConfig config1 = new PipelineClusterConfig("clusterA", graph1, modules1, Set.of("t1"), Set.of("g1"));
-        PipelineClusterConfig config2 = new PipelineClusterConfig("clusterA", graph2, modules2, Set.of("t1"), Set.of("g1")); // Identical
-        PipelineClusterConfig config3_diff_graph = new PipelineClusterConfig("clusterA", graph3, modules1, Set.of("t1"), Set.of("g1"));
+        PipelineClusterConfig config1 = new PipelineClusterConfig("clusterA", graph1, modules1, null, Set.of("t1"), Set.of("g1"));
+        PipelineClusterConfig config2 = new PipelineClusterConfig("clusterA", graph2, modules2, null, Set.of("t1"), Set.of("g1")); // Identical
+        PipelineClusterConfig config3_diff_graph = new PipelineClusterConfig("clusterA", graph3, modules1, null, Set.of("t1"), Set.of("g1"));
 
 
         assertEquals(config1, config2);

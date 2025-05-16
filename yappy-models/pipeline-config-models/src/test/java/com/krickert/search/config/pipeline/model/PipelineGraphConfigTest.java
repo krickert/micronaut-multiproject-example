@@ -50,7 +50,8 @@ class PipelineGraphConfigTest {
                 List.of("error-logical-step"),
                 TransportType.KAFKA,
                 kafkaConfig, // Provide KafkaTransportConfig
-                null         // grpcConfig must be null for KAFKA type
+                null,        // grpcConfig must be null for KAFKA type
+                null         // stepType defaults to PIPELINE
         );
         steps.put("kafka-test-step", kafkaStep);
 
@@ -109,7 +110,8 @@ class PipelineGraphConfigTest {
                 Collections.emptyList(), // Empty error steps
                 TransportType.GRPC,
                 null,       // kafkaConfig must be null for GRPC type
-                grpcConfig  // Provide GrpcTransportConfig
+                grpcConfig,  // Provide GrpcTransportConfig
+                null        // stepType defaults to PIPELINE
         );
         steps.put("grpc-test-step", grpcStep);
 
@@ -154,7 +156,8 @@ class PipelineGraphConfigTest {
                 Collections.emptyList(),
                 TransportType.INTERNAL,
                 null,       // kafkaConfig must be null
-                null        // grpcConfig must be null
+                null,       // grpcConfig must be null
+                null        // stepType defaults to PIPELINE
         );
         steps.put("internal-test-step", internalStep);
 
@@ -205,7 +208,8 @@ class PipelineGraphConfigTest {
                 List.of("error-step-id"),
                 TransportType.KAFKA,
                 kafkaConfig,
-                null
+                null, // grpcConfig must be null for KAFKA
+                null  // stepType defaults to PIPELINE
         );
         steps.put("test-step", step);
         PipelineConfig pipeline = new PipelineConfig("test-pipeline", steps);
@@ -325,7 +329,8 @@ class PipelineGraphConfigTest {
                     "s1", "impl1", null, null, null,
                     TransportType.KAFKA,
                     null, // kafkaConfig is null
-                    null
+                    null,
+                    null // stepType defaults to PIPELINE
             );
         });
         assertTrue(eKafka.getMessage().contains("KafkaTransportConfig must be provided"));
@@ -336,7 +341,8 @@ class PipelineGraphConfigTest {
                     "s2", "impl2", null, null, null,
                     TransportType.GRPC,
                     null,
-                    null // grpcConfig is null
+                    null, // grpcConfig is null
+                    null  // stepType defaults to PIPELINE
             );
         });
         assertTrue(eGrpc.getMessage().contains("GrpcTransportConfig must be provided"));
@@ -353,7 +359,8 @@ class PipelineGraphConfigTest {
                     "s1", "impl1", null, null, null,
                     TransportType.KAFKA,
                     kConf,
-                    gConf // grpcConfig should be null
+                    gConf, // grpcConfig should be null
+                    null   // stepType defaults to PIPELINE
             );
         });
         assertTrue(eKafkaMismatch.getMessage().contains("GrpcTransportConfig should only be provided"));
@@ -365,7 +372,8 @@ class PipelineGraphConfigTest {
                     "s2", "impl2", null, null, null,
                     TransportType.GRPC,
                     kConf, // kafkaConfig should be null
-                    gConf
+                    gConf,
+                    null  // stepType defaults to PIPELINE
             );
         });
         assertTrue(eGrpcMismatch.getMessage().contains("KafkaTransportConfig should only be provided"));
@@ -376,7 +384,8 @@ class PipelineGraphConfigTest {
                     "s3", "impl3", null, null, null,
                     TransportType.INTERNAL,
                     kConf, // kafkaConfig should be null
-                    null
+                    null,
+                    null  // stepType defaults to PIPELINE
             );
         });
         assertTrue(eInternalMismatchKafka.getMessage().contains("KafkaTransportConfig should only be provided"));
@@ -387,7 +396,8 @@ class PipelineGraphConfigTest {
                     "s4", "impl4", null, null, null,
                     TransportType.INTERNAL,
                     null,
-                    gConf // grpcConfig should be null
+                    gConf, // grpcConfig should be null
+                    null   // stepType defaults to PIPELINE
             );
         });
         assertTrue(eInternalMismatchGrpc.getMessage().contains("GrpcTransportConfig should only be provided"));

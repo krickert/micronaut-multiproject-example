@@ -124,7 +124,7 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                     this.clusterName, updateSource);
             cachedConfigHolder.clearConfiguration();
             if (oldConfigForEvent.isPresent()) {
-                PipelineClusterConfig effectivelyEmptyConfig = new PipelineClusterConfig(this.clusterName, null, null, null, null);
+                PipelineClusterConfig effectivelyEmptyConfig = new PipelineClusterConfig(this.clusterName, null, null, null, null, null);
                 ClusterConfigUpdateEvent event = new ClusterConfigUpdateEvent(oldConfigForEvent, effectivelyEmptyConfig);
                 publishEvent(event);
             } else {

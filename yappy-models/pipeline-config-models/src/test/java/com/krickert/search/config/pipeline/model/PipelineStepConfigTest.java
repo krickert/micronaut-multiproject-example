@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class PipelineStepConfigTest {
 
@@ -44,7 +45,8 @@ class PipelineStepConfigTest {
                 List.of("error-step-1"),
                 TransportType.KAFKA,
                 kafkaConfig,
-                null // grpcConfig must be null for KAFKA
+                null, // grpcConfig must be null for KAFKA
+                null  // stepType defaults to PIPELINE
         );
 
         String json = objectMapper.writeValueAsString(config);
@@ -83,7 +85,8 @@ class PipelineStepConfigTest {
                 Collections.emptyList(),
                 TransportType.GRPC,
                 null, // kafkaConfig must be null for GRPC
-                grpcConfig
+                grpcConfig,
+                null  // stepType defaults to PIPELINE
         );
 
         String json = objectMapper.writeValueAsString(config);
@@ -115,7 +118,8 @@ class PipelineStepConfigTest {
                 null, // errorSteps defaults to empty
                 TransportType.INTERNAL,
                 null, // kafkaConfig must be null
-                null  // grpcConfig must be null
+                null, // grpcConfig must be null
+                null  // stepType defaults to PIPELINE
         );
 
         String json = objectMapper.writeValueAsString(config);
@@ -137,27 +141,27 @@ class PipelineStepConfigTest {
     void testValidation_ConstructorArgs() {
         // Test null pipelineStepId validation
         Exception e1 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                null, "m", null, null, null, TransportType.INTERNAL, null, null));
+                null, "m", null, null, null, TransportType.INTERNAL, null, null, null));
         assertTrue(e1.getMessage().contains("pipelineStepId cannot be null or blank"));
 
         // Test blank pipelineStepId validation
         Exception e2 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                " ", "m", null, null, null, TransportType.INTERNAL, null, null));
+                " ", "m", null, null, null, TransportType.INTERNAL, null, null, null));
         assertTrue(e2.getMessage().contains("pipelineStepId cannot be null or blank"));
 
         // Test null pipelineImplementationId validation
         Exception e3 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                "s", null, null, null, null, TransportType.INTERNAL, null, null));
+                "s", null, null, null, null, TransportType.INTERNAL, null, null, null));
         assertTrue(e3.getMessage().contains("pipelineImplementationId cannot be null or blank"));
 
         // Test null transportType validation
         Exception e4 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                "s", "m", null, null, null, null, null, null));
+                "s", "m", null, null, null, null, null, null, null));
         assertTrue(e4.getMessage().contains("transportType cannot be null"));
 
         // Test null collections handling (implicitly tested by constructors above and their defaulting)
         PipelineStepConfig configWithNullLists = new PipelineStepConfig(
-                "test-step", "test-module", null, null, null, TransportType.INTERNAL, null, null);
+                "test-step", "test-module", null, null, null, TransportType.INTERNAL, null, null, null);
         assertTrue(configWithNullLists.nextSteps().isEmpty());
         assertTrue(configWithNullLists.errorSteps().isEmpty());
 
@@ -165,12 +169,12 @@ class PipelineStepConfigTest {
         nextStepsWithNullEl.add("valid");
         nextStepsWithNullEl.add(null);
         Exception e5 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                "s", "m", null, nextStepsWithNullEl, null, TransportType.INTERNAL, null, null));
+                "s", "m", null, nextStepsWithNullEl, null, TransportType.INTERNAL, null, null, null));
         assertTrue(e5.getMessage().contains("nextSteps cannot contain null or blank step IDs: [valid, null]"));
 
         List<String> errorStepsWithBlankEl = List.of("");
         Exception e6 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                "s", "m", null, null, errorStepsWithBlankEl, TransportType.INTERNAL, null, null));
+                "s", "m", null, null, errorStepsWithBlankEl, TransportType.INTERNAL, null, null, null));
         assertTrue(e6.getMessage().contains("errorSteps cannot contain null or blank step IDs"));
     }
 
@@ -181,32 +185,32 @@ class PipelineStepConfigTest {
 
         // KAFKA type but missing kafkaConfig
         Exception e1 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                "s", "m", null, null, null, TransportType.KAFKA, null, null));
+                "s", "m", null, null, null, TransportType.KAFKA, null, null, null));
         assertTrue(e1.getMessage().contains("KafkaTransportConfig must be provided"));
 
         // KAFKA type but grpcConfig is present
         Exception e2 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                "s", "m", null, null, null, TransportType.KAFKA, kCfg, gCfg));
+                "s", "m", null, null, null, TransportType.KAFKA, kCfg, gCfg, null));
         assertTrue(e2.getMessage().contains("GrpcTransportConfig should only be provided"));
 
         // GRPC type but missing grpcConfig
         Exception e3 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                "s", "m", null, null, null, TransportType.GRPC, null, null));
+                "s", "m", null, null, null, TransportType.GRPC, null, null, null));
         assertTrue(e3.getMessage().contains("GrpcTransportConfig must be provided"));
 
         // GRPC type but kafkaConfig is present
         Exception e4 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                "s", "m", null, null, null, TransportType.GRPC, kCfg, gCfg));
+                "s", "m", null, null, null, TransportType.GRPC, kCfg, gCfg, null));
         assertTrue(e4.getMessage().contains("KafkaTransportConfig should only be provided"));
 
         // INTERNAL type but kafkaConfig is present
         Exception e5 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                "s", "m", null, null, null, TransportType.INTERNAL, kCfg, null));
+                "s", "m", null, null, null, TransportType.INTERNAL, kCfg, null, null));
         assertTrue(e5.getMessage().contains("KafkaTransportConfig should only be provided"));
 
         // INTERNAL type but grpcConfig is present
         Exception e6 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                "s", "m", null, null, null, TransportType.INTERNAL, null, gCfg));
+                "s", "m", null, null, null, TransportType.INTERNAL, null, gCfg, null));
         assertTrue(e6.getMessage().contains("GrpcTransportConfig should only be provided"));
     }
 
@@ -224,7 +228,8 @@ class PipelineStepConfigTest {
                 List.of("error-json"),
                 TransportType.KAFKA,
                 kafkaConfig,
-                null
+                null,
+                null  // stepType defaults to PIPELINE
         );
 
         String json = objectMapper.writeValueAsString(config);

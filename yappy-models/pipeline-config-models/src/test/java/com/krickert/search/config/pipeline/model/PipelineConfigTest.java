@@ -50,7 +50,8 @@ class PipelineConfigTest {
                 List.of("kafka-error-logger"),  // errorStep
                 TransportType.KAFKA,
                 kafkaConfig,
-                null // grpcConfig must be null
+                null, // grpcConfig must be null
+                null  // stepType defaults to PIPELINE
         );
         steps.put(kafkaStep.pipelineStepId(), kafkaStep);
 
@@ -68,7 +69,8 @@ class PipelineConfigTest {
                 null,                          // errorSteps (will default to empty)
                 TransportType.GRPC,
                 null, // kafkaConfig must be null
-                grpcConfig
+                grpcConfig,
+                null  // stepType defaults to PIPELINE
         );
         steps.put(grpcStep.pipelineStepId(), grpcStep);
 
@@ -81,7 +83,8 @@ class PipelineConfigTest {
                 Collections.emptyList(), // No error steps
                 TransportType.INTERNAL,
                 null,
-                null
+                null,
+                null  // stepType defaults to PIPELINE
         );
         steps.put(internalStep.pipelineStepId(), internalStep);
 
@@ -162,7 +165,8 @@ class PipelineConfigTest {
                 Collections.emptyList(),    // errorSteps
                 TransportType.KAFKA,
                 kafkaConfig,
-                null // grpcConfig
+                null, // grpcConfig must be null for KAFKA
+                null  // stepType defaults to PIPELINE
         );
         steps.put(step.pipelineStepId(), step);
         PipelineConfig config = new PipelineConfig("json-prop-pipeline", steps);
@@ -248,7 +252,7 @@ class PipelineConfigTest {
         // Assumes PipelineConfig's constructor uses Map.copyOf for pipelineSteps
         Map<String, PipelineStepConfig> initialSteps = new HashMap<>();
         PipelineStepConfig internalStep = new PipelineStepConfig(
-                "s1", "m1", null, null, null, TransportType.INTERNAL, null, null);
+                "s1", "m1", null, null, null, TransportType.INTERNAL, null, null, null);
         initialSteps.put("s1", internalStep);
 
         PipelineConfig config = new PipelineConfig("immutable-test-pipeline", initialSteps);

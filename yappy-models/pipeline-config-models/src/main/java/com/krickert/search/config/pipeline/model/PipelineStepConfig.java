@@ -21,6 +21,7 @@ import java.util.Objects;
  * @param transportType The transport mechanism (KAFKA, GRPC, INTERNAL) for this step.
  * @param kafkaConfig Configuration for Kafka transport, used if transportType is KAFKA.
  * @param grpcConfig Configuration for gRPC transport, used if transportType is GRPC.
+ * @param stepType The type of step (PIPELINE, INITIAL_PIPELINE, SINK), which affects validation rules and behavior.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record PipelineStepConfig(
@@ -35,7 +36,10 @@ public record PipelineStepConfig(
     // Physical transport configuration
     @JsonProperty("transportType") TransportType transportType,
     @JsonProperty("kafkaConfig") KafkaTransportConfig kafkaConfig,
-    @JsonProperty("grpcConfig") GrpcTransportConfig grpcConfig
+    @JsonProperty("grpcConfig") GrpcTransportConfig grpcConfig,
+
+    // Step type (PIPELINE, INITIAL_PIPELINE, SINK)
+    @JsonProperty("stepType") StepType stepType
 ) {
     @JsonCreator
     public PipelineStepConfig(
@@ -46,7 +50,8 @@ public record PipelineStepConfig(
         @JsonProperty("errorSteps") List<String> errorSteps,
         @JsonProperty("transportType") TransportType transportType,
         @JsonProperty("kafkaConfig") KafkaTransportConfig kafkaConfig,
-        @JsonProperty("grpcConfig") GrpcTransportConfig grpcConfig
+        @JsonProperty("grpcConfig") GrpcTransportConfig grpcConfig,
+        @JsonProperty("stepType") StepType stepType
     ) {
         // --- Essential Validations ---
         if (pipelineStepId == null || pipelineStepId.isBlank()) {
@@ -63,6 +68,9 @@ public record PipelineStepConfig(
             throw new IllegalArgumentException("PipelineStepConfig transportType cannot be null.");
         }
         this.transportType = transportType;
+
+        // Default to PIPELINE if stepType is null
+        this.stepType = (stepType == null) ? StepType.PIPELINE : stepType;
 
         // --- Conditional Validations for Transport Configs ---
         if (this.transportType == TransportType.KAFKA && kafkaConfig == null) {

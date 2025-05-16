@@ -6,6 +6,7 @@ import com.krickert.search.config.pipeline.model.PipelineConfig;
 // Assuming PipelineConnectorSpec is a class/record in your model that now includes initialTargetStepName
 // import com.krickert.search.config.pipeline.model.PipelineConnectorSpec;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig; // For step validation if needed
+import com.krickert.search.config.pipeline.model.StepType; // For identifying INITIAL_PIPELINE steps
 import com.google.protobuf.Empty;
 import com.krickert.search.engine.IngestDataRequest;
 import com.krickert.search.engine.IngestDataResponse;
@@ -19,6 +20,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.UUID;
 import java.util.Optional;
+import java.util.Map;
 
 @Singleton
 public class IngestionService {
@@ -150,55 +152,66 @@ public class IngestionService {
 
     private ConnectorPipelineTarget findConnectorPipelineTarget(PipelineClusterConfig clusterConfig, String sourceIdentifier) {
         // Priority:
-        // 1. Specific mapping (pipeline + initialStepName from connector spec)
-        // 2. Default pipeline + (default pipeline's own initial step if connector spec did NOT specify initialStepName)
-
-        var connectorSpec = clusterConfig.pipelineGraphConfig().pipelines().get(sourceIdentifier);
-
-        if (connectorSpec != null) {
-            String targetPipelineName = connectorSpec.pipelineSteps().get;
-            String initialStepName = connectorSpec.pipelineSteps().; // New field in ConnectorSpec
-
-            if (targetPipelineName != null && !targetPipelineName.isEmpty()) {
-                if (initialStepName != null && !initialStepName.isEmpty()) {
-                    LOG.info("Found specific pipeline mapping for source_identifier {}: pipeline={}, initial_step={}", sourceIdentifier, targetPipelineName, initialStepName);
-                    return new ConnectorPipelineTarget(targetPipelineName, initialStepName); //Explicit initial step
-                } else {
-                    //If the connector specifies a pipeline, but not an initial step, use the pipeline's default initial step.
-                    //This is a fallback.
-
-                    PipelineConfig pipelineConfig = Optional.ofNullable(clusterConfig.pipelineGraphConfig())
-                        .map(graphConfig -> graphConfig.getPipelineConfig(targetPipelineName))
-                        .orElse(null);
-
-                    if (pipelineConfig != null && pipelineConfig.getInitialStepName() != null && !pipelineConfig.getInitialStepName().isEmpty()) {
-                        LOG.info("Found pipeline mapping for source_identifier {} without explicit initial step. Using default initial step from pipeline {}: step={}", sourceIdentifier, targetPipelineName, pipelineConfig.getInitialStepName());
-                        return new ConnectorPipelineTarget(targetPipelineName, pipelineConfig.getInitialStepName());
-                    } else {
-                        LOG.warn("Connector specifies pipeline '{}' for source '{}', but it has no initial step configured (nor does the pipeline itself).", targetPipelineName, sourceIdentifier);
-                        return null; //Invalid configuration - need both pipeline AND a valid initial step
-                    }
+        // 1. Look for a pipeline with an INITIAL_PIPELINE step that matches the sourceIdentifier
+        // 2. Use the default pipeline if specified
+        
+        if (clusterConfig.pipelineGraphConfig() == null) {
+            LOG.warn("No pipeline graph configuration found.");
+            return null;
+        }
+        
+        // Search through all pipelines for an INITIAL_PIPELINE step that matches the sourceIdentifier
+        for (Map.Entry<String, PipelineConfig> pipelineEntry : clusterConfig.pipelineGraphConfig().pipelines().entrySet()) {
+            String pipelineName = pipelineEntry.getKey();
+            PipelineConfig pipelineConfig = pipelineEntry.getValue();
+            
+            if (pipelineConfig == null || pipelineConfig.pipelineSteps() == null) {
+                continue;
+            }
+            
+            for (Map.Entry<String, PipelineStepConfig> stepEntry : pipelineConfig.pipelineSteps().entrySet()) {
+                String stepId = stepEntry.getKey();
+                PipelineStepConfig stepConfig = stepEntry.getValue();
+                
+                if (stepConfig == null) {
+                    continue;
+                }
+                
+                // Check if this is an INITIAL_PIPELINE step and if its ID matches the sourceIdentifier
+                if (stepConfig.stepType() == StepType.INITIAL_PIPELINE && stepId.equals(sourceIdentifier)) {
+                    LOG.info("Found initial step with ID matching source_identifier {}: pipeline={}, step={}",
+                        sourceIdentifier, pipelineName, stepId);
+                    return new ConnectorPipelineTarget(pipelineName, stepId);
                 }
             }
         }
-
-        // No specific mapping found (or incomplete). Use default pipeline.
-        String defaultPipelineName = clusterConfig.getDefaultPipelineName();
+        
+        // No specific initial step found for this sourceIdentifier
+        // Fall back to the default pipeline if configured
+        String defaultPipelineName = clusterConfig.defaultPipelineName();
         if (defaultPipelineName != null && !defaultPipelineName.isEmpty()) {
-            PipelineConfig defaultPipelineConfig = Optional.ofNullable(clusterConfig.pipelineGraphConfig())
-                .map(graphConfig -> graphConfig.getPipelineConfig(defaultPipelineName))
-                .orElse(null);
-
-            if (defaultPipelineConfig != null && defaultPipelineConfig.getInitialStepName() != null && !defaultPipelineConfig.getInitialStepName().isEmpty()) {
-                LOG.info("No specific pipeline mapping found for source_identifier {}. Using default pipeline: pipeline={}, initial_step={}", sourceIdentifier, defaultPipelineName, defaultPipelineConfig.getInitialStepName());
-                return new ConnectorPipelineTarget(defaultPipelineName, defaultPipelineConfig.getInitialStepName());
+            PipelineConfig defaultPipelineConfig = clusterConfig.pipelineGraphConfig().getPipelineConfig(defaultPipelineName);
+            
+            if (defaultPipelineConfig != null && defaultPipelineConfig.pipelineSteps() != null) {
+                // Find the first INITIAL_PIPELINE step in the default pipeline
+                for (Map.Entry<String, PipelineStepConfig> stepEntry : defaultPipelineConfig.pipelineSteps().entrySet()) {
+                    String stepId = stepEntry.getKey();
+                    PipelineStepConfig stepConfig = stepEntry.getValue();
+                    
+                    if (stepConfig != null && stepConfig.stepType() == StepType.INITIAL_PIPELINE) {
+                        LOG.info("Using default pipeline's initial step for source_identifier {}: pipeline={}, step={}",
+                            sourceIdentifier, defaultPipelineName, stepId);
+                        return new ConnectorPipelineTarget(defaultPipelineName, stepId);
+                    }
+                }
+                
+                LOG.warn("Default pipeline '{}' has no INITIAL_PIPELINE steps.", defaultPipelineName);
             } else {
-                LOG.error("Default pipeline '{}' is configured, but it has no initial step defined (or the config is invalid).", defaultPipelineName);
-                return null; // Default pipeline misconfigured
+                LOG.warn("Default pipeline '{}' not found in configuration or has no steps.", defaultPipelineName);
             }
-        } else {
-            LOG.warn("No specific pipeline mapping found for source_identifier {} and no default pipeline configured.", sourceIdentifier);
-            return null; // No pipeline configured at all (neither specific nor default)
         }
+        
+        LOG.warn("No matching initial step found for source_identifier {} and no usable default pipeline.", sourceIdentifier);
+        return null;
     }
 }
