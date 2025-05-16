@@ -2,6 +2,7 @@ package com.krickert.search.config.consul;
 
 import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
+import com.krickert.search.config.pipeline.model.PipelineConfig;
 import com.krickert.search.config.pipeline.model.SchemaReference;
 
 import java.util.Optional;
@@ -28,6 +29,7 @@ public interface DynamicConfigurationManager {
      */
     Optional<PipelineClusterConfig> getCurrentPipelineClusterConfig();
 
+    Optional<PipelineConfig> getPipelineConfig(String pipelineId);
     /**
      * Retrieves the content of a specific schema version if it's actively referenced and cached.
      *

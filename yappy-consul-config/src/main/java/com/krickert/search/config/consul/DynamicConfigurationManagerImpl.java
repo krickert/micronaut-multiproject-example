@@ -3,6 +3,7 @@ package com.krickert.search.config.consul;
 import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
 import com.krickert.search.config.consul.exception.ConfigurationManagerInitializationException;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
+import com.krickert.search.config.pipeline.model.PipelineConfig;
 import com.krickert.search.config.pipeline.model.PipelineModuleConfiguration;
 import com.krickert.search.config.pipeline.model.SchemaReference;
 import com.krickert.search.config.schema.registry.model.SchemaVersionData;
@@ -198,6 +199,11 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
     @Override
     public Optional<PipelineClusterConfig> getCurrentPipelineClusterConfig() {
         return cachedConfigHolder.getCurrentConfig();
+    }
+
+    @Override
+    public Optional<PipelineConfig> getPipelineConfig(String pipelineId) {
+        return getCurrentPipelineClusterConfig().flatMap(clusterConfig -> Optional.ofNullable(clusterConfig.pipelineGraphConfig().getPipelineConfig(pipelineId)));
     }
 
     @Override
