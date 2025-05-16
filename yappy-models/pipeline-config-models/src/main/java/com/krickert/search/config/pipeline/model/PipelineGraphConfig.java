@@ -23,4 +23,7 @@ public record PipelineGraphConfig(
         pipelines = (pipelines == null) ? Collections.emptyMap() : Map.copyOf(pipelines);
         // Map.copyOf will throw NPE if map contains null keys or values.
     }
+    public PipelineConfig getPipelineConfig(String pipelineId) {
+        return pipelines.get(pipelineId);
+    }
 }
