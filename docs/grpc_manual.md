@@ -200,12 +200,11 @@ This service manages JSON Schema definitions used by Module Frameworks to valida
 ### 6.1. High-Level gRPC Service Interactions
 
 This diagram shows the key YAPPY services that expose gRPC interfaces and typical callers.
-
 ```mermaid
 graph TD
-    subgraph External Systems
-        Connectors[Connectors/Data Sources]
-    end
+subgraph External Systems
+Connectors[Connectors/Data Sources]
+end
 
     subgraph YAPPY Core Services
         CS[("Connector Service\n(Implements PipeStreamEngine.IngestDataAsync)")]
@@ -221,30 +220,29 @@ graph TD
         Consul[Consul Service Discovery & Health]
     end
 
-    Connectors -->|1. IngestDataAsync(req)| CS
-    CS -->|2. PipeStreamEngine.processAsync(PipeStream)| MF_A
+    Connectors -- "1. IngestDataAsync(req)" --> CS
+    CS -- "2. PipeStreamEngine.processAsync(PipeStream)" --> MF_A
     
-    MF_A -->|3. GetSchema(req)| CustomJsonSR
-    CustomJsonSR -->|4. GetSchemaResponse| MF_A
+    MF_A -- "3. GetSchema(req)" --> CustomJsonSR
+    CustomJsonSR -- "4. GetSchemaResponse" --> MF_A
     
-    MF_A -->|5. ProcessData(req)| PMP_A
-    PMP_A -->|6. ProcessResponse| MF_A
+    MF_A -- "5. ProcessData(req)" --> PMP_A
+    PMP_A -- "6. ProcessResponse" --> MF_A
     
-    MF_A -->|7. PipeStreamEngine.processAsync(PipeStream to MF_B)| MF_B
+    MF_A -- "7. PipeStreamEngine.processAsync(PipeStream to MF_B)" --> MF_B
     
-    MF_B -->|...similar flow...| PMP_B
+    MF_B -- "...similar flow..." --> PMP_B
     
-    AdminSvc -->|Manages Schemas| CustomJsonSR
+    AdminSvc -- "Manages Schemas" --> CustomJsonSR
 
-    CS -.->|Registers With| Consul
-    MF_A -.->|Registers With & Discovers From| Consul
-    MF_B -.->|Registers With & Discovers From| Consul
-    PMP_A -.->|Registers With (if remote)| Consul
-    PMP_B -.->|Registers With (if remote)| Consul
-    CustomJsonSR -.->|Registers With| Consul
-    AdminSvc -.->|Registers With| Consul
-````
-
+    CS -.->|"Registers With"| Consul
+    MF_A -.->|"Registers With & Discovers From"| Consul
+    MF_B -.->|"Registers With & Discovers From"| Consul
+    PMP_A -.->|"Registers With (if remote)"| Consul
+    PMP_B -.->|"Registers With (if remote)"| Consul
+    CustomJsonSR -.->|"Registers With"| Consul
+    AdminSvc -.->|"Registers With"| Consul
+```
 ### 6.2. Sequence Diagram: Pipeline Initiation (`IngestDataAsync`)
 
 ```mermaid
