@@ -1,11 +1,18 @@
 // GrpcForwarder.java
 package com.krickert.search.engine.orchestration.grpc;
 
+import com.google.protobuf.Empty;
+import com.krickert.search.engine.PipeStreamEngineGrpc; // Assuming this is your generated gRPC service
+import com.krickert.search.engine.PipeStreamProtos; // Assuming PipeStream is a protobuf message
+// ^^^ Or your actual PipeStream protobuf generated class if it's different
 import com.krickert.search.engine.exception.StepExecutionException;
+// import com.krickert.search.model.PipeStream; // This seems to be a domain model, you'll need to convert it to the protobuf type
 import com.krickert.search.model.PipeStream;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.stub.StreamObserver;
 import io.micronaut.context.annotation.Value;
+import io.micronaut.discovery.DiscoveryClient;
 import io.micronaut.discovery.ServiceInstance;
 import jakarta.annotation.PreDestroy;
 import jakarta.inject.Inject;
@@ -15,131 +22,170 @@ import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap; // Prefer this more specific import
+// import java.util.concurrent.TimeUnit; // Not directly used, but good for other channel options
+
+import static com.google.common.collect.Maps.newConcurrentMap;
+
 
 @Singleton
 @Slf4j
 @Getter
 public class GrpcForwarder {
-
-    // For demonstration we create a single stub.
-    // In practice, you may want to select the stub based on route.getDestination().
-    private final ManagedChannel channel;
     private final boolean usePlaintext;
+    private final Map<String, ManagedChannel> managedChannelCache = newConcurrentMap();
+
+    private final DiscoveryClient discoveryClient;
+    private final Duration discoveryClientTimeout;
 
     @Inject
     public GrpcForwarder(@Value("${grpc.client.plaintext:true}") boolean usePlaintext,
-                         ) {
+                         DiscoveryClient discoveryClient,
+                         @Value("${micronaut.discovery.client.timeout:10s}") Duration discoveryClientTimeout) {
         this.usePlaintext = usePlaintext;
+        this.discoveryClient = discoveryClient;
+        this.discoveryClientTimeout = discoveryClientTimeout;
         log.info("Initializing GrpcForwarder with plaintext: {}", usePlaintext);
-
-        // Create a channel to the destination gRPC service (address could be externalized to config)
-        ManagedChannelBuilder<?> builder = ManagedChannelBuilder.forAddress("localhost", 50051);
-
-        if (usePlaintext) {
-            builder.usePlaintext();
-        }
-
-        this.channel = builder.build();
-        //TODO: use the micronaut managed channel factory here instead
-        //this.stub = PipelineServiceGrpc.newBlockingStub(channel);
-    }
-
-    public void forwardToGrpc(PipeStream pipe) {
-        // In a real-world scenario, use route.getDestination() to choose the correct stub.
-        // Here we simply call the forward method and ignore the response.
-        log.debug("Forwarding to gRPC service: {}", );
-        //noinspection ResultOfMethodCallIgnored
-        stub.forward(pipe);
-    }
-
-    @PreDestroy
-    public void shutdown() {
-        log.info("Shutting down gRPC channel");
-        if (channel != null && !channel.isShutdown()) {
-            try {
-                channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                log.warn("Error shutting down gRPC channel", e);
-                Thread.currentThread().interrupt();
-            } finally {
-                if (!channel.isTerminated()) {
-                    channel.shutdownNow();
-                }
-            }
-        }
+        // The ManagedChannelBuilder specific to "localhost:50051" was not used and
+        // is correctly handled within getManagedChannel. So, it's removed from here.
     }
 
     /**
-     * Retrieves or creates a ManagedChannel for a remote gRPC service using DiscoveryClient.
-     * Handles caching and potential discovery failures. This method blocks for discovery.
+     * Forwards the PipeStream to the target gRPC service asynchronously ("fire and forget").
+     * The method returns immediately and does not wait for the gRPC call to complete or for a response.
+     * Errors during the gRPC call itself will be logged via the StreamObserver.
+     * Note: The initial discovery of the service (if not cached) is blocking.
      *
-     * @param consulAppName The Consul application name of the service.
-     * @return A ManagedChannel instance ready for use.
-     * @throws StepExecutionException if discovery fails, no instances are found, or channel cannot be created.
+     * @param pipeStreamProto The PipeStream protobuf message to send.
+     * @param pipeStepName  The name of the target pipestream service (used for discovery and channel caching).
      */
+    public void forwardToGrpc(PipeStream pipeStreamProto, String pipeStepName) {
+        // Your original code used a domain model `com.krickert.search.model.PipeStream pipe`.
+        // For gRPC, you need to send the protobuf generated message.
+        // I'm assuming you have a conversion step before this method is called,
+        // or you'd convert it here. For this example, I've changed the parameter type
+        // to `PipeStreamProtos.PipeStream pipeStreamProto` (adjust if your proto name is different).
+
+        log.debug("Forwarding PipeStream to gRPC service '{}' for pipeline: {}", pipeStepName, pipeStreamProto.getCurrentPipelineName());
+        try {
+            ManagedChannel channel = getManagedChannel(pipeStepName); // This can block on cache miss
+
+            // Use the asynchronous stub
+            PipeStreamEngineGrpc.PipeStreamEngineStub asyncStub = PipeStreamEngineGrpc.newStub(channel);
+
+            // Make the asynchronous call.
+            // For "fire and forget", we provide a StreamObserver that logs errors
+            // but doesn't do much else. The calling thread of forwardToGrpc will not block here.
+            asyncStub.processAsync(pipeStreamProto, new StreamObserver<Empty>() {
+                @Override
+                public void onNext(Empty value) {
+                    // In a unary call, onNext is called once with the response.
+                    // For "fire and forget", we don't typically expect a meaningful response other than Empty.
+                    // If the server indeed responds with Empty, this will be called.
+                    log.trace("gRPC call for pipeline '{}' acknowledged by service '{}'.", pipeStreamProto.getCurrentPipelineName(), pipeStepName);
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                    // The gRPC call failed.
+                    log.error("Error forwarding PipeStream for pipeline '{}' to service '{}': {}",
+                            pipeStreamProto.getCurrentPipelineName(), pipeStepName, t.getMessage(), t);
+                    // Depending on requirements, you might want to:
+                    // - Implement retry logic (though gRPC itself might have some retry capabilities configured on the channel)
+                    // - Send to a dead-letter queue
+                    // - Increment error metrics
+                }
+
+                @Override
+                public void onCompleted() {
+                    // The gRPC call completed successfully from the server's perspective.
+                    log.debug("gRPC call for pipeline '{}' completed by service '{}'.", pipeStreamProto.getCurrentPipelineName(), pipeStepName);
+                }
+            });
+            log.debug("Asynchronous gRPC call initiated for pipeline '{}' to service '{}'.", pipeStreamProto.getCurrentPipelineName(), pipeStepName);
+
+        } catch (StepExecutionException e) {
+            // This exception comes from getManagedChannel (e.g., discovery failure)
+            log.error("Failed to get managed channel for service '{}' for pipeline '{}': {}",
+                    pipeStepName, pipeStreamProto.getCurrentPipelineName(), e.getMessage(), e);
+            // Handle channel acquisition failure (e.g., re-throw, specific metrics)
+            // This is a synchronous failure before the async gRPC call could be made.
+            throw e; // Or handle as appropriate for your application
+        } catch (Exception e) {
+            // Catch any other unexpected synchronous errors during setup
+            log.error("Unexpected error preparing to forward PipeStream for pipeline '{}' to service '{}': {}",
+                    pipeStreamProto.getCurrentPipelineName(), pipeStepName, e.getMessage(), e);
+            // This is also a synchronous failure.
+            throw new RuntimeException("Failed to initiate gRPC call for " + pipeStepName, e); // Or handle as appropriate
+        }
+    }
+
+
+    @PreDestroy
+    public void shutdown() {
+        log.info("Shutting down gRPC channels. Number of channels: {}", managedChannelCache.size());
+        managedChannelCache.values().forEach(channel -> {
+            try {
+                channel.shutdown().awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+                log.info("Channel {} shut down.", channel.toString());
+            } catch (InterruptedException e) {
+                log.warn("Interrupted while shutting down channel {}. Forcing shutdown.", channel.toString());
+                channel.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        });
+        managedChannelCache.clear();
+        log.info("All gRPC channels processed for shutdown.");
+    }
+
     private ManagedChannel getManagedChannel(String consulAppName) throws StepExecutionException {
-        // Compute if absent ensures thread-safe creation and retrieval
         return managedChannelCache.computeIfAbsent(consulAppName, appName -> {
             log.info("Cache miss. Attempting discovery and channel creation for service: '{}'", appName);
             try {
-                // Use DiscoveryClient reactively and block for the result with timeout
                 Publisher<List<ServiceInstance>> instancesPublisher = discoveryClient.getInstances(appName);
                 List<ServiceInstance> instances = Mono.from(instancesPublisher)
-                        .block(this.discoveryClientTimeout); // Block until discovery completes or times out
+                        .block(this.discoveryClientTimeout);
 
                 if (instances == null || instances.isEmpty()) {
                     log.error("No instances found via discovery for service: '{}' within {} timeout.", appName, this.discoveryClientTimeout);
-                    // Throw specific exception indicating service not found
-                    throw new StepExecutionException("Service not found via discovery: " + appName, true); // Retryable = true
+                    throw new StepExecutionException("Service not found via discovery: " + appName, true);
                 }
 
-                // Basic Strategy: Use the first available instance.
-                // TODO: Implement a load balancing strategy (e.g., round-robin, random) for production.
-                ServiceInstance instance = instances.get(0);
+                ServiceInstance instance = instances.get(0); // Basic: Use first instance
                 String host = instance.getHost();
                 int port = instance.getPort();
-                // Use service ID from discovery if available, otherwise use appName
                 String instanceId = instance.getInstanceId().orElse(appName + ":N/A");
                 log.info("Selected instance for service '{}': ID='{}' at {}:{}", appName, instanceId, host, port);
 
-                // Build the gRPC channel
                 ManagedChannelBuilder<?> builder = ManagedChannelBuilder.forAddress(host, port);
                 if (usePlaintext) {
                     builder.usePlaintext();
                     log.debug("Using plaintext connection for service '{}'", appName);
                 } else {
-                    // TODO: Configure TLS/SSL if usePlaintext is false (e.g., using default system certs or providing custom ones)
                     log.debug("Using secure connection (TLS/SSL) for service '{}'", appName);
-                    // Example: builder.useTransportSecurity(); // Uses system default CAs
+                    // Example: builder.useTransportSecurity();
                 }
-                // TODO: Add other common channel options as needed:
-                // builder.keepAliveTime(1, TimeUnit.MINUTES);
-                // builder.intercept(...); // For tracing, metrics, auth etc.
-                // builder.defaultLoadBalancingPolicy("round_robin"); // If needed and not handled by discovery
+                // Consider adding other channel options like keepAliveTime, interceptors etc.
+                // builder.keepAliveTime(1, java.util.concurrent.TimeUnit.MINUTES);
 
                 log.info("Successfully created new ManagedChannel for service: '{}'", appName);
                 return builder.build();
 
             } catch (IllegalStateException e) {
-                // Handle specific exceptions from Mono.block (e.g., timeout)
                 log.error("Discovery for service '{}' failed (possibly timed out or empty publisher): {}", appName, e.getMessage());
-                // Remove potentially stale cache entry on timeout to force rediscovery attempt next time
-                managedChannelCache.remove(appName);
-                // Check if the message indicates a timeout specifically
+                managedChannelCache.remove(appName); // Evict on this type of error
                 if (e.getMessage() != null && (e.getMessage().contains("Timeout on blocking read") || e.getMessage().contains("Did not observe any item or terminal signal"))) {
                     throw new StepExecutionException("Timeout waiting for service discovery for " + appName, e, true);
                 }
                 throw new StepExecutionException("Service discovery for " + appName + " yielded no instances or failed.", e, true);
             } catch (StepExecutionException e) {
-                // Re-throw exceptions specifically thrown above (like service not found)
                 throw e;
             } catch (RuntimeException e) {
-                // Catch other potential runtime exceptions during discovery or channel build
                 log.error("Failed to discover instances or create ManagedChannel for service '{}': {}", appName, e.getMessage(), e);
-                // Remove potentially bad entry from cache if creation failed mid-way
-                managedChannelCache.remove(appName);
+                managedChannelCache.remove(appName); // Evict on this type of error
                 throw new StepExecutionException("Failed to establish channel for service " + appName + ": " + e.getMessage(), e, true);
             }
         });

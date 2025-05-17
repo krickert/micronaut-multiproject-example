@@ -1,76 +1,118 @@
 package com.krickert.search.config.consul.validator;
 
-import com.krickert.search.config.pipeline.model.*;
-import jakarta.inject.Singleton;
+import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
+import com.krickert.search.config.pipeline.model.PipelineConfig;
+import com.krickert.search.config.pipeline.model.PipelineStepConfig;
+import com.krickert.search.config.pipeline.model.SchemaReference;
+import com.krickert.search.config.pipeline.model.StepType; // Ensure this is your enum: INITIAL_PIPELINE, SINK, PIPELINE
+import io.micronaut.core.util.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 
-/**
- * Validates that step types are used correctly within a pipeline.
- * <br/>
- * This validator ensures that:
- * 1. INITIAL_PIPELINE steps are not referenced by any other steps (they are true entry points)
- * 2. SINK steps don't have any next steps or error steps (they are true terminal points)
- */
-@Singleton
 public class StepTypeValidator implements ClusterValidationRule {
     private static final Logger LOG = LoggerFactory.getLogger(StepTypeValidator.class);
 
     @Override
-    public List<String> validate(PipelineClusterConfig clusterConfig,
-                                 Function<SchemaReference, Optional<String>> schemaContentProvider) {
+    public List<String> validate(
+            PipelineClusterConfig clusterConfig,
+            Function<SchemaReference, Optional<String>> schemaContentProvider) {
+
         List<String> errors = new ArrayList<>();
 
-        if (clusterConfig == null || clusterConfig.pipelineGraphConfig() == null) {
-            return errors; // Nothing to validate
+        if (clusterConfig == null || clusterConfig.pipelineGraphConfig() == null || CollectionUtils.isEmpty(clusterConfig.pipelineGraphConfig().pipelines())) {
+            return errors;
         }
 
         for (Map.Entry<String, PipelineConfig> pipelineEntry : clusterConfig.pipelineGraphConfig().pipelines().entrySet()) {
             String pipelineName = pipelineEntry.getKey();
-            PipelineConfig pipeline = pipelineEntry.getValue();
+            PipelineConfig pipelineConfig = pipelineEntry.getValue();
 
-            if (pipeline == null || pipeline.pipelineSteps() == null) {
-                continue; // Skip invalid pipelines
+            if (pipelineConfig == null || CollectionUtils.isEmpty(pipelineConfig.pipelineSteps())) {
+                continue;
             }
 
-            // Collect all step IDs that are referenced as next steps or error steps
-            Set<String> referencedStepIds = new HashSet<>();
-            for (PipelineStepConfig step : pipeline.pipelineSteps().values()) {
-                if (step != null) {
-                    referencedStepIds.addAll(step.nextSteps());
-                    referencedStepIds.addAll(step.errorSteps());
-                }
-            }
+            for (Map.Entry<String, PipelineStepConfig> stepEntry : pipelineConfig.pipelineSteps().entrySet()) {
+                PipelineStepConfig stepConfig = stepEntry.getValue();
 
-            // Validate each step
-            for (Map.Entry<String, PipelineStepConfig> stepEntry : pipeline.pipelineSteps().entrySet()) {
-                String stepId = stepEntry.getKey();
-                PipelineStepConfig step = stepEntry.getValue();
-
-                if (step == null) {
-                    continue; // Skip invalid steps
+                if (stepConfig == null || stepConfig.stepName() == null || stepConfig.stepName().isBlank() || stepConfig.stepType() == null) {
+                    errors.add(String.format(
+                        "Pipeline '%s', Step key '%s': Contains invalid step definition (null, missing name, or missing type).",
+                        pipelineName, stepEntry.getKey()
+                    ));
+                    continue;
                 }
 
-                String stepContext = String.format("Step '%s' in pipeline '%s' (cluster '%s')",
-                        stepId, pipelineName, clusterConfig.clusterName());
+                String stepName = stepConfig.stepName();
+                StepType stepType = stepConfig.stepType();
 
-                // Validate INITIAL_PIPELINE steps are not referenced by other steps
-                if (step.stepType() == StepType.INITIAL_PIPELINE && referencedStepIds.contains(stepId)) {
-                    errors.add(String.format("%s: is marked as INITIAL_PIPELINE but is referenced by other steps, which is not allowed.", 
-                            stepContext));
-                }
+                boolean hasKafkaInputs = CollectionUtils.isNotEmpty(stepConfig.kafkaInputs());
+                boolean hasOutputs = CollectionUtils.isNotEmpty(stepConfig.outputs());
 
-                // Validate SINK steps don't have next steps or error steps
-                if (step.stepType() == StepType.SINK && (!step.nextSteps().isEmpty() || !step.errorSteps().isEmpty())) {
-                    errors.add(String.format("%s: is marked as SINK but has next steps or error steps, which is not allowed.", 
-                            stepContext));
+                switch (stepType) {
+                    case INITIAL_PIPELINE: // Changed from SOURCE
+                        if (hasKafkaInputs) {
+                            errors.add(String.format(
+                                "Pipeline '%s', Step '%s' of type INITIAL_PIPELINE: must not have kafkaInputs defined. Found %d.",
+                                pipelineName, stepName, stepConfig.kafkaInputs() != null ? stepConfig.kafkaInputs().size() : 0
+                            ));
+                        }
+                        if (!hasOutputs) {
+                            errors.add(String.format(
+                                "Pipeline '%s', Step '%s' of type INITIAL_PIPELINE: should ideally have outputs defined.",
+                                pipelineName, stepName
+                            ));
+                        }
+                        break;
+
+                    case SINK:
+                        // Logic for SINK remains the same (no outputs, ideally has inputs)
+                        if (!hasKafkaInputs && (stepConfig.processorInfo() == null || stepConfig.processorInfo().internalProcessorBeanName() == null || stepConfig.processorInfo().internalProcessorBeanName().isBlank())) {
+                            errors.add(String.format(
+                                "Pipeline '%s', Step '%s' of type SINK: should ideally have kafkaInputs defined or be an internal processor that receives data via other pipeline steps.",
+                                pipelineName, stepName
+                            ));
+                        }
+                        if (hasOutputs) {
+                            errors.add(String.format(
+                                "Pipeline '%s', Step '%s' of type SINK: must not have any outputs defined. Found %d.",
+                                pipelineName, stepName, stepConfig.outputs() != null ? stepConfig.outputs().size() : 0
+                            ));
+                        }
+                        break;
+
+                    case PIPELINE:
+                        // Logic for PIPELINE remains the same
+                        if (!hasKafkaInputs && !hasOutputs && (stepConfig.processorInfo() == null || stepConfig.processorInfo().internalProcessorBeanName() == null || stepConfig.processorInfo().internalProcessorBeanName().isBlank())) {
+                            // A PIPELINE step might not have direct Kafka inputs if it's fed by another step's output (e.g., gRPC).
+                            // And it might not have outputs if it's an internal endpoint or a terminal processing step not formally a SINK.
+                            // This condition is trying to catch truly orphaned PIPELINE steps.
+                            // A more robust check would involve graph analysis (is it targeted by any output, do its outputs lead anywhere).
+                            // For now, this logs. The current StepTypeValidator code in the previous response had a LOG.debug for this.
+                            // If you want to make it an error:
+                            // errors.add(String.format(
+                            // "Pipeline '%s', Step '%s' of type PIPELINE: has no Kafka inputs and no defined outputs, and is not clearly an internal gRPC service. It may be orphaned or misconfigured.",
+                            // pipelineName, stepName
+                            // ));
+                            LOG.debug("Pipeline '{}', Step '{}' of type PIPELINE has no Kafka inputs and no defined outputs. It might be an internal processing step or targeted by another step's output.", pipelineName, stepName);
+                        }
+                        break;
+
+                    default:
+                        errors.add(String.format(
+                            "Pipeline '%s', Step '%s': Encountered an unknown or unhandled StepType '%s'.",
+                            pipelineName, stepName, stepType
+                        ));
+                        break;
                 }
             }
         }
-
         return errors;
     }
 }

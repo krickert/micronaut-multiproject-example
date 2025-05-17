@@ -19,7 +19,7 @@ public class KafkaForwarder {
         kafkaForwarderClient.send(topic, ProtobufUtils.createKey(pipe.getStreamId()), pipe);
     }
 
-    public void forwardToBackup(PipeStream pipe, String topic) {
+    public void forwardToError(PipeStream pipe, String topic) {
         // Use a backup topic (e.g. prefix with "backup-") for reprocessing failed messages.
         String backupTopic = "backup-" + topic;
         kafkaForwarderClient.send(backupTopic, ProtobufUtils.createKey(pipe.getStreamId()), pipe);

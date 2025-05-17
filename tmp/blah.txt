@@ -1,0 +1,4 @@
+./src/test/java/com/krickert/search/pipeline/kafka/KafkaForwarderIT.java
+./src/main/java/com/krickert/search/pipeline/grpc/GrpcForwarder.java
+./src/main/java/com/krickert/search/pipeline/kafka/KafkaForwarder.java
+./src/main/java/com/krickert/search/pipeline/kafka/KafkaForwarderClient.java

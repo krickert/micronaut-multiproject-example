@@ -11,10 +11,24 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Singleton
 public class WhitelistValidator implements ClusterValidationRule {
     private static final Logger LOG = LoggerFactory.getLogger(WhitelistValidator.class);
+
+    // Regex to capture conventional topic names.
+    // It expects pipelineName and stepName not to contain dots.
+    // It also expects clusterName not to contain dots.
+    // Example conventional topic: yappy.pipeline.my-pipeline-name.step.my-step-name.output
+    private static final Pattern KAFKA_TOPIC_CONVENTION_PATTERN = Pattern.compile(
+            "yappy\\.pipeline\\.([^.]+)\\.step\\.([^.]+)\\.(input|output|error|dead-letter)" // Added more common suffixes
+    );
+    // Variables for placeholder replacement. Using convention that variables are ${variableName}
+    // We will replace these with actual values before checking against the convention pattern if needed,
+    // or ensure the topic string in config *is* the fully resolved name.
+    // The current isKafkaTopicPermitted resolves them first.
 
     @Override
     public List<String> validate(PipelineClusterConfig clusterConfig,
@@ -28,15 +42,29 @@ public class WhitelistValidator implements ClusterValidationRule {
 
         LOG.debug("Performing whitelist validation for cluster: {}", clusterConfig.clusterName());
 
-        Set<String> allowedKafkaTopics = clusterConfig.allowedKafkaTopics(); // Guaranteed non-null
-        Set<String> allowedGrpcServices = clusterConfig.allowedGrpcServices(); // Guaranteed non-null
+        final String currentClusterName = clusterConfig.clusterName(); // Assuming clusterName cannot have dots
+        Set<String> allowedKafkaTopics = clusterConfig.allowedKafkaTopics();
+        Set<String> allowedGrpcServices = clusterConfig.allowedGrpcServices();
 
         if (clusterConfig.pipelineGraphConfig() != null && clusterConfig.pipelineGraphConfig().pipelines() != null) {
             for (Map.Entry<String, PipelineConfig> pipelineEntry : clusterConfig.pipelineGraphConfig().pipelines().entrySet()) {
-                String pipelineName = pipelineEntry.getKey();
+                String pipelineName = pipelineEntry.getKey(); // Assuming pipelineName cannot have dots
                 PipelineConfig pipeline = pipelineEntry.getValue();
 
-                if (pipeline == null || pipeline.pipelineSteps() == null) {
+                if (pipeline == null || !pipelineName.equals(pipeline.name())) {
+                    // Basic integrity check, though ReferentialIntegrityValidator might also cover this.
+                    if (pipeline != null) {
+                        errors.add(String.format("Pipeline key '%s' does not match pipeline name '%s' in cluster '%s'.",
+                                pipelineEntry.getKey(), pipeline.name(), currentClusterName));
+                    } else {
+                        errors.add(String.format("Pipeline definition for key '%s' is null in cluster '%s'.",
+                                pipelineEntry.getKey(), currentClusterName));
+                    }
+                    continue;
+                }
+
+
+                if (pipeline.pipelineSteps() == null) {
                     continue;
                 }
 
@@ -45,68 +73,61 @@ public class WhitelistValidator implements ClusterValidationRule {
                     if (step == null) {
                         continue;
                     }
+                    if (!stepEntry.getKey().equals(step.stepName())) {
+                        errors.add(String.format("Step key '%s' does not match step name '%s' in pipeline '%s', cluster '%s'.",
+                                stepEntry.getKey(), step.stepName(), pipelineName, currentClusterName));
+                        continue;
+                    }
 
+
+                    // Assuming stepName cannot have dots
                     String stepContext = String.format("Step '%s' in pipeline '%s' (cluster '%s')",
-                            step.pipelineStepId(), pipelineName, clusterConfig.clusterName());
+                            step.stepName(), pipelineName, currentClusterName);
 
-                    TransportType transportType = step.transportType(); // Get the transport type
+                    if (step.outputs() != null) {
+                        for (Map.Entry<String, PipelineStepConfig.OutputTarget> outputEntry : step.outputs().entrySet()) {
+                            String outputKey = outputEntry.getKey();
+                            PipelineStepConfig.OutputTarget outputTarget = outputEntry.getValue();
 
-                    if (transportType == TransportType.KAFKA) {
-                        KafkaTransportConfig kafkaConfig = step.kafkaConfig();
-                        if (kafkaConfig != null) {
-                            // Check Kafka Listen Topics
-                            if (kafkaConfig.listenTopics() != null) { // listenTopics itself can be empty but not null due to constructor
-                                for (String topic : kafkaConfig.listenTopics()) {
-                                    // Element validation (null/blank) should ideally be caught by KafkaTransportConfig constructor
-                                    // But defensive check here is okay too.
-                                    if (topic == null || topic.isBlank()) {
-                                        errors.add(String.format("%s contains a null or blank Kafka listen topic in kafkaConfig.", stepContext));
-                                        continue;
+                            if (outputTarget == null) {
+                                errors.add(String.format("%s has a null OutputTarget for output key '%s'.", stepContext, outputKey));
+                                continue;
+                            }
+
+                            String outputContext = String.format("%s, output '%s'", stepContext, outputKey);
+                            TransportType transportType = outputTarget.transportType();
+
+                            if (transportType == TransportType.KAFKA) {
+                                KafkaTransportConfig kafkaConfig = outputTarget.kafkaTransport();
+                                if (kafkaConfig != null) {
+                                    String publishTopic = kafkaConfig.topic();
+                                    if (publishTopic != null && !publishTopic.isBlank()) {
+                                        if (!isKafkaTopicPermitted(publishTopic, allowedKafkaTopics,
+                                                currentClusterName, // Pass cluster name explicitly
+                                                pipelineName,       // Pass pipeline name explicitly
+                                                step.stepName())) { // Pass step name explicitly
+                                            errors.add(String.format("%s (Kafka) publishes to topic '%s' which is not whitelisted by convention or explicit list. Allowed explicit: %s",
+                                                    outputContext, publishTopic, allowedKafkaTopics));
+                                        }
                                     }
-                                    if (!allowedKafkaTopics.contains(topic)) {
-                                        errors.add(String.format("%s (Kafka) listens to non-whitelisted topic '%s'. Allowed: %s",
-                                                stepContext, topic, allowedKafkaTopics));
+                                    // As discussed, listen topics are not handled here based on current OutputTarget model.
+                                } else {
+                                    errors.add(String.format("%s is KAFKA type but has null kafkaTransport.", outputContext));
+                                }
+                            } else if (transportType == TransportType.GRPC) {
+                                GrpcTransportConfig grpcConfig = outputTarget.grpcTransport();
+                                if (grpcConfig != null) {
+                                    String serviceName = grpcConfig.serviceName();
+                                    if (!allowedGrpcServices.contains(serviceName)) {
+                                        errors.add(String.format("%s (gRPC) uses non-whitelisted serviceName '%s'. Allowed: %s",
+                                                outputContext, serviceName, allowedGrpcServices));
                                     }
+                                } else {
+                                    errors.add(String.format("%s is GRPC type but has null grpcTransport.", outputContext));
                                 }
                             }
-
-                            // Check Kafka Publish Topic Pattern
-                            String publishPattern = kafkaConfig.publishTopicPattern();
-                            if (publishPattern != null && !publishPattern.isBlank()) {
-                                // This validation is a bit nuanced for a "pattern".
-                                // If the pattern is a simple topic name, direct check is fine.
-                                // If it's a true pattern like "${pipelineId}.${stepId}.out",
-                                // you'd either need to:
-                                // 1. Ensure such patterns are implicitly allowed.
-                                // 2. Resolve the pattern to a concrete topic name for this step and check that.
-                                // 3. Have a list of allowed patterns.
-                                // For now, let's assume if it's a plain string, it should be in the whitelist
-                                // if it's meant to be a resolvable, publishable topic.
-                                // This check might be too simplistic if patterns are complex.
-                                // A simple interpretation: if a step *publishes*, its output topic must be known and allowed.
-                                // Let's assume for now the pattern itself, if non-blank, should map to an allowed topic.
-                                // This means publishTopicPattern often might just be a direct topic name.
-                                if (!isPatternLikelyAllowed(publishPattern, allowedKafkaTopics, step, pipelineName, clusterConfig.clusterName())) {
-                                    errors.add(String.format("%s (Kafka) uses a publishTopicPattern '%s' that does not resolve to/match an allowed topic. Allowed: %s",
-                                            stepContext, publishPattern, allowedKafkaTopics));
-                                }
-                            }
-                        } else if (step.transportType() == TransportType.KAFKA) { // Should not happen if constructor validation is good
-                            errors.add(String.format("%s is KAFKA type but has null kafkaConfig.", stepContext));
-                        }
-                    } else if (transportType == TransportType.GRPC) {
-                        GrpcTransportConfig grpcConfig = step.grpcConfig();
-                        if (grpcConfig != null) {
-                            String serviceId = grpcConfig.serviceId(); // serviceId is non-null/blank by its own record constructor
-                            if (!allowedGrpcServices.contains(serviceId)) {
-                                errors.add(String.format("%s (gRPC) uses non-whitelisted serviceId '%s'. Allowed: %s",
-                                        stepContext, serviceId, allowedGrpcServices));
-                            }
-                        } else if (step.transportType() == TransportType.GRPC) { // Should not happen
-                            errors.add(String.format("%s is GRPC type but has null grpcConfig.", stepContext));
                         }
                     }
-                    // No specific whitelist validation for INTERNAL transport type
                 }
             }
         }
@@ -114,44 +135,105 @@ public class WhitelistValidator implements ClusterValidationRule {
     }
 
     /**
-     * Helper method to determine if a publish pattern is allowed.
-     * This is a placeholder for potentially more complex logic.
-     * For now, it checks if the pattern (if it's a simple topic name) is directly in the allowed list.
-     * Or if it's a variable pattern, it might try to resolve it and check.
+     * Checks if the resolved topic name matches the defined Kafka topic naming convention.
+     * This version assumes pipelineName and stepName do not contain dots.
+     *
+     * @param resolvedTopicName The fully resolved topic name (no variables like ${...}).
+     * @param expectedPipelineName The name of the pipeline this topic should belong to.
+     * @param expectedStepName The name of the step this topic should belong to.
+     * @return true if the topic matches the convention, false otherwise.
      */
-    private boolean isPatternLikelyAllowed(String pattern, Set<String> allowedKafkaTopics,
-                                           PipelineStepConfig step, String pipelineName, String clusterName) {
-        if (pattern == null || pattern.isBlank()) {
-            return true; // No pattern to check
+    private boolean topicMatchesNamingConvention(String resolvedTopicName, String expectedPipelineName, String expectedStepName) {
+        if (resolvedTopicName == null || expectedPipelineName == null || expectedStepName == null) {
+            return false;
         }
-        // Simplistic check: if the pattern itself is an allowed topic
-        if (allowedKafkaTopics.contains(pattern)) {
+
+        Matcher matcher = KAFKA_TOPIC_CONVENTION_PATTERN.matcher(resolvedTopicName);
+        if (matcher.matches()) {
+            String actualPipelineName = matcher.group(1);
+            String actualStepName = matcher.group(2);
+            // String topicType = matcher.group(3); // e.g., input, output, error
+
+            // Check if the extracted pipeline and step names match the expected ones.
+            // This ensures the topic belongs to the correct pipeline and step context.
+            boolean matchesContext = expectedPipelineName.equals(actualPipelineName) &&
+                    expectedStepName.equals(actualStepName);
+            if (!matchesContext) {
+                LOG.warn("Topic '{}' matches convention pattern but has mismatched context. Expected pipeline: '{}', step: '{}'. Got pipeline: '{}', step: '{}'.",
+                        resolvedTopicName, expectedPipelineName, expectedStepName, actualPipelineName, actualStepName);
+            }
+            return matchesContext;
+        }
+        return false;
+    }
+
+
+    /**
+     * Determines if a Kafka topic is permitted, either by explicit whitelist or by conforming to a naming convention.
+     *
+     * @param topicNameInConfig The topic name as defined in the configuration (may contain variables).
+     * @param allowedKafkaTopics Set of explicitly whitelisted topic names.
+     * @param currentClusterName The actual name of the current cluster.
+     * @param currentPipelineName The actual name of the current pipeline.
+     * @param currentStepName The actual name of the current step.
+     * @return true if the topic is permitted, false otherwise.
+     */
+    private boolean isKafkaTopicPermitted(String topicNameInConfig, Set<String> allowedKafkaTopics,
+                                          String currentClusterName, String currentPipelineName, String currentStepName) {
+        if (topicNameInConfig == null || topicNameInConfig.isBlank()) {
+            // Consider if blank topic in config is an error.
+            // For whitelisting, a blank topic isn't usually "permitted" unless explicitly in the list.
+            return allowedKafkaTopics.contains(""); // Unlikely, but covers the case.
+        }
+
+        // 1. Resolve variables in the topic name from config
+        //    The convention itself uses <pipelineName> and <stepName> as part of the dot-separated structure,
+        //    not as ${variables} within the segments.
+        //    So, topicNameInConfig should ideally be the fully formed name or use variables
+        //    that resolve to a name matching the convention.
+        //    The variables ${clusterName}, ${pipelineName}, ${stepName} are for allowing topic strings
+        //    in config to be like "yappy.pipeline.${pipelineName}.step.${stepName}.output"
+        //    which then resolves to "yappy.pipeline.my-pipe.step.my-step.output".
+        //    This resolved string is then checked against the KAFKA_TOPIC_CONVENTION_PATTERN.
+
+        String resolvedTopic = topicNameInConfig
+                .replace("${clusterName}", currentClusterName) // This variable is not in our current convention string directly
+                .replace("${pipelineName}", currentPipelineName)
+                .replace("${stepName}", currentStepName);
+        // Add other potential variables if used, e.g. .replace("${outputKey}", outputKeyFromStepOutput);
+
+        // 2. Check if the original or resolved topic is in the explicit whitelist first.
+        //    This allows overriding or listing topics that don't fit the convention.
+        if (allowedKafkaTopics.contains(topicNameInConfig)) {
+            LOG.debug("Topic '{}' found in explicit whitelist.", topicNameInConfig);
             return true;
         }
-        // More advanced: try to resolve known variables if any are used
-        // Example: "${pipelineId}.${stepId}.output"
-        String resolvedTopic = pattern.replace("${clusterId}", clusterName) // if you had clusterId
-                .replace("${pipelineId}", pipelineName)
-                .replace("${stepId}", step.pipelineStepId());
-        // If after resolution it's different from original pattern and is in allowed list
-        if (!resolvedTopic.equals(pattern) && allowedKafkaTopics.contains(resolvedTopic)) {
+        if (!resolvedTopic.equals(topicNameInConfig) && allowedKafkaTopics.contains(resolvedTopic)) {
+            LOG.debug("Topic '{}' (resolved to '{}') found in explicit whitelist.", topicNameInConfig, resolvedTopic);
             return true;
         }
 
-        // If it looks like a pattern with unresolved variables, it's harder to validate directly
-        // against a list of explicit topic names without a clear convention or an allowed patterns list.
-        // For now, if it's not directly in the list and doesn't simply resolve to one, assume it's problematic
-        // unless specific pattern-matching rules are in place for whitelisting.
-        // This indicates a potential gap if you use complex patterns that aren't explicitly enumerated
-        // or covered by a whitelisted pattern rule.
-        if (resolvedTopic.contains("${")) { // Still contains unresolved placeholders
-            LOG.warn("Publish pattern '{}' for step '{}' contains unresolved variables and is not directly whitelisted.", pattern, step.pipelineStepId());
-            // Depending on policy, this could be an error or a warning.
-            // For strict whitelisting of final topic names, this would be an error if not directly matched.
-            return false; // Defaulting to false if it's a pattern that doesn't resolve to a whitelisted topic
+        // 3. If not explicitly whitelisted, check if the resolved topic matches the naming convention.
+        //    Only check convention if the topic is fully resolved (no more template variables).
+        if (!resolvedTopic.contains("${")) {
+            // We pass currentPipelineName and currentStepName to ensure the conventional topic
+            // actually matches the context it's being used in.
+            if (topicMatchesNamingConvention(resolvedTopic, currentPipelineName, currentStepName)) {
+                LOG.debug("Topic '{}' (resolved to '{}') matches naming convention for pipeline '{}' and step '{}'.",
+                        topicNameInConfig, resolvedTopic, currentPipelineName, currentStepName);
+                return true;
+            }
+        } else {
+            // Topic still contains unresolved ${...} variables after attempting resolution.
+            LOG.warn("Topic '{}' from config for pipeline '{}', step '{}' still contains unresolved variables ('{}') after attempted resolution. " +
+                            "Cannot check against naming convention and not found in explicit whitelist.",
+                    topicNameInConfig, currentPipelineName, currentStepName, resolvedTopic);
+            return false;
         }
 
-        // If it resolved to something but that something isn't in the list
-        return allowedKafkaTopics.contains(resolvedTopic);
+        // 4. If not in explicit list and not matching convention (after attempting resolution).
+        LOG.debug("Topic '{}' (resolved to '{}') for pipeline '{}', step '{}' is not explicitly whitelisted and does not match naming convention.",
+                topicNameInConfig, resolvedTopic, currentPipelineName, currentStepName);
+        return false;
     }
 }

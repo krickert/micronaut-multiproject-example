@@ -1,6 +1,6 @@
 package com.krickert.search.config.consul.validator;
 
-import com.krickert.search.config.pipeline.model.*;
+import com.krickert.search.config.pipeline.model.*; // Ensure KafkaInputDefinition is imported if not covered by *
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,21 +8,6 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.function.Function;
 
-/**
- * Validates the referential integrity of a PipelineClusterConfig.
- * <br/>
- * This validator ensures that:
- * 1. Basic structure of PipelineClusterConfig and its main components are sound (null checks, name presence).
- * 2. Pipeline step implementation IDs reference valid modules in the available modules map.
- * 3. Step IDs are unique within each pipeline and match their map keys.
- * 4. Pipeline names are unique within the graph and match their map keys.
- * 5. For Kafka/gRPC transport types, the respective configuration objects (kafkaConfig/grpcConfig) are present.
- * (Note: The record constructors for PipelineStepConfig, KafkaTransportConfig, GrpcTransportConfig
- * already handle many low-level null/blank checks for their direct fields.)
- * 6. Referenced 'nextSteps' and 'errorSteps' exist as valid step IDs within the same pipeline.
- * <br/>
- * The validator is designed to collect all errors rather than failing fast on the first error.
- */
 @Singleton
 public class ReferentialIntegrityValidator implements ClusterValidationRule {
     private static final Logger LOG = LoggerFactory.getLogger(ReferentialIntegrityValidator.class);
@@ -36,169 +21,221 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
             errors.add("PipelineClusterConfig is null.");
             return errors;
         }
-        // clusterConfig.clusterName() is validated by its record constructor
-
-        LOG.debug("Performing referential integrity checks for cluster: {}", clusterConfig.clusterName());
+        final String currentClusterName = clusterConfig.clusterName();
+        LOG.debug("Performing referential integrity checks for cluster: {}", currentClusterName);
 
         Map<String, PipelineModuleConfiguration> availableModules =
                 (clusterConfig.pipelineModuleMap() != null && clusterConfig.pipelineModuleMap().availableModules() != null) ?
                         clusterConfig.pipelineModuleMap().availableModules() : Collections.emptyMap();
 
         if (clusterConfig.pipelineGraphConfig() == null) {
-            LOG.debug("PipelineGraphConfig is null in cluster: {}. No pipelines to validate further.", clusterConfig.clusterName());
-            // If there are defined modules or allowed topics/services, but no pipelines, it might be an anomaly
-            // but not strictly a referential integrity issue of the (non-existent) pipelines themselves.
-            return errors; // No pipelines to check steps for.
+            LOG.debug("PipelineGraphConfig is null in cluster: {}. No pipelines to validate further.", currentClusterName);
+            return errors;
         }
         if (clusterConfig.pipelineGraphConfig().pipelines() == null) {
-            // This should be prevented by PipelineGraphConfig constructor (defaults to empty map)
-            errors.add(String.format("PipelineGraphConfig.pipelines map is null in cluster '%s'.", clusterConfig.clusterName()));
+            errors.add(String.format("PipelineGraphConfig.pipelines map is null in cluster '%s'.", currentClusterName));
             return errors; // Cannot proceed.
         }
 
-        // Check for pipeline name uniqueness and consistency
-        Set<String> pipelineKeysInGraph = clusterConfig.pipelineGraphConfig().pipelines().keySet();
         Set<String> declaredPipelineNames = new HashSet<>();
-
         for (Map.Entry<String, PipelineConfig> pipelineEntry : clusterConfig.pipelineGraphConfig().pipelines().entrySet()) {
-            String pipelineKey = pipelineEntry.getKey(); // Key from the map
+            String pipelineKey = pipelineEntry.getKey();
             PipelineConfig pipeline = pipelineEntry.getValue();
-
-            String pipelineContextForKey = String.format("Pipeline with map key '%s' in cluster '%s'", pipelineKey, clusterConfig.clusterName());
+            String pipelineContextForKey = String.format("Pipeline with map key '%s' in cluster '%s'", pipelineKey, currentClusterName);
 
             if (pipelineKey == null || pipelineKey.isBlank()) {
-                errors.add(String.format("Pipeline map in cluster '%s' contains a null or blank key.", clusterConfig.clusterName()));
-                continue; // Cannot reliably process this entry.
+                errors.add(String.format("Pipeline map in cluster '%s' contains a null or blank key.", currentClusterName));
+                continue;
             }
-
             if (pipeline == null) {
                 errors.add(String.format("%s: definition is null.", pipelineContextForKey));
                 continue;
             }
-            // pipeline.name() is validated by its record constructor not to be null/blank.
-            if (!pipelineKey.equals(pipeline.name())) {
+             if (pipeline.name() == null || pipeline.name().isBlank()) { // Ensure pipeline name itself is valid
+                errors.add(String.format("%s: pipeline name field is null or blank.", pipelineContextForKey));
+                // continue; // Don't continue if we want to check key mismatch even with bad name
+            }
+
+            if (pipeline.name() != null && !pipelineKey.equals(pipeline.name())) {
                 errors.add(String.format("%s: map key '%s' does not match its name field '%s'.",
                         pipelineContextForKey, pipelineKey, pipeline.name()));
             }
-            if (!declaredPipelineNames.add(pipeline.name())) {
+            if (pipeline.name() != null && !pipeline.name().isBlank() && !declaredPipelineNames.add(pipeline.name())) {
                 errors.add(String.format("Duplicate pipeline name '%s' found in cluster '%s'. Pipeline names must be unique.",
-                        pipeline.name(), clusterConfig.clusterName()));
+                        pipeline.name(), currentClusterName));
             }
 
-            // Proceed with step validation
             if (pipeline.pipelineSteps() == null) {
-                // This should be prevented by PipelineConfig constructor (defaults to empty map)
-                errors.add(String.format("Pipeline '%s' (cluster '%s') has a null pipelineSteps map.", pipeline.name(), clusterConfig.clusterName()));
+                errors.add(String.format("Pipeline '%s' (cluster '%s') has a null pipelineSteps map.",
+                        (pipeline.name() != null ? pipeline.name() : pipelineKey), currentClusterName));
                 continue;
             }
 
-            Set<String> stepKeysInPipeline = pipeline.pipelineSteps().keySet();
-            Set<String> declaredStepIdsInPipeline = new HashSet<>();
-
+            Set<String> declaredStepNamesInPipeline = new HashSet<>();
             for (Map.Entry<String, PipelineStepConfig> stepEntry : pipeline.pipelineSteps().entrySet()) {
-                String stepKey = stepEntry.getKey(); // Key from the map
+                String stepKey = stepEntry.getKey();
                 PipelineStepConfig step = stepEntry.getValue();
                 String stepContextForKey = String.format("Step with map key '%s' in pipeline '%s' (cluster '%s')",
-                        stepKey, pipeline.name(), clusterConfig.clusterName());
+                        stepKey, (pipeline.name() != null ? pipeline.name() : pipelineKey), currentClusterName);
 
                 if (stepKey == null || stepKey.isBlank()) {
                     errors.add(String.format("Pipeline '%s' (cluster '%s') contains a step with a null or blank map key.",
-                            pipeline.name(), clusterConfig.clusterName()));
-                    continue; // Cannot reliably process.
+                            (pipeline.name() != null ? pipeline.name() : pipelineKey), currentClusterName));
+                    continue;
                 }
-
                 if (step == null) {
                     errors.add(String.format("%s: definition is null.", stepContextForKey));
                     continue;
                 }
+                if (step.stepName() == null || step.stepName().isBlank()) {
+                    errors.add(String.format("%s: stepName field is null or blank.", stepContextForKey));
+                    // continue; // Don't continue if we want to check key mismatch
+                }
 
-                // step.pipelineStepId() is validated by its record constructor not to be null/blank.
-                // Use actual stepId for context from here on.
+                String currentStepNameForContext = (step.stepName() != null && !step.stepName().isBlank()) ? step.stepName() : stepKey;
                 String currentStepContext = String.format("Step '%s' in pipeline '%s' (cluster '%s')",
-                        step.pipelineStepId(), pipeline.name(), clusterConfig.clusterName());
+                        currentStepNameForContext, (pipeline.name() != null ? pipeline.name() : pipelineKey), currentClusterName);
 
-                if (!stepKey.equals(step.pipelineStepId())) {
-                    errors.add(String.format("%s: map key '%s' does not match its pipelineStepId field '%s'.",
-                            stepContextForKey, stepKey, step.pipelineStepId()));
+
+                if (step.stepName() != null && !stepKey.equals(step.stepName())) {
+                    errors.add(String.format("%s: map key '%s' does not match its stepName field '%s'.",
+                            stepContextForKey, stepKey, step.stepName()));
                 }
-                if (!declaredStepIdsInPipeline.add(step.pipelineStepId())) {
-                    errors.add(String.format("Duplicate step ID '%s' found in pipeline '%s' (cluster '%s').",
-                            step.pipelineStepId(), pipeline.name(), clusterConfig.clusterName()));
+                if (step.stepName() != null && !step.stepName().isBlank() && !declaredStepNamesInPipeline.add(step.stepName())) {
+                    errors.add(String.format("Duplicate stepName '%s' found in pipeline '%s' (cluster '%s').",
+                            step.stepName(), (pipeline.name() != null ? pipeline.name() : pipelineKey), currentClusterName));
                 }
 
-                // Check pipelineImplementationId
-                // (step.pipelineImplementationId() validated by its record constructor not null/blank)
-                if (!availableModules.containsKey(step.pipelineImplementationId())) {
-                    errors.add(String.format("%s references unknown pipelineImplementationId '%s'. Available modules: %s",
-                            currentStepContext, step.pipelineImplementationId(), availableModules.keySet()));
+                // Check processorInfo and its link to availableModules
+                String implementationKey = null;
+                if (step.processorInfo() != null) { // processorInfo is @NotNull
+                    if (step.processorInfo().grpcServiceName() != null && !step.processorInfo().grpcServiceName().isBlank()) {
+                        implementationKey = step.processorInfo().grpcServiceName();
+                    } else if (step.processorInfo().internalProcessorBeanName() != null && !step.processorInfo().internalProcessorBeanName().isBlank()) {
+                        implementationKey = step.processorInfo().internalProcessorBeanName();
+                    } else {
+                         // This case should be prevented by ProcessorInfo constructor validation
+                        errors.add(String.format("%s: processorInfo must have either grpcServiceName or internalProcessorBeanName correctly set.", currentStepContext));
+                    }
                 } else {
-                    // SchemaReference in PipelineModuleConfiguration is validated by its own record constructor.
-                    PipelineModuleConfiguration module = availableModules.get(step.pipelineImplementationId());
-                    if (module != null && step.customConfig() != null && (step.customConfig().jsonConfig() != null && !step.customConfig().jsonConfig().equals(JsonConfigOptions.DEFAULT_EMPTY_JSON)) && module.customConfigSchemaReference() == null) {
-                        errors.add(String.format("%s has customConfig but its module '%s' does not define a customConfigSchemaReference.",
-                                currentStepContext, module.implementationId()));
-                    }
+                    // This should be prevented by PipelineStepConfig constructor making processorInfo @NotNull
+                    errors.add(String.format("%s: processorInfo is null, which should be prevented by model constraints.", currentStepContext));
                 }
 
-                // Check transport type specific configurations
-                // The PipelineStepConfig constructor already validates that if transportType is KAFKA,
-                // kafkaConfig is non-null, and grpcConfig is null (and vice-versa for GRPC).
-                // So, we mainly check elements within those configs if they exist.
-
-                if (step.transportType() == TransportType.KAFKA) {
-                    KafkaTransportConfig kafkaConfig = step.kafkaConfig(); // Should be non-null
-                    if (kafkaConfig != null) { // Defensive check
-                        // listenTopics elements & publishTopicPattern null/blank are handled by KafkaTransportConfig constructor
-                        // kafkaProperties keys/values null/blank checks
-                        if (kafkaConfig.kafkaProperties() != null) {
-                            for(Map.Entry<String, String> propEntry : kafkaConfig.kafkaProperties().entrySet()){
-                                if(propEntry.getKey() == null || propEntry.getKey().isBlank()){
-                                    errors.add(String.format("%s kafkaConfig.kafkaProperties contains a null or blank key.", currentStepContext));
-                                }
-                                if(propEntry.getValue() == null){
-                                    errors.add(String.format("%s kafkaConfig.kafkaProperties contains a null value for key '%s'.", currentStepContext, propEntry.getKey()));
-                                }
-                            }
+                if (implementationKey != null) {
+                    if (!availableModules.containsKey(implementationKey)) {
+                        errors.add(String.format("%s references unknown implementationKey '%s' (from processorInfo). Available module implementationIds: %s",
+                                currentStepContext, implementationKey, availableModules.keySet()));
+                    } else {
+                        PipelineModuleConfiguration module = availableModules.get(implementationKey);
+                        if (module != null && step.customConfig() != null &&
+                            (step.customConfig().jsonConfig() != null || (step.customConfig().configParams() != null && !step.customConfig().configParams().isEmpty())) &&
+                             module.customConfigSchemaReference() == null && (step.customConfigSchemaId() == null || step.customConfigSchemaId().isBlank())) {
+                            errors.add(String.format("%s has customConfig but its module '%s' does not define a customConfigSchemaReference, and step does not define customConfigSchemaId.",
+                                    currentStepContext, module.implementationId()));
                         }
-                    }
-                } else if (step.transportType() == TransportType.GRPC) {
-                    GrpcTransportConfig grpcConfig = step.grpcConfig(); // Should be non-null
-                    if (grpcConfig != null) { // Defensive check
-                        // serviceId non-null/blank is handled by GrpcTransportConfig constructor
-                        // grpcProperties keys/values null/blank checks
-                        if (grpcConfig.grpcProperties() != null) {
-                            for(Map.Entry<String, String> propEntry : grpcConfig.grpcProperties().entrySet()){
-                                if(propEntry.getKey() == null || propEntry.getKey().isBlank()){
-                                    errors.add(String.format("%s grpcConfig.grpcProperties contains a null or blank key.", currentStepContext));
-                                }
-                                if(propEntry.getValue() == null){
-                                    errors.add(String.format("%s grpcConfig.grpcProperties contains a null value for key '%s'.", currentStepContext, propEntry.getKey()));
-                                }
+                        if (step.customConfigSchemaId() != null && !step.customConfigSchemaId().isBlank() && module != null && module.customConfigSchemaReference() != null) {
+                            // Using toIdentifier() as fixed previously
+                            if (!step.customConfigSchemaId().equals(module.customConfigSchemaReference().toIdentifier())) {
+                                LOG.warn("{}: step's customConfigSchemaId ('{}') differs from module's schema reference identifier ('{}'). Assuming step's ID is an override or specific reference.",
+                                         currentStepContext, step.customConfigSchemaId(), module.customConfigSchemaReference().toIdentifier());
                             }
                         }
                     }
                 }
+                
+                // Validate KafkaInputDefinition if present
+                if (step.kafkaInputs() != null) {
+                    for (int i = 0; i < step.kafkaInputs().size(); i++) {
+                        KafkaInputDefinition inputDef = step.kafkaInputs().get(i);
+                        String inputContext = String.format("%s, kafkaInput #%d", currentStepContext, i + 1);
+                        if (inputDef == null) {
+                            errors.add(String.format("%s: definition is null.", inputContext));
+                            continue;
+                        }
+                        // listenTopics @NotEmpty and elements non-blank is handled by KafkaInputDefinition constructor
+                        // consumerGroupId is optional
+                        if (inputDef.kafkaConsumerProperties() != null) {
+                            for(Map.Entry<String, String> propEntry : inputDef.kafkaConsumerProperties().entrySet()){
+                                if(propEntry.getKey() == null || propEntry.getKey().isBlank()){
+                                    errors.add(String.format("%s kafkaConsumerProperties contains a null or blank key.", inputContext));
+                                }
+                                // Null values for Kafka properties might be acceptable.
+                            }
+                        }
+                    }
+                }
 
-                // Validate that nextSteps and errorSteps refer to existing step IDs within the current pipeline
-                Set<String> currentPipelineStepIds = pipeline.pipelineSteps().keySet(); // More direct than declaredStepIdsInPipeline for lookup
-                validateStepReferences(errors, step.nextSteps(), currentPipelineStepIds, "nextSteps", currentStepContext, pipeline.name());
-                validateStepReferences(errors, step.errorSteps(), currentPipelineStepIds, "errorSteps", currentStepContext, pipeline.name());
 
+                // Validate transport properties within each OutputTarget
+                if (step.outputs() != null) {
+                    for (Map.Entry<String, PipelineStepConfig.OutputTarget> outputEntry : step.outputs().entrySet()) {
+                        String outputKey = outputEntry.getKey();
+                        PipelineStepConfig.OutputTarget outputTarget = outputEntry.getValue();
+                        String outputContext = String.format("%s, output '%s'", currentStepContext, outputKey);
+
+                        if (outputTarget == null) {
+                            errors.add(String.format("%s: definition is null.", outputContext));
+                            continue;
+                        }
+
+                        if (outputTarget.transportType() == TransportType.KAFKA && outputTarget.kafkaTransport() != null) {
+                            KafkaTransportConfig kafkaConfig = outputTarget.kafkaTransport();
+                            if (kafkaConfig.kafkaProducerProperties() != null) {
+                                for(Map.Entry<String, String> propEntry : kafkaConfig.kafkaProducerProperties().entrySet()){
+                                    if(propEntry.getKey() == null || propEntry.getKey().isBlank()){
+                                        errors.add(String.format("%s kafkaTransport.kafkaProducerProperties contains a null or blank key.", outputContext));
+                                    }
+                                }
+                            }
+                        } else if (outputTarget.transportType() == TransportType.GRPC && outputTarget.grpcTransport() != null) {
+                            GrpcTransportConfig grpcConfig = outputTarget.grpcTransport();
+                            if (grpcConfig.grpcClientProperties() != null) {
+                                for(Map.Entry<String, String> propEntry : grpcConfig.grpcClientProperties().entrySet()){
+                                    if(propEntry.getKey() == null || propEntry.getKey().isBlank()){
+                                        errors.add(String.format("%s grpcTransport.grpcClientProperties contains a null or blank key.", outputContext));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Validate that targetStepName in outputs refer to existing step names within the current pipeline
+                if (step.outputs() != null) {
+                    Set<String> currentPipelineStepNames = pipeline.pipelineSteps().keySet();
+                    validateOutputTargetReferences(errors, step.outputs(), currentPipelineStepNames, currentStepContext, (pipeline.name() != null ? pipeline.name() : pipelineKey));
+                }
             } // End of step iteration
         } // End of pipeline iteration
         return errors;
     }
 
+    private void validateOutputTargetReferences(List<String> errors,
+                                                Map<String, PipelineStepConfig.OutputTarget> outputs,
+                                                Set<String> existingStepNamesInPipeline,
+                                                String sourceStepContext, String pipelineName) {
+        if (outputs == null) { // Should be handled by caller, but defensive.
+            return;
+        }
+        for (Map.Entry<String, PipelineStepConfig.OutputTarget> outputEntry : outputs.entrySet()) {
+            String outputKey = outputEntry.getKey();
+            PipelineStepConfig.OutputTarget outputTarget = outputEntry.getValue();
 
-    private void validateStepReferences(List<String> errors, List<String> referencedStepIds,
-                                        Set<String> existingStepKeysInPipeline, // Changed to Set<String> for direct key lookup
-                                        String referenceType, String sourceStepContext, String pipelineName) {
-        // referencedStepIds list itself is guaranteed non-null and its elements non-null/blank
-        // by PipelineStepConfig's constructor. This method checks for existence.
-        for (String referencedStepId : referencedStepIds) {
-            if (!existingStepKeysInPipeline.contains(referencedStepId)) {
-                errors.add(String.format("%s: %s contains reference to unknown step ID '%s' in pipeline '%s'. Available step IDs: %s",
-                        sourceStepContext, referenceType, referencedStepId, pipelineName, existingStepKeysInPipeline));
+            if (outputTarget == null) {
+                errors.add(String.format("%s: OutputTarget for key '%s' is null.", sourceStepContext, outputKey));
+                continue;
+            }
+            
+            // targetStepName non-null/blank is handled by OutputTarget constructor
+            if (outputTarget.targetStepName() != null && !outputTarget.targetStepName().isBlank()) { // Check again for safety
+                if (!existingStepNamesInPipeline.contains(outputTarget.targetStepName())) {
+                    errors.add(String.format("%s: output '%s' contains reference to unknown targetStepName '%s' in pipeline '%s'. Available step names: %s",
+                            sourceStepContext, outputKey, outputTarget.targetStepName(), pipelineName, existingStepNamesInPipeline));
+                }
+            } else {
+                 // This case should be caught by OutputTarget's constructor if targetStepName is @NotBlank
+                 errors.add(String.format("%s: output '%s' has a null or blank targetStepName (should be caught by model validation).", sourceStepContext, outputKey));
             }
         }
     }
