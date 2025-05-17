@@ -65,12 +65,22 @@ class PipelineStepConfigTest {
                 null, null
         ));
 
+        // Create a list of KafkaInputDefinition for testing
+        List<KafkaInputDefinition> kafkaInputs = List.of(
+                new KafkaInputDefinition(
+                        List.of("input-topic-1", "input-topic-2"),
+                        "test-consumer-group",
+                        Map.of("auto.offset.reset", "earliest")
+                )
+        );
+
         PipelineStepConfig config = new PipelineStepConfig(
                 "test-kafka-output-step",
                 StepType.PIPELINE,
                 "A step that outputs to Kafka",
                 "my-custom-schema-v1",
                 customConfig,
+                kafkaInputs,
                 outputs,
                 3,
                 2000L,
@@ -103,6 +113,16 @@ class PipelineStepConfigTest {
         assertEquals(60000L, deserialized.maxRetryBackoffMs());
         assertEquals(1.5, deserialized.retryBackoffMultiplier());
         assertEquals(10000L, deserialized.stepTimeoutMs());
+
+        // Verify kafkaInputs
+        assertNotNull(deserialized.kafkaInputs());
+        assertEquals(1, deserialized.kafkaInputs().size());
+        KafkaInputDefinition kafkaInput = deserialized.kafkaInputs().get(0);
+        assertEquals(2, kafkaInput.listenTopics().size());
+        assertTrue(kafkaInput.listenTopics().contains("input-topic-1"));
+        assertTrue(kafkaInput.listenTopics().contains("input-topic-2"));
+        assertEquals("test-consumer-group", kafkaInput.consumerGroupId());
+        assertEquals("earliest", kafkaInput.kafkaConsumerProperties().get("auto.offset.reset"));
 
         assertNotNull(deserialized.outputs());
         assertEquals(2, deserialized.outputs().size());
@@ -144,12 +164,22 @@ class PipelineStepConfigTest {
                 null
         ));
 
+        // Create a list of KafkaInputDefinition for testing
+        List<KafkaInputDefinition> kafkaInputs = List.of(
+                new KafkaInputDefinition(
+                        List.of("grpc-input-topic"),
+                        "grpc-consumer-group",
+                        Map.of("max.poll.records", "100")
+                )
+        );
+
         PipelineStepConfig config = new PipelineStepConfig(
                 "test-grpc-output-step",
                 StepType.PIPELINE,
                 "Outputs to gRPC",
                 null,
                 customConfig,
+                kafkaInputs,
                 outputs,
                 0,
                 1000L,
@@ -172,6 +202,16 @@ class PipelineStepConfigTest {
         assertNotNull(deserialized.customConfig());
         // CORRECTED ASSERTION:
         assertEquals("{\"serviceSpecific\":\"config\"}", deserialized.customConfig().jsonConfig().toString());
+
+        // Verify kafkaInputs
+        assertNotNull(deserialized.kafkaInputs());
+        assertEquals(1, deserialized.kafkaInputs().size());
+        KafkaInputDefinition kafkaInput = deserialized.kafkaInputs().get(0);
+        assertEquals(1, kafkaInput.listenTopics().size());
+        assertTrue(kafkaInput.listenTopics().contains("grpc-input-topic"));
+        assertEquals("grpc-consumer-group", kafkaInput.consumerGroupId());
+        assertEquals("100", kafkaInput.kafkaConsumerProperties().get("max.poll.records"));
+
         assertEquals(0, deserialized.maxRetries());
 
         assertNotNull(deserialized.outputs());
@@ -194,12 +234,23 @@ class PipelineStepConfigTest {
                 "internal-aggregator-module"
         );
         Map<String, PipelineStepConfig.OutputTarget> outputs = Collections.emptyMap();
+
+        // Create a list of KafkaInputDefinition for testing
+        List<KafkaInputDefinition> kafkaInputs = List.of(
+                new KafkaInputDefinition(
+                        List.of("sink-input-topic"),
+                        "sink-consumer-group",
+                        Map.of("enable.auto.commit", "true")
+                )
+        );
+
         PipelineStepConfig config = new PipelineStepConfig(
                 "final-internal-sink-step",
                 StepType.SINK,
                 "An internal sink step",
                 null,
                 null,
+                kafkaInputs,
                 outputs,
                 0, 1000L, 30000L, 2.0, null,
                 processorInfo
@@ -215,6 +266,16 @@ class PipelineStepConfigTest {
         assertEquals("internal-aggregator-module", deserialized.processorInfo().internalProcessorBeanName());
         assertNull(deserialized.processorInfo().grpcServiceName());
         assertNull(deserialized.customConfig());
+
+        // Verify kafkaInputs
+        assertNotNull(deserialized.kafkaInputs());
+        assertEquals(1, deserialized.kafkaInputs().size());
+        KafkaInputDefinition kafkaInput = deserialized.kafkaInputs().get(0);
+        assertEquals(1, kafkaInput.listenTopics().size());
+        assertTrue(kafkaInput.listenTopics().contains("sink-input-topic"));
+        assertEquals("sink-consumer-group", kafkaInput.consumerGroupId());
+        assertEquals("true", kafkaInput.kafkaConsumerProperties().get("enable.auto.commit"));
+
         assertTrue(deserialized.outputs().isEmpty());
     }
 
@@ -295,9 +356,19 @@ class PipelineStepConfigTest {
                 "error-step-id", TransportType.INTERNAL, null, null
         ));
 
+        // Create a list of KafkaInputDefinition for testing
+        List<KafkaInputDefinition> kafkaInputs = List.of(
+                new KafkaInputDefinition(
+                        List.of("json-test-topic"),
+                        "json-test-group",
+                        Map.of("client.id", "json-test-client")
+                )
+        );
+
         PipelineStepConfig config = new PipelineStepConfig(
                 "test-step-json", StepType.PIPELINE, "A JSON step", "schema-abc",
                 createJsonConfigOptions("{\"mode\":\"test\"}"),
+                kafkaInputs,
                 outputs, 1, 100L, 1000L, 1.0, 500L, processorInfo
         );
 
@@ -313,6 +384,21 @@ class PipelineStepConfigTest {
         assertTrue(stepNode.has("customConfigSchemaId") && "schema-abc".equals(stepNode.path("customConfigSchemaId").asText()));
         assertTrue(stepNode.has("customConfig"));
         assertEquals("{\"mode\":\"test\"}", stepNode.path("customConfig").path("jsonConfig").toString()); // Corrected
+
+        // Verify kafkaInputs in JSON
+        assertTrue(stepNode.has("kafkaInputs"));
+        assertTrue(stepNode.path("kafkaInputs").isArray());
+        assertEquals(1, stepNode.path("kafkaInputs").size());
+        JsonNode kafkaInputNode = stepNode.path("kafkaInputs").get(0);
+        assertTrue(kafkaInputNode.has("listenTopics"));
+        assertTrue(kafkaInputNode.path("listenTopics").isArray());
+        assertEquals(1, kafkaInputNode.path("listenTopics").size());
+        assertEquals("json-test-topic", kafkaInputNode.path("listenTopics").get(0).asText());
+        assertTrue(kafkaInputNode.has("consumerGroupId"));
+        assertEquals("json-test-group", kafkaInputNode.path("consumerGroupId").asText());
+        assertTrue(kafkaInputNode.has("kafkaConsumerProperties"));
+        assertEquals("json-test-client", kafkaInputNode.path("kafkaConsumerProperties").path("client.id").asText());
+
         assertTrue(stepNode.has("processorInfo"));
         assertEquals("test-module-grpc", stepNode.path("processorInfo").path("grpcServiceName").asText());
         assertTrue(stepNode.has("outputs"));
@@ -360,6 +446,16 @@ class PipelineStepConfigTest {
           "processorInfo": {
             "grpcServiceName": "image-processing-module-v2"
           },
+          "kafkaInputs": [
+            {
+              "listenTopics": ["raw-images", "reprocess-images"],
+              "consumerGroupId": "image-processor-group",
+              "kafkaConsumerProperties": {
+                "auto.offset.reset": "earliest",
+                "fetch.max.bytes": "52428800"
+              }
+            }
+          ],
           "outputs": {
             "default": {
               "targetStepName": "storeImageMetadata",
@@ -394,6 +490,18 @@ class PipelineStepConfigTest {
         assertEquals("DEBUG", config.customConfig().configParams().get("logLevel"));
         assertEquals(3, config.maxRetries());
         assertEquals(2000L, config.retryBackoffMs());
+
+        // Verify kafkaInputs
+        assertNotNull(config.kafkaInputs());
+        assertEquals(1, config.kafkaInputs().size());
+        KafkaInputDefinition kafkaInput = config.kafkaInputs().get(0);
+        assertEquals(2, kafkaInput.listenTopics().size());
+        assertTrue(kafkaInput.listenTopics().contains("raw-images"));
+        assertTrue(kafkaInput.listenTopics().contains("reprocess-images"));
+        assertEquals("image-processor-group", kafkaInput.consumerGroupId());
+        assertEquals("earliest", kafkaInput.kafkaConsumerProperties().get("auto.offset.reset"));
+        assertEquals("52428800", kafkaInput.kafkaConsumerProperties().get("fetch.max.bytes"));
+
         assertNotNull(config.outputs().get("default"));
         assertEquals("storeImageMetadata", config.outputs().get("default").targetStepName());
         assertEquals(TransportType.KAFKA, config.outputs().get("default").transportType());

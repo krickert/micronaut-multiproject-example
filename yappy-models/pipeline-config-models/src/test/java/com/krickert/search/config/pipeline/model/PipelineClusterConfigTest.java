@@ -92,12 +92,26 @@ class PipelineClusterConfigTest {
             }
         }
 
+        // Create a list of KafkaInputDefinition for testing
+        List<KafkaInputDefinition> kafkaInputs = Collections.emptyList();
+        if (processorNature == TransportType.KAFKA) {
+            // If this is a Kafka processor, add a sample KafkaInputDefinition
+            kafkaInputs = List.of(
+                    new KafkaInputDefinition(
+                            List.of("input-topic-for-" + stepName),
+                            "consumer-group-for-" + stepName,
+                            Map.of("auto.offset.reset", "earliest")
+                    )
+            );
+        }
+
         return new PipelineStepConfig(
                 stepName,
                 stepType == null ? com.krickert.search.config.pipeline.model.StepType.PIPELINE : stepType,
                 "Description for " + stepName,
                 "schema-for-" + moduleImplementationId, // customConfigSchemaId
                 configOptions,
+                kafkaInputs,
                 outputs,
                 0, 1000L, 30000L, 2.0, null, // Default retry/timeout
                 processorInfo

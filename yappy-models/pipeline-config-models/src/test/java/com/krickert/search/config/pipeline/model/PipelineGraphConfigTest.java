@@ -81,12 +81,22 @@ class PipelineGraphConfigTest {
                 )
         );
 
+        // Create a list of KafkaInputDefinition for testing
+        List<KafkaInputDefinition> kafkaInputs = List.of(
+                new KafkaInputDefinition(
+                        List.of("input-topic-for-kafka-test-step"),
+                        "consumer-group-for-kafka-test-step",
+                        Map.of("auto.offset.reset", "earliest")
+                )
+        );
+
         PipelineStepConfig kafkaStep = new PipelineStepConfig(
                 "kafka-test-step",
                 com.krickert.search.config.pipeline.model.StepType.PIPELINE,
                 "A Kafka test step",
                 null,
                 customConfig,
+                kafkaInputs,
                 outputs,
                 0,
                 1000L,
@@ -167,12 +177,22 @@ class PipelineGraphConfigTest {
                 )
         );
 
+        // Create a list of KafkaInputDefinition for testing
+        List<KafkaInputDefinition> kafkaInputs = List.of(
+                new KafkaInputDefinition(
+                        List.of("input-topic-for-grpc-test-step"),
+                        "consumer-group-for-grpc-test-step",
+                        Map.of("auto.offset.reset", "earliest")
+                )
+        );
+
         PipelineStepConfig grpcStep = new PipelineStepConfig(
                 "grpc-test-step",
                 com.krickert.search.config.pipeline.model.StepType.PIPELINE,
                 "A gRPC test step",
                 null,
                 customConfig,
+                kafkaInputs,
                 outputs,
                 0, 1000L, 30000L, 2.0, null,
                 processorInfo
@@ -221,11 +241,15 @@ class PipelineGraphConfigTest {
 
         Map<String, PipelineStepConfig.OutputTarget> outputs = Collections.emptyMap();
 
+        // Create an empty list of KafkaInputDefinition for internal step
+        List<KafkaInputDefinition> kafkaInputs = Collections.emptyList();
+
         PipelineStepConfig internalStep = new PipelineStepConfig(
                 "internal-test-step",
                 com.krickert.search.config.pipeline.model.StepType.PIPELINE,
                 "An internal test step",
                 null, null,
+                kafkaInputs,
                 outputs,
                 0, 1000L, 30000L, 2.0, null,
                 processorInfo
@@ -282,11 +306,21 @@ class PipelineGraphConfigTest {
                 null, null
         ));
 
+        // Create a list of KafkaInputDefinition for testing
+        List<KafkaInputDefinition> kafkaInputs = List.of(
+                new KafkaInputDefinition(
+                        List.of("input-topic-for-test-step"),
+                        "consumer-group-for-test-step",
+                        Map.of("auto.offset.reset", "earliest")
+                )
+        );
+
         PipelineStepConfig step = new PipelineStepConfig(
                 "test-step",
                 com.krickert.search.config.pipeline.model.StepType.PIPELINE,
                 "Test Description", "schema-id-123",
                 createJsonConfigOptions("{\"configKey\":\"configValue\"}"),
+                kafkaInputs,
                 outputs,
                 1, 2000L, 60000L, 1.5, 5000L,
                 processorInfo
