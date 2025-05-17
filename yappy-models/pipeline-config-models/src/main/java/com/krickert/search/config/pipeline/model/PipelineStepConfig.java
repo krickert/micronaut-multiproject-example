@@ -1,4 +1,3 @@
-// File: yappy-models/pipeline-config-models/src/main/java/com/krickert/search/config/pipeline/model/PipelineStepConfig.java
 package com.krickert.search.config.pipeline.model;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -17,37 +16,37 @@ import java.util.Objects;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record PipelineStepConfig(
-    @JsonProperty("stepName") @NotBlank String stepName,
-    @JsonProperty("stepType") @NotNull StepType stepType,
-    @JsonProperty("description") String description,
-    @JsonProperty("customConfigSchemaId") String customConfigSchemaId,
-    @JsonProperty("customConfig") @Valid JsonConfigOptions customConfig, // Inner record JsonConfigOptions
-    @JsonProperty("kafkaInputs") @Valid List<KafkaInputDefinition> kafkaInputs,
-    @JsonProperty("outputs") @Valid Map<String, OutputTarget> outputs,
-    @JsonProperty("maxRetries") Integer maxRetries,
-    @JsonProperty("retryBackoffMs") Long retryBackoffMs,
-    @JsonProperty("maxRetryBackoffMs") Long maxRetryBackoffMs,
-    @JsonProperty("retryBackoffMultiplier") Double retryBackoffMultiplier,
-    @JsonProperty("stepTimeoutMs") Long stepTimeoutMs,
-    @JsonProperty("processorInfo") @NotNull(message = "Processor information (processorInfo) must be provided.") @Valid ProcessorInfo processorInfo
-) {
-
-    // Canonical constructor (as provided by you, with validation)
-    @JsonCreator
-    public PipelineStepConfig(
-        @JsonProperty("stepName") String stepName,
-        @JsonProperty("stepType") StepType stepType,
+        @JsonProperty("stepName") @NotBlank String stepName,
+        @JsonProperty("stepType") @NotNull StepType stepType,
         @JsonProperty("description") String description,
         @JsonProperty("customConfigSchemaId") String customConfigSchemaId,
-        @JsonProperty("customConfig") JsonConfigOptions customConfig,
-        @JsonProperty("kafkaInputs") List<KafkaInputDefinition> kafkaInputs,
-        @JsonProperty("outputs") Map<String, OutputTarget> outputs,
+        @JsonProperty("customConfig") @Valid JsonConfigOptions customConfig, // Inner record JsonConfigOptions
+        @JsonProperty("kafkaInputs") @Valid List<KafkaInputDefinition> kafkaInputs,
+        @JsonProperty("outputs") @Valid Map<String, OutputTarget> outputs,
         @JsonProperty("maxRetries") Integer maxRetries,
         @JsonProperty("retryBackoffMs") Long retryBackoffMs,
         @JsonProperty("maxRetryBackoffMs") Long maxRetryBackoffMs,
         @JsonProperty("retryBackoffMultiplier") Double retryBackoffMultiplier,
         @JsonProperty("stepTimeoutMs") Long stepTimeoutMs,
-        @JsonProperty("processorInfo") ProcessorInfo processorInfo
+        @JsonProperty("processorInfo") @NotNull(message = "Processor information (processorInfo) must be provided.") @Valid ProcessorInfo processorInfo
+) {
+
+    // Canonical constructor (as provided by you, with validation)
+    @JsonCreator
+    public PipelineStepConfig(
+            @JsonProperty("stepName") String stepName,
+            @JsonProperty("stepType") StepType stepType,
+            @JsonProperty("description") String description,
+            @JsonProperty("customConfigSchemaId") String customConfigSchemaId,
+            @JsonProperty("customConfig") JsonConfigOptions customConfig,
+            @JsonProperty("kafkaInputs") List<KafkaInputDefinition> kafkaInputs,
+            @JsonProperty("outputs") Map<String, OutputTarget> outputs,
+            @JsonProperty("maxRetries") Integer maxRetries,
+            @JsonProperty("retryBackoffMs") Long retryBackoffMs,
+            @JsonProperty("maxRetryBackoffMs") Long maxRetryBackoffMs,
+            @JsonProperty("retryBackoffMultiplier") Double retryBackoffMultiplier,
+            @JsonProperty("stepTimeoutMs") Long stepTimeoutMs,
+            @JsonProperty("processorInfo") ProcessorInfo processorInfo
     ) {
         this.stepName = Objects.requireNonNull(stepName, "stepName cannot be null");
         if (stepName.isBlank()) throw new IllegalArgumentException("stepName cannot be blank");
@@ -68,16 +67,55 @@ public record PipelineStepConfig(
 
         // ProcessorInfo validation
         if (this.processorInfo.grpcServiceName() != null && !this.processorInfo.grpcServiceName().isBlank() &&
-            this.processorInfo.internalProcessorBeanName() != null && !this.processorInfo.internalProcessorBeanName().isBlank()) {
+                this.processorInfo.internalProcessorBeanName() != null && !this.processorInfo.internalProcessorBeanName().isBlank()) {
             throw new IllegalArgumentException("ProcessorInfo cannot have both grpcServiceName and internalProcessorBeanName set.");
         }
         if ((this.processorInfo.grpcServiceName() == null || this.processorInfo.grpcServiceName().isBlank()) &&
-            (this.processorInfo.internalProcessorBeanName() == null || this.processorInfo.internalProcessorBeanName().isBlank())) {
+                (this.processorInfo.internalProcessorBeanName() == null || this.processorInfo.internalProcessorBeanName().isBlank())) {
             throw new IllegalArgumentException("ProcessorInfo must have either grpcServiceName or internalProcessorBeanName set.");
         }
     }
 
     // --- START: Added Helper Constructors ---
+
+    /**
+     * Constructor matching the parameters:
+     * stepName, stepType, description, customConfigSchemaId, customConfig,
+     * outputs, maxRetries, retryBackoffMs, maxRetryBackoffMs,
+     * retryBackoffMultiplier, stepTimeoutMs, processorInfo.
+     * Defaults kafkaInputs to an empty list.
+     */
+    public PipelineStepConfig(
+            String stepName,
+            StepType stepType,
+            String description,
+            String customConfigSchemaId,
+            JsonConfigOptions customConfig,
+            Map<String, OutputTarget> outputs,
+            Integer maxRetries,
+            Long retryBackoffMs,
+            Long maxRetryBackoffMs,
+            Double retryBackoffMultiplier,
+            Long stepTimeoutMs,
+            ProcessorInfo processorInfo
+    ) {
+        this(
+                stepName,
+                stepType,
+                description,
+                customConfigSchemaId,
+                customConfig,
+                Collections.emptyList(), // Default for kafkaInputs
+                outputs,
+                maxRetries,
+                retryBackoffMs,
+                maxRetryBackoffMs,
+                retryBackoffMultiplier,
+                stepTimeoutMs,
+                processorInfo
+        );
+    }
+
     public PipelineStepConfig(
             String stepName,
             StepType stepType,
@@ -117,11 +155,11 @@ public record PipelineStepConfig(
             ProcessorInfo processorInfo
     ) {
         this(
-            stepName,
-            stepType,
-            processorInfo,
-            new PipelineStepConfig.JsonConfigOptions(JsonNodeFactory.instance.objectNode(), Collections.emptyMap()), // Default empty custom config
-            null
+                stepName,
+                stepType,
+                processorInfo,
+                new PipelineStepConfig.JsonConfigOptions(JsonNodeFactory.instance.objectNode(), Collections.emptyMap()), // Default empty custom config
+                null
         );
     }
     // --- END: Added Helper Constructors ---
@@ -133,13 +171,13 @@ public record PipelineStepConfig(
     // Ensuring the JsonConfigOptions inner record is what we expect:
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record JsonConfigOptions(
-        @JsonProperty("jsonConfig") JsonNode jsonConfig, // This should be JsonNode
-        @JsonProperty("configParams") Map<String, String> configParams
+            @JsonProperty("jsonConfig") JsonNode jsonConfig, // This should be JsonNode
+            @JsonProperty("configParams") Map<String, String> configParams
     ) {
         @JsonCreator
         public JsonConfigOptions(
-            @JsonProperty("jsonConfig") JsonNode jsonConfig,
-            @JsonProperty("configParams") Map<String, String> configParams
+                @JsonProperty("jsonConfig") JsonNode jsonConfig,
+                @JsonProperty("configParams") Map<String, String> configParams
         ) {
             this.jsonConfig = jsonConfig; // Can be null if not provided in JSON
             this.configParams = (configParams == null) ? Collections.emptyMap() : Map.copyOf(configParams);
@@ -149,7 +187,7 @@ public record PipelineStepConfig(
         public JsonConfigOptions(JsonNode jsonNode) {
             this(jsonNode, Collections.emptyMap());
         }
-         // Convenience for tests if only configParams are needed
+        // Convenience for tests if only configParams are needed
         public JsonConfigOptions(Map<String, String> configParams) {
             this(null, configParams); // Or JsonNodeFactory.instance.objectNode() if jsonConfig should never be null in the object
         }
@@ -157,17 +195,17 @@ public record PipelineStepConfig(
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record OutputTarget(
-        @JsonProperty("targetStepName") @NotBlank String targetStepName,
-        @JsonProperty("transportType") @NotNull TransportType transportType,
-        @JsonProperty("grpcTransport") @Valid GrpcTransportConfig grpcTransport,
-        @JsonProperty("kafkaTransport") @Valid KafkaTransportConfig kafkaTransport
+            @JsonProperty("targetStepName") @NotBlank String targetStepName,
+            @JsonProperty("transportType") @NotNull TransportType transportType,
+            @JsonProperty("grpcTransport") @Valid GrpcTransportConfig grpcTransport,
+            @JsonProperty("kafkaTransport") @Valid KafkaTransportConfig kafkaTransport
     ) {
         @JsonCreator
         public OutputTarget(
-            @JsonProperty("targetStepName") String targetStepName,
-            @JsonProperty("transportType") TransportType transportType,
-            @JsonProperty("grpcTransport") GrpcTransportConfig grpcTransport,
-            @JsonProperty("kafkaTransport") KafkaTransportConfig kafkaTransport
+                @JsonProperty("targetStepName") String targetStepName,
+                @JsonProperty("transportType") TransportType transportType,
+                @JsonProperty("grpcTransport") GrpcTransportConfig grpcTransport,
+                @JsonProperty("kafkaTransport") KafkaTransportConfig kafkaTransport
         ) {
             this.targetStepName = Objects.requireNonNull(targetStepName, "targetStepName cannot be null");
             if (this.targetStepName.isBlank()) throw new IllegalArgumentException("targetStepName cannot be blank");
@@ -193,13 +231,13 @@ public record PipelineStepConfig(
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record ProcessorInfo(
-        @JsonProperty("grpcServiceName") String grpcServiceName,
-        @JsonProperty("internalProcessorBeanName") String internalProcessorBeanName
-    ) {
-         @JsonCreator
-        public ProcessorInfo(
             @JsonProperty("grpcServiceName") String grpcServiceName,
             @JsonProperty("internalProcessorBeanName") String internalProcessorBeanName
+    ) {
+        @JsonCreator
+        public ProcessorInfo(
+                @JsonProperty("grpcServiceName") String grpcServiceName,
+                @JsonProperty("internalProcessorBeanName") String internalProcessorBeanName
         ) {
             boolean grpcSet = grpcServiceName != null && !grpcServiceName.isBlank();
             boolean beanSet = internalProcessorBeanName != null && !internalProcessorBeanName.isBlank();
