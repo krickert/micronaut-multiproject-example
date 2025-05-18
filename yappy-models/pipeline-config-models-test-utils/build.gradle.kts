@@ -29,6 +29,9 @@ dependencies {
     implementation("com.fasterxml.jackson.module:jackson-module-parameter-names:2.19.0")
     implementation(mn.jackson.databind)
 
+    // JSON Schema validation
+    implementation("com.networknt:json-schema-validator:1.5.6")
+
     // Annotation processors
     annotationProcessor(libs.lombok)
     compileOnly(libs.lombok)
