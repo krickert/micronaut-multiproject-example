@@ -1,0 +1,7 @@
+{
+  "subject": "test-schema",
+  "version": 1,
+  "schemaContent": "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}}}",
+  "schemaType": "JSON_SCHEMA",
+  "createdAt": "2023-01-01T00:00:00Z"
+}

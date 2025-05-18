@@ -1,55 +1,43 @@
-package com.krickert.search.config.pipeline.model; // Or your chosen package
+// File: yappy-models/pipeline-config-models/src/main/java/com/krickert/search/config/pipeline/model/KafkaTransportConfig.java
+package com.krickert.search.config.pipeline.model;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
+import lombok.Builder;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Collections;
-import java.util.Objects;
 
-/**
- * Configuration specific to Kafka transport for a pipeline step.
- *
- * @param listenTopics Topics this step consumes from. Can be empty if the step only publishes.
- * @param publishTopicPattern Pattern for the topic this step publishes its output to
- * (e.g., "${pipelineId}.${stepId}.output"). Can be null if the step only consumes.
- * @param kafkaProperties Additional Kafka consumer/producer properties specific to this step.
- */
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@Builder
 public record KafkaTransportConfig(
-    @JsonProperty("listenTopics") List<String> listenTopics,
-    @JsonProperty("publishTopicPattern") String publishTopicPattern,
-    @JsonProperty("kafkaProperties") Map<String, String> kafkaProperties
+    // For an OutputTarget, 'topic' is the primary field.
+    // The old model's KafkaTransportConfig was multi-purpose.
+    // Let's simplify for an OutputTarget context.
+    @JsonProperty("topic") String topic, // Target topic to publish to
+    // Consider if partitions/replicationFactor are relevant for an *output target's* config.
+    // They are usually for topic creation/definition, not for a producer client.
+    // @JsonProperty("partitions") Integer partitions,
+    // @JsonProperty("replicationFactor") Integer replicationFactor,
+    @JsonProperty("kafkaProducerProperties") Map<String, String> kafkaProducerProperties // Specific properties for the producer for THIS output
 ) {
-    @JsonCreator // Important for Jackson deserialization with records if custom logic/defaults exist
+    @JsonCreator
     public KafkaTransportConfig(
-        @JsonProperty("listenTopics") List<String> listenTopics,
-        @JsonProperty("publishTopicPattern") String publishTopicPattern,
-        @JsonProperty("kafkaProperties") Map<String, String> kafkaProperties
+        @JsonProperty("topic") String topic,
+        // @JsonProperty("partitions") Integer partitions,
+        // @JsonProperty("replicationFactor") Integer replicationFactor,
+        @JsonProperty("kafkaProducerProperties") Map<String, String> kafkaProducerProperties
     ) {
-        this.listenTopics = (listenTopics == null) ? Collections.emptyList() : List.copyOf(listenTopics);
-        this.publishTopicPattern = publishTopicPattern; // Can be null
-        this.kafkaProperties = (kafkaProperties == null) ? Collections.emptyMap() : Map.copyOf(kafkaProperties);
-
-        for (String topic : this.listenTopics) {
-            if (topic == null || topic.isBlank()) {
-                throw new IllegalArgumentException("KafkaTransportConfig listenTopics cannot contain null or blank topics.");
-            }
-        }
-        // No validation for null/blank publishTopicPattern as it's optional
+        this.topic = topic; // Can be null if not a Kafka output, validation handled by OutputTarget
+        // this.partitions = partitions;
+        // this.replicationFactor = replicationFactor;
+        this.kafkaProducerProperties = (kafkaProducerProperties == null) ? Collections.emptyMap() : Map.copyOf(kafkaProducerProperties);
     }
 
-    // Overriding default record constructor to ensure immutability and validation if not using @JsonCreator
-    // public KafkaTransportConfig {
-    //    this.listenTopics = (listenTopics == null) ? Collections.emptyList() : List.copyOf(listenTopics);
-    //    // publishTopicPattern can be null
-    //    this.kafkaProperties = (kafkaProperties == null) ? Collections.emptyMap() : Map.copyOf(kafkaProperties);
-    //    for (String topic : this.listenTopics) {
-    //        if (topic == null || topic.isBlank()) {
-    //            throw new IllegalArgumentException("KafkaTransportConfig listenTopics cannot contain null or blank topics.");
-    //        }
-    //    }
-    // }
+    // Constructor from your old test for KafkaTransportConfig (used for step's own config)
+    // This is likely NOT what's needed for OutputTarget's KafkaTransportConfig.
+    // Keeping for reference from your old test:
+    // KafkaTransportConfig(List<String> listenTopics, String publishTopicPattern, Map<String, String> kafkaProperties)
+    // For an OUTPUT, it's just one target topic.
 }

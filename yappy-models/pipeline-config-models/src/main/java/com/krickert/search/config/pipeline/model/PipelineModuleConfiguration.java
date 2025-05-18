@@ -2,7 +2,7 @@ package com.krickert.search.config.pipeline.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-// No Lombok needed
+import lombok.Builder;
 
 /**
  * Defines a type of pipeline module, corresponding to a specific gRPC service implementation.
@@ -18,6 +18,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * JSON object.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@Builder
 public record PipelineModuleConfiguration(
     @JsonProperty("implementationName") String implementationName,
     @JsonProperty("implementationId") String implementationId,

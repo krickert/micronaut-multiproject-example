@@ -1,34 +1,25 @@
-package com.krickert.search.config.pipeline.model; // Or your chosen package
+// File: yappy-models/pipeline-config-models/src/main/java/com/krickert/search/config/pipeline/model/GrpcTransportConfig.java
+package com.krickert.search.config.pipeline.model;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
-import java.util.Map;
+import lombok.Builder;
 import java.util.Collections;
-import java.util.Objects;
+import java.util.Map;
 
-/**
- * Configuration specific to gRPC transport for a pipeline step.
- *
- * @param serviceId The Consul serviceId or other resolvable gRPC target identifier
- * for the module implementing this step.
- * @param grpcProperties Additional gRPC client properties (e.g., timeout, retry policies) for this call.
- */
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@Builder
 public record GrpcTransportConfig(
-        @JsonProperty("serviceId") String serviceId,
-        @JsonProperty("grpcProperties") Map<String, String> grpcProperties
+    @JsonProperty("serviceName") String serviceName, // Consul service name of the TARGET gRPC service
+    @JsonProperty("grpcClientProperties") Map<String, String> grpcClientProperties // e.g., timeout, loadBalancingPolicy for THIS output call
 ) {
     @JsonCreator
     public GrpcTransportConfig(
-            @JsonProperty("serviceId") String serviceId,
-            @JsonProperty("grpcProperties") Map<String, String> grpcProperties
+        @JsonProperty("serviceName") String serviceName,
+        @JsonProperty("grpcClientProperties") Map<String, String> grpcClientProperties
     ) {
-        if (serviceId == null || serviceId.isBlank()) {
-            throw new IllegalArgumentException("GrpcTransportConfig serviceId cannot be null or blank.");
-        }
-        this.serviceId = serviceId;
-        this.grpcProperties = (grpcProperties == null) ? Collections.emptyMap() : Map.copyOf(grpcProperties);
+        this.serviceName = serviceName; // Can be null if not a GRPC output, validation by OutputTarget
+        this.grpcClientProperties = (grpcClientProperties == null) ? Collections.emptyMap() : Map.copyOf(grpcClientProperties);
     }
 }

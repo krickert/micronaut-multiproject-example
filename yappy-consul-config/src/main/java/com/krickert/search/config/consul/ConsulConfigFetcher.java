@@ -1,7 +1,7 @@
 package com.krickert.search.config.consul;
 
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
-import com.krickert.search.config.schema.registry.model.SchemaVersionData;
+import com.krickert.search.config.schema.model.SchemaVersionData;
 
 import java.io.Closeable;
 import java.util.Optional;

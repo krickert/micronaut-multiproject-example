@@ -72,6 +72,11 @@ dependencies {
     // https://mvnrepository.com/artifact/org.jgrapht/jgrapht-core
     implementation("org.jgrapht:jgrapht-core:1.5.2")
 
+    implementation(mn.micronaut.kafka)
+    implementation(mn.protobuf.java.util)
+    implementation(mn.grpc.protobuf)
+    implementation(mn.micronaut.grpc.runtime)
+
 }
 
 // Add this block to explicitly configure the Mockito agent

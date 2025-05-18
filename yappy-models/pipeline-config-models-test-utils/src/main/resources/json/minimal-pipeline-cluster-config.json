@@ -1,0 +1,32 @@
+{
+  "clusterName": "minimal-cluster",
+  "pipelineGraphConfig": {
+    "pipelines": {
+      "minimal-pipeline": {
+        "name": "minimal-pipeline",
+        "pipelineSteps": {
+          "minimal-step": {
+            "stepName": "minimal-step",
+            "stepType": "PIPELINE",
+            "description": "A minimal pipeline step",
+            "processorInfo": {
+              "grpcServiceName": "minimal-service"
+            },
+            "outputs": {}
+          }
+        }
+      }
+    }
+  },
+  "pipelineModuleMap": {
+    "availableModules": {
+      "minimal-service": {
+        "implementationName": "Minimal Service",
+        "implementationId": "minimal-service"
+      }
+    }
+  },
+  "defaultPipelineName": "minimal-pipeline",
+  "allowedKafkaTopics": [],
+  "allowedGrpcServices": ["minimal-service"]
+}

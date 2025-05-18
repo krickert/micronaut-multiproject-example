@@ -3,18 +3,21 @@ package com.krickert.search.config.pipeline.model; // Or your actual package
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Builder;
 import java.util.Set;
 import java.util.Map;
 import java.util.Collections;
 // import java.util.stream.Collectors; // Not needed for this version
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@Builder
 public record PipelineClusterConfig(
         @JsonProperty("clusterName") String clusterName,
         @JsonProperty("pipelineGraphConfig") PipelineGraphConfig pipelineGraphConfig,
         @JsonProperty("pipelineModuleMap") PipelineModuleMap pipelineModuleMap,
-        @JsonProperty("allowedKafkaTopics") Set<String> allowedKafkaTopics, // Correct annotation
-        @JsonProperty("allowedGrpcServices") Set<String> allowedGrpcServices // Correct annotation
+        @JsonProperty("defaultPipelineName") String defaultPipelineName,
+        @JsonProperty("allowedKafkaTopics") Set<String> allowedKafkaTopics,
+        @JsonProperty("allowedGrpcServices") Set<String> allowedGrpcServices
 ) {
     // This is an EXPLICIT CANONICAL CONSTRUCTOR
     @JsonCreator
@@ -22,8 +25,9 @@ public record PipelineClusterConfig(
             @JsonProperty("clusterName") String clusterName,
             @JsonProperty("pipelineGraphConfig") PipelineGraphConfig pipelineGraphConfig,
             @JsonProperty("pipelineModuleMap") PipelineModuleMap pipelineModuleMap,
-            @JsonProperty("allowedKafkaTopics") Set<String> allowedKafkaTopics, // This is the input parameter
-            @JsonProperty("allowedGrpcServices") Set<String> allowedGrpcServices // This is the input parameter
+            @JsonProperty("defaultPipelineName") String defaultPipelineName,
+            @JsonProperty("allowedKafkaTopics") Set<String> allowedKafkaTopics,
+            @JsonProperty("allowedGrpcServices") Set<String> allowedGrpcServices
     ) {
         if (clusterName == null || clusterName.isBlank()) {
             throw new IllegalArgumentException("PipelineClusterConfig clusterName cannot be null or blank.");
@@ -32,6 +36,7 @@ public record PipelineClusterConfig(
 
         this.pipelineGraphConfig = pipelineGraphConfig; // Can be null, assigned directly
         this.pipelineModuleMap = pipelineModuleMap;     // Can be null, assigned directly
+        this.defaultPipelineName = defaultPipelineName; // Can be null, assigned directly
 
         // Validate and normalize allowedKafkaTopics
         if (allowedKafkaTopics == null) {

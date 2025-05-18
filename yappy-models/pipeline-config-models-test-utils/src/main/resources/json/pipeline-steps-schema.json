@@ -1,0 +1,205 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PipelineStepConfig Schema",
+  "description": "JSON Schema for validating PipelineStepConfig objects",
+  "type": "object",
+  "required": ["stepName", "stepType", "processorInfo"],
+  "properties": {
+    "stepName": {
+      "type": "string",
+      "description": "The name of the pipeline step",
+      "minLength": 1
+    },
+    "stepType": {
+      "type": "string",
+      "description": "The type of the pipeline step",
+      "enum": ["PIPELINE", "SINK", "INITIAL_PIPELINE"]
+    },
+    "description": {
+      "type": "string",
+      "description": "A description of the pipeline step"
+    },
+    "customConfigSchemaId": {
+      "type": "string",
+      "description": "The ID of the schema for the custom configuration"
+    },
+    "customConfig": {
+      "type": "object",
+      "description": "Custom configuration for the pipeline step",
+      "properties": {
+        "jsonConfig": {
+          "type": "object",
+          "description": "JSON configuration for the pipeline step"
+        },
+        "configParams": {
+          "type": "object",
+          "description": "Configuration parameters for the pipeline step",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "kafkaInputs": {
+      "type": "array",
+      "description": "Kafka input definitions for the pipeline step",
+      "items": {
+        "type": "object",
+        "required": ["listenTopics", "consumerGroupId"],
+        "properties": {
+          "listenTopics": {
+            "type": "array",
+            "description": "List of Kafka topics to listen to",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "consumerGroupId": {
+            "type": "string",
+            "description": "Kafka consumer group ID",
+            "minLength": 1
+          },
+          "kafkaConsumerProperties": {
+            "type": "object",
+            "description": "Kafka consumer properties",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "description": "Output targets for the pipeline step",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["targetStepName", "transportType"],
+        "properties": {
+          "targetStepName": {
+            "type": "string",
+            "description": "The name of the target step",
+            "minLength": 1
+          },
+          "transportType": {
+            "type": "string",
+            "description": "The type of transport to use",
+            "enum": ["KAFKA", "GRPC", "INTERNAL"]
+          },
+          "grpcTransport": {
+            "type": "object",
+            "description": "gRPC transport configuration",
+            "required": ["serviceName"],
+            "properties": {
+              "serviceName": {
+                "type": "string",
+                "description": "The name of the gRPC service",
+                "minLength": 1
+              },
+              "grpcClientProperties": {
+                "type": "object",
+                "description": "gRPC client properties",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "kafkaTransport": {
+            "type": "object",
+            "description": "Kafka transport configuration",
+            "required": ["topic"],
+            "properties": {
+              "topic": {
+                "type": "string",
+                "description": "The Kafka topic to publish to",
+                "minLength": 1
+              },
+              "kafkaProducerProperties": {
+                "type": "object",
+                "description": "Kafka producer properties",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "transportType": {
+                  "enum": ["KAFKA"]
+                }
+              }
+            },
+            "then": {
+              "required": ["kafkaTransport"]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "transportType": {
+                  "enum": ["GRPC"]
+                }
+              }
+            },
+            "then": {
+              "required": ["grpcTransport"]
+            }
+          }
+        ]
+      }
+    },
+    "maxRetries": {
+      "type": "integer",
+      "description": "Maximum number of retries for the pipeline step",
+      "minimum": 0
+    },
+    "retryBackoffMs": {
+      "type": "integer",
+      "description": "Retry backoff in milliseconds",
+      "minimum": 0
+    },
+    "maxRetryBackoffMs": {
+      "type": "integer",
+      "description": "Maximum retry backoff in milliseconds",
+      "minimum": 0
+    },
+    "retryBackoffMultiplier": {
+      "type": "number",
+      "description": "Retry backoff multiplier",
+      "minimum": 1.0
+    },
+    "stepTimeoutMs": {
+      "type": "integer",
+      "description": "Step timeout in milliseconds",
+      "minimum": 0
+    },
+    "processorInfo": {
+      "type": "object",
+      "description": "Information about the processor for the pipeline step",
+      "properties": {
+        "grpcServiceName": {
+          "type": "string",
+          "description": "The name of the gRPC service"
+        },
+        "internalProcessorBeanName": {
+          "type": "string",
+          "description": "The name of the internal processor bean"
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["grpcServiceName"]
+        },
+        {
+          "required": ["internalProcessorBeanName"]
+        }
+      ]
+    }
+  }
+}

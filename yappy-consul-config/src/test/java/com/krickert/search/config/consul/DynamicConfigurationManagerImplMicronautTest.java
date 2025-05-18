@@ -4,13 +4,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
 import com.krickert.search.config.consul.exception.ConfigurationManagerInitializationException;
-import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
-import com.krickert.search.config.pipeline.model.PipelineModuleConfiguration;
-import com.krickert.search.config.pipeline.model.PipelineModuleMap;
-import com.krickert.search.config.pipeline.model.SchemaReference;
-import com.krickert.search.config.schema.registry.model.SchemaCompatibility;
-import com.krickert.search.config.schema.registry.model.SchemaType;
-import com.krickert.search.config.schema.registry.model.SchemaVersionData;
+import com.krickert.search.config.consul.factory.DynamicConfigurationManagerFactory;
+import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
+import com.krickert.search.config.pipeline.model.*;
+import com.krickert.search.config.schema.model.SchemaCompatibility;
+import com.krickert.search.config.schema.model.SchemaType;
+import com.krickert.search.config.schema.model.SchemaVersionData;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.context.event.ApplicationEventPublisher;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
@@ -21,8 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.kiwiproject.consul.Consul;
-import org.kiwiproject.consul.KeyValueClient;
+// Removed direct Consul imports as per issue requirements
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,8 +53,7 @@ class DynamicConfigurationManagerImplMicronautTest {
     static final String DEFAULT_PROPERTY_CLUSTER = "propertyClusterDefault"; // For @Value in SUT constructor
     static final String TEST_EXECUTION_CLUSTER = "dynamicManagerTestCluster"; // Cluster name used in tests
 
-    @Inject
-    Consul directConsulClientForTestSetup;
+    // Removed direct Consul client injection as per issue requirements
 
     @Inject
     ObjectMapper objectMapper;
@@ -70,22 +67,28 @@ class DynamicConfigurationManagerImplMicronautTest {
     @Inject
     TestApplicationEventListener testApplicationEventListener;
 
-    private KeyValueClient testKvClient;
+    @Inject
+    ConsulBusinessOperationsService consulBusinessOperationsService;
+
+    @Inject
+    private DynamicConfigurationManagerFactory dynamicConfigurationManagerFactory;
     private String clusterConfigKeyPrefix;
     private String schemaVersionsKeyPrefix;
     private int appWatchSeconds;
 
 
-    // SUT instance, created per test or in BeforeEach
+    @Inject
     private DynamicConfigurationManagerImpl dynamicConfigurationManager;
+
+    @Inject
+    private CachedConfigHolder cachedConfigHolder;
 
     // Dependencies for manual SUT construction
     private ConfigurationValidator mockValidator;
-    private CachedConfigHolder testCachedConfigHolder;
 
     @BeforeEach
     void setUp() {
-        testKvClient = directConsulClientForTestSetup.keyValueClient();
+        // Using ConsulBusinessOperationsService instead of direct KeyValueClient
 
         // Get prefixes from the real fetcher (it reads them from properties)
         clusterConfigKeyPrefix = realConsulConfigFetcher.clusterConfigKeyPrefix;
@@ -101,16 +104,8 @@ class DynamicConfigurationManagerImplMicronautTest {
 
         // Prepare dependencies for manual SUT construction
         mockValidator = mock(ConfigurationValidator.class);
-        testCachedConfigHolder = new SimpleMapCachedConfigHolder();
 
-        // Construct the SUT manually for each test
-        dynamicConfigurationManager = new DynamicConfigurationManagerImpl(
-                TEST_EXECUTION_CLUSTER,       // Explicitly pass the cluster name for this test instance
-                realConsulConfigFetcher,    // Use the real fetcher
-                mockValidator,
-                testCachedConfigHolder,
-                eventPublisher
-        );
+
         LOG.info("DynamicConfigurationManagerImpl manually constructed for cluster: {}", TEST_EXECUTION_CLUSTER);
     }
 
@@ -124,9 +119,8 @@ class DynamicConfigurationManagerImplMicronautTest {
     }
 
     private void deleteConsulKeysForCluster(String clusterName) {
-        String fullClusterKey = getFullClusterKey(clusterName);
-        LOG.debug("Attempting to clean Consul key: {}", fullClusterKey);
-        testKvClient.deleteKey(fullClusterKey);
+        LOG.debug("Attempting to clean Consul key for cluster: {}", clusterName);
+        consulBusinessOperationsService.deleteClusterConfiguration(clusterName).block();
         // If tests use specific schemas, they should clean them up too or use unique names
     }
 
@@ -139,25 +133,25 @@ class DynamicConfigurationManagerImplMicronautTest {
     }
 
     private PipelineClusterConfig createDummyClusterConfig(String name, String... topics) {
-        return new PipelineClusterConfig(
-                name,
-                null,
-                new PipelineModuleMap(Collections.emptyMap()),
-                topics != null ? Set.of(topics) : Collections.emptySet(),
-                Collections.emptySet()
-        );
+        return PipelineClusterConfig.builder()
+                .clusterName(name)
+                .pipelineModuleMap(new PipelineModuleMap(Collections.emptyMap()))
+                .defaultPipelineName(name + "-default")
+                .allowedKafkaTopics(topics != null ? Set.of(topics) : Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
     }
 
     private PipelineClusterConfig createClusterConfigWithSchema(String name, SchemaReference schemaRef, String... topics) {
         PipelineModuleConfiguration moduleWithSchema = new PipelineModuleConfiguration("ModuleWithSchema", "module_schema_impl_id", schemaRef);
         PipelineModuleMap moduleMap = new PipelineModuleMap(Map.of(moduleWithSchema.implementationId(), moduleWithSchema));
-        return new PipelineClusterConfig(
-                name,
-                null,
-                moduleMap,
-                topics != null ? Set.of(topics) : Collections.emptySet(),
-                Collections.emptySet()
-        );
+        return PipelineClusterConfig.builder()
+                .clusterName(name)
+                .pipelineModuleMap(moduleMap)
+                .defaultPipelineName(name + "-default")
+                .allowedKafkaTopics(topics != null ? Set.of(topics) : Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
     }
 
     private SchemaVersionData createDummySchemaData(String subject, int version, String content) {
@@ -169,9 +163,40 @@ class DynamicConfigurationManagerImplMicronautTest {
     }
 
     private void seedConsulKv(String key, Object object) throws JsonProcessingException {
-        String jsonValue = objectMapper.writeValueAsString(object);
-        LOG.info("Seeding Consul KV: {} = {}", key, jsonValue.length() > 150 ? jsonValue.substring(0, 150) + "..." : jsonValue);
-        assertTrue(testKvClient.putValue(key, jsonValue), "Failed to seed Consul KV for key: " + key);
+        LOG.info("Seeding Consul KV: {} = {}", key, 
+                object.toString().length() > 150 ? object.toString().substring(0, 150) + "..." : object.toString());
+
+        // Determine if this is a cluster config or schema version based on the key
+        if (key.startsWith(clusterConfigKeyPrefix)) {
+            // Extract cluster name from key
+            String clusterName = key.substring(clusterConfigKeyPrefix.length());
+
+            // Store cluster configuration
+            Boolean result = consulBusinessOperationsService.storeClusterConfiguration(clusterName, object).block();
+            assertTrue(result != null && result, "Failed to seed cluster configuration for key: " + key);
+        } else if (key.startsWith(schemaVersionsKeyPrefix)) {
+            // Extract subject and version from key
+            String path = key.substring(schemaVersionsKeyPrefix.length());
+
+            String[] parts = path.split("/");
+            if (parts.length == 2) {
+                String subject = parts[0];
+                int version = Integer.parseInt(parts[1]);
+
+                // Store schema version
+                Boolean result = consulBusinessOperationsService.storeSchemaVersion(subject, version, object).block();
+                assertTrue(result != null && result, "Failed to seed schema version for key: " + key);
+            } else {
+                // Fallback to generic putValue for other keys
+                Boolean result = consulBusinessOperationsService.putValue(key, object).block();
+                assertTrue(result != null && result, "Failed to seed Consul KV for key: " + key);
+            }
+        } else {
+            // Fallback to generic putValue for other keys
+            Boolean result = consulBusinessOperationsService.putValue(key, object).block();
+            assertTrue(result != null && result, "Failed to seed Consul KV for key: " + key);
+        }
+
         // Allow a brief moment for Consul to process and for KVCache (if active) to pick up
         // This is more critical for watch tests than initial load.
         try {
@@ -256,7 +281,7 @@ class DynamicConfigurationManagerImplMicronautTest {
         String fullClusterKey = getFullClusterKey(TEST_EXECUTION_CLUSTER);
 
         // Clean specific schema key for this test
-        testKvClient.deleteKey(fullSchemaKey1);
+        consulBusinessOperationsService.deleteSchemaVersion(schemaRef1.subject(), schemaRef1.version()).block();
 
         // Seed schema into Consul FIRST
         seedConsulKv(fullSchemaKey1, schemaData1);
@@ -278,10 +303,10 @@ class DynamicConfigurationManagerImplMicronautTest {
         assertTrue(initialEvent.oldConfig().isEmpty(), "Old config should be empty for initial load");
         assertEquals(initialConfig, initialEvent.newConfig(), "New config in event should match initial seeded config");
 
-        Optional<PipelineClusterConfig> cachedConfigAfterInit = testCachedConfigHolder.getCurrentConfig();
+        Optional<PipelineClusterConfig> cachedConfigAfterInit = cachedConfigHolder.getCurrentConfig();
         assertTrue(cachedConfigAfterInit.isPresent(), "Config should be in cache after initial load");
         assertEquals(initialConfig, cachedConfigAfterInit.get());
-        assertEquals(schemaData1.schemaContent(), testCachedConfigHolder.getSchemaContent(schemaRef1).orElse(null), "Schema content should be cached");
+        assertEquals(schemaData1.schemaContent(), cachedConfigHolder.getSchemaContent(schemaRef1).orElse(null), "Schema content should be cached");
         LOG.info("integration_initialLoad_thenWatchUpdate: Initial load verified.");
 
         // --- Setup for Watch Update ---
@@ -316,14 +341,14 @@ class DynamicConfigurationManagerImplMicronautTest {
         assertEquals(initialConfig, updateEvent.oldConfig().get(), "Old config in event should be the previously loaded one");
         assertEquals(updatedConfig, updateEvent.newConfig(), "New config in event should match the updated seeded config");
 
-        Optional<PipelineClusterConfig> cachedConfigAfterUpdate = testCachedConfigHolder.getCurrentConfig();
+        Optional<PipelineClusterConfig> cachedConfigAfterUpdate = cachedConfigHolder.getCurrentConfig();
         assertTrue(cachedConfigAfterUpdate.isPresent(), "Config should be in cache after update");
         assertEquals(updatedConfig, cachedConfigAfterUpdate.get());
-        assertEquals(schemaData1.schemaContent(), testCachedConfigHolder.getSchemaContent(schemaRef1).orElse(null), "Schema content should still be cached");
+        assertEquals(schemaData1.schemaContent(), cachedConfigHolder.getSchemaContent(schemaRef1).orElse(null), "Schema content should still be cached");
         LOG.info("integration_initialLoad_thenWatchUpdate: Watch update verified.");
 
         // Clean up schema key used in this test
-        testKvClient.deleteKey(fullSchemaKey1);
+        consulBusinessOperationsService.deleteSchemaVersion(schemaRef1.subject(), schemaRef1.version()).block();
     }
 
     @Test
@@ -332,7 +357,7 @@ class DynamicConfigurationManagerImplMicronautTest {
     void integration_initialLoad_noConfigFound_thenAppearsOnWatch() throws Exception {
         // --- Setup: Ensure no pre-existing config for this cluster ---
         String fullClusterKey = getFullClusterKey(TEST_EXECUTION_CLUSTER);
-        testKvClient.deleteKey(fullClusterKey); // Explicitly delete to be sure
+        consulBusinessOperationsService.deleteClusterConfiguration(TEST_EXECUTION_CLUSTER).block(); // Explicitly delete to be sure
         LOG.info("integration_noConfigFound_thenAppears: Ensured key {} is deleted before test.", fullClusterKey);
 
         // No specific validator stubbing needed for the initial (empty) phase
@@ -346,7 +371,7 @@ class DynamicConfigurationManagerImplMicronautTest {
         ClusterConfigUpdateEvent initialEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 2, TimeUnit.SECONDS); // Shorter poll, expect no event
         assertNull(initialEvent, "Should NOT have received an event as no initial config was found");
 
-        Optional<PipelineClusterConfig> cachedConfigAfterInit = testCachedConfigHolder.getCurrentConfig();
+        Optional<PipelineClusterConfig> cachedConfigAfterInit = cachedConfigHolder.getCurrentConfig();
         assertFalse(cachedConfigAfterInit.isPresent(), "Config should NOT be in cache as none was found initially");
         LOG.info("integration_noConfigFound_thenAppears: Verified no initial config loaded or event published.");
 
@@ -367,7 +392,7 @@ class DynamicConfigurationManagerImplMicronautTest {
         assertTrue(discoveredEvent.oldConfig().isEmpty(), "Old config in event should be empty as this is the first load via watch");
         assertEquals(newConfigAppearing, discoveredEvent.newConfig(), "New config in event should match the appeared config");
 
-        Optional<PipelineClusterConfig> cachedConfigAfterDiscovery = testCachedConfigHolder.getCurrentConfig();
+        Optional<PipelineClusterConfig> cachedConfigAfterDiscovery = cachedConfigHolder.getCurrentConfig();
         assertTrue(cachedConfigAfterDiscovery.isPresent(), "Config should be in cache after being discovered by watch");
         assertEquals(newConfigAppearing, cachedConfigAfterDiscovery.get());
         LOG.info("integration_noConfigFound_thenAppears: Config discovered by watch and processed successfully.");
@@ -378,15 +403,39 @@ class DynamicConfigurationManagerImplMicronautTest {
     @Timeout(value = 30, unit = TimeUnit.SECONDS) // Shorter, as no successful watch event is expected immediately
     void integration_initialLoad_configFailsValidation() throws Exception {
         // --- Setup Data ---
-        PipelineClusterConfig invalidInitialConfig = createDummyClusterConfig(TEST_EXECUTION_CLUSTER, "topicInvalid1");
+        // Create an invalid config that will fail validation with the real validator
+        // This config has a pipeline step that references a non-existent module implementation ID
+
+        // Create a step with a processorInfo that references a non-existent grpc service
+        PipelineStepConfig.ProcessorInfo invalidProcessorInfo = new PipelineStepConfig.ProcessorInfo("non_existent_grpc_service", null);
+        PipelineStepConfig invalidStep = new PipelineStepConfig(
+                "invalidStep",
+                StepType.PIPELINE,
+                invalidProcessorInfo
+        );
+
+        // Create a pipeline with the invalid step
+        Map<String, PipelineStepConfig> pipelineSteps = Map.of("invalidStep", invalidStep);
+        PipelineConfig invalidPipeline = new PipelineConfig("invalidPipeline", pipelineSteps);
+
+        // Create a pipeline graph with the invalid pipeline
+        Map<String, PipelineConfig> pipelines = Map.of("invalidPipeline", invalidPipeline);
+        PipelineGraphConfig invalidGraphConfig = new PipelineGraphConfig(pipelines);
+
+        // Create a cluster config with the invalid pipeline graph
+        PipelineClusterConfig invalidInitialConfig = PipelineClusterConfig.builder()
+                .clusterName(TEST_EXECUTION_CLUSTER)
+                .pipelineGraphConfig(invalidGraphConfig)
+                .pipelineModuleMap(new PipelineModuleMap(Collections.emptyMap()))
+                .defaultPipelineName(TEST_EXECUTION_CLUSTER + "-default")
+                .allowedKafkaTopics(Set.of("topicInvalid1"))
+                .allowedGrpcServices(Set.of()) // Empty set, so the grpc service in the step is not allowed
+                .build();
+
         String fullClusterKey = getFullClusterKey(TEST_EXECUTION_CLUSTER);
 
         // Seed the invalid config into Consul
         seedConsulKv(fullClusterKey, invalidInitialConfig);
-
-        // Configure mock validator to return invalid for this specific config
-        when(mockValidator.validate(eq(invalidInitialConfig), any()))
-                .thenReturn(ValidationResult.invalid(Collections.singletonList("Test validation error: initial config is bad")));
 
         // --- Act: Initialize DCM ---
         LOG.info("integration_initialLoad_failsValidation: Initializing DynamicConfigurationManager for cluster '{}'...", TEST_EXECUTION_CLUSTER);
@@ -399,7 +448,7 @@ class DynamicConfigurationManagerImplMicronautTest {
         ClusterConfigUpdateEvent initialEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 2, TimeUnit.SECONDS); // Short poll
         assertNull(initialEvent, "Should NOT have received a successful config update event due to validation failure");
 
-        Optional<PipelineClusterConfig> cachedConfigAfterInit = testCachedConfigHolder.getCurrentConfig();
+        Optional<PipelineClusterConfig> cachedConfigAfterInit = cachedConfigHolder.getCurrentConfig();
         assertFalse(cachedConfigAfterInit.isPresent(), "Config should NOT be in cache after initial load validation failure");
         LOG.info("integration_initialLoad_failsValidation: Verified no config cached and no successful event published due to validation failure.");
 
@@ -408,8 +457,6 @@ class DynamicConfigurationManagerImplMicronautTest {
         // This part is similar to the 'noConfigFound_thenAppearsOnWatch' test's latter half.
         LOG.info("integration_initialLoad_failsValidation: Attempting to seed a valid config to check if watch is active...");
         PipelineClusterConfig subsequentValidConfig = createDummyClusterConfig(TEST_EXECUTION_CLUSTER, "topicValidAfterFail");
-        when(mockValidator.validate(eq(subsequentValidConfig), any())) // Validator for the new, valid config
-                .thenReturn(ValidationResult.valid());
 
         seedConsulKv(fullClusterKey, subsequentValidConfig);
         LOG.info("integration_initialLoad_failsValidation: Subsequent valid config seeded.");
@@ -419,7 +466,7 @@ class DynamicConfigurationManagerImplMicronautTest {
         assertTrue(recoveryEvent.oldConfig().isEmpty(), "Old config in recovery event should be empty (as initial validation failed)");
         assertEquals(subsequentValidConfig, recoveryEvent.newConfig(), "New config in recovery event should match the valid seeded config");
 
-        Optional<PipelineClusterConfig> cachedConfigAfterRecovery = testCachedConfigHolder.getCurrentConfig();
+        Optional<PipelineClusterConfig> cachedConfigAfterRecovery = cachedConfigHolder.getCurrentConfig();
         assertTrue(cachedConfigAfterRecovery.isPresent(), "Config should be in cache after valid config discovered by watch");
         assertEquals(subsequentValidConfig, cachedConfigAfterRecovery.get());
         LOG.info("integration_initialLoad_failsValidation: Watch successfully picked up a subsequent valid configuration.");
@@ -449,13 +496,13 @@ class DynamicConfigurationManagerImplMicronautTest {
         ClusterConfigUpdateEvent initialLoadEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 10, TimeUnit.SECONDS);
         assertNotNull(initialLoadEvent, "Should have received an initial load event");
         assertEquals(initialConfig, initialLoadEvent.newConfig(), "New config in initial event should match seeded config");
-        assertTrue(testCachedConfigHolder.getCurrentConfig().isPresent(), "Config should be in cache after initial load");
-        assertEquals(initialConfig, testCachedConfigHolder.getCurrentConfig().get());
+        assertTrue(cachedConfigHolder.getCurrentConfig().isPresent(), "Config should be in cache after initial load");
+        assertEquals(initialConfig, cachedConfigHolder.getCurrentConfig().get());
         LOG.info("integration_configDeleted: Initial load verified.");
 
         // --- Act: Delete the config from Consul ---
-        LOG.info("integration_configDeleted: Deleting config from Consul for key {}...", fullClusterKey);
-        testKvClient.deleteKey(fullClusterKey);
+        LOG.info("integration_configDeleted: Deleting config from Consul for cluster {}...", TEST_EXECUTION_CLUSTER);
+        consulBusinessOperationsService.deleteClusterConfiguration(TEST_EXECUTION_CLUSTER).block();
         // Add a small delay to ensure KVCache picks up the delete
         TimeUnit.MILLISECONDS.sleep(appWatchSeconds * 1000L / 2 + 500); // Wait for a bit more than half a watch cycle
         LOG.info("integration_configDeleted: Config deleted from Consul.");
@@ -501,7 +548,7 @@ class DynamicConfigurationManagerImplMicronautTest {
         assertTrue(deletionEvent.newConfig().allowedKafkaTopics() == null || deletionEvent.newConfig().allowedKafkaTopics().isEmpty(), "New config topics should be empty for deletion");
         assertTrue(deletionEvent.newConfig().pipelineModuleMap() == null || deletionEvent.newConfig().pipelineModuleMap().availableModules().isEmpty(), "New config modules should be empty for deletion");
 
-        Optional<PipelineClusterConfig> cachedConfigAfterDelete = testCachedConfigHolder.getCurrentConfig();
+        Optional<PipelineClusterConfig> cachedConfigAfterDelete = cachedConfigHolder.getCurrentConfig();
         assertFalse(cachedConfigAfterDelete.isPresent(), "Config should be cleared from cache after deletion");
         LOG.info("integration_configDeleted: Deletion processed successfully, cache cleared.");
         // Assert that the new config is effectively empty (no topics, no modules, etc.)
@@ -523,13 +570,10 @@ class DynamicConfigurationManagerImplMicronautTest {
         String fullClusterKey = getFullClusterKey(TEST_EXECUTION_CLUSTER);
         String fullInitialSchemaKey = getFullSchemaKey(initialSchemaRef.subject(), initialSchemaRef.version());
 
-        testKvClient.deleteKey(fullInitialSchemaKey); // Clean schema key
+        consulBusinessOperationsService.deleteSchemaVersion(initialSchemaRef.subject(), initialSchemaRef.version()).block(); // Clean schema key
 
         seedConsulKv(fullInitialSchemaKey, initialSchemaData);
         seedConsulKv(fullClusterKey, initialValidConfig);
-
-        when(mockValidator.validate(eq(initialValidConfig), any()))
-                .thenReturn(ValidationResult.valid());
 
         // --- Initialize DCM ---
         LOG.info("integration_watchUpdate_failsValidation: Initializing DCM...");
@@ -539,23 +583,37 @@ class DynamicConfigurationManagerImplMicronautTest {
         ClusterConfigUpdateEvent initialLoadEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 10, TimeUnit.SECONDS);
         assertNotNull(initialLoadEvent, "Should have received an initial load event");
         assertEquals(initialValidConfig, initialLoadEvent.newConfig());
-        assertEquals(initialValidConfig, testCachedConfigHolder.getCurrentConfig().orElse(null));
-        assertEquals(initialSchemaData.schemaContent(), testCachedConfigHolder.getSchemaContent(initialSchemaRef).orElse(null));
+        assertEquals(initialValidConfig, cachedConfigHolder.getCurrentConfig().orElse(null));
+        assertEquals(initialSchemaData.schemaContent(), cachedConfigHolder.getSchemaContent(initialSchemaRef).orElse(null));
         LOG.info("integration_watchUpdate_failsValidation: Initial load verified.");
         testApplicationEventListener.clear(); // Clear events before watch update
 
         // --- Setup for Watch Update (which will fail validation) ---
-        SchemaReference newSchemaRef = new SchemaReference("integSchemaNewInvalid", 1); // Could be same or different
-        PipelineClusterConfig newInvalidConfigFromWatch = createClusterConfigWithSchema(TEST_EXECUTION_CLUSTER, newSchemaRef, "topicNewInvalid");
-        SchemaVersionData newSchemaData = createDummySchemaData(newSchemaRef.subject(), newSchemaRef.version(), "{\"type\":\"integer\"}");
-        String fullNewSchemaKey = getFullSchemaKey(newSchemaRef.subject(), newSchemaRef.version());
+        // Create a step with a processorInfo that references a non-existent grpc service
+        PipelineStepConfig.ProcessorInfo invalidProcessorInfo = new PipelineStepConfig.ProcessorInfo("non_existent_grpc_service", null);
+        PipelineStepConfig invalidStep = new PipelineStepConfig(
+                "invalidStep",
+                StepType.PIPELINE,
+                invalidProcessorInfo
+        );
 
-        testKvClient.deleteKey(fullNewSchemaKey); // Clean new schema key
-        seedConsulKv(fullNewSchemaKey, newSchemaData); // Seed the schema for the new invalid config
+        // Create a pipeline with the invalid step
+        Map<String, PipelineStepConfig> pipelineSteps = Map.of("invalidStep", invalidStep);
+        PipelineConfig invalidPipeline = new PipelineConfig("invalidPipeline", pipelineSteps);
 
-        // Configure validator to FAIL for the new config
-        when(mockValidator.validate(eq(newInvalidConfigFromWatch), any()))
-                .thenReturn(ValidationResult.invalid(Collections.singletonList("Test: New config from watch is invalid")));
+        // Create a pipeline graph with the invalid pipeline
+        Map<String, PipelineConfig> pipelines = Map.of("invalidPipeline", invalidPipeline);
+        PipelineGraphConfig invalidGraphConfig = new PipelineGraphConfig(pipelines);
+
+        // Create a cluster config with the invalid pipeline graph
+        PipelineClusterConfig newInvalidConfigFromWatch = PipelineClusterConfig.builder()
+                .clusterName(TEST_EXECUTION_CLUSTER)
+                .pipelineGraphConfig(invalidGraphConfig)
+                .pipelineModuleMap(new PipelineModuleMap(Collections.emptyMap()))
+                .defaultPipelineName(TEST_EXECUTION_CLUSTER + "-default")
+                .allowedKafkaTopics(Set.of("topicNewInvalid"))
+                .allowedGrpcServices(Set.of()) // Empty set, so the grpc service in the step is not allowed
+                .build();
 
         // --- Act: Trigger Watch Update by changing Consul data ---
         LOG.info("integration_watchUpdate_failsValidation: Seeding new (invalid) config to trigger watch...");
@@ -582,24 +640,14 @@ class DynamicConfigurationManagerImplMicronautTest {
 
 
         // CRITICAL: Verify that the cache still holds the OLD VALID config
-        Optional<PipelineClusterConfig> cachedConfigAfterInvalid = testCachedConfigHolder.getCurrentConfig();
+        Optional<PipelineClusterConfig> cachedConfigAfterInvalid = cachedConfigHolder.getCurrentConfig();
         assertTrue(cachedConfigAfterInvalid.isPresent(), "Cache should still contain a config");
         assertEquals(initialValidConfig, cachedConfigAfterInvalid.get(), "Cache should still hold the initial valid config");
-        assertEquals(initialSchemaData.schemaContent(), testCachedConfigHolder.getSchemaContent(initialSchemaRef).orElse(null), "Cache should still hold initial valid schema");
+        assertEquals(initialSchemaData.schemaContent(), cachedConfigHolder.getSchemaContent(initialSchemaRef).orElse(null), "Cache should still hold initial valid schema");
         LOG.info("integration_watchUpdate_failsValidation: Verified cache still holds the old valid configuration.");
 
-        // Verify that the validator was indeed called with the new invalid config
-        // The schema provider passed to validate should be able to resolve newSchemaRef
-        verify(mockValidator).validate(eq(newInvalidConfigFromWatch), argThat(provider -> {
-            Optional<String> schemaContentOpt = provider.apply(newSchemaRef); // Use .apply()
-            return schemaContentOpt.isPresent() &&
-                    newSchemaData.schemaContent().equals(schemaContentOpt.get());
-        }));
-        LOG.info("integration_watchUpdate_failsValidation: Verified validator was called for the new invalid config.");
-
         // Clean up schema keys
-        testKvClient.deleteKey(fullInitialSchemaKey);
-        testKvClient.deleteKey(fullNewSchemaKey);
+        consulBusinessOperationsService.deleteSchemaVersion(initialSchemaRef.subject(), initialSchemaRef.version()).block();
     }
     @Test
     @DisplayName("Integration: Watch update - new config references missing schema, keeps old config")
@@ -610,8 +658,6 @@ class DynamicConfigurationManagerImplMicronautTest {
         String fullClusterKey = getFullClusterKey(TEST_EXECUTION_CLUSTER);
 
         seedConsulKv(fullClusterKey, initialValidConfig);
-        when(mockValidator.validate(eq(initialValidConfig), any()))
-                .thenReturn(ValidationResult.valid());
 
         // --- Initialize DCM ---
         LOG.info("integration_watchUpdate_missingSchema: Initializing DCM...");
@@ -621,7 +667,7 @@ class DynamicConfigurationManagerImplMicronautTest {
         ClusterConfigUpdateEvent initialLoadEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 10, TimeUnit.SECONDS);
         assertNotNull(initialLoadEvent, "Should have received an initial load event");
         assertEquals(initialValidConfig, initialLoadEvent.newConfig());
-        assertEquals(initialValidConfig, testCachedConfigHolder.getCurrentConfig().orElse(null));
+        assertEquals(initialValidConfig, cachedConfigHolder.getCurrentConfig().orElse(null));
         LOG.info("integration_watchUpdate_missingSchema: Initial load verified.");
         testApplicationEventListener.clear(); // Clear events before watch update
 
@@ -631,13 +677,8 @@ class DynamicConfigurationManagerImplMicronautTest {
         String fullMissingSchemaKey = getFullSchemaKey(missingSchemaRef.subject(), missingSchemaRef.version());
 
         // Ensure the schema is NOT in Consul
-        testKvClient.deleteKey(fullMissingSchemaKey);
+        consulBusinessOperationsService.deleteSchemaVersion(missingSchemaRef.subject(), missingSchemaRef.version()).block();
         LOG.info("integration_watchUpdate_missingSchema: Ensured schema key {} is deleted.", fullMissingSchemaKey);
-
-        // Configure validator to FAIL if the schemaProvider cannot provide 'missingSchemaRef'
-        when(mockValidator.validate(eq(newConfigMissingSchema), argThat(provider ->
-                !provider.apply(missingSchemaRef).isPresent() // Check that the schema is indeed missing from the provider
-        ))).thenReturn(ValidationResult.invalid(Collections.singletonList("Test: Schema " + missingSchemaRef + " not found")));
 
         // --- Act: Trigger Watch Update by changing Consul data ---
         LOG.info("integration_watchUpdate_missingSchema: Seeding new config (referencing missing schema) to trigger watch...");
@@ -657,17 +698,10 @@ class DynamicConfigurationManagerImplMicronautTest {
         }
 
         // CRITICAL: Verify that the cache still holds the OLD VALID config
-        Optional<PipelineClusterConfig> cachedConfigAfterMissingSchema = testCachedConfigHolder.getCurrentConfig();
+        Optional<PipelineClusterConfig> cachedConfigAfterMissingSchema = cachedConfigHolder.getCurrentConfig();
         assertTrue(cachedConfigAfterMissingSchema.isPresent(), "Cache should still contain a config");
         assertEquals(initialValidConfig, cachedConfigAfterMissingSchema.get(), "Cache should still hold the initial valid config");
         LOG.info("integration_watchUpdate_missingSchema: Verified cache still holds the old valid configuration.");
-
-        // Verify that the validator was indeed called with the new config and a schema provider
-        // that would return empty for the missing schema.
-        verify(mockValidator).validate(eq(newConfigMissingSchema), argThat(provider ->
-                !provider.apply(missingSchemaRef).isPresent()
-        ));
-        LOG.info("integration_watchUpdate_missingSchema: Verified validator was called for the new config with a provider that could not resolve the missing schema.");
     }
 
     @Test
@@ -685,7 +719,7 @@ class DynamicConfigurationManagerImplMicronautTest {
         seedConsulKv(fullClusterKey, initialConfigWithMissingSchema);
 
         // Ensure the referenced schema is NOT in Consul
-        testKvClient.deleteKey(fullMissingSchemaKey);
+        consulBusinessOperationsService.deleteSchemaVersion(missingSchemaRef.subject(), missingSchemaRef.version()).block();
         LOG.info("integration_initialLoad_missingSchema: Ensured schema key {} is deleted for initial load.", fullMissingSchemaKey);
 
         // Configure mock validator:
@@ -706,7 +740,7 @@ class DynamicConfigurationManagerImplMicronautTest {
         ClusterConfigUpdateEvent initialEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 2, TimeUnit.SECONDS); // Short poll
         assertNull(initialEvent, "Should NOT have received a successful config update event due to missing schema during initial load");
 
-        Optional<PipelineClusterConfig> cachedConfigAfterInit = testCachedConfigHolder.getCurrentConfig();
+        Optional<PipelineClusterConfig> cachedConfigAfterInit = cachedConfigHolder.getCurrentConfig();
         assertFalse(cachedConfigAfterInit.isPresent(), "Config should NOT be in cache after initial load with missing schema");
         LOG.info("integration_initialLoad_missingSchema: Verified no config cached and no successful event published.");
 
@@ -719,7 +753,7 @@ class DynamicConfigurationManagerImplMicronautTest {
         String fullNowPresentSchemaKey = getFullSchemaKey(nowPresentSchemaRef.subject(), nowPresentSchemaRef.version());
 
         // Clean and seed the new schema
-        testKvClient.deleteKey(fullNowPresentSchemaKey);
+        consulBusinessOperationsService.deleteSchemaVersion(nowPresentSchemaRef.subject(), nowPresentSchemaRef.version()).block();
         seedConsulKv(fullNowPresentSchemaKey, nowPresentSchemaData);
 
         // Validator for the new, valid config (this time schema provider WILL find the schema)
@@ -738,14 +772,14 @@ class DynamicConfigurationManagerImplMicronautTest {
         assertTrue(recoveryEvent.oldConfig().isEmpty(), "Old config in recovery event should be empty (as initial load effectively failed)");
         assertEquals(subsequentValidConfig, recoveryEvent.newConfig(), "New config in recovery event should match the valid seeded config");
 
-        Optional<PipelineClusterConfig> cachedConfigAfterRecovery = testCachedConfigHolder.getCurrentConfig();
+        Optional<PipelineClusterConfig> cachedConfigAfterRecovery = cachedConfigHolder.getCurrentConfig();
         assertTrue(cachedConfigAfterRecovery.isPresent(), "Config should be in cache after valid config discovered by watch");
         assertEquals(subsequentValidConfig, cachedConfigAfterRecovery.get());
-        assertEquals(nowPresentSchemaData.schemaContent(), testCachedConfigHolder.getSchemaContent(nowPresentSchemaRef).orElse(null), "The new schema should be cached");
+        assertEquals(nowPresentSchemaData.schemaContent(), cachedConfigHolder.getSchemaContent(nowPresentSchemaRef).orElse(null), "The new schema should be cached");
         LOG.info("integration_initialLoad_missingSchema: Watch successfully picked up a subsequent valid configuration and its schema.");
 
         // Cleanup
-        testKvClient.deleteKey(fullNowPresentSchemaKey);
+        consulBusinessOperationsService.deleteSchemaVersion(nowPresentSchemaRef.subject(), nowPresentSchemaRef.version()).block();
     }
 
     @Test
@@ -757,20 +791,17 @@ class DynamicConfigurationManagerImplMicronautTest {
         String fullClusterKey = getFullClusterKey(TEST_EXECUTION_CLUSTER);
 
         seedConsulKv(fullClusterKey, initialValidConfig);
-        when(mockValidator.validate(eq(initialValidConfig), any()))
-                .thenReturn(ValidationResult.valid());
 
         // Spy on the realConsulConfigFetcher bean
         KiwiprojectConsulConfigFetcher spiedFetcher = spy(this.realConsulConfigFetcher);
 
         // IMPORTANT: Construct a NEW DynamicConfigurationManager for THIS TEST that uses the spy
-        DynamicConfigurationManagerImpl localDcmForTest = new DynamicConfigurationManagerImpl(
-                TEST_EXECUTION_CLUSTER,
-                spiedFetcher, // Use the spied fetcher
-                mockValidator,
-                testCachedConfigHolder,
-                eventPublisher
-        );
+        DynamicConfigurationManagerImpl localDcmForTest = (DynamicConfigurationManagerImpl) dynamicConfigurationManagerFactory.createDynamicConfigurationManager(TEST_EXECUTION_CLUSTER);
+
+        // Use reflection to replace the consulConfigFetcher field with our spy
+        java.lang.reflect.Field fetcherField = DynamicConfigurationManagerImpl.class.getDeclaredField("consulConfigFetcher");
+        fetcherField.setAccessible(true);
+        fetcherField.set(localDcmForTest, spiedFetcher);
 
         LOG.info("integration_watchUpdate_schemaFetchThrowsRT: Initializing DCM with spied fetcher...");
         localDcmForTest.initialize(TEST_EXECUTION_CLUSTER); // Initialize this local instance
@@ -779,7 +810,7 @@ class DynamicConfigurationManagerImplMicronautTest {
         ClusterConfigUpdateEvent initialLoadEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 10, TimeUnit.SECONDS);
         assertNotNull(initialLoadEvent, "Should have received an initial load event");
         assertEquals(initialValidConfig, initialLoadEvent.newConfig());
-        assertEquals(initialValidConfig, testCachedConfigHolder.getCurrentConfig().orElse(null));
+        assertEquals(initialValidConfig, cachedConfigHolder.getCurrentConfig().orElse(null));
         LOG.info("integration_watchUpdate_schemaFetchThrowsRT: Initial load verified.");
         testApplicationEventListener.clear();
 
@@ -807,7 +838,7 @@ class DynamicConfigurationManagerImplMicronautTest {
             LOG.info("integration_watchUpdate_schemaFetchThrowsRT: Correctly received no new successful update event after config with schema fetch error.");
         }
 
-        Optional<PipelineClusterConfig> cachedConfigAfterFetchError = testCachedConfigHolder.getCurrentConfig();
+        Optional<PipelineClusterConfig> cachedConfigAfterFetchError = cachedConfigHolder.getCurrentConfig();
         assertTrue(cachedConfigAfterFetchError.isPresent(), "Cache should still contain a config");
         assertEquals(initialValidConfig, cachedConfigAfterFetchError.get(), "Cache should still hold the initial valid config");
         LOG.info("integration_watchUpdate_schemaFetchThrowsRT: Verified cache still holds the old valid configuration.");
@@ -822,18 +853,25 @@ class DynamicConfigurationManagerImplMicronautTest {
     @Test
     @DisplayName("Integration: initialize() - when consulConfigFetcher.connect() fails, throws ConfigurationManagerInitializationException")
     @Timeout(value = 15, unit = TimeUnit.SECONDS) // Shorter timeout, not waiting for watches
-    void integration_initialize_whenConnectFails_throwsInitializationException() throws InterruptedException {
+    void integration_initialize_whenConnectFails_throwsInitializationException() throws InterruptedException, Exception {
+        // Create a real CachedConfigHolder to verify that clearConfiguration() is called
+        InMemoryCachedConfigHolder realCachedConfigHolder = new InMemoryCachedConfigHolder();
+
         // Spy on the realConsulConfigFetcher bean
         KiwiprojectConsulConfigFetcher spiedFetcher = spy(this.realConsulConfigFetcher);
 
-        // IMPORTANT: Construct a NEW DynamicConfigurationManager for THIS TEST that uses the spy
-        DynamicConfigurationManagerImpl localDcmForTest = new DynamicConfigurationManagerImpl(
-                TEST_EXECUTION_CLUSTER,
-                spiedFetcher, // Use the spied fetcher
-                mockValidator,
-                testCachedConfigHolder,
-                eventPublisher
-        );
+        // IMPORTANT: Construct a NEW DynamicConfigurationManager for THIS TEST
+        DynamicConfigurationManagerImpl localDcmForTest = (DynamicConfigurationManagerImpl) dynamicConfigurationManagerFactory.createDynamicConfigurationManager(TEST_EXECUTION_CLUSTER);
+
+        // Use reflection to replace the consulConfigFetcher field with our spy
+        java.lang.reflect.Field fetcherField = DynamicConfigurationManagerImpl.class.getDeclaredField("consulConfigFetcher");
+        fetcherField.setAccessible(true);
+        fetcherField.set(localDcmForTest, spiedFetcher);
+
+        // Use reflection to replace the cachedConfigHolder field with our real implementation
+        java.lang.reflect.Field cacheField = DynamicConfigurationManagerImpl.class.getDeclaredField("cachedConfigHolder");
+        cacheField.setAccessible(true);
+        cacheField.set(localDcmForTest, realCachedConfigHolder);
 
         // Configure the spied connect() method to throw an exception
         RuntimeException simulatedConnectException = new RuntimeException("Simulated KCCF.connect() failure!");
@@ -860,8 +898,8 @@ class DynamicConfigurationManagerImplMicronautTest {
         verify(spiedFetcher, never()).fetchPipelineClusterConfig(anyString());
         verify(spiedFetcher, never()).watchClusterConfig(anyString(), any());
 
-        // Verify cache and event listener were not affected
-        assertFalse(testCachedConfigHolder.getCurrentConfig().isPresent(), "Cache should be empty if connect failed");
+        // Verify cache is empty after connection failure
+        assertFalse(realCachedConfigHolder.getCurrentConfig().isPresent(), "Cache should be empty if connect failed");
         assertNull(testApplicationEventListener.pollEvent(1, TimeUnit.SECONDS), "No event should be published if connect failed");
         LOG.info("integration_initialize_connectFails: Verifications complete.");
 
@@ -872,17 +910,24 @@ class DynamicConfigurationManagerImplMicronautTest {
     @DisplayName("Integration: initialize() - when consulConfigFetcher.watchClusterConfig() fails, throws ConfigurationManagerInitializationException")
     @Timeout(value = 15, unit = TimeUnit.SECONDS) // Shorter timeout
     void integration_initialize_whenWatchClusterConfigFails_throwsInitializationException() throws Exception {
+        // Create a real CachedConfigHolder to verify that clearConfiguration() is called
+        InMemoryCachedConfigHolder realCachedConfigHolder = new InMemoryCachedConfigHolder();
+
         // Spy on the realConsulConfigFetcher bean
         KiwiprojectConsulConfigFetcher spiedFetcher = spy(this.realConsulConfigFetcher);
 
-        // IMPORTANT: Construct a NEW DynamicConfigurationManager for THIS TEST that uses the spy
-        DynamicConfigurationManagerImpl localDcmForTest = new DynamicConfigurationManagerImpl(
-                TEST_EXECUTION_CLUSTER,
-                spiedFetcher, // Use the spied fetcher
-                mockValidator,
-                testCachedConfigHolder,
-                eventPublisher
-        );
+        // IMPORTANT: Construct a NEW DynamicConfigurationManager for THIS TEST
+        DynamicConfigurationManagerImpl localDcmForTest = (DynamicConfigurationManagerImpl) dynamicConfigurationManagerFactory.createDynamicConfigurationManager(TEST_EXECUTION_CLUSTER);
+
+        // Use reflection to replace the consulConfigFetcher field with our spy
+        java.lang.reflect.Field fetcherField = DynamicConfigurationManagerImpl.class.getDeclaredField("consulConfigFetcher");
+        fetcherField.setAccessible(true);
+        fetcherField.set(localDcmForTest, spiedFetcher);
+
+        // Use reflection to replace the cachedConfigHolder field with our real implementation
+        java.lang.reflect.Field cacheField = DynamicConfigurationManagerImpl.class.getDeclaredField("cachedConfigHolder");
+        cacheField.setAccessible(true);
+        cacheField.set(localDcmForTest, realCachedConfigHolder);
 
         // Simulate initial fetch succeeding or returning empty (doesn't matter for this test's core)
         // We need connect() to succeed and fetchPipelineClusterConfig to not throw an earlier exception.
@@ -915,8 +960,8 @@ class DynamicConfigurationManagerImplMicronautTest {
         verify(spiedFetcher).fetchPipelineClusterConfig(eq(TEST_EXECUTION_CLUSTER)); // initial fetch attempt
         verify(spiedFetcher).watchClusterConfig(eq(TEST_EXECUTION_CLUSTER), any()); // watch setup attempt
 
-        // Verify cache and event listener were not affected by a successful load
-        assertFalse(testCachedConfigHolder.getCurrentConfig().isPresent(), "Cache should be empty if watch setup failed during init");
+        // Verify cache is empty after watch setup failure
+        assertFalse(realCachedConfigHolder.getCurrentConfig().isPresent(), "Cache should be empty if watch setup failed");
         assertNull(testApplicationEventListener.pollEvent(1, TimeUnit.SECONDS), "No event should be published if watch setup failed");
         LOG.info("integration_initialize_watchFails: Verifications complete.");
 

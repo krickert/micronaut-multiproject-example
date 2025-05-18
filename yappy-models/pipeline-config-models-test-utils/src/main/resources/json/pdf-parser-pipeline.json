@@ -1,0 +1,464 @@
+{
+  "clusterName": "pdf-parser-cluster",
+  "pipelineGraphConfig": {
+    "pipelines": {
+      "pdf-parser-pipeline": {
+        "name": "pdf-parser-pipeline",
+        "pipelineSteps": {
+          "pdf-ingestion": {
+            "stepName": "pdf-ingestion",
+            "stepType": "INITIAL_PIPELINE",
+            "description": "Ingests PDF files from various sources",
+            "customConfigSchemaId": "pdf-ingestion-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "watchDirectories": [
+                  "/data/pdf/incoming",
+                  "/data/pdf/backlog"
+                ],
+                "filePattern": "*.pdf",
+                "recursiveSearch": true,
+                "pollingIntervalMs": 5000,
+                "maxFileSizeMb": 100
+              }
+            },
+            "processorInfo": {
+              "grpcServiceName": "pdf-ingestion-service"
+            },
+            "outputs": {
+              "default": {
+                "targetStepName": "pdf-metadata-extractor",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "pdf.files.incoming",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4",
+                    "batch.size": "16384"
+                  }
+                }
+              }
+            }
+          },
+          "pdf-metadata-extractor": {
+            "stepName": "pdf-metadata-extractor",
+            "stepType": "PIPELINE",
+            "description": "Extracts metadata from PDF files",
+            "customConfigSchemaId": "pdf-metadata-extractor-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "extractTitle": true,
+                "extractAuthor": true,
+                "extractCreationDate": true,
+                "extractKeywords": true,
+                "extractSubject": true,
+                "extractPageCount": true
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["pdf.files.incoming"],
+                "consumerGroupId": "pdf-metadata-extractor-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest",
+                  "max.poll.records": "50"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "pdf-metadata-extractor-service"
+            },
+            "outputs": {
+              "default": {
+                "targetStepName": "pdf-text-extractor",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "pdf.metadata.extracted",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              },
+              "onError": {
+                "targetStepName": "pdf-error-handler",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "pdf.processing.errors",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              }
+            }
+          },
+          "pdf-text-extractor": {
+            "stepName": "pdf-text-extractor",
+            "stepType": "PIPELINE",
+            "description": "Extracts text content from PDF files",
+            "customConfigSchemaId": "pdf-text-extractor-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "extractionMethod": "pdfbox",
+                "fallbackToOcr": true,
+                "ocrLanguages": ["eng", "spa", "fra", "deu"],
+                "preserveFormatting": true,
+                "extractByPage": true,
+                "detectTables": true
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["pdf.metadata.extracted"],
+                "consumerGroupId": "pdf-text-extractor-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "pdf-text-extractor-service"
+            },
+            "outputs": {
+              "default_structure": {
+                "targetStepName": "pdf-structure-analyzer",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "pdf.text.extracted",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              },
+              "default_image": {
+                "targetStepName": "pdf-image-extractor",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "pdf.for.image.extraction",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              },
+              "onError": {
+                "targetStepName": "pdf-error-handler",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "pdf.processing.errors",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              }
+            }
+          },
+          "pdf-structure-analyzer": {
+            "stepName": "pdf-structure-analyzer",
+            "stepType": "PIPELINE",
+            "description": "Analyzes the structure of PDF documents",
+            "customConfigSchemaId": "pdf-structure-analyzer-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "detectHeadings": true,
+                "detectParagraphs": true,
+                "detectLists": true,
+                "detectFootnotes": true,
+                "detectPageNumbers": true,
+                "detectTableOfContents": true
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["pdf.text.extracted"],
+                "consumerGroupId": "pdf-structure-analyzer-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "pdf-structure-analyzer-service"
+            },
+            "outputs": {
+              "default": {
+                "targetStepName": "pdf-content-enricher",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "pdf.structure.analyzed",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              },
+              "onError": {
+                "targetStepName": "pdf-error-handler",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "pdf.processing.errors",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              }
+            }
+          },
+          "pdf-image-extractor": {
+            "stepName": "pdf-image-extractor",
+            "stepType": "PIPELINE",
+            "description": "Extracts images from PDF files",
+            "customConfigSchemaId": "pdf-image-extractor-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "minImageResolution": 150,
+                "extractImageMetadata": true,
+                "saveImagesPath": "/data/pdf/images",
+                "supportedFormats": ["jpg", "png", "tiff"],
+                "performOcrOnImages": true
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["pdf.for.image.extraction"],
+                "consumerGroupId": "pdf-image-extractor-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "pdf-image-extractor-service"
+            },
+            "outputs": {
+              "default": {
+                "targetStepName": "pdf-content-enricher",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "pdf.images.extracted",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              },
+              "onError": {
+                "targetStepName": "pdf-error-handler",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "pdf.processing.errors",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              }
+            }
+          },
+          "pdf-content-enricher": {
+            "stepName": "pdf-content-enricher",
+            "stepType": "PIPELINE",
+            "description": "Enriches PDF content with additional information",
+            "customConfigSchemaId": "pdf-content-enricher-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "performNER": true,
+                "extractKeyPhrases": true,
+                "categorizeContent": true,
+                "generateSummary": true,
+                "detectLanguage": true,
+                "sentimentAnalysis": true
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["pdf.structure.analyzed", "pdf.images.extracted"],
+                "consumerGroupId": "pdf-content-enricher-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "pdf-content-enricher-service"
+            },
+            "outputs": {
+              "default": {
+                "targetStepName": "pdf-document-store",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "pdf.content.enriched",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              },
+              "onError": {
+                "targetStepName": "pdf-error-handler",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "pdf.processing.errors",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              }
+            }
+          },
+          "pdf-document-store": {
+            "stepName": "pdf-document-store",
+            "stepType": "SINK",
+            "description": "Stores processed PDF documents and their extracted content",
+            "customConfigSchemaId": "pdf-document-store-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "storageType": "elasticsearch",
+                "indexName": "pdf_documents",
+                "documentIdField": "fileHash",
+                "bulkBatchSize": 50,
+                "storeOriginalPdf": true,
+                "compressionEnabled": true
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["pdf.content.enriched"],
+                "consumerGroupId": "pdf-document-store-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "pdf-document-store-service"
+            },
+            "outputs": {
+              "onError": {
+                "targetStepName": "pdf-error-handler",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "pdf.processing.errors",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              }
+            }
+          },
+          "pdf-error-handler": {
+            "stepName": "pdf-error-handler",
+            "stepType": "SINK",
+            "description": "Handles errors in PDF processing",
+            "customConfigSchemaId": "pdf-error-handler-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "errorLogPath": "/var/log/pdf-pipeline/errors",
+                "notifyOnError": true,
+                "notificationEmail": "pdf-admin@example.com",
+                "retryEnabled": true,
+                "maxRetries": 3,
+                "retryDelayMs": 60000
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["pdf.processing.errors"],
+                "consumerGroupId": "pdf-error-handler-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "pdf-error-handler-service"
+            },
+            "outputs": {}
+          }
+        }
+      }
+    }
+  },
+  "pipelineModuleMap": {
+    "availableModules": {
+      "pdf-ingestion-service": {
+        "implementationName": "PDF Ingestion Service",
+        "implementationId": "pdf-ingestion-service",
+        "customConfigSchemaReference": {
+          "subject": "pdf-ingestion-schema",
+          "version": 1
+        }
+      },
+      "pdf-metadata-extractor-service": {
+        "implementationName": "PDF Metadata Extractor Service",
+        "implementationId": "pdf-metadata-extractor-service",
+        "customConfigSchemaReference": {
+          "subject": "pdf-metadata-extractor-schema",
+          "version": 1
+        }
+      },
+      "pdf-text-extractor-service": {
+        "implementationName": "PDF Text Extractor Service",
+        "implementationId": "pdf-text-extractor-service",
+        "customConfigSchemaReference": {
+          "subject": "pdf-text-extractor-schema",
+          "version": 1
+        }
+      },
+      "pdf-structure-analyzer-service": {
+        "implementationName": "PDF Structure Analyzer Service",
+        "implementationId": "pdf-structure-analyzer-service",
+        "customConfigSchemaReference": {
+          "subject": "pdf-structure-analyzer-schema",
+          "version": 1
+        }
+      },
+      "pdf-image-extractor-service": {
+        "implementationName": "PDF Image Extractor Service",
+        "implementationId": "pdf-image-extractor-service",
+        "customConfigSchemaReference": {
+          "subject": "pdf-image-extractor-schema",
+          "version": 1
+        }
+      },
+      "pdf-content-enricher-service": {
+        "implementationName": "PDF Content Enricher Service",
+        "implementationId": "pdf-content-enricher-service",
+        "customConfigSchemaReference": {
+          "subject": "pdf-content-enricher-schema",
+          "version": 1
+        }
+      },
+      "pdf-document-store-service": {
+        "implementationName": "PDF Document Store Service",
+        "implementationId": "pdf-document-store-service",
+        "customConfigSchemaReference": {
+          "subject": "pdf-document-store-schema",
+          "version": 1
+        }
+      },
+      "pdf-error-handler-service": {
+        "implementationName": "PDF Error Handler Service",
+        "implementationId": "pdf-error-handler-service",
+        "customConfigSchemaReference": {
+          "subject": "pdf-error-handler-schema",
+          "version": 1
+        }
+      }
+    }
+  },
+  "defaultPipelineName": "pdf-parser-pipeline",
+  "allowedKafkaTopics": [
+    "pdf.files.incoming",
+    "pdf.metadata.extracted",
+    "pdf.text.extracted",
+    "pdf.for.image.extraction",
+    "pdf.structure.analyzed",
+    "pdf.images.extracted",
+    "pdf.content.enriched",
+    "pdf.processing.errors"
+  ],
+  "allowedGrpcServices": [
+    "pdf-ingestion-service",
+    "pdf-metadata-extractor-service",
+    "pdf-text-extractor-service",
+    "pdf-structure-analyzer-service",
+    "pdf-image-extractor-service",
+    "pdf-content-enricher-service",
+    "pdf-document-store-service",
+    "pdf-error-handler-service"
+  ]
+}

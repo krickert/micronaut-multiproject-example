@@ -2,9 +2,9 @@ package com.krickert.search.config.pipeline.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Builder;
 import java.util.Map;
 import java.util.Collections; // For unmodifiable map
-// No Lombok needed
 
 /**
  * Defines a single named pipeline, comprising a map of its constituent pipeline steps.
@@ -16,6 +16,7 @@ import java.util.Collections; // For unmodifiable map
  * If provided, keys and values cannot be null.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@Builder
 public record PipelineConfig(
     @JsonProperty("name") String name,
     @JsonProperty("pipelineSteps") Map<String, PipelineStepConfig> pipelineSteps

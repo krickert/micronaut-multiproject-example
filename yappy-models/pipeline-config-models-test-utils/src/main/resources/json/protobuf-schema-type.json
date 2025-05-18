@@ -1,0 +1,10 @@
+{
+  "globalId": 333,
+  "subject": "protobuf-schema",
+  "version": 1,
+  "schemaContent": "syntax = \"proto3\";\n\npackage com.example;\n\nmessage User {\n  int64 id = 1;\n  string name = 2;\n  optional string email = 3;\n}",
+  "schemaType": "PROTOBUF",
+  "compatibility": "FORWARD",
+  "createdAt": "2023-01-25T00:00:00Z",
+  "versionDescription": "Protobuf Schema example"
+}

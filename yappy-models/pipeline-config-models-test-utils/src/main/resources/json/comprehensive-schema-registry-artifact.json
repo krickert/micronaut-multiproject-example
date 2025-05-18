@@ -1,0 +1,8 @@
+{
+  "subject": "comprehensive-schema",
+  "description": "A comprehensive schema for testing",
+  "schemaType": "AVRO",
+  "createdAt": "2023-01-01T00:00:00Z",
+  "updatedAt": "2023-02-01T00:00:00Z",
+  "latestVersionNumber": 3
+}
