@@ -8,9 +8,9 @@
     import com.krickert.search.config.pipeline.model.*;
     import com.krickert.search.config.pipeline.model.test.PipelineConfigTestUtils;
     import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigObjects;
-    import com.krickert.search.config.schema.registry.model.SchemaCompatibility;
-    import com.krickert.search.config.schema.registry.model.SchemaType;
-    import com.krickert.search.config.schema.registry.model.SchemaVersionData;
+    import com.krickert.search.config.schema.model.SchemaCompatibility;
+    import com.krickert.search.config.schema.model.SchemaType;
+    import com.krickert.search.config.schema.model.SchemaVersionData;
     import io.micronaut.context.annotation.Property;
     import io.micronaut.context.event.ApplicationEventPublisher;
     import io.micronaut.test.extensions.junit5.annotation.MicronautTest;

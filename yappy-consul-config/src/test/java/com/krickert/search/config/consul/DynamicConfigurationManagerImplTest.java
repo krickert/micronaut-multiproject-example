@@ -10,9 +10,9 @@ import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineModuleConfiguration;
 import com.krickert.search.config.pipeline.model.PipelineModuleMap;
 import com.krickert.search.config.pipeline.model.SchemaReference;
-import com.krickert.search.config.schema.registry.model.SchemaCompatibility;
-import com.krickert.search.config.schema.registry.model.SchemaType;
-import com.krickert.search.config.schema.registry.model.SchemaVersionData;
+import com.krickert.search.config.schema.model.SchemaCompatibility;
+import com.krickert.search.config.schema.model.SchemaType;
+import com.krickert.search.config.schema.model.SchemaVersionData;
 
 import io.micronaut.context.event.ApplicationEventPublisher;
 import org.junit.jupiter.api.BeforeEach;

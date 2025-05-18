@@ -285,14 +285,14 @@ class DeleteServiceFromPipelineTest {
                     String fullSchemaKey = getFullSchemaKey(schemaRef.subject(), schemaRef.version());
 
                     // Create a schema version data
-                    com.krickert.search.config.schema.registry.model.SchemaVersionData schemaData = 
-                        new com.krickert.search.config.schema.registry.model.SchemaVersionData(
+                    com.krickert.search.config.schema.model.SchemaVersionData schemaData =
+                        new com.krickert.search.config.schema.model.SchemaVersionData(
                             (long) (Math.random() * 1000000),
                             schemaRef.subject(),
                             schemaRef.version(),
                             schemaContent,
-                            com.krickert.search.config.schema.registry.model.SchemaType.JSON_SCHEMA,
-                            com.krickert.search.config.schema.registry.model.SchemaCompatibility.NONE,
+                            com.krickert.search.config.schema.model.SchemaType.JSON_SCHEMA,
+                            com.krickert.search.config.schema.model.SchemaCompatibility.NONE,
                             java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS),
                             "Test schema for " + schemaRef.subject()
                         );
@@ -323,14 +323,14 @@ class DeleteServiceFromPipelineTest {
                                 String schemaContent = getSchemaContentForSubject(subject);
 
                                 // Create a schema version data
-                                com.krickert.search.config.schema.registry.model.SchemaVersionData schemaData = 
-                                    new com.krickert.search.config.schema.registry.model.SchemaVersionData(
+                                com.krickert.search.config.schema.model.SchemaVersionData schemaData =
+                                    new com.krickert.search.config.schema.model.SchemaVersionData(
                                         (long) (Math.random() * 1000000),
                                         subject,
                                         version,
                                         schemaContent,
-                                        com.krickert.search.config.schema.registry.model.SchemaType.JSON_SCHEMA,
-                                        com.krickert.search.config.schema.registry.model.SchemaCompatibility.NONE,
+                                        com.krickert.search.config.schema.model.SchemaType.JSON_SCHEMA,
+                                        com.krickert.search.config.schema.model.SchemaCompatibility.NONE,
                                         java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS),
                                         "Test schema for " + subject
                                     );

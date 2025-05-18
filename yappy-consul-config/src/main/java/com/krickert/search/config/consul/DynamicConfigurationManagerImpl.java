@@ -7,8 +7,8 @@ import com.krickert.search.config.consul.exception.ConfigurationManagerInitializ
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import com.krickert.search.config.pipeline.model.*;
-import com.krickert.search.config.schema.registry.model.SchemaVersionData;
 
+import com.krickert.search.config.schema.model.SchemaVersionData;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.event.ApplicationEventPublisher;
 import jakarta.annotation.PostConstruct;

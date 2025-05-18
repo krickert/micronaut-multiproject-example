@@ -49,14 +49,12 @@ dependencies {
 
     testImplementation(project(":yappy-test-resources"))
     testImplementation(project(":yappy-models:pipeline-config-models-test-utils"))
-    testImplementation(project(":yappy-models:schema-registry-models-test-utils"))
 
     api(mn.micronaut.serde.api)
     api(mn.micronaut.serde.jackson)
     api(mn.micronaut.jackson.databind)
     // https://mvnrepository.com/artifact/org.kiwiproject/consul-client
     api("org.kiwiproject:consul-client:1.5.1")
-    api(project(":yappy-models:schema-registry-models"))
     api(project(":yappy-models:pipeline-config-models"))
     implementation(project(":yappy-test-resources:consul-test-resource"))
     testResourcesImplementation(mn.testcontainers.consul)
@@ -71,6 +69,39 @@ dependencies {
     implementation(mn.javax.annotation.api)
     implementation(mn.micronaut.context)
     testResourcesImplementation(mn.testcontainers.consul)
+    // Apply BOM/platform dependencies
+    implementation(platform(project(":bom")))
+    annotationProcessor(platform(project(":bom")))
+    testImplementation(platform(project(":bom")))
+    testAnnotationProcessor(platform(project(":bom")))
+
+    // Annotation processors
+    annotationProcessor(libs.bundles.micronaut.annotation.processors)
+    annotationProcessor(mn.lombok)
+    compileOnly(mn.lombok)
+
+
+    runtimeOnly(mn.logback.classic) // This line was missing from your provided snippet, re-add if it was there
+    implementation(mn.micronaut.reactor.http.client)
+    implementation(mn.javax.annotation.api)
+    implementation(mn.micronaut.context)
+
+    implementation(mn.micronaut.grpc.annotation)
+    implementation(mn.grpc.services)
+    implementation(mn.micronaut.grpc.server.runtime)
+    implementation(mn.micronaut.grpc.runtime)
+    implementation(project(":yappy-models:protobuf-models"))
+    testImplementation(mn.mockito.junit.jupiter)
+    testResourcesImplementation(mn.testcontainers.consul)
+    testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
+    testImplementation(mn.reactor.test)
+    testImplementation(mn.assertj.core)
+
+    // https://mvnrepository.com/artifact/com.networknt/json-schema-validator
+    implementation("com.networknt:json-schema-validator:1.5.6")
+    // https://mvnrepository.com/artifact/org.jgrapht/jgrapht-core
+    implementation("org.jgrapht:jgrapht-core:1.5.2")
+
 }
 
 // Add this block to explicitly configure the Mockito agent
