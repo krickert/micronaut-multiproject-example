@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
+import com.krickert.search.config.pipeline.model.test.PipelineConfigTestUtils;
+import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigJson;
+import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigObjects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -22,19 +25,12 @@ class PipelineClusterConfigTest {
 
     @BeforeEach
     void setUp() {
-        objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new ParameterNamesModule());
-        objectMapper.registerModule(new Jdk8Module());
-        objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
+        objectMapper = PipelineConfigTestUtils.createObjectMapper();
     }
 
     // Helper to create JsonConfigOptions from a JSON string
     private PipelineStepConfig.JsonConfigOptions createJsonConfigOptions(String jsonString) throws com.fasterxml.jackson.core.JsonProcessingException {
-        if (jsonString == null || jsonString.isBlank()) {
-            return new PipelineStepConfig.JsonConfigOptions(null, Collections.emptyMap());
-        }
-        // Assuming JsonConfigOptions has a constructor that takes JsonNode and Map
-        return new PipelineStepConfig.JsonConfigOptions(objectMapper.readTree(jsonString), Collections.emptyMap());
+        return PipelineConfigTestUtils.createJsonConfigOptions(jsonString);
     }
 
     // --- Refactored Helper Methods for creating new PipelineStepConfig records ---
@@ -121,80 +117,51 @@ class PipelineClusterConfigTest {
 
     @Test
     void testSerializationDeserialization() throws Exception {
-        Map<String, PipelineConfig> pipelinesMap = new HashMap<>();
-        Map<String, PipelineStepConfig> steps1 = new HashMap<>();
+        // Use the sample pipeline cluster config from the test utilities
+        PipelineClusterConfig config = SamplePipelineConfigObjects.createSearchIndexingPipelineClusterConfig();
 
-        PipelineStepConfig step1_1 = createSampleStep("p1s1", "module-k1", TransportType.GRPC,
-                "{\"configFor\":\"p1s1\"}", List.of("p1s2"), List.of("p1err1"),
-                TransportType.GRPC, new GrpcTransportConfig("service-g1-target", Map.of("timeout", "5s")),
-                com.krickert.search.config.pipeline.model.StepType.PIPELINE);
-
-        PipelineStepConfig.ProcessorInfo step1_2ProcInfo = new PipelineStepConfig.ProcessorInfo("module-g1", null);
-        PipelineStepConfig step1_2 = new PipelineStepConfig("p1s2", com.krickert.search.config.pipeline.model.StepType.SINK,
-                "Description for p1s2", "schema-for-module-g1",
-                createJsonConfigOptions("{\"configFor\":\"p1s2\"}"),
-                Collections.emptyMap(), 0,1000L,30000L,2.0,null, step1_2ProcInfo);
-
-        steps1.put(step1_1.stepName(), step1_1);
-        steps1.put(step1_2.stepName(), step1_2);
-        PipelineConfig pipeline1 = new PipelineConfig("pipeline-alpha", steps1);
-        pipelinesMap.put(pipeline1.name(), pipeline1);
-        PipelineGraphConfig pipelineGraphConfig = new PipelineGraphConfig(pipelinesMap);
-
-        Map<String, PipelineModuleConfiguration> modules = new HashMap<>();
-        SchemaReference schemaRefK1 = new SchemaReference("schema-for-module-k1", 1);
-        PipelineModuleConfiguration moduleK1 = new PipelineModuleConfiguration("Kafka Module K1", "module-k1", schemaRefK1);
-        modules.put(moduleK1.implementationId(), moduleK1);
-        SchemaReference schemaRefG1 = new SchemaReference("schema-for-module-g1", 2);
-        PipelineModuleConfiguration moduleG1 = new PipelineModuleConfiguration("gRPC Module G1", "module-g1", schemaRefG1);
-        modules.put(moduleG1.implementationId(), moduleG1);
-        PipelineModuleMap pipelineModuleMap = new PipelineModuleMap(modules);
-
-        Set<String> allowedKafkaTopics = new HashSet<>(); // No Kafka outputs in this specific primary path
-        Set<String> allowedGrpcServices = new HashSet<>(Arrays.asList("service-g1-target", "module-k1", "module-g1"));
-
-        PipelineClusterConfig config = new PipelineClusterConfig(
-                "test-cluster-001", pipelineGraphConfig, pipelineModuleMap,
-                null, allowedKafkaTopics, allowedGrpcServices
-        );
-
-        String json = objectMapper.writeValueAsString(config);
+        // Serialize to JSON using the test utilities
+        String json = PipelineConfigTestUtils.toJson(config);
         System.out.println("Serialized PipelineClusterConfig JSON (New Model):\n" + json);
-        PipelineClusterConfig deserialized = objectMapper.readValue(json, PipelineClusterConfig.class);
 
-        assertEquals("test-cluster-001", deserialized.clusterName());
+        // Deserialize back to object using the test utilities
+        PipelineClusterConfig deserialized = PipelineConfigTestUtils.fromJson(json, PipelineClusterConfig.class);
+
+        // Verify that the deserialized object equals the original
+        assertEquals(config, deserialized);
+
+        // Verify specific properties
+        assertEquals("search-indexing-cluster", deserialized.clusterName());
+        assertEquals("search-indexing-pipeline", deserialized.defaultPipelineName());
+
+        // Verify pipeline graph config
         assertNotNull(deserialized.pipelineGraphConfig());
         assertEquals(1, deserialized.pipelineGraphConfig().pipelines().size());
-        PipelineConfig deserializedPipeline = deserialized.pipelineGraphConfig().pipelines().get("pipeline-alpha");
+
+        // Verify pipeline
+        PipelineConfig deserializedPipeline = deserialized.pipelineGraphConfig().pipelines().get("search-indexing-pipeline");
         assertNotNull(deserializedPipeline);
-        assertEquals(2, deserializedPipeline.pipelineSteps().size());
+        assertEquals(5, deserializedPipeline.pipelineSteps().size());
 
-        PipelineStepConfig deserializedP1S1 = deserializedPipeline.pipelineSteps().get("p1s1");
-        assertNotNull(deserializedP1S1);
-        assertEquals("module-k1", deserializedP1S1.processorInfo().grpcServiceName());
+        // Verify file connector step
+        PipelineStepConfig fileConnectorStep = deserializedPipeline.pipelineSteps().get("file-connector");
+        assertNotNull(fileConnectorStep);
+        assertEquals(StepType.INITIAL_PIPELINE, fileConnectorStep.stepType());
+        assertEquals("file-connector-service", fileConnectorStep.processorInfo().grpcServiceName());
 
-        assertNotNull(deserializedP1S1.outputs().get("default_p1s2"));
-        assertEquals("p1s2", deserializedP1S1.outputs().get("default_p1s2").targetStepName());
-        assertEquals(TransportType.GRPC, deserializedP1S1.outputs().get("default_p1s2").transportType());
-        assertEquals("service-g1-target", deserializedP1S1.outputs().get("default_p1s2").grpcTransport().serviceName());
+        // Verify document parser step
+        PipelineStepConfig documentParserStep = deserializedPipeline.pipelineSteps().get("document-parser");
+        assertNotNull(documentParserStep);
+        assertEquals(StepType.PIPELINE, documentParserStep.stepType());
+        assertEquals("document-parser-service", documentParserStep.processorInfo().grpcServiceName());
 
-        assertNotNull(deserializedP1S1.outputs().get("onError_p1err1"));
-        assertEquals("p1err1", deserializedP1S1.outputs().get("onError_p1err1").targetStepName());
-        assertEquals(TransportType.INTERNAL, deserializedP1S1.outputs().get("onError_p1err1").transportType());
-
-        PipelineStepConfig deserializedP1S2 = deserializedPipeline.pipelineSteps().get("p1s2");
-        assertNotNull(deserializedP1S2);
-        assertEquals(StepType.SINK, deserializedP1S2.stepType());
-        assertEquals("module-g1", deserializedP1S2.processorInfo().grpcServiceName());
-        assertTrue(deserializedP1S2.outputs().isEmpty());
-
+        // Verify module map
         assertNotNull(deserialized.pipelineModuleMap());
-        assertEquals(2, deserialized.pipelineModuleMap().availableModules().size());
-        assertTrue(deserialized.pipelineModuleMap().availableModules().containsKey("module-k1"));
-        assertEquals("schema-for-module-g1", deserialized.pipelineModuleMap().availableModules().get("module-g1").customConfigSchemaReference().subject());
+        assertEquals(5, deserialized.pipelineModuleMap().availableModules().size());
 
-        assertEquals(allowedKafkaTopics, deserialized.allowedKafkaTopics());
-        assertEquals(allowedGrpcServices, deserialized.allowedGrpcServices());
+        // Verify allowed topics and services
+        assertTrue(deserialized.allowedKafkaTopics().contains("search.files.incoming"));
+        assertTrue(deserialized.allowedGrpcServices().contains("file-connector-service"));
     }
 
     @Test
@@ -258,89 +225,48 @@ class PipelineClusterConfigTest {
 
     @Test
     void testLoadFromJsonFile_WithNewModel() throws Exception {
-        String jsonToLoad = """
-        {
-          "clusterName": "loaded-cluster-from-file",
-          "defaultPipelineName": "dataPipelineFromFile",
-          "pipelineGraphConfig": {
-            "pipelines": {
-              "dataPipelineFromFile": {
-                "name": "dataPipelineFromFile",
-                "pipelineSteps": {
-                  "ingestStepFile": {
-                    "stepName": "ingestStepFile",
-                    "stepType": "INITIAL_PIPELINE",
-                    "description": "Ingests data from a conceptual file source",
-                    "customConfigSchemaId": "fileIngestSchemaV1",
-                    "customConfig": { "jsonConfig": {"sourcePath":"/input"} },
-                    "processorInfo": { "internalProcessorBeanName": "fileIngestModule" },
-                    "outputs": {
-                      "default": {
-                        "targetStepName": "processStepFile",
-                        "transportType": "KAFKA",
-                        "kafkaTransport": { "topic": "file.ingest.to.process", "kafkaProducerProperties": {"retention.ms":"3600000"}}
-                      }
-                    }
-                  },
-                  "processStepFile": {
-                    "stepName": "processStepFile",
-                    "stepType": "PIPELINE",
-                    "description": "Processes data",
-                    "processorInfo": { "grpcServiceName": "fileProcessorService" },
-                    "outputs": { "default" : { "targetStepName": "archiveStepFile", "transportType": "INTERNAL"}}
-                  },
-                  "archiveStepFile": {
-                    "stepName": "archiveStepFile",
-                    "stepType": "SINK",
-                    "description": "Archives data",
-                    "processorInfo": { "internalProcessorBeanName": "archiverModule" },
-                    "outputs": {}
-                  }
-                }
-              }
-            }
-          },
-          "pipelineModuleMap": {
-            "availableModules": {
-              "fileIngestModule": {"implementationName":"File Ingestor", "implementationId":"fileIngestModule", "customConfigSchemaReference":{"subject":"fileIngestSchema","version":1}},
-              "fileProcessorService": {"implementationName":"File Processor", "implementationId":"fileProcessorService", "customConfigSchemaReference":{"subject":"fileProcSchema","version":1}},
-              "archiverModule": {"implementationName":"Archiver", "implementationId":"archiverModule"}
-            }
-          },
-          "allowedKafkaTopics": ["file.ingest.to.process", "some.other.topic"],
-          "allowedGrpcServices": ["fileProcessorService", "another.utility.service"]
-        }
-        """;
-        PipelineClusterConfig config = objectMapper.readValue(new ByteArrayInputStream(jsonToLoad.getBytes(StandardCharsets.UTF_8)), PipelineClusterConfig.class);
+        // Get the search indexing pipeline JSON from the test utilities
+        String jsonToLoad = SamplePipelineConfigJson.getSearchIndexingPipelineJson();
 
-        assertEquals("loaded-cluster-from-file", config.clusterName());
-        assertEquals("dataPipelineFromFile", config.defaultPipelineName());
+        // Deserialize the JSON to a PipelineClusterConfig object
+        PipelineClusterConfig config = PipelineConfigTestUtils.fromJson(jsonToLoad, PipelineClusterConfig.class);
 
+        // Verify the cluster properties
+        assertEquals("search-indexing-cluster", config.clusterName());
+        assertEquals("search-indexing-pipeline", config.defaultPipelineName());
+
+        // Verify the pipeline graph config
         assertNotNull(config.pipelineGraphConfig());
         assertEquals(1, config.pipelineGraphConfig().pipelines().size());
-        PipelineConfig p1 = config.pipelineGraphConfig().pipelines().get("dataPipelineFromFile");
-        assertNotNull(p1);
-        assertEquals("dataPipelineFromFile", p1.name());
-        assertEquals(3, p1.pipelineSteps().size());
 
-        PipelineStepConfig ingestStep = p1.pipelineSteps().get("ingestStepFile");
-        assertNotNull(ingestStep);
-        assertEquals("ingestStepFile", ingestStep.stepName());
-        assertEquals(StepType.INITIAL_PIPELINE, ingestStep.stepType());
-        assertEquals("fileIngestModule", ingestStep.processorInfo().internalProcessorBeanName());
-        assertEquals("file.ingest.to.process", ingestStep.outputs().get("default").kafkaTransport().topic());
+        // Verify the pipeline
+        PipelineConfig pipeline = config.pipelineGraphConfig().pipelines().get("search-indexing-pipeline");
+        assertNotNull(pipeline);
+        assertEquals("search-indexing-pipeline", pipeline.name());
+        assertEquals(5, pipeline.pipelineSteps().size());
 
-        PipelineStepConfig processStep = p1.pipelineSteps().get("processStepFile");
-        assertNotNull(processStep);
-        assertEquals("fileProcessorService", processStep.processorInfo().grpcServiceName());
+        // Verify the file connector step
+        PipelineStepConfig fileConnectorStep = pipeline.pipelineSteps().get("file-connector");
+        assertNotNull(fileConnectorStep);
+        assertEquals("file-connector", fileConnectorStep.stepName());
+        assertEquals(StepType.INITIAL_PIPELINE, fileConnectorStep.stepType());
+        assertEquals("file-connector-service", fileConnectorStep.processorInfo().grpcServiceName());
+        assertEquals("search.files.incoming", fileConnectorStep.outputs().get("default").kafkaTransport().topic());
 
+        // Verify the document parser step
+        PipelineStepConfig documentParserStep = pipeline.pipelineSteps().get("document-parser");
+        assertNotNull(documentParserStep);
+        assertEquals("document-parser-service", documentParserStep.processorInfo().grpcServiceName());
+
+        // Verify the module map
         assertNotNull(config.pipelineModuleMap());
-        assertEquals(3, config.pipelineModuleMap().availableModules().size());
-        assertTrue(config.pipelineModuleMap().availableModules().containsKey("fileProcessorService"));
-        assertEquals("fileProcSchema", config.pipelineModuleMap().availableModules().get("fileProcessorService").customConfigSchemaReference().subject());
+        assertEquals(5, config.pipelineModuleMap().availableModules().size());
+        assertTrue(config.pipelineModuleMap().availableModules().containsKey("document-parser-service"));
+        assertEquals("document-parser-schema", config.pipelineModuleMap().availableModules().get("document-parser-service").customConfigSchemaReference().subject());
 
-        assertTrue(config.allowedKafkaTopics().contains("file.ingest.to.process"));
-        assertTrue(config.allowedGrpcServices().contains("fileProcessorService"));
+        // Verify the allowed topics and services
+        assertTrue(config.allowedKafkaTopics().contains("search.files.incoming"));
+        assertTrue(config.allowedGrpcServices().contains("file-connector-service"));
     }
 
     @Test

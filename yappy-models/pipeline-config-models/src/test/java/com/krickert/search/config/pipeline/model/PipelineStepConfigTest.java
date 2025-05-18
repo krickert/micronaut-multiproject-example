@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
+import com.krickert.search.config.pipeline.model.test.PipelineConfigTestUtils;
+import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigJson;
+import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigObjects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -25,258 +28,181 @@ class PipelineStepConfigTest {
 
     @BeforeEach
     void setUp() {
-        objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new ParameterNamesModule()); // For record deserialization
-        objectMapper.registerModule(new Jdk8Module());           // For Optional, etc.
-        objectMapper.enable(SerializationFeature.INDENT_OUTPUT); // For readable JSON output during debugging
+        objectMapper = PipelineConfigTestUtils.createObjectMapper();
     }
 
     // Helper to create JsonConfigOptions from a JSON string
     private PipelineStepConfig.JsonConfigOptions createJsonConfigOptions(String jsonString) throws com.fasterxml.jackson.core.JsonProcessingException {
-        if (jsonString == null || jsonString.isBlank()) {
-            return new PipelineStepConfig.JsonConfigOptions(null, Collections.emptyMap());
-        }
-        return new PipelineStepConfig.JsonConfigOptions(objectMapper.readTree(jsonString));
+        return PipelineConfigTestUtils.createJsonConfigOptions(jsonString);
     }
 
 
     @Test
     void testSerializationDeserialization_KafkaOutputStep() throws Exception {
-        PipelineStepConfig.JsonConfigOptions customConfig = createJsonConfigOptions("{\"key\":\"value\"}");
-        PipelineStepConfig.ProcessorInfo processorInfo = new PipelineStepConfig.ProcessorInfo(
-                "kafka-processing-service", // This step is implemented by this gRPC service
-                null
-        );
+        // Get the search indexing pipeline JSON from the test utilities
+        String clusterJson = SamplePipelineConfigJson.getSearchIndexingPipelineJson();
 
-        Map<String, PipelineStepConfig.OutputTarget> outputs = new HashMap<>();
-        KafkaTransportConfig kafkaOutputTransport = new KafkaTransportConfig(
-                "pipeline.step.out",
-                Map.of("retries", "3")
-        );
-        outputs.put("default", new PipelineStepConfig.OutputTarget(
-                "next-step-1",
-                TransportType.KAFKA,
-                null,
-                kafkaOutputTransport
-        ));
-        outputs.put("errorPath", new PipelineStepConfig.OutputTarget(
-                "error-step-1",
-                TransportType.INTERNAL,
-                null, null
-        ));
+        // Extract the file connector step from the cluster configuration
+        String stepJson = extractPipelineStepJson(clusterJson, "search-indexing-pipeline", "file-connector");
 
-        // Create a list of KafkaInputDefinition for testing
-        List<KafkaInputDefinition> kafkaInputs = List.of(
-                new KafkaInputDefinition(
-                        List.of("input-topic-1", "input-topic-2"),
-                        "test-consumer-group",
-                        Map.of("auto.offset.reset", "earliest")
-                )
-        );
+        // Deserialize the JSON to a PipelineStepConfig object
+        PipelineStepConfig config = PipelineConfigTestUtils.fromJson(stepJson, PipelineStepConfig.class);
 
-        PipelineStepConfig config = new PipelineStepConfig(
-                "test-kafka-output-step",
-                StepType.PIPELINE,
-                "A step that outputs to Kafka",
-                "my-custom-schema-v1",
-                customConfig,
-                kafkaInputs,
-                outputs,
-                3,
-                2000L,
-                60000L,
-                1.5,
-                10000L,
-                processorInfo
-        );
-
-        String json = objectMapper.writeValueAsString(config);
+        // Serialize to JSON using the test utilities
+        String json = PipelineConfigTestUtils.toJson(config);
         System.out.println("Serialized KAFKA Output PipelineStepConfig JSON:\n" + json);
 
-        PipelineStepConfig deserialized = objectMapper.readValue(json, PipelineStepConfig.class);
+        // Deserialize back to object using the test utilities
+        PipelineStepConfig deserialized = PipelineConfigTestUtils.fromJson(json, PipelineStepConfig.class);
 
-        assertEquals("test-kafka-output-step", deserialized.stepName());
-        assertEquals(StepType.PIPELINE, deserialized.stepType());
-        assertEquals("A step that outputs to Kafka", deserialized.description());
-        assertEquals("my-custom-schema-v1", deserialized.customConfigSchemaId());
+        // Verify that the deserialized object equals the original
+        assertEquals(config, deserialized);
 
+        // Verify specific properties
+        assertEquals("file-connector", deserialized.stepName());
+        assertEquals(StepType.INITIAL_PIPELINE, deserialized.stepType());
+        assertEquals("Monitors a directory for new files to index", deserialized.description());
+        assertEquals("file-connector-schema", deserialized.customConfigSchemaId());
+
+        // Verify custom config
         assertNotNull(deserialized.customConfig());
-        // CORRECTED ASSERTION:
-        assertEquals("{\"key\":\"value\"}", deserialized.customConfig().jsonConfig().toString());
+        assertTrue(deserialized.customConfig().jsonConfig().has("directory"));
+        assertTrue(deserialized.customConfig().jsonConfig().has("pollingIntervalMs"));
+        assertTrue(deserialized.customConfig().jsonConfig().has("filePatterns"));
 
+        // Verify processor info
         assertNotNull(deserialized.processorInfo());
-        assertEquals("kafka-processing-service", deserialized.processorInfo().grpcServiceName());
+        assertEquals("file-connector-service", deserialized.processorInfo().grpcServiceName());
         assertNull(deserialized.processorInfo().internalProcessorBeanName());
 
-        assertEquals(3, deserialized.maxRetries());
-        assertEquals(2000L, deserialized.retryBackoffMs());
-        assertEquals(60000L, deserialized.maxRetryBackoffMs());
-        assertEquals(1.5, deserialized.retryBackoffMultiplier());
-        assertEquals(10000L, deserialized.stepTimeoutMs());
-
-        // Verify kafkaInputs
-        assertNotNull(deserialized.kafkaInputs());
-        assertEquals(1, deserialized.kafkaInputs().size());
-        KafkaInputDefinition kafkaInput = deserialized.kafkaInputs().get(0);
-        assertEquals(2, kafkaInput.listenTopics().size());
-        assertTrue(kafkaInput.listenTopics().contains("input-topic-1"));
-        assertTrue(kafkaInput.listenTopics().contains("input-topic-2"));
-        assertEquals("test-consumer-group", kafkaInput.consumerGroupId());
-        assertEquals("earliest", kafkaInput.kafkaConsumerProperties().get("auto.offset.reset"));
-
+        // Verify outputs
         assertNotNull(deserialized.outputs());
-        assertEquals(2, deserialized.outputs().size());
+        assertEquals(1, deserialized.outputs().size());
 
+        // Verify default output
         PipelineStepConfig.OutputTarget defaultOutput = deserialized.outputs().get("default");
         assertNotNull(defaultOutput);
-        assertEquals("next-step-1", defaultOutput.targetStepName());
+        assertEquals("document-parser", defaultOutput.targetStepName());
         assertEquals(TransportType.KAFKA, defaultOutput.transportType());
         assertNotNull(defaultOutput.kafkaTransport());
-        assertEquals("pipeline.step.out", defaultOutput.kafkaTransport().topic());
-        assertEquals(Map.of("retries", "3"), defaultOutput.kafkaTransport().kafkaProducerProperties());
+        assertEquals("search.files.incoming", defaultOutput.kafkaTransport().topic());
         assertNull(defaultOutput.grpcTransport());
-
-        PipelineStepConfig.OutputTarget errorOutput = deserialized.outputs().get("errorPath");
-        assertNotNull(errorOutput);
-        assertEquals("error-step-1", errorOutput.targetStepName());
-        assertEquals(TransportType.INTERNAL, errorOutput.transportType());
-        assertNull(errorOutput.kafkaTransport());
-        assertNull(errorOutput.grpcTransport());
     }
 
     @Test
     void testSerializationDeserialization_GrpcOutputStep() throws Exception {
-        PipelineStepConfig.JsonConfigOptions customConfig = createJsonConfigOptions("{\"serviceSpecific\":\"config\"}");
-        PipelineStepConfig.ProcessorInfo processorInfo = new PipelineStepConfig.ProcessorInfo(
-                null,
-                "grpc-processing-internal-bean"
-        );
+        // Get the comprehensive pipeline cluster JSON from the test utilities
+        String clusterJson = SamplePipelineConfigJson.getComprehensivePipelineClusterConfigJson();
 
-        Map<String, PipelineStepConfig.OutputTarget> outputs = new HashMap<>();
-        GrpcTransportConfig grpcOutputTransport = new GrpcTransportConfig(
-                "my-downstream-grpc-service",
-                Map.of("deadlineMs", "5000")
-        );
-        outputs.put("primary", new PipelineStepConfig.OutputTarget(
-                "next-grpc-target",
-                TransportType.GRPC,
-                grpcOutputTransport,
-                null
-        ));
+        // Extract the analytics processor step from the cluster configuration
+        // This step uses gRPC for output
+        String stepJson = extractPipelineStepJson(clusterJson, "analytics-pipeline", "analytics-processor");
 
-        // Create a list of KafkaInputDefinition for testing
-        List<KafkaInputDefinition> kafkaInputs = List.of(
-                new KafkaInputDefinition(
-                        List.of("grpc-input-topic"),
-                        "grpc-consumer-group",
-                        Map.of("max.poll.records", "100")
-                )
-        );
+        // Deserialize the JSON to a PipelineStepConfig object
+        PipelineStepConfig config = PipelineConfigTestUtils.fromJson(stepJson, PipelineStepConfig.class);
 
-        PipelineStepConfig config = new PipelineStepConfig(
-                "test-grpc-output-step",
-                StepType.PIPELINE,
-                "Outputs to gRPC",
-                null,
-                customConfig,
-                kafkaInputs,
-                outputs,
-                0,
-                1000L,
-                30000L,
-                2.0,
-                5000L,
-                processorInfo
-        );
-
-        String json = objectMapper.writeValueAsString(config);
+        // Serialize to JSON using the test utilities
+        String json = PipelineConfigTestUtils.toJson(config);
         System.out.println("Serialized GRPC Output PipelineStepConfig JSON:\n" + json);
 
-        PipelineStepConfig deserialized = objectMapper.readValue(json, PipelineStepConfig.class);
+        // Deserialize back to object using the test utilities
+        PipelineStepConfig deserialized = PipelineConfigTestUtils.fromJson(json, PipelineStepConfig.class);
 
-        assertEquals("test-grpc-output-step", deserialized.stepName());
-        assertNotNull(deserialized.processorInfo());
-        assertEquals("grpc-processing-internal-bean", deserialized.processorInfo().internalProcessorBeanName());
-        assertNull(deserialized.processorInfo().grpcServiceName());
+        // Verify that the deserialized object equals the original
+        assertEquals(config, deserialized);
 
+        // Verify specific properties
+        assertEquals("analytics-processor", deserialized.stepName());
+        assertEquals(StepType.PIPELINE, deserialized.stepType());
+        assertEquals("Processes documents for analytics", deserialized.description());
+        assertEquals("analytics-processor-schema", deserialized.customConfigSchemaId());
+
+        // Verify custom config
         assertNotNull(deserialized.customConfig());
-        // CORRECTED ASSERTION:
-        assertEquals("{\"serviceSpecific\":\"config\"}", deserialized.customConfig().jsonConfig().toString());
+        assertTrue(deserialized.customConfig().jsonConfig().has("aggregationEnabled"));
+        assertTrue(deserialized.customConfig().jsonConfig().has("trendAnalysisEnabled"));
 
-        // Verify kafkaInputs
+        // Verify processor info
+        assertNotNull(deserialized.processorInfo());
+        assertEquals("analytics-processor-service", deserialized.processorInfo().grpcServiceName());
+        assertNull(deserialized.processorInfo().internalProcessorBeanName());
+
+        // Verify kafka inputs
         assertNotNull(deserialized.kafkaInputs());
         assertEquals(1, deserialized.kafkaInputs().size());
         KafkaInputDefinition kafkaInput = deserialized.kafkaInputs().get(0);
-        assertEquals(1, kafkaInput.listenTopics().size());
-        assertTrue(kafkaInput.listenTopics().contains("grpc-input-topic"));
-        assertEquals("grpc-consumer-group", kafkaInput.consumerGroupId());
-        assertEquals("100", kafkaInput.kafkaConsumerProperties().get("max.poll.records"));
+        assertTrue(kafkaInput.listenTopics().contains("document.for.analytics"));
+        assertEquals("analytics-processor-group", kafkaInput.consumerGroupId());
 
-        assertEquals(0, deserialized.maxRetries());
-
+        // Verify outputs
         assertNotNull(deserialized.outputs());
         assertEquals(1, deserialized.outputs().size());
 
-        PipelineStepConfig.OutputTarget primaryOutput = deserialized.outputs().get("primary");
-        assertNotNull(primaryOutput);
-        assertEquals("next-grpc-target", primaryOutput.targetStepName());
-        assertEquals(TransportType.GRPC, primaryOutput.transportType());
-        assertNotNull(primaryOutput.grpcTransport());
-        assertEquals("my-downstream-grpc-service", primaryOutput.grpcTransport().serviceName());
-        assertEquals(Map.of("deadlineMs", "5000"), primaryOutput.grpcTransport().grpcClientProperties());
-        assertNull(primaryOutput.kafkaTransport());
+        // Verify default output
+        PipelineStepConfig.OutputTarget defaultOutput = deserialized.outputs().get("default_dashboard");
+        assertNotNull(defaultOutput);
+        assertEquals("dashboard-updater", defaultOutput.targetStepName());
+        assertEquals(TransportType.GRPC, defaultOutput.transportType());
+        assertNotNull(defaultOutput.grpcTransport());
+        assertEquals("dashboard-service", defaultOutput.grpcTransport().serviceName());
+        assertNull(defaultOutput.kafkaTransport());
     }
 
     @Test
     void testSerializationDeserialization_InternalStepAsSink() throws Exception {
-        PipelineStepConfig.ProcessorInfo processorInfo = new PipelineStepConfig.ProcessorInfo(
-                null,
-                "internal-aggregator-module"
-        );
-        Map<String, PipelineStepConfig.OutputTarget> outputs = Collections.emptyMap();
+        // Get the search indexing pipeline JSON from the test utilities
+        String clusterJson = SamplePipelineConfigJson.getSearchIndexingPipelineJson();
 
-        // Create a list of KafkaInputDefinition for testing
-        List<KafkaInputDefinition> kafkaInputs = List.of(
-                new KafkaInputDefinition(
-                        List.of("sink-input-topic"),
-                        "sink-consumer-group",
-                        Map.of("enable.auto.commit", "true")
-                )
-        );
+        // Extract the search indexer step from the cluster configuration
+        // This step is a sink
+        String stepJson = extractPipelineStepJson(clusterJson, "search-indexing-pipeline", "search-indexer");
 
-        PipelineStepConfig config = new PipelineStepConfig(
-                "final-internal-sink-step",
-                StepType.SINK,
-                "An internal sink step",
-                null,
-                null,
-                kafkaInputs,
-                outputs,
-                0, 1000L, 30000L, 2.0, null,
-                processorInfo
-        );
+        // Deserialize the JSON to a PipelineStepConfig object
+        PipelineStepConfig config = PipelineConfigTestUtils.fromJson(stepJson, PipelineStepConfig.class);
 
-        String json = objectMapper.writeValueAsString(config);
-        System.out.println("Serialized INTERNAL Sink PipelineStepConfig JSON:\n" + json);
-        PipelineStepConfig deserialized = objectMapper.readValue(json, PipelineStepConfig.class);
+        // Serialize to JSON using the test utilities
+        String json = PipelineConfigTestUtils.toJson(config);
+        System.out.println("Serialized Sink PipelineStepConfig JSON:\n" + json);
 
-        assertEquals("final-internal-sink-step", deserialized.stepName());
+        // Deserialize back to object using the test utilities
+        PipelineStepConfig deserialized = PipelineConfigTestUtils.fromJson(json, PipelineStepConfig.class);
+
+        // Verify that the deserialized object equals the original
+        assertEquals(config, deserialized);
+
+        // Verify specific properties
+        assertEquals("search-indexer", deserialized.stepName());
         assertEquals(StepType.SINK, deserialized.stepType());
-        assertNotNull(deserialized.processorInfo());
-        assertEquals("internal-aggregator-module", deserialized.processorInfo().internalProcessorBeanName());
-        assertNull(deserialized.processorInfo().grpcServiceName());
-        assertNull(deserialized.customConfig());
+        assertEquals("Indexes documents in the search engine", deserialized.description());
+        assertEquals("search-indexer-schema", deserialized.customConfigSchemaId());
 
-        // Verify kafkaInputs
+        // Verify custom config
+        assertNotNull(deserialized.customConfig());
+        assertTrue(deserialized.customConfig().jsonConfig().has("indexName"));
+        assertTrue(deserialized.customConfig().jsonConfig().has("batchSize"));
+
+        // Verify processor info
+        assertNotNull(deserialized.processorInfo());
+        assertEquals("search-indexer-service", deserialized.processorInfo().grpcServiceName());
+        assertNull(deserialized.processorInfo().internalProcessorBeanName());
+
+        // Verify kafka inputs
         assertNotNull(deserialized.kafkaInputs());
         assertEquals(1, deserialized.kafkaInputs().size());
         KafkaInputDefinition kafkaInput = deserialized.kafkaInputs().get(0);
-        assertEquals(1, kafkaInput.listenTopics().size());
-        assertTrue(kafkaInput.listenTopics().contains("sink-input-topic"));
-        assertEquals("sink-consumer-group", kafkaInput.consumerGroupId());
-        assertEquals("true", kafkaInput.kafkaConsumerProperties().get("enable.auto.commit"));
+        assertTrue(kafkaInput.listenTopics().contains("search.documents.analyzed"));
+        assertEquals("search-indexer-group", kafkaInput.consumerGroupId());
 
-        assertTrue(deserialized.outputs().isEmpty());
+        // Verify outputs
+        assertNotNull(deserialized.outputs());
+        assertEquals(1, deserialized.outputs().size());
+
+        // Verify error output
+        PipelineStepConfig.OutputTarget errorOutput = deserialized.outputs().get("onError");
+        assertNotNull(errorOutput);
+        assertEquals("error-handler", errorOutput.targetStepName());
+        assertEquals(TransportType.KAFKA, errorOutput.transportType());
+        assertEquals("search.errors", errorOutput.kafkaTransport().topic());
     }
 
     @Test
@@ -428,92 +354,66 @@ class PipelineStepConfigTest {
 
     @Test
     void testLoadFromJsonFile_WithNewRecordModel() throws Exception {
-        String jsonToLoad = """
-        {
-          "stepName": "imageProcessorKafka",
-          "stepType": "PIPELINE",
-          "description": "Processes images received from Kafka",
-          "customConfigSchemaId": "imageProcSchema_v2",
-          "customConfig": {
-            "jsonConfig": {"format":"jpeg", "quality":90, "targetSize":"1024x768"},
-            "configParams": {"logLevel": "DEBUG"}
-          },
-          "maxRetries": 3,
-          "retryBackoffMs": 2000,
-          "maxRetryBackoffMs": 60000,
-          "retryBackoffMultiplier": 2.0,
-          "stepTimeoutMs": 30000,
-          "processorInfo": {
-            "grpcServiceName": "image-processing-module-v2"
-          },
-          "kafkaInputs": [
-            {
-              "listenTopics": ["raw-images", "reprocess-images"],
-              "consumerGroupId": "image-processor-group",
-              "kafkaConsumerProperties": {
-                "auto.offset.reset": "earliest",
-                "fetch.max.bytes": "52428800"
-              }
-            }
-          ],
-          "outputs": {
-            "default": {
-              "targetStepName": "storeImageMetadata",
-              "transportType": "KAFKA",
-              "kafkaTransport": {
-                "topic": "processed.images.imageProcessorKafka.metadata",
-                "kafkaProducerProperties": {"acks": "all"}
-              }
-            },
-            "onCompletion": {
-              "targetStepName": "notifyCompletion",
-              "transportType": "GRPC",
-              "grpcTransport": {
-                "serviceName": "notification-service",
-                "grpcClientProperties": {"timeout": "5s"}
-              }
-            },
-            "onError": {
-              "targetStepName": "logImageProcessingError",
-              "transportType": "INTERNAL"
-            }
-          }
-        }
-        """;
-        PipelineStepConfig config = objectMapper.readValue(new ByteArrayInputStream(jsonToLoad.getBytes(StandardCharsets.UTF_8)), PipelineStepConfig.class);
+        // Get the search indexing pipeline JSON from the test utilities
+        String clusterJson = SamplePipelineConfigJson.getSearchIndexingPipelineJson();
 
-        assertEquals("imageProcessorKafka", config.stepName());
+        // Extract a pipeline step from the cluster configuration
+        String stepJson = extractPipelineStepJson(clusterJson, "search-indexing-pipeline", "document-parser");
+
+        // Deserialize the JSON to a PipelineStepConfig object
+        PipelineStepConfig config = PipelineConfigTestUtils.fromJson(stepJson, PipelineStepConfig.class);
+
+        // Verify the step properties
+        assertEquals("document-parser", config.stepName());
         assertEquals(StepType.PIPELINE, config.stepType());
-        assertEquals("image-processing-module-v2", config.processorInfo().grpcServiceName());
-        assertNotNull(config.customConfig());
-        assertEquals("{\"format\":\"jpeg\",\"quality\":90,\"targetSize\":\"1024x768\"}", config.customConfig().jsonConfig().toString());
-        assertEquals("DEBUG", config.customConfig().configParams().get("logLevel"));
-        assertEquals(3, config.maxRetries());
-        assertEquals(2000L, config.retryBackoffMs());
+        assertEquals("document-parser-service", config.processorInfo().grpcServiceName());
 
-        // Verify kafkaInputs
+        // Verify custom config
+        assertNotNull(config.customConfig());
+        assertTrue(config.customConfig().jsonConfig().has("extractMetadata"));
+        assertTrue(config.customConfig().jsonConfig().has("extractText"));
+        assertEquals("document-parser-schema", config.customConfigSchemaId());
+
+        // Verify kafka inputs
         assertNotNull(config.kafkaInputs());
         assertEquals(1, config.kafkaInputs().size());
         KafkaInputDefinition kafkaInput = config.kafkaInputs().get(0);
-        assertEquals(2, kafkaInput.listenTopics().size());
-        assertTrue(kafkaInput.listenTopics().contains("raw-images"));
-        assertTrue(kafkaInput.listenTopics().contains("reprocess-images"));
-        assertEquals("image-processor-group", kafkaInput.consumerGroupId());
-        assertEquals("earliest", kafkaInput.kafkaConsumerProperties().get("auto.offset.reset"));
-        assertEquals("52428800", kafkaInput.kafkaConsumerProperties().get("fetch.max.bytes"));
+        assertTrue(kafkaInput.listenTopics().contains("search.files.incoming"));
+        assertEquals("document-parser-group", kafkaInput.consumerGroupId());
 
+        // Verify outputs
+        assertNotNull(config.outputs());
+        assertEquals(2, config.outputs().size());
+
+        // Verify default output
         assertNotNull(config.outputs().get("default"));
-        assertEquals("storeImageMetadata", config.outputs().get("default").targetStepName());
+        assertEquals("text-analyzer", config.outputs().get("default").targetStepName());
         assertEquals(TransportType.KAFKA, config.outputs().get("default").transportType());
-        assertEquals("processed.images.imageProcessorKafka.metadata", config.outputs().get("default").kafkaTransport().topic());
-        assertNotNull(config.outputs().get("onCompletion"));
-        assertEquals("notifyCompletion", config.outputs().get("onCompletion").targetStepName());
-        assertEquals(TransportType.GRPC, config.outputs().get("onCompletion").transportType());
-        assertEquals("notification-service", config.outputs().get("onCompletion").grpcTransport().serviceName());
+        assertEquals("search.documents.parsed", config.outputs().get("default").kafkaTransport().topic());
+
+        // Verify error output
         assertNotNull(config.outputs().get("onError"));
-        assertEquals("logImageProcessingError", config.outputs().get("onError").targetStepName());
-        assertEquals(TransportType.INTERNAL, config.outputs().get("onError").transportType());
-        assertNull(config.outputs().get("onError").kafkaTransport());
-        assertNull(config.outputs().get("onError").grpcTransport());
+        assertEquals("error-handler", config.outputs().get("onError").targetStepName());
+        assertEquals(TransportType.KAFKA, config.outputs().get("onError").transportType());
+        assertEquals("search.errors", config.outputs().get("onError").kafkaTransport().topic());
+    }
+
+    /**
+     * Helper method to extract a pipeline step configuration from a cluster configuration JSON.
+     */
+    private String extractPipelineStepJson(String clusterJson, String pipelineName, String stepName) throws Exception {
+        // Parse the cluster JSON
+        JsonNode clusterNode = objectMapper.readTree(clusterJson);
+
+        // Extract the pipeline step node
+        JsonNode stepNode = clusterNode
+            .path("pipelineGraphConfig")
+            .path("pipelines")
+            .path(pipelineName)
+            .path("pipelineSteps")
+            .path(stepName);
+
+        // Convert the step node back to JSON
+        return objectMapper.writeValueAsString(stepNode);
     }
 }
