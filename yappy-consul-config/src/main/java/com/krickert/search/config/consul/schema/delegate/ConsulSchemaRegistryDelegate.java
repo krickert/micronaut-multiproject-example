@@ -241,6 +241,53 @@ public class ConsulSchemaRegistryDelegate {
         });
     }
 
+    /**
+     * Validates a JSON content against a JSON Schema.
+     *
+     * @param jsonContent The JSON content to validate
+     * @param schemaContent The JSON Schema content to validate against
+     * @return A Mono that emits a Set of ValidationMessage objects if validation fails, or an empty Set if validation succeeds
+     */
+    public Mono<Set<ValidationMessage>> validateContentAgainstSchema(@NonNull String jsonContent, @NonNull String schemaContent) {
+        return Mono.fromCallable(() -> {
+            if (StringUtils.isEmpty(jsonContent)) {
+                return Set.of(ValidationMessage.builder().message("JSON content cannot be empty.").build());
+            }
+            if (StringUtils.isEmpty(schemaContent)) {
+                return Set.of(ValidationMessage.builder().message("Schema content cannot be empty.").build());
+            }
+
+            try {
+                // Parse the JSON content and schema
+                JsonNode jsonNode = objectMapper.readTree(jsonContent);
+                JsonNode schemaNode = objectMapper.readTree(schemaContent);
+
+                // Create a JsonSchema instance from the schema content
+                JsonSchema schema = schemaFactory.getSchema(schemaNode, getSchemaValidationConfig());
+
+                // Validate the JSON content against the schema
+                Set<ValidationMessage> messages = schema.validate(jsonNode);
+
+                if (messages.isEmpty()) {
+                    log.trace("JSON content is valid against the schema.");
+                    return Collections.emptySet();
+                } else {
+                    String errors = messages.stream()
+                            .map(ValidationMessage::getMessage)
+                            .collect(Collectors.joining("; "));
+                    log.warn("JSON content validation failed against schema. Errors: {}", errors);
+                    return messages;
+                }
+            } catch (JsonProcessingException e) {
+                log.warn("Invalid JSON syntax: {}", e.getMessage());
+                return Set.of(ValidationMessage.builder().message("Invalid JSON syntax: " + e.getMessage()).build());
+            } catch (Exception e) {
+                log.warn("Error during JSON content validation: {}", e.getMessage(), e);
+                return Set.of(ValidationMessage.builder().message("Error during JSON content validation: " + e.getMessage()).build());
+            }
+        });
+    }
+
     private String getSchemaKey(String schemaId) {
         return this.fullSchemaKvPrefix + schemaId;
     }
