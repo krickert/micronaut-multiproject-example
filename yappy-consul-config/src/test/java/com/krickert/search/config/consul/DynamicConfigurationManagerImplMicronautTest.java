@@ -139,25 +139,25 @@ class DynamicConfigurationManagerImplMicronautTest {
     }
 
     private PipelineClusterConfig createDummyClusterConfig(String name, String... topics) {
-        return new PipelineClusterConfig(
-                name,
-                null,
-                new PipelineModuleMap(Collections.emptyMap()),
-                topics != null ? Set.of(topics) : Collections.emptySet(),
-                Collections.emptySet()
-        );
+        return PipelineClusterConfig.builder()
+                .clusterName(name)
+                .pipelineModuleMap(new PipelineModuleMap(Collections.emptyMap()))
+                .defaultPipelineName(name + "-default")
+                .allowedKafkaTopics(topics != null ? Set.of(topics) : Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
     }
 
     private PipelineClusterConfig createClusterConfigWithSchema(String name, SchemaReference schemaRef, String... topics) {
         PipelineModuleConfiguration moduleWithSchema = new PipelineModuleConfiguration("ModuleWithSchema", "module_schema_impl_id", schemaRef);
         PipelineModuleMap moduleMap = new PipelineModuleMap(Map.of(moduleWithSchema.implementationId(), moduleWithSchema));
-        return new PipelineClusterConfig(
-                name,
-                null,
-                moduleMap,
-                topics != null ? Set.of(topics) : Collections.emptySet(),
-                Collections.emptySet()
-        );
+        return PipelineClusterConfig.builder()
+                .clusterName(name)
+                .pipelineModuleMap(moduleMap)
+                .defaultPipelineName(name + "-default")
+                .allowedKafkaTopics(topics != null ? Set.of(topics) : Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
     }
 
     private SchemaVersionData createDummySchemaData(String subject, int version, String content) {

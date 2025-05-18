@@ -110,13 +110,36 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
     }
 
     private PipelineClusterConfig createDummyClusterConfig(String name) {
-        return new PipelineClusterConfig(
-                name,
-                new PipelineGraphConfig(Collections.emptyMap()),
-                new PipelineModuleMap(Collections.emptyMap()),
-                Collections.emptySet(),
-                Collections.emptySet()
-        );
+        return PipelineClusterConfig.builder()
+                .clusterName(name)
+                .pipelineGraphConfig(new PipelineGraphConfig(Collections.emptyMap()))
+                .pipelineModuleMap(new PipelineModuleMap(Collections.emptyMap()))
+                .defaultPipelineName(name + "-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
+    }
+
+    private PipelineClusterConfig updateTopics(PipelineClusterConfig config, Set<String> topics) {
+        return PipelineClusterConfig.builder()
+                .clusterName(config.clusterName())
+                .pipelineGraphConfig(config.pipelineGraphConfig())
+                .pipelineModuleMap(config.pipelineModuleMap())
+                .defaultPipelineName(config.defaultPipelineName())
+                .allowedKafkaTopics(topics)
+                .allowedGrpcServices(config.allowedGrpcServices())
+                .build();
+    }
+
+    private PipelineClusterConfig updateTopicsAndServices(PipelineClusterConfig config, Set<String> topics, Set<String> services) {
+        return PipelineClusterConfig.builder()
+                .clusterName(config.clusterName())
+                .pipelineGraphConfig(config.pipelineGraphConfig())
+                .pipelineModuleMap(config.pipelineModuleMap())
+                .defaultPipelineName(config.defaultPipelineName())
+                .allowedKafkaTopics(topics)
+                .allowedGrpcServices(services)
+                .build();
     }
 
     @SuppressWarnings("SameParameterValue")
@@ -146,13 +169,14 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
     @Test
     @DisplayName("fetchPipelineClusterConfig - should retrieve and deserialize existing config")
     void fetchPipelineClusterConfig_whenKeyExists_returnsConfig() throws Exception {
-        PipelineClusterConfig expectedConfig = new PipelineClusterConfig(
-                defaultTestClusterNameFromProperties,
-                new PipelineGraphConfig(Collections.emptyMap()),
-                new PipelineModuleMap(Collections.emptyMap()),
-                Set.of("topicA", "topicB"),
-                Set.of("serviceX")
-        );
+        PipelineClusterConfig expectedConfig = PipelineClusterConfig.builder()
+                .clusterName(defaultTestClusterNameFromProperties)
+                .pipelineGraphConfig(new PipelineGraphConfig(Collections.emptyMap()))
+                .pipelineModuleMap(new PipelineModuleMap(Collections.emptyMap()))
+                .defaultPipelineName(defaultTestClusterNameFromProperties + "-default")
+                .allowedKafkaTopics(Set.of("topicA", "topicB"))
+                .allowedGrpcServices(Set.of("serviceX"))
+                .build();
         seedConsulKv(fullDefaultClusterKey, expectedConfig);
         Optional<PipelineClusterConfig> fetchedOpt = configFetcher.fetchPipelineClusterConfig(defaultTestClusterNameFromProperties);
         assertTrue(fetchedOpt.isPresent(), "Expected config to be present");
@@ -227,7 +251,14 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         // 2. Test Initial config PUT after watch starts
         LOG.info("Watch Test: Putting initial config for key {}...", fullWatchClusterKey);
         PipelineClusterConfig initialConfig = createDummyClusterConfig(testClusterForWatch);
-        initialConfig = new PipelineClusterConfig(initialConfig.clusterName(), initialConfig.pipelineGraphConfig(), initialConfig.pipelineModuleMap(), Set.of("initialTopic"), initialConfig.allowedGrpcServices());
+        initialConfig = PipelineClusterConfig.builder()
+                .clusterName(initialConfig.clusterName())
+                .pipelineGraphConfig(initialConfig.pipelineGraphConfig())
+                .pipelineModuleMap(initialConfig.pipelineModuleMap())
+                .defaultPipelineName(initialConfig.defaultPipelineName())
+                .allowedKafkaTopics(Set.of("initialTopic"))
+                .allowedGrpcServices(initialConfig.allowedGrpcServices())
+                .build();
         seedConsulKv(fullWatchClusterKey, initialConfig);
 
         WatchCallbackResult receivedInitialResult = updates.poll(appWatchSeconds + 10, TimeUnit.SECONDS);
@@ -240,8 +271,12 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
         // 3. Update the config
         LOG.info("Watch Test: Updating config for key {}...", fullWatchClusterKey);
-        PipelineClusterConfig updatedConfig = new PipelineClusterConfig(testClusterForWatch,
-                null, null, Set.of("updatedTopic"), Collections.singleton("updatedService"));
+        PipelineClusterConfig updatedConfig = PipelineClusterConfig.builder()
+                .clusterName(testClusterForWatch)
+                .defaultPipelineName(testClusterForWatch + "-default")
+                .allowedKafkaTopics(Set.of("updatedTopic"))
+                .allowedGrpcServices(Collections.singleton("updatedService"))
+                .build();
         seedConsulKv(fullWatchClusterKey, updatedConfig);
 
         WatchCallbackResult receivedUpdateResult = updates.poll(appWatchSeconds + 10, TimeUnit.SECONDS);
@@ -292,13 +327,13 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         Consumer<WatchCallbackResult> handlerB = updatesB::offer;
 
         PipelineClusterConfig config1 = createDummyClusterConfig(testClusterForWatch);
-        config1 = new PipelineClusterConfig(config1.clusterName(), config1.pipelineGraphConfig(), config1.pipelineModuleMap(), Set.of("topic1"), config1.allowedGrpcServices());
+        config1 = updateTopics(config1, Set.of("topic1"));
 
         PipelineClusterConfig config2 = createDummyClusterConfig(testClusterForWatch);
-        config2 = new PipelineClusterConfig(config2.clusterName(), config2.pipelineGraphConfig(), config2.pipelineModuleMap(), Set.of("topic2"), config2.allowedGrpcServices());
+        config2 = updateTopics(config2, Set.of("topic2"));
 
         PipelineClusterConfig config3 = createDummyClusterConfig(testClusterForWatch);
-        config3 = new PipelineClusterConfig(config3.clusterName(), config3.pipelineGraphConfig(), config3.pipelineModuleMap(), Set.of("topic3"), config3.allowedGrpcServices());
+        config3 = updateTopics(config3, Set.of("topic3"));
 
 
         // Initial watch with Handler A
@@ -365,13 +400,13 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         Consumer<WatchCallbackResult> handlerB = updatesB::offer;
 
         PipelineClusterConfig configA1 = createDummyClusterConfig(clusterNameA);
-        configA1 = new PipelineClusterConfig(configA1.clusterName(), configA1.pipelineGraphConfig(), configA1.pipelineModuleMap(), Set.of("topicA1"), configA1.allowedGrpcServices());
+        configA1 = updateTopics(configA1, Set.of("topicA1"));
         PipelineClusterConfig configA2 = createDummyClusterConfig(clusterNameA); // A second config for cluster A
-        configA2 = new PipelineClusterConfig(configA2.clusterName(), configA2.pipelineGraphConfig(), configA2.pipelineModuleMap(), Set.of("topicA2"), configA2.allowedGrpcServices());
+        configA2 = updateTopics(configA2, Set.of("topicA2"));
 
 
         PipelineClusterConfig configB1 = createDummyClusterConfig(clusterNameB);
-        configB1 = new PipelineClusterConfig(configB1.clusterName(), configB1.pipelineGraphConfig(), configB1.pipelineModuleMap(), Set.of("topicB1"), configB1.allowedGrpcServices());
+        configB1 = updateTopics(configB1, Set.of("topicB1"));
 
         // 1. Watch Cluster A
         configFetcher.watchClusterConfig(clusterNameA, handlerA);
@@ -430,9 +465,9 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         Consumer<WatchCallbackResult> handler = updates::offer;
 
         PipelineClusterConfig config1 = createDummyClusterConfig(testClusterForWatch);
-        config1 = new PipelineClusterConfig(config1.clusterName(), config1.pipelineGraphConfig(), config1.pipelineModuleMap(), Set.of("topicClose1"), config1.allowedGrpcServices());
+        config1 = updateTopics(config1, Set.of("topicClose1"));
         PipelineClusterConfig config2 = createDummyClusterConfig(testClusterForWatch);
-        config2 = new PipelineClusterConfig(config2.clusterName(), config2.pipelineGraphConfig(), config2.pipelineModuleMap(), Set.of("topicClose2"), config2.allowedGrpcServices());
+        config2 = updateTopics(config2, Set.of("topicClose2"));
 
         // 1. Establish a watch and get an initial update
         configFetcher.watchClusterConfig(testClusterForWatch, handler);
@@ -490,9 +525,7 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         Consumer<WatchCallbackResult> handler = updates::offer;
 
         PipelineClusterConfig initialValidConfig = createDummyClusterConfig(testClusterForWatch);
-        initialValidConfig = new PipelineClusterConfig(initialValidConfig.clusterName(),
-                initialValidConfig.pipelineGraphConfig(), initialValidConfig.pipelineModuleMap(),
-                Set.of("topicInitial"), initialValidConfig.allowedGrpcServices());
+        initialValidConfig = updateTopics(initialValidConfig, Set.of("topicInitial"));
 
         // Start the watch
         configFetcher.watchClusterConfig(testClusterForWatch, handler);
@@ -635,8 +668,7 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         Consumer<WatchCallbackResult> handler = updates::offer;
 
         PipelineClusterConfig config1 = createDummyClusterConfig(testClusterForWatch);
-        config1 = new PipelineClusterConfig(config1.clusterName(), config1.pipelineGraphConfig(),
-                config1.pipelineModuleMap(), Set.of("topicKvNullTest"), config1.allowedGrpcServices());
+        config1 = updateTopics(config1, Set.of("topicKvNullTest"));
 
         // Initial state: connected via @BeforeEach
         assertTrue(configFetcher.connected.get(), "Should be connected initially from @BeforeEach");
@@ -735,12 +767,10 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         Consumer<WatchCallbackResult> handler2 = updates2::offer;
 
         PipelineClusterConfig config1 = createDummyClusterConfig(testClusterForWatch);
-        config1 = new PipelineClusterConfig(config1.clusterName(), config1.pipelineGraphConfig(),
-                config1.pipelineModuleMap(), Set.of("topicWatch1"), config1.allowedGrpcServices());
+        config1 = updateTopics(config1, Set.of("topicWatch1"));
 
         PipelineClusterConfig config2 = createDummyClusterConfig(testClusterForWatch); // Same key, different content
-        config2 = new PipelineClusterConfig(config2.clusterName(), config2.pipelineGraphConfig(),
-                config2.pipelineModuleMap(), Set.of("topicWatch2"), config2.allowedGrpcServices());
+        config2 = updateTopics(config2, Set.of("topicWatch2"));
 
         // 1. Establish first watch and verify it works
         configFetcher.watchClusterConfig(testClusterForWatch, handler1);

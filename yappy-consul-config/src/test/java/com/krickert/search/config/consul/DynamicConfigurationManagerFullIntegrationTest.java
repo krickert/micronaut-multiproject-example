@@ -3,8 +3,9 @@
     import com.fasterxml.jackson.core.JsonProcessingException;
     import com.fasterxml.jackson.databind.ObjectMapper;
     import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
-    // ... other necessary imports from DynamicConfigurationManagerImplMicronautTest ...
     import com.krickert.search.config.pipeline.model.*;
+    import com.krickert.search.config.pipeline.model.test.PipelineConfigTestUtils;
+    import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigObjects;
     import com.krickert.search.config.schema.registry.model.SchemaCompatibility;
     import com.krickert.search.config.schema.registry.model.SchemaType;
     import com.krickert.search.config.schema.registry.model.SchemaVersionData;
@@ -136,14 +137,24 @@
         private String getFullClusterKey(String clusterName) { return clusterConfigKeyPrefix + clusterName; }
         private String getFullSchemaKey(String subject, int version) { return String.format("%s%s/%d", schemaVersionsKeyPrefix, subject, version); }
         private PipelineClusterConfig createDummyClusterConfig(String name, String... topics) {
-            return new PipelineClusterConfig(name, null, new PipelineModuleMap(Collections.emptyMap()),
-                    topics != null ? Set.of(topics) : Collections.emptySet(), Collections.emptySet());
+            return PipelineClusterConfig.builder()
+                    .clusterName(name)
+                    .pipelineModuleMap(new PipelineModuleMap(Collections.emptyMap()))
+                    .defaultPipelineName(name + "-default")
+                    .allowedKafkaTopics(topics != null ? Set.of(topics) : Collections.emptySet())
+                    .allowedGrpcServices(Collections.emptySet())
+                    .build();
         }
         private PipelineClusterConfig createClusterConfigWithSchema(String name, SchemaReference schemaRef, String... topics) {
             PipelineModuleConfiguration moduleWithSchema = new PipelineModuleConfiguration("ModuleWithSchema", "module_schema_impl_id", schemaRef);
             PipelineModuleMap moduleMap = new PipelineModuleMap(Map.of(moduleWithSchema.implementationId(), moduleWithSchema));
-            return new PipelineClusterConfig(name, null, moduleMap,
-                    topics != null ? Set.of(topics) : Collections.emptySet(), Collections.emptySet());
+            return PipelineClusterConfig.builder()
+                    .clusterName(name)
+                    .pipelineModuleMap(moduleMap)
+                    .defaultPipelineName(name + "-default")
+                    .allowedKafkaTopics(topics != null ? Set.of(topics) : Collections.emptySet())
+                    .allowedGrpcServices(Collections.emptySet())
+                    .build();
         }
         private SchemaVersionData createDummySchemaData(String subject, int version, String content) {
             Instant createdAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
@@ -252,16 +263,12 @@
             PipelineModuleMap moduleMap = new PipelineModuleMap(Map.of(moduleImplementationId, moduleWithMissingSchema));
 
             // Create a step that uses this module and has a customConfig
-            PipelineStepConfig stepUsingMissingSchema = new PipelineStepConfig(
-                    "step1_uses_missing_schema", // pipelineStepId
-                    moduleImplementationId,      // pipelineImplementationId (links to moduleWithMissingSchema)
-                    new JsonConfigOptions("{\"someKey\":\"someValue\"}"), // customConfig
-                    null, // nextSteps
-                    null, // errorSteps
-                    TransportType.INTERNAL, // transportType
-                    null, // kafkaConfig
-                    null  // grpcConfig
-            );
+            PipelineStepConfig stepUsingMissingSchema = PipelineStepConfig.builder()
+                    .stepName("step1_uses_missing_schema")
+                    .stepType(StepType.PIPELINE)
+                    .processorInfo(new PipelineStepConfig.ProcessorInfo(moduleImplementationId, null))
+                    .customConfig(PipelineConfigTestUtils.createJsonConfigOptions("{\"someKey\":\"someValue\"}"))
+                    .build();
 
             // Create a pipeline containing this step
             PipelineConfig pipelineConfig = new PipelineConfig(
@@ -275,13 +282,14 @@
             );
 
             // Create the final cluster config
-            PipelineClusterConfig configViolatingRule = new PipelineClusterConfig(
-                    TEST_EXECUTION_CLUSTER,
-                    graphConfig, // Add the graph
-                    moduleMap,
-                    Set.of("topicViolatesRule"),
-                    Collections.emptySet()
-            );
+            PipelineClusterConfig configViolatingRule = PipelineClusterConfig.builder()
+                    .clusterName(TEST_EXECUTION_CLUSTER)
+                    .pipelineGraphConfig(graphConfig)
+                    .pipelineModuleMap(moduleMap)
+                    .defaultPipelineName(TEST_EXECUTION_CLUSTER + "-default")
+                    .allowedKafkaTopics(Set.of("topicViolatesRule"))
+                    .allowedGrpcServices(Collections.emptySet())
+                    .build();
 
             String fullClusterKey = getFullClusterKey(TEST_EXECUTION_CLUSTER);
             String fullMissingSchemaKey = getFullSchemaKey(missingSchemaRef.subject(), missingSchemaRef.version());

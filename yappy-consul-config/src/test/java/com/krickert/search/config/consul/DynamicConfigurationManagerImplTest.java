@@ -66,14 +66,31 @@ class DynamicConfigurationManagerImplTest {
         );
     }
 
+    private PipelineClusterConfig createTestClusterConfig(String name, PipelineModuleMap moduleMap) {
+        return PipelineClusterConfig.builder()
+                .clusterName(name)
+                .pipelineModuleMap(moduleMap)
+                .defaultPipelineName(name + "-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
+    }
+
+    private PipelineClusterConfig createSimpleTestClusterConfig(String name) {
+        return PipelineClusterConfig.builder()
+                .clusterName(name)
+                .defaultPipelineName(name + "-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
+    }
+
     @Test
     void initialize_successfulInitialLoad_validatesAndCachesConfigAndStartsWatch() {
         SchemaReference schemaRef1 = new SchemaReference("moduleA-schema", 1);
         PipelineModuleConfiguration moduleAConfig = new PipelineModuleConfiguration("ModuleA", "moduleA_impl_id", schemaRef1);
         PipelineModuleMap moduleMap = new PipelineModuleMap(Map.of("moduleA_impl_id", moduleAConfig));
-        PipelineClusterConfig mockClusterConfig = new PipelineClusterConfig(
-                TEST_CLUSTER_NAME, null, moduleMap, Collections.emptySet(), Collections.emptySet()
-        );
+        PipelineClusterConfig mockClusterConfig = createTestClusterConfig(TEST_CLUSTER_NAME, moduleMap);
         SchemaVersionData schemaVersionData1 = new SchemaVersionData(
                 1L, schemaRef1.subject(), schemaRef1.version(), "{\"type\":\"object\"}",
                 SchemaType.JSON_SCHEMA, SchemaCompatibility.NONE, Instant.now(), "Test Schema"
@@ -118,7 +135,7 @@ class DynamicConfigurationManagerImplTest {
 
     @Test
     void initialize_initialValidationFails_doesNotUpdateCacheOrPublishEventAndStartsWatch() {
-        PipelineClusterConfig mockClusterConfig = new PipelineClusterConfig(TEST_CLUSTER_NAME, null, null, null, null);
+        PipelineClusterConfig mockClusterConfig = createSimpleTestClusterConfig(TEST_CLUSTER_NAME);
         when(mockConsulConfigFetcher.fetchPipelineClusterConfig(TEST_CLUSTER_NAME))
                 .thenReturn(Optional.of(mockClusterConfig));
         when(mockConfigurationValidator.validate(eq(mockClusterConfig), any()))
@@ -134,7 +151,12 @@ class DynamicConfigurationManagerImplTest {
 
     @Test
     void handleConsulClusterConfigUpdate_successfulUpdate_validatesAndCachesAndPublishes() {
-        PipelineClusterConfig oldMockConfig = new PipelineClusterConfig("old-cluster-config-name", null, null, null, null);
+        PipelineClusterConfig oldMockConfig = PipelineClusterConfig.builder()
+                .clusterName("old-cluster-config-name")
+                .defaultPipelineName("old-cluster-config-name-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
         // This is what will be in the cache *before* the new config from watch is processed.
         // This will become the 'oldConfig' in the update event.
         when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldMockConfig));
@@ -142,9 +164,13 @@ class DynamicConfigurationManagerImplTest {
         SchemaReference schemaRefNew = new SchemaReference("moduleNew-schema", 1);
         PipelineModuleConfiguration moduleNewConfig = new PipelineModuleConfiguration("ModuleNew", "moduleNew_impl_id", schemaRefNew);
         PipelineModuleMap moduleMapNew = new PipelineModuleMap(Map.of("moduleNew_impl_id", moduleNewConfig));
-        PipelineClusterConfig newWatchedConfig = new PipelineClusterConfig(
-                TEST_CLUSTER_NAME, null, moduleMapNew, Collections.emptySet(), Collections.emptySet()
-        );
+        PipelineClusterConfig newWatchedConfig = PipelineClusterConfig.builder()
+                .clusterName(TEST_CLUSTER_NAME)
+                .pipelineModuleMap(moduleMapNew)
+                .defaultPipelineName(TEST_CLUSTER_NAME + "-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
         SchemaVersionData schemaVersionDataNew = new SchemaVersionData(
                 2L, schemaRefNew.subject(), schemaRefNew.version(), "{\"type\":\"string\"}",
                 SchemaType.JSON_SCHEMA, SchemaCompatibility.NONE, Instant.now(), "New Test Schema"
@@ -192,7 +218,12 @@ class DynamicConfigurationManagerImplTest {
 
     @Test
     void handleConsulClusterConfigUpdate_configDeleted_clearsCacheAndPublishes() {
-        PipelineClusterConfig oldMockConfig = new PipelineClusterConfig(TEST_CLUSTER_NAME, null, null, null, null);
+        PipelineClusterConfig oldMockConfig = PipelineClusterConfig.builder()
+                .clusterName(TEST_CLUSTER_NAME)
+                .defaultPipelineName(TEST_CLUSTER_NAME + "-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
 
         // --- Initialisation Phase Stubs ---
         // This is what initialize() will fetch and process
@@ -233,9 +264,19 @@ class DynamicConfigurationManagerImplTest {
 
     @Test
     void handleConsulClusterConfigUpdate_validationFails_keepsOldConfigAndDoesNotPublishSuccessEvent() {
-        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config", null, null, null, null);
+        PipelineClusterConfig oldValidConfig = PipelineClusterConfig.builder()
+                .clusterName("old-valid-config")
+                .defaultPipelineName("old-valid-config-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
         when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
-        PipelineClusterConfig newInvalidConfigFromWatch = new PipelineClusterConfig("new-invalid-config", null, null, null, null);
+        PipelineClusterConfig newInvalidConfigFromWatch = PipelineClusterConfig.builder()
+                .clusterName("new-invalid-config")
+                .defaultPipelineName("new-invalid-config-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
 
         // Simulate initial load and watch setup
         when(mockConsulConfigFetcher.fetchPipelineClusterConfig(TEST_CLUSTER_NAME)).thenReturn(Optional.of(oldValidConfig));
@@ -286,15 +327,24 @@ class DynamicConfigurationManagerImplTest {
 
     @Test
     void handleConsulClusterConfigUpdate_fetchSchemaThrowsException_handlesGracefullyKeepsOldConfig() {
-        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config", null, null, null, null);
+        PipelineClusterConfig oldValidConfig = PipelineClusterConfig.builder()
+                .clusterName("old-valid-config")
+                .defaultPipelineName("old-valid-config-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
         when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
 
         SchemaReference schemaRefNew = new SchemaReference("moduleNew-schema", 1);
         PipelineModuleConfiguration moduleNewConfig = new PipelineModuleConfiguration("ModuleNew", "moduleNew_impl_id", schemaRefNew);
         PipelineModuleMap moduleMapNew = new PipelineModuleMap(Map.of("moduleNew_impl_id", moduleNewConfig));
-        PipelineClusterConfig newWatchedConfig = new PipelineClusterConfig(
-                TEST_CLUSTER_NAME, null, moduleMapNew, Collections.emptySet(), Collections.emptySet()
-        );
+        PipelineClusterConfig newWatchedConfig = PipelineClusterConfig.builder()
+                .clusterName(TEST_CLUSTER_NAME)
+                .pipelineModuleMap(moduleMapNew)
+                .defaultPipelineName(TEST_CLUSTER_NAME + "-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
 
         // Simulate initial load and watch setup
         when(mockConsulConfigFetcher.fetchPipelineClusterConfig(TEST_CLUSTER_NAME)).thenReturn(Optional.of(oldValidConfig));
@@ -360,7 +410,12 @@ class DynamicConfigurationManagerImplTest {
 
     @Test
     void handleConsulWatchUpdate_watchResultHasError_logsAndKeepsOldConfig() {
-        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config", null, null, null, null);
+        PipelineClusterConfig oldValidConfig = PipelineClusterConfig.builder()
+                .clusterName("old-valid-config")
+                .defaultPipelineName("old-valid-config-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
         when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
 
         // Initial setup
@@ -388,8 +443,18 @@ class DynamicConfigurationManagerImplTest {
     }
     @Test
     void handleConsulWatchUpdate_validationItselfThrowsRuntimeException_logsAndKeepsOldConfig() {
-        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config", null, null, null, null);
-        PipelineClusterConfig newConfigFromWatch = new PipelineClusterConfig("new-config-causes-validator-error", null, null, null, null);
+        PipelineClusterConfig oldValidConfig = PipelineClusterConfig.builder()
+                .clusterName("old-valid-config")
+                .defaultPipelineName("old-valid-config-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
+        PipelineClusterConfig newConfigFromWatch = PipelineClusterConfig.builder()
+                .clusterName("new-config-causes-validator-error")
+                .defaultPipelineName("new-config-causes-validator-error-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
         when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
 
         dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
@@ -412,8 +477,18 @@ class DynamicConfigurationManagerImplTest {
     }
     @Test
     void handleConsulWatchUpdate_cacheUpdateThrowsRuntimeException_logsError_eventNotPublished() {
-        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config", null, null, null, null);
-        PipelineClusterConfig newConfigFromWatch = new PipelineClusterConfig("new-config-causes-cache-error", null, null, null, null);
+        PipelineClusterConfig oldValidConfig = PipelineClusterConfig.builder()
+                .clusterName("old-valid-config")
+                .defaultPipelineName("old-valid-config-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
+        PipelineClusterConfig newConfigFromWatch = PipelineClusterConfig.builder()
+                .clusterName("new-config-causes-cache-error")
+                .defaultPipelineName("new-config-causes-cache-error-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
         when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
 
         dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
@@ -437,8 +512,18 @@ class DynamicConfigurationManagerImplTest {
     }
     @Test
     void publishEvent_directListenerThrows_continuesNotifyingOtherListenersAndMicronautPublisher() {
-        PipelineClusterConfig currentConfig = new PipelineClusterConfig("current", null, null, null, null);
-        PipelineClusterConfig newConfig = new PipelineClusterConfig("new-valid-config", null, null, null, null);
+        PipelineClusterConfig currentConfig = PipelineClusterConfig.builder()
+                .clusterName("current")
+                .defaultPipelineName("current-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
+        PipelineClusterConfig newConfig = PipelineClusterConfig.builder()
+                .clusterName("new-valid-config")
+                .defaultPipelineName("new-valid-config-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
 
         Consumer<ClusterConfigUpdateEvent> misbehavingListener = Mockito.mock(Consumer.class);
         doThrow(new RuntimeException("Listener failed!")).when(misbehavingListener).accept(any());
@@ -492,7 +577,12 @@ class DynamicConfigurationManagerImplTest {
     }
     @Test
     void handleConsulWatchUpdate_ambiguousWatchResult_logsAndNoAction() {
-        PipelineClusterConfig oldValidConfig = new PipelineClusterConfig("old-valid-config", null, null, null, null);
+        PipelineClusterConfig oldValidConfig = PipelineClusterConfig.builder()
+                .clusterName("old-valid-config")
+                .defaultPipelineName("old-valid-config-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
         when(mockCachedConfigHolder.getCurrentConfig()).thenReturn(Optional.of(oldValidConfig));
 
         dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);

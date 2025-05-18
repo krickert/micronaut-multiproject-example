@@ -48,6 +48,8 @@ dependencies {
     testResourcesImplementation(project(":yappy-test-resources"))
 
     testImplementation(project(":yappy-test-resources"))
+    testImplementation(project(":yappy-models:pipeline-config-models-test-utils"))
+    testImplementation(project(":yappy-models:schema-registry-models-test-utils"))
 
     api(mn.micronaut.serde.api)
     api(mn.micronaut.serde.jackson)

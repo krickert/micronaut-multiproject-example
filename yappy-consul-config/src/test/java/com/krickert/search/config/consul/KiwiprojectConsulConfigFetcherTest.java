@@ -127,7 +127,12 @@ class KiwiprojectConsulConfigFetcherTest {
         simulateConnectedState();
         String clusterConfigKey = consulConfigFetcher.getClusterConfigKey(TEST_CLUSTER_NAME);
         String clusterConfigJson = "{\"clusterName\":\"" + TEST_CLUSTER_NAME + "\"}";
-        PipelineClusterConfig expectedConfig = new PipelineClusterConfig(TEST_CLUSTER_NAME, null, null, Collections.emptySet(), Collections.emptySet());
+        PipelineClusterConfig expectedConfig = PipelineClusterConfig.builder()
+                .clusterName(TEST_CLUSTER_NAME)
+                .defaultPipelineName(TEST_CLUSTER_NAME + "-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
 
         when(mockKeyValueClient.getValueAsString(clusterConfigKey)).thenReturn(Optional.of(clusterConfigJson));
         when(mockObjectMapper.readValue(clusterConfigJson, PipelineClusterConfig.class)).thenReturn(expectedConfig);
@@ -207,7 +212,12 @@ class KiwiprojectConsulConfigFetcherTest {
         String clusterConfigKey = consulConfigFetcher.getClusterConfigKey(TEST_CLUSTER_NAME);
         @SuppressWarnings("unchecked")
         Consumer<WatchCallbackResult> mockUpdateHandler = mock(Consumer.class);
-        PipelineClusterConfig testConfig = new PipelineClusterConfig(TEST_CLUSTER_NAME, null, null, null, null);
+        PipelineClusterConfig testConfig = PipelineClusterConfig.builder()
+                .clusterName(TEST_CLUSTER_NAME)
+                .defaultPipelineName(TEST_CLUSTER_NAME + "-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
         String testConfigJson = "{\"clusterName\":\"" + TEST_CLUSTER_NAME + "\"}";
 
         org.kiwiproject.consul.model.kv.Value consulApiValue = mock(org.kiwiproject.consul.model.kv.Value.class);

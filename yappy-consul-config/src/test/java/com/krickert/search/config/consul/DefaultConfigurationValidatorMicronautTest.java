@@ -1,10 +1,14 @@
 package com.krickert.search.config.consul;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.krickert.search.config.consul.validator.ClusterValidationRule;
 import com.krickert.search.config.consul.validator.CustomConfigSchemaValidator;
 import com.krickert.search.config.consul.validator.ReferentialIntegrityValidator;
 import com.krickert.search.config.consul.validator.WhitelistValidator;
 import com.krickert.search.config.pipeline.model.*;
+import com.krickert.search.config.pipeline.model.test.PipelineConfigTestUtils;
+import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigObjects;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
@@ -28,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class DefaultConfigurationValidatorMicronautTest {
     private static final Logger LOG = LoggerFactory.getLogger(DefaultConfigurationValidatorMicronautTest.class);
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Inject
     private DefaultConfigurationValidator validator; // The DI managed validator
@@ -64,7 +69,12 @@ class DefaultConfigurationValidatorMicronautTest {
     @Test
     void testValidatorInjectedAndValidatesSimpleConfig() {
         assertNotNull(validator, "DefaultConfigurationValidator should be injected");
-        PipelineClusterConfig config = new PipelineClusterConfig("TestClusterSimple", null, null, null, null);
+        PipelineClusterConfig config = PipelineClusterConfig.builder()
+                .clusterName("TestClusterSimple")
+                .defaultPipelineName("default-pipeline")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
         Function<SchemaReference, Optional<String>> schemaContentProvider = ref -> Optional.of("{}");
         ValidationResult result = validator.validate(config, schemaContentProvider); // Use the injected validator
         assertTrue(result.isValid(), "Validation should succeed for a simple valid configuration. Errors: " + result.errors());
@@ -83,13 +93,14 @@ class DefaultConfigurationValidatorMicronautTest {
     @Test
     void testCreatingConfigWithBlankClusterName_throwsAtConstruction() {
         Exception exception = assertThrows(IllegalArgumentException.class, () -> {
-            new PipelineClusterConfig( // This line will throw
-                    "", // Blank cluster name
-                    new PipelineGraphConfig(Collections.emptyMap()),
-                    new PipelineModuleMap(Collections.emptyMap()),
-                    Collections.emptySet(),
-                    Collections.emptySet()
-            );
+            PipelineClusterConfig.builder() // This line will throw
+                    .clusterName("") // Blank cluster name
+                    .pipelineGraphConfig(new PipelineGraphConfig(Collections.emptyMap()))
+                    .pipelineModuleMap(new PipelineModuleMap(Collections.emptyMap()))
+                    .defaultPipelineName("default-pipeline")
+                    .allowedKafkaTopics(Collections.emptySet())
+                    .allowedGrpcServices(Collections.emptySet())
+                    .build();
         });
         assertEquals("PipelineClusterConfig clusterName cannot be null or blank.", exception.getMessage());
     }
@@ -98,50 +109,78 @@ class DefaultConfigurationValidatorMicronautTest {
     @Test
     void testValidateInvalidConfigFromInjectedRule() {
         Map<String, PipelineStepConfig> steps = new HashMap<>();
-        PipelineStepConfig step = new PipelineStepConfig(
-                "step1", "non-existent-module", null, null, null, 
-                TransportType.INTERNAL, null, null
-        );
-        steps.put("step1", step);
+
+        // Create a step with a non-existent module
+        PipelineStepConfig step = PipelineStepConfig.builder()
+                .stepName("step1")
+                .stepType(StepType.PIPELINE)
+                .processorInfo(new PipelineStepConfig.ProcessorInfo("non-existent-module", null))
+                .build();
+
+        steps.put(step.stepName(), step);
         PipelineConfig pipeline = new PipelineConfig("pipeline1", steps);
         Map<String, PipelineConfig> pipelines = new HashMap<>();
         pipelines.put("pipeline1", pipeline);
         PipelineGraphConfig graphConfig = new PipelineGraphConfig(pipelines);
         PipelineModuleMap moduleMap = new PipelineModuleMap(Collections.emptyMap());
-        PipelineClusterConfig config = new PipelineClusterConfig(
-                "test-cluster-invalid-module", graphConfig, moduleMap,
-                Collections.emptySet(),
-                Collections.emptySet()
-        );
+
+        PipelineClusterConfig config = PipelineClusterConfig.builder()
+                .clusterName("test-cluster-invalid-module")
+                .pipelineGraphConfig(graphConfig)
+                .pipelineModuleMap(moduleMap)
+                .defaultPipelineName("pipeline1")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
+
         ValidationResult result = validator.validate(config, ref -> Optional.empty()); // Use the injected validator
         assertFalse(result.isValid(), "Validation should fail for a configuration with an invalid implementation ID. Errors: " + result.errors());
         assertTrue(result.errors().size() >= 1, "There should be at least one validation error");
-        assertTrue(result.errors().stream().anyMatch(error -> error.contains("references unknown pipelineImplementationId 'non-existent-module'")),
+        assertTrue(result.errors().stream().anyMatch(error -> error.contains("references unknown implementationKey 'non-existent-module'")),
                 "At least one error should indicate an unknown implementation ID");
     }
     @Test
     void testValidateConfigWithMultipleRuleViolations() {
         Map<String, PipelineStepConfig> stepsInvalidModule = new HashMap<>();
-        PipelineStepConfig stepInvalidModule = new PipelineStepConfig(
-                "stepBadModule", "unknown-module-id", null, null, null, 
-                TransportType.INTERNAL, null, null
-        );
-        stepsInvalidModule.put(stepInvalidModule.pipelineStepId(), stepInvalidModule);
+
+        // Create a step with an unknown module ID and invalid custom config
+        PipelineStepConfig stepInvalidModule = PipelineStepConfig.builder()
+                .stepName("stepBadModule")
+                .stepType(StepType.PIPELINE)
+                .processorInfo(new PipelineStepConfig.ProcessorInfo("unknown-module-id", null))
+                .customConfigSchemaId("non-existent-schema")
+                .customConfig(new PipelineStepConfig.JsonConfigOptions(OBJECT_MAPPER.createObjectNode().put("invalid", "config"), Map.of()))
+                .build();
+
+        stepsInvalidModule.put(stepInvalidModule.stepName(), stepInvalidModule);
         PipelineConfig pipeline1 = new PipelineConfig("pipelineWithBadModule", stepsInvalidModule);
 
         Map<String, PipelineStepConfig> stepsInvalidTopic = new HashMap<>();
-        // Create a KafkaTransportConfig with a non-whitelisted listen topic
-        KafkaTransportConfig kafkaConfig = new KafkaTransportConfig(
-                List.of("non-whitelisted-listen-topic"), 
-                null, 
-                null
+
+        // Create a KafkaInputDefinition with a non-whitelisted listen topic
+        List<KafkaInputDefinition> kafkaInputs = List.of(
+            KafkaInputDefinition.builder()
+                .listenTopics(List.of("non-whitelisted-listen-topic"))
+                .consumerGroupId("test-group")
+                .build()
         );
 
-        PipelineStepConfig stepInvalidTopic = new PipelineStepConfig(
-                "stepBadTopic", "actual-module-id", null, null, null,
-                TransportType.KAFKA, kafkaConfig, null
-        );
-        stepsInvalidTopic.put(stepInvalidTopic.pipelineStepId(), stepInvalidTopic);
+        // Create a step with the non-whitelisted kafka input and invalid output target
+        Map<String, PipelineStepConfig.OutputTarget> invalidOutputs = new HashMap<>();
+        invalidOutputs.put("default", PipelineStepConfig.OutputTarget.builder()
+                .targetStepName("non-existent-step")
+                .transportType(TransportType.INTERNAL)
+                .build());
+
+        PipelineStepConfig stepInvalidTopic = PipelineStepConfig.builder()
+                .stepName("stepBadTopic")
+                .stepType(StepType.PIPELINE)
+                .processorInfo(new PipelineStepConfig.ProcessorInfo("actual-module-id", null))
+                .kafkaInputs(kafkaInputs)
+                .outputs(invalidOutputs)
+                .build();
+
+        stepsInvalidTopic.put(stepInvalidTopic.stepName(), stepInvalidTopic);
         PipelineConfig pipeline2 = new PipelineConfig("pipelineWithBadTopic", stepsInvalidTopic);
 
         Map<String, PipelineModuleConfiguration> modules = new HashMap<>();
@@ -156,9 +195,14 @@ class DefaultConfigurationValidatorMicronautTest {
         Set<String> allowedKafkaTopics = Collections.singleton("some-other-topic");
         Set<String> allowedGrpcServices = Collections.emptySet();
 
-        PipelineClusterConfig config = new PipelineClusterConfig(
-                "test-cluster-multi-error", graphConfig, moduleMap, allowedKafkaTopics, allowedGrpcServices
-        );
+        PipelineClusterConfig config = PipelineClusterConfig.builder()
+                .clusterName("test-cluster-multi-error")
+                .pipelineGraphConfig(graphConfig)
+                .pipelineModuleMap(moduleMap)
+                .defaultPipelineName("default-pipeline")
+                .allowedKafkaTopics(allowedKafkaTopics)
+                .allowedGrpcServices(allowedGrpcServices)
+                .build();
 
         ValidationResult result = validator.validate(config, ref -> Optional.of("{}")); // Use the injected validator
 
@@ -169,15 +213,15 @@ class DefaultConfigurationValidatorMicronautTest {
         System.out.println("[DEBUG_LOG] All errors: " + result.errors());
 
         boolean unknownModuleErrorFound = result.errors().stream()
-                .anyMatch(e -> e.contains("references unknown pipelineImplementationId 'unknown-module-id'"));
-        boolean whitelistErrorFound = result.errors().stream()
-                .anyMatch(e -> e.contains("listens to non-whitelisted topic 'non-whitelisted-listen-topic'"));
+                .anyMatch(e -> e.contains("references unknown implementationKey 'unknown-module-id'"));
+        boolean schemaErrorFound = result.errors().stream()
+                .anyMatch(e -> e.contains("non-existent-schema"));
 
         System.out.println("[DEBUG_LOG] unknownModuleErrorFound: " + unknownModuleErrorFound);
-        System.out.println("[DEBUG_LOG] whitelistErrorFound: " + whitelistErrorFound);
+        System.out.println("[DEBUG_LOG] schemaErrorFound: " + schemaErrorFound);
 
         assertTrue(unknownModuleErrorFound, "Should find error for unknown module ID.");
-        assertTrue(whitelistErrorFound, "Should find error for non-whitelisted Kafka topic.");
+        assertTrue(schemaErrorFound, "Should find error for non-existent schema.");
     }
 
     @Test
@@ -190,7 +234,13 @@ class DefaultConfigurationValidatorMicronautTest {
 
         DefaultConfigurationValidator testSpecificValidator = new DefaultConfigurationValidator(rulesForThisTest);
 
-        PipelineClusterConfig config = new PipelineClusterConfig("TestClusterForException", null, null, null, null);
+        PipelineClusterConfig config = PipelineClusterConfig.builder()
+                .clusterName("TestClusterForException")
+                .defaultPipelineName("default-pipeline")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
+
         ValidationResult result = testSpecificValidator.validate(config, ref -> Optional.empty());
 
         assertFalse(result.isValid(), "Validation should fail when a rule throws an exception.");
@@ -221,62 +271,88 @@ class DefaultConfigurationValidatorMicronautTest {
         // --- Pipeline 1 Steps (Modified to use the new transport model) ---
         Map<String, PipelineStepConfig> p1Steps = new HashMap<>();
 
-        // Create KafkaTransportConfig for p1s1
-        KafkaTransportConfig p1s1KafkaConfig = new KafkaTransportConfig(
-                List.of("input-topic"),
-                "p1s1-produces-topic",
-                null
+        // Create KafkaInputDefinition for p1s1
+        List<KafkaInputDefinition> p1s1KafkaInputs = List.of(
+            KafkaInputDefinition.builder()
+                .listenTopics(List.of("input-topic"))
+                .consumerGroupId("p1s1-group")
+                .build()
         );
 
-        p1Steps.put("p1s1", new PipelineStepConfig(
-                "p1s1", 
-                "mod1_impl",
-                new JsonConfigOptions("{\"key\":\"value\"}"), // Has custom config
-                List.of("p1s2"), // nextSteps
-                null,  // errorSteps
-                TransportType.KAFKA, 
-                p1s1KafkaConfig,
-                null // No gRPC config
-        ));
+        // Create output target for p1s1
+        Map<String, PipelineStepConfig.OutputTarget> p1s1Outputs = new HashMap<>();
+        p1s1Outputs.put("default", PipelineStepConfig.OutputTarget.builder()
+                .targetStepName("p1s2")
+                .transportType(TransportType.KAFKA)
+                .kafkaTransport(KafkaTransportConfig.builder()
+                        .topic("p1s1-produces-topic")
+                        .build())
+                .build());
 
-        // Create KafkaTransportConfig for p1s2
-        KafkaTransportConfig p1s2KafkaConfig = new KafkaTransportConfig(
-                List.of("p1s2-listens-topic"),
-                "output-topic",
-                null
+        // Create p1s1 step
+        PipelineStepConfig p1s1 = PipelineStepConfig.builder()
+                .stepName("p1s1")
+                .stepType(StepType.PIPELINE)
+                .processorInfo(new PipelineStepConfig.ProcessorInfo("mod1_impl", null))
+                .customConfigSchemaId("schema-subject-1")
+                .customConfig(new PipelineStepConfig.JsonConfigOptions(OBJECT_MAPPER.createObjectNode().put("key", "value"), Map.of()))
+                .kafkaInputs(p1s1KafkaInputs)
+                .outputs(p1s1Outputs)
+                .build();
+
+        p1Steps.put(p1s1.stepName(), p1s1);
+
+        // Create KafkaInputDefinition for p1s2
+        List<KafkaInputDefinition> p1s2KafkaInputs = List.of(
+            KafkaInputDefinition.builder()
+                .listenTopics(List.of("p1s2-listens-topic"))
+                .consumerGroupId("p1s2-group")
+                .build()
         );
 
-        // Create GrpcTransportConfig for p1s2
-        GrpcTransportConfig p1s2GrpcConfig = new GrpcTransportConfig(
-                "grpc-service-A",
-                null
-        );
+        // Create output target for p1s2
+        Map<String, PipelineStepConfig.OutputTarget> p1s2Outputs = new HashMap<>();
+        p1s2Outputs.put("default", PipelineStepConfig.OutputTarget.builder()
+                .targetStepName("output")
+                .transportType(TransportType.KAFKA)
+                .kafkaTransport(KafkaTransportConfig.builder()
+                        .topic("output-topic")
+                        .build())
+                .build());
 
-        p1Steps.put("p1s2", new PipelineStepConfig(
-                "p1s2", 
-                "mod2_impl", 
-                null, // No custom config
-                null, // No next steps
-                null, // No error steps
-                TransportType.KAFKA, // Using Kafka as the primary transport
-                p1s2KafkaConfig,
-                null // No gRPC config for this test
-        ));
+        // Create p1s2 step
+        PipelineStepConfig p1s2 = PipelineStepConfig.builder()
+                .stepName("p1s2")
+                .stepType(StepType.PIPELINE)
+                .processorInfo(new PipelineStepConfig.ProcessorInfo("mod2_impl", null))
+                .kafkaInputs(p1s2KafkaInputs)
+                .outputs(p1s2Outputs)
+                .build();
+
+        p1Steps.put(p1s2.stepName(), p1s2);
+
+        // Create output step
+        PipelineStepConfig outputStep = PipelineStepConfig.builder()
+                .stepName("output")
+                .stepType(StepType.SINK)
+                .processorInfo(new PipelineStepConfig.ProcessorInfo("mod2_impl", null))
+                .build();
+
+        p1Steps.put(outputStep.stepName(), outputStep);
 
         PipelineConfig pipeline1 = new PipelineConfig("pipelineOne", p1Steps);
 
         // --- Pipeline 2 Steps (simple, using INTERNAL transport) ---
         Map<String, PipelineStepConfig> p2Steps = new HashMap<>();
-        p2Steps.put("p2s1", new PipelineStepConfig(
-                "p2s1", 
-                "mod2_impl", 
-                null, 
-                null, 
-                null, 
-                TransportType.INTERNAL, 
-                null, 
-                null
-        ));
+
+        // Create p2s1 step
+        PipelineStepConfig p2s1 = PipelineStepConfig.builder()
+                .stepName("p2s1")
+                .stepType(StepType.PIPELINE)
+                .processorInfo(new PipelineStepConfig.ProcessorInfo("mod2_impl", null))
+                .build();
+
+        p2Steps.put(p2s1.stepName(), p2s1);
         PipelineConfig pipeline2 = new PipelineConfig("pipelineTwo", p2Steps);
 
         // --- Graph ---
@@ -286,9 +362,14 @@ class DefaultConfigurationValidatorMicronautTest {
         ));
 
         // --- Cluster Config ---
-        PipelineClusterConfig config = new PipelineClusterConfig(
-                "complexValidCluster", graphConfig, moduleMap, allowedKafkaTopics, allowedGrpcServices
-        );
+        PipelineClusterConfig config = PipelineClusterConfig.builder()
+                .clusterName("complexValidCluster")
+                .pipelineGraphConfig(graphConfig)
+                .pipelineModuleMap(moduleMap)
+                .defaultPipelineName("pipelineOne")
+                .allowedKafkaTopics(allowedKafkaTopics)
+                .allowedGrpcServices(allowedGrpcServices)
+                .build();
 
         // --- Schema Provider ---
         String validSchemaContent = "{\"type\":\"object\", \"properties\":{\"key\":{\"type\":\"string\"}}, \"required\":[\"key\"]}";
