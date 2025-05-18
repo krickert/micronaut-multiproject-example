@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory; // Added for default
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import lombok.Builder;
 
 import java.util.Collections;
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@Builder
 public record PipelineStepConfig(
         @JsonProperty("stepName") @NotBlank String stepName,
         @JsonProperty("stepType") @NotNull StepType stepType,
@@ -170,6 +172,7 @@ public record PipelineStepConfig(
     // For brevity, not repeating them here but they should be part of this file.
     // Ensuring the JsonConfigOptions inner record is what we expect:
     @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Builder
     public record JsonConfigOptions(
             @JsonProperty("jsonConfig") JsonNode jsonConfig, // This should be JsonNode
             @JsonProperty("configParams") Map<String, String> configParams
@@ -194,6 +197,7 @@ public record PipelineStepConfig(
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Builder
     public record OutputTarget(
             @JsonProperty("targetStepName") @NotBlank String targetStepName,
             @JsonProperty("transportType") @NotNull TransportType transportType,
@@ -230,6 +234,7 @@ public record PipelineStepConfig(
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Builder
     public record ProcessorInfo(
             @JsonProperty("grpcServiceName") String grpcServiceName,
             @JsonProperty("internalProcessorBeanName") String internalProcessorBeanName

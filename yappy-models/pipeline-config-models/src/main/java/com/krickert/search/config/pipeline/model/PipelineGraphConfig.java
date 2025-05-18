@@ -2,9 +2,9 @@ package com.krickert.search.config.pipeline.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Builder;
 import java.util.Map;
 import java.util.Collections; // For unmodifiable map
-// No Lombok needed
 
 /**
  * Configuration for a pipeline graph, which contains a map of all defined pipeline configurations.
@@ -15,6 +15,7 @@ import java.util.Collections; // For unmodifiable map
  * If provided, keys and values cannot be null.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@Builder
 public record PipelineGraphConfig(
     @JsonProperty("pipelines") Map<String, PipelineConfig> pipelines
 ) {

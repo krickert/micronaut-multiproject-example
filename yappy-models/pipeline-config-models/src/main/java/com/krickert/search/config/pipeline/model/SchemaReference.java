@@ -2,9 +2,11 @@ package com.krickert.search.config.pipeline.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Builder;
 
 // ... (javadoc)
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@Builder
 public record SchemaReference(
         @JsonProperty("subject") String subject,
         @JsonProperty("version") Integer version

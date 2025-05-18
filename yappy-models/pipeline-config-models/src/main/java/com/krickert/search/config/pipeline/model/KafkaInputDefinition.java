@@ -3,11 +3,13 @@ package com.krickert.search.config.pipeline.model;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotEmpty;
+import lombok.Builder;
 
 import java.util.List;
 import java.util.Map;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@Builder
 public record KafkaInputDefinition(
     @JsonProperty("listenTopics") @NotEmpty List<String> listenTopics,
     @JsonProperty("consumerGroupId") String consumerGroupId, // Now truly optional in config
