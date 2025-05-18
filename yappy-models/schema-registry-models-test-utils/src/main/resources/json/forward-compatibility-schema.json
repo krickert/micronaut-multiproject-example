@@ -1,0 +1,10 @@
+{
+  "globalId": 555,
+  "subject": "forward-compatibility-schema",
+  "version": 1,
+  "schemaContent": "{\"type\":\"record\",\"name\":\"ForwardCompatible\",\"fields\":[{\"name\":\"id\",\"type\":\"long\"},{\"name\":\"name\",\"type\":\"string\"}]}",
+  "schemaType": "AVRO",
+  "compatibility": "FORWARD",
+  "createdAt": "2023-03-05T00:00:00Z",
+  "versionDescription": "Schema with FORWARD compatibility"
+}

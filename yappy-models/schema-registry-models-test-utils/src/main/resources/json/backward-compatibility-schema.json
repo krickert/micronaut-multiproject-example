@@ -1,0 +1,10 @@
+{
+  "globalId": 444,
+  "subject": "backward-compatibility-schema",
+  "version": 1,
+  "schemaContent": "{\"type\":\"record\",\"name\":\"BackwardCompatible\",\"fields\":[{\"name\":\"id\",\"type\":\"long\"},{\"name\":\"name\",\"type\":\"string\"}]}",
+  "schemaType": "AVRO",
+  "compatibility": "BACKWARD",
+  "createdAt": "2023-03-01T00:00:00Z",
+  "versionDescription": "Schema with BACKWARD compatibility"
+}

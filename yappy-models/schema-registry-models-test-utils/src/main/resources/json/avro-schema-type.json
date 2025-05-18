@@ -1,0 +1,10 @@
+{
+  "globalId": 222,
+  "subject": "avro-schema",
+  "version": 1,
+  "schemaContent": "{\"type\":\"record\",\"name\":\"User\",\"namespace\":\"com.example\",\"fields\":[{\"name\":\"id\",\"type\":\"long\"},{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"email\",\"type\":[\"null\",\"string\"],\"default\":null}]}",
+  "schemaType": "AVRO",
+  "compatibility": "BACKWARD",
+  "createdAt": "2023-01-20T00:00:00Z",
+  "versionDescription": "Avro Schema example"
+}

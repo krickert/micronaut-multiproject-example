@@ -1,0 +1,10 @@
+{
+  "globalId": 123456,
+  "subject": "comprehensive-schema",
+  "version": 2,
+  "schemaContent": "{\"type\":\"record\",\"name\":\"TestRecord\",\"fields\":[{\"name\":\"id\",\"type\":\"long\"},{\"name\":\"name\",\"type\":\"string\"}]}",
+  "schemaType": "AVRO",
+  "compatibility": "BACKWARD",
+  "createdAt": "2023-02-01T00:00:00Z",
+  "versionDescription": "Version 2 with additional fields"
+}

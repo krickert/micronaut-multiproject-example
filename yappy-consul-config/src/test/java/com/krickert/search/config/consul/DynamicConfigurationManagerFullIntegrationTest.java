@@ -266,7 +266,7 @@
             // Create a pipeline containing this step
             PipelineConfig pipelineConfig = new PipelineConfig(
                     "pipeline_with_bad_step", // name
-                    Map.of(stepUsingMissingSchema.pipelineStepId(), stepUsingMissingSchema) // pipelineSteps
+                    Map.of(stepUsingMissingSchema.stepName(), stepUsingMissingSchema) // pipelineSteps
             );
 
             // Create a pipeline graph containing this pipeline
