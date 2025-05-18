@@ -8,6 +8,7 @@ import com.krickert.search.config.pipeline.model.PipelineModuleMap;
 import com.krickert.search.config.schema.registry.model.SchemaCompatibility;
 import com.krickert.search.config.schema.registry.model.SchemaType;
 import com.krickert.search.config.schema.registry.model.SchemaVersionData;
+import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
@@ -51,8 +52,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
     @Inject
     ObjectMapper objectMapper;
 
-    @Inject
-    Consul directConsulClientForTestSetup;
+    // Removed direct Consul client injection as per issue requirements
+    // All Consul operations should go through ConsulBusinessOperationsService
 
     @Property(name = "app.config.consul.key-prefixes.pipeline-clusters")
     String clusterConfigKeyPrefixWithSlash;
@@ -66,7 +67,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
     @Property(name = "app.config.consul.watch-seconds")
     int appWatchSeconds;
 
-    private KeyValueClient testKvClient;
+    @Inject
+    ConsulBusinessOperationsService consulBusinessOperations;
     private final String testClusterForWatch = "watchTestClusterDelta"; // Unique name
     private final String testSchemaSubject1 = "integTestSchemaSubjectDelta1";
     private final int testSchemaVersion1 = 1;
@@ -77,9 +79,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
     @BeforeEach
     void setUp() {
-        assertNotNull(directConsulClientForTestSetup, "Test Consul client should be injected by TestResources");
-        testKvClient = directConsulClientForTestSetup.keyValueClient();
-        assertNotNull(testKvClient, "KeyValueClient for test setup should not be null");
+        // Removed direct Consul client assertion as per issue requirements
+        assertNotNull(consulBusinessOperations, "ConsulBusinessOperationsService should be injected");
 
         String clusterPrefix = clusterConfigKeyPrefixWithSlash.endsWith("/") ? clusterConfigKeyPrefixWithSlash : clusterConfigKeyPrefixWithSlash + "/";
         fullDefaultClusterKey = clusterPrefix + defaultTestClusterNameFromProperties;
@@ -91,22 +92,30 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         configFetcher.connect();
 
         LOG.info("Deleting KV key for default cluster setup: {}", fullDefaultClusterKey);
-        testKvClient.deleteKey(fullDefaultClusterKey);
+        consulBusinessOperations.deleteClusterConfiguration(defaultTestClusterNameFromProperties).block();
         LOG.info("Deleting KV key for watch cluster setup: {}", fullWatchClusterKey);
-        testKvClient.deleteKey(fullWatchClusterKey);
+        consulBusinessOperations.deleteClusterConfiguration(testClusterForWatch).block();
         LOG.info("Deleting KV key for schema setup: {}", fullTestSchemaKey1);
-        testKvClient.deleteKey(fullTestSchemaKey1);
+        consulBusinessOperations.deleteSchemaVersion(testSchemaSubject1, testSchemaVersion1).block();
         LOG.info("Cleaned up Consul keys for test setup.");
     }
 
     @AfterEach
     void tearDown() {
-        if (testKvClient != null) {
-            if (fullDefaultClusterKey != null) testKvClient.deleteKey(fullDefaultClusterKey);
-            if (fullWatchClusterKey != null) testKvClient.deleteKey(fullWatchClusterKey);
-            if (fullTestSchemaKey1 != null) testKvClient.deleteKey(fullTestSchemaKey1);
+        if (consulBusinessOperations != null) {
+            if (defaultTestClusterNameFromProperties != null) {
+                consulBusinessOperations.deleteClusterConfiguration(defaultTestClusterNameFromProperties).block();
+            }
+            if (testClusterForWatch != null) {
+                consulBusinessOperations.deleteClusterConfiguration(testClusterForWatch).block();
+            }
+            if (testSchemaSubject1 != null) {
+                consulBusinessOperations.deleteSchemaVersion(testSchemaSubject1, testSchemaVersion1).block();
+            }
+            LOG.info("Test finished, keys cleaned using ConsulBusinessOperationsService.");
+        } else {
+            LOG.warn("ConsulBusinessOperationsService was null in tearDown, keys may not be cleaned.");
         }
-        LOG.info("Test finished, keys potentially cleaned.");
     }
 
     private PipelineClusterConfig createDummyClusterConfig(String name) {
@@ -152,9 +161,45 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
     }
 
     private void seedConsulKv(String key, Object object) throws JsonProcessingException {
-        String jsonValue = objectMapper.writeValueAsString(object);
-        LOG.info("Seeding Consul KV: {} = {}", key, jsonValue.length() > 200 ? jsonValue.substring(0, 200) + "..." : jsonValue);
-        assertTrue(testKvClient.putValue(key, jsonValue), "Failed to seed Consul KV for key: " + key);
+        LOG.info("Seeding Consul KV: {} = {}", key, 
+                object.toString().length() > 200 ? object.toString().substring(0, 200) + "..." : object.toString());
+
+        // Determine if this is a cluster config or schema version based on the key
+        if (key.startsWith(clusterConfigKeyPrefixWithSlash)) {
+            // Extract cluster name from key
+            String clusterName = key.substring(clusterConfigKeyPrefixWithSlash.length());
+            if (clusterName.startsWith("/")) {
+                clusterName = clusterName.substring(1);
+            }
+
+            // Store cluster configuration
+            Boolean result = consulBusinessOperations.storeClusterConfiguration(clusterName, object).block();
+            assertTrue(result != null && result, "Failed to seed cluster configuration for key: " + key);
+        } else if (key.startsWith(schemaVersionsKeyPrefixWithSlash)) {
+            // Extract subject and version from key
+            String path = key.substring(schemaVersionsKeyPrefixWithSlash.length());
+            if (path.startsWith("/")) {
+                path = path.substring(1);
+            }
+
+            String[] parts = path.split("/");
+            if (parts.length == 2) {
+                String subject = parts[0];
+                int version = Integer.parseInt(parts[1]);
+
+                // Store schema version
+                Boolean result = consulBusinessOperations.storeSchemaVersion(subject, version, object).block();
+                assertTrue(result != null && result, "Failed to seed schema version for key: " + key);
+            } else {
+                // Fallback to generic putValue for other keys
+                Boolean result = consulBusinessOperations.putValue(key, object).block();
+                assertTrue(result != null && result, "Failed to seed Consul KV for key: " + key);
+            }
+        } else {
+            // Fallback to generic putValue for other keys
+            Boolean result = consulBusinessOperations.putValue(key, object).block();
+            assertTrue(result != null && result, "Failed to seed Consul KV for key: " + key);
+        }
     }
 
     @Test
@@ -194,7 +239,9 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
     @DisplayName("fetchPipelineClusterConfig - should return empty for malformed JSON and log error")
     void fetchPipelineClusterConfig_whenJsonMalformed_returnsEmpty() throws Exception {
         LOG.info("Seeding Consul with malformed JSON for test: {}", fullDefaultClusterKey);
-        assertTrue(testKvClient.putValue(fullDefaultClusterKey, "{\"clusterName\":\"bad\", this_is_not_json}"), "Failed to seed malformed JSON");
+        // Using putValue directly since we're intentionally putting malformed JSON
+        Boolean result = consulBusinessOperations.putValue(fullDefaultClusterKey, "{\"clusterName\":\"bad\", this_is_not_json}").block();
+        assertTrue(result != null && result, "Failed to seed malformed JSON");
         Optional<PipelineClusterConfig> fetchedOpt = configFetcher.fetchPipelineClusterConfig(defaultTestClusterNameFromProperties);
         assertTrue(fetchedOpt.isEmpty(), "Expected empty Optional for malformed JSON");
     }
@@ -220,7 +267,9 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
     @DisplayName("fetchSchemaVersionData - should return empty for malformed JSON and log error")
     void fetchSchemaVersionData_whenJsonMalformed_returnsEmpty() throws Exception {
         LOG.info("Seeding Consul with malformed JSON for schema test: {}", fullTestSchemaKey1);
-        assertTrue(testKvClient.putValue(fullTestSchemaKey1, "{\"subject\":\"bad\", this_is_not_json_for_schema}"), "Failed to seed malformed JSON for schema");
+        // Using putValue directly since we're intentionally putting malformed JSON
+        Boolean result = consulBusinessOperations.putValue(fullTestSchemaKey1, "{\"subject\":\"bad\", this_is_not_json_for_schema}").block();
+        assertTrue(result != null && result, "Failed to seed malformed JSON for schema");
         Optional<SchemaVersionData> fetchedOpt = configFetcher.fetchSchemaVersionData(testSchemaSubject1, testSchemaVersion1);
         assertTrue(fetchedOpt.isEmpty(), "Expected empty Optional for malformed schema JSON");
     }
@@ -286,7 +335,9 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
         // 4. Update with Malformed JSON
         LOG.info("Watch Test: Putting malformed JSON to Consul for watch: {}", fullWatchClusterKey);
-        assertTrue(testKvClient.putValue(fullWatchClusterKey, "this is definitely not json {{{{"), "Failed to seed malformed JSON");
+        // Using putValue directly since we're intentionally putting malformed JSON
+        Boolean putResult = consulBusinessOperations.putValue(fullWatchClusterKey, "this is definitely not json {{{{").block();
+        assertTrue(putResult != null && putResult, "Failed to seed malformed JSON");
 
         WatchCallbackResult receivedMalformedResult = updates.poll(appWatchSeconds + 10, TimeUnit.SECONDS);
         assertNotNull(receivedMalformedResult, "Handler should have received a result after malformed JSON update.");
@@ -296,7 +347,7 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
         // 5. Delete the config
         LOG.info("Watch Test: Deleting config for key {}...", fullWatchClusterKey);
-        testKvClient.deleteKey(fullWatchClusterKey);
+        consulBusinessOperations.deleteClusterConfiguration(testClusterForWatch).block();
 
         WatchCallbackResult receivedDeleteResult = updates.poll(appWatchSeconds + 10, TimeUnit.SECONDS);
         assertNotNull(receivedDeleteResult, "Handler should have received notification for delete");
@@ -388,8 +439,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         String fullClusterKeyB = (clusterConfigKeyPrefixWithSlash.endsWith("/") ? clusterConfigKeyPrefixWithSlash : clusterConfigKeyPrefixWithSlash + "/") + clusterNameB;
 
         // Clean up these specific keys before the test
-        testKvClient.deleteKey(fullClusterKeyA);
-        testKvClient.deleteKey(fullClusterKeyB);
+        consulBusinessOperations.deleteClusterConfiguration(clusterNameA).block();
+        consulBusinessOperations.deleteClusterConfiguration(clusterNameB).block();
         LOG.info("Cleaned up keys for watchDifferentKey test: {}, {}", fullClusterKeyA, fullClusterKeyB);
 
 
@@ -453,8 +504,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         assertTrue(updatesB.isEmpty(), "Handler B's queue should be empty before next update to B");
 
         // Cleanup specific keys at the end of this test as well
-        testKvClient.deleteKey(fullClusterKeyA);
-        testKvClient.deleteKey(fullClusterKeyB);
+        consulBusinessOperations.deleteClusterConfiguration(clusterNameA).block();
+        consulBusinessOperations.deleteClusterConfiguration(clusterNameB).block();
     }
 
     @Test
@@ -546,7 +597,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
         // 2. Update with an empty JSON object "{}"
         LOG.info("handlesEmptyOrBlankJsonValues: Seeding with empty JSON object {{}}");
-        assertTrue(testKvClient.putValue(fullWatchClusterKey, "{}"), "Failed to seed empty JSON object");
+        Boolean emptyJsonResult = consulBusinessOperations.putValue(fullWatchClusterKey, "{}").block();
+        assertTrue(emptyJsonResult != null && emptyJsonResult, "Failed to seed empty JSON object");
         WatchCallbackResult emptyObjectEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
         assertNotNull(emptyObjectEvent, "Should receive event for empty JSON object");
 
@@ -571,7 +623,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         LOG.info("handlesEmptyOrBlankJsonValues: Seeding with empty string \"\"");
         // Note: Consul might treat putting an empty string as deleting the value or the key itself.
         // The KVCache behavior might then report it as a delete.
-        assertTrue(testKvClient.putValue(fullWatchClusterKey, ""), "Failed to seed empty string");
+        Boolean emptyStringResult = consulBusinessOperations.putValue(fullWatchClusterKey, "").block();
+        assertTrue(emptyStringResult != null && emptyStringResult, "Failed to seed empty string");
         WatchCallbackResult emptyStringEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
         assertNotNull(emptyStringEvent, "Should receive event for empty string");
         assertTrue(emptyStringEvent.deleted(), "Empty string should be treated as deleted. Event: " + emptyStringEvent);
@@ -583,7 +636,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
         // 4. Update with a string of only whitespace "   "
         LOG.info("handlesEmptyOrBlankJsonValues: Seeding with whitespace string \"   \"");
-        assertTrue(testKvClient.putValue(fullWatchClusterKey, "   "), "Failed to seed whitespace string");
+        Boolean whitespaceResult = consulBusinessOperations.putValue(fullWatchClusterKey, "   ").block();
+        assertTrue(whitespaceResult != null && whitespaceResult, "Failed to seed whitespace string");
         WatchCallbackResult whitespaceEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
         assertNotNull(whitespaceEvent, "Should receive event for whitespace string");
         assertTrue(whitespaceEvent.deleted(), "Whitespace string should be treated as deleted. Event: " + whitespaceEvent);
@@ -591,7 +645,7 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
         // 5. Delete the key (simulates value becoming null/absent)
         LOG.info("handlesEmptyOrBlankJsonValues: Deleting the key explicitly");
-        testKvClient.deleteKey(fullWatchClusterKey);
+        consulBusinessOperations.deleteClusterConfiguration(testClusterForWatch).block();
         WatchCallbackResult deletedKeyEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
         assertNotNull(deletedKeyEvent, "Should receive event for explicit key deletion");
         assertTrue(deletedKeyEvent.deleted(), "Explicit key deletion should be treated as deleted. Event: " + deletedKeyEvent);
@@ -649,7 +703,7 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
                 clusterConfigKeyPrefixWithSlash,
                 schemaVersionsKeyPrefixWithSlash,
                 appWatchSeconds,
-                directConsulClientForTestSetup // Use the real one to avoid null issues if it tried to connect
+                null // We don't need a real Consul client as we won't connect
         );
         // Don't call freshFetcher.connect()
         LOG.info("idempotency_test: Testing close() on a fetcher where connect() was not explicitly called by test logic (beyond its own @BeforeEach if applicable)");

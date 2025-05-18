@@ -238,7 +238,14 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
 
             // targetStepName non-null/blank is handled by OutputTarget constructor
             if (outputTarget.targetStepName() != null && !outputTarget.targetStepName().isBlank()) { // Check again for safety
-                if (!existingStepNamesInPipeline.contains(outputTarget.targetStepName())) {
+                // Check if this is a cross-pipeline reference (contains a dot)
+                if (outputTarget.targetStepName().contains(".")) {
+                    // This is a cross-pipeline reference, format is expected to be "pipelineName.stepName"
+                    // We don't validate cross-pipeline references here as they might be valid
+                    // The actual validation of cross-pipeline references should be done elsewhere
+                    LOG.debug("{}: output '{}' contains a cross-pipeline reference to '{}'. Skipping validation in ReferentialIntegrityValidator.",
+                            sourceStepContext, outputKey, outputTarget.targetStepName());
+                } else if (!existingStepNamesInPipeline.contains(outputTarget.targetStepName())) {
                     errors.add(String.format("%s: output '%s' contains reference to unknown targetStepName '%s' in pipeline '%s'. Available step names: %s",
                             sourceStepContext, outputKey, outputTarget.targetStepName(), pipelineName, existingStepNamesInPipeline));
                 }

@@ -273,7 +273,7 @@ class DefaultConfigurationValidatorMicronautTest {
 
         // --- Whitelists (Adjusted for the new topic structure) ---
         Set<String> allowedKafkaTopics = Set.of("input-topic", "p1s1-produces-topic", "p1s2-listens-topic", "output-topic");
-        Set<String> allowedGrpcServices = Set.of("grpc-service-A");
+        Set<String> allowedGrpcServices = Set.of("grpc-service-A", "mod1_impl", "mod2_impl");
 
         // --- Pipeline 1 Steps (Modified to use the new transport model) ---
         Map<String, PipelineStepConfig> p1Steps = new HashMap<>();

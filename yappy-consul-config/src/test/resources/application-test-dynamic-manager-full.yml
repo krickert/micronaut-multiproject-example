@@ -15,7 +15,7 @@ micronaut:
 # Application-specific Consul configuration
 app:
   config:
-    cluster-name: blahblah
+    cluster-name: comprehensive-cluster
     consul:
       key-prefixes:
         pipeline-clusters: pipeline-configs/clusters

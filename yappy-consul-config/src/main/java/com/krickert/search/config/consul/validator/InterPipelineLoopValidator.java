@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,10 @@ public class InterPipelineLoopValidator implements ClusterValidationRule {
             }
         }
 
+        // Map to track which topics are published by which pipeline
+        Map<String, Set<String>> topicsPublishedByPipeline = new HashMap<>();
+
+        // First pass: collect all topics published by each pipeline
         for (Map.Entry<String, PipelineConfig> sourcePipelineEntry : pipelinesMap.entrySet()) {
             String sourcePipelineKey = sourcePipelineEntry.getKey();
             PipelineConfig sourcePipeline = sourcePipelineEntry.getValue();
@@ -87,9 +92,15 @@ public class InterPipelineLoopValidator implements ClusterValidationRule {
                 }
             }
 
-            if (topicsPublishedBySourcePipeline.isEmpty()) {
-                continue;
+            if (!topicsPublishedBySourcePipeline.isEmpty()) {
+                topicsPublishedByPipeline.put(sourcePipelineName, topicsPublishedBySourcePipeline);
             }
+        }
+
+        // Second pass: build the graph based on topic connections
+        for (Map.Entry<String, Set<String>> sourceEntry : topicsPublishedByPipeline.entrySet()) {
+            String sourcePipelineName = sourceEntry.getKey();
+            Set<String> publishedTopics = sourceEntry.getValue();
 
             for (Map.Entry<String, PipelineConfig> targetPipelineEntry : pipelinesMap.entrySet()) {
                 String targetPipelineKey = targetPipelineEntry.getKey();
@@ -99,6 +110,14 @@ public class InterPipelineLoopValidator implements ClusterValidationRule {
                     continue;
                 }
                 String targetPipelineName = targetPipeline.name();
+
+                // Don't skip self-loops for the same pipeline - we want to detect when a pipeline
+                // publishes to and listens from the same topic
+                if (sourcePipelineName.equals(targetPipelineName)) {
+                    LOG.debug("Checking self-loop for pipeline '{}' in cluster '{}'", 
+                            sourcePipelineName, currentClusterName);
+                    // continue; - removed to allow self-loop detection
+                }
 
                 boolean linkFoundForTargetPipeline = false;
                 for (PipelineStepConfig targetStep : targetPipeline.pipelineSteps().values()) {
@@ -114,7 +133,7 @@ public class InterPipelineLoopValidator implements ClusterValidationRule {
                                     targetPipelineName,
                                     currentClusterName
                                 );
-                                if (resolvedListenTopic != null && topicsPublishedBySourcePipeline.contains(resolvedListenTopic)) {
+                                if (resolvedListenTopic != null && publishedTopics.contains(resolvedListenTopic)) {
                                     if (interPipelineGraph.containsVertex(sourcePipelineName) && interPipelineGraph.containsVertex(targetPipelineName)) {
                                          if (!interPipelineGraph.containsEdge(sourcePipelineName, targetPipelineName)) {
                                             try {

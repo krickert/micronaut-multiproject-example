@@ -2,6 +2,10 @@ package com.krickert.search.config.consul;
 
 import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
 import com.krickert.search.config.consul.exception.ConfigurationManagerInitializationException;
+import com.krickert.search.config.consul.factory.TestDynamicConfigurationManagerFactory;
+import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
+import com.krickert.search.config.consul.service.ConsulKvService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineModuleConfiguration;
 import com.krickert.search.config.pipeline.model.PipelineModuleMap;
@@ -45,6 +49,12 @@ class DynamicConfigurationManagerImplTest {
     private CachedConfigHolder mockCachedConfigHolder;
     @Mock
     private ApplicationEventPublisher<ClusterConfigUpdateEvent> mockEventPublisher;
+    @Mock
+    private ConsulKvService mockConsulKvService;
+    @Mock
+    private ConsulBusinessOperationsService mockConsulBusinessOperationsService;
+    @Mock
+    private ObjectMapper mockObjectMapper;
 
     @Captor
     private ArgumentCaptor<Consumer<WatchCallbackResult>> watchCallbackCaptor; // CORRECTED TYPE
@@ -57,12 +67,15 @@ class DynamicConfigurationManagerImplTest {
 
     @BeforeEach
     void setUp() {
-        dynamicConfigurationManager = new DynamicConfigurationManagerImpl(
+        dynamicConfigurationManager = TestDynamicConfigurationManagerFactory.createDynamicConfigurationManager(
                 TEST_CLUSTER_NAME,
                 mockConsulConfigFetcher,
                 mockConfigurationValidator,
                 mockCachedConfigHolder,
-                mockEventPublisher
+                mockEventPublisher,
+                mockConsulKvService,
+                mockConsulBusinessOperationsService,
+                mockObjectMapper
         );
     }
 

@@ -84,6 +84,16 @@ public class WhitelistValidator implements ClusterValidationRule {
                     String stepContext = String.format("Step '%s' in pipeline '%s' (cluster '%s')",
                             step.stepName(), pipelineName, currentClusterName);
 
+                    // Check if the service referenced in processorInfo is in the allowedGrpcServices list
+                    if (step.processorInfo() != null && step.processorInfo().grpcServiceName() != null 
+                            && !step.processorInfo().grpcServiceName().isBlank()) {
+                        String serviceName = step.processorInfo().grpcServiceName();
+                        if (!allowedGrpcServices.contains(serviceName)) {
+                            errors.add(String.format("%s uses non-whitelisted gRPC service '%s' in processorInfo. Allowed: %s",
+                                    stepContext, serviceName, allowedGrpcServices));
+                        }
+                    }
+
                     if (step.outputs() != null) {
                         for (Map.Entry<String, PipelineStepConfig.OutputTarget> outputEntry : step.outputs().entrySet()) {
                             String outputKey = outputEntry.getKey();

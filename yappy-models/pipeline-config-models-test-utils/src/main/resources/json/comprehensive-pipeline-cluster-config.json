@@ -147,14 +147,14 @@
                 "targetStepName": "search-indexer",
                 "transportType": "KAFKA",
                 "kafkaTransport": {
-                  "topic": "document.enriched",
+                  "topic": "document.enriched.for.indexing",
                   "kafkaProducerProperties": {
                     "compression.type": "snappy"
                   }
                 }
               },
               "default_analytics": {
-                "targetStepName": "analytics-processor",
+                "targetStepName": "analytics-pipeline.analytics-processor",
                 "transportType": "KAFKA",
                 "kafkaTransport": {
                   "topic": "document.for.analytics",
@@ -179,7 +179,7 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["document.enriched"],
+                "listenTopics": ["document.enriched.for.indexing"],
                 "consumerGroupId": "search-indexer-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -318,7 +318,7 @@
     "document.ingest.binary",
     "document.text.extracted",
     "document.binary.processed",
-    "document.enriched",
+    "document.enriched.for.indexing",
     "document.for.analytics"
   ],
   "allowedGrpcServices": [
