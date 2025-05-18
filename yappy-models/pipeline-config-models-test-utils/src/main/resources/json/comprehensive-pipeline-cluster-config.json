@@ -1,0 +1,333 @@
+{
+  "clusterName": "comprehensive-cluster",
+  "pipelineGraphConfig": {
+    "pipelines": {
+      "search-pipeline": {
+        "name": "search-pipeline",
+        "pipelineSteps": {
+          "document-ingest": {
+            "stepName": "document-ingest",
+            "stepType": "INITIAL_PIPELINE",
+            "description": "Ingests documents from various sources",
+            "customConfigSchemaId": "document-ingest-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "sourcePath": "/input/documents",
+                "filePatterns": ["*.pdf", "*.docx", "*.txt"]
+              }
+            },
+            "processorInfo": {
+              "grpcServiceName": "document-ingest-service"
+            },
+            "outputs": {
+              "default_text": {
+                "targetStepName": "text-extractor",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "document.ingest.text",
+                  "kafkaProducerProperties": {
+                    "compression.type": "snappy",
+                    "batch.size": "16384"
+                  }
+                }
+              },
+              "default_binary": {
+                "targetStepName": "binary-processor",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "document.ingest.binary",
+                  "kafkaProducerProperties": {
+                    "compression.type": "snappy",
+                    "batch.size": "16384"
+                  }
+                }
+              }
+            }
+          },
+          "text-extractor": {
+            "stepName": "text-extractor",
+            "stepType": "PIPELINE",
+            "description": "Extracts text from documents",
+            "customConfigSchemaId": "text-extractor-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "extractMetadata": true,
+                "extractText": true,
+                "languages": ["en", "es", "fr"]
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["document.ingest.text"],
+                "consumerGroupId": "text-extractor-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest",
+                  "fetch.min.bytes": "1"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "text-extractor-service"
+            },
+            "outputs": {
+              "default_enrichment": {
+                "targetStepName": "text-enrichment",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "document.text.extracted",
+                  "kafkaProducerProperties": {
+                    "compression.type": "snappy"
+                  }
+                }
+              }
+            }
+          },
+          "binary-processor": {
+            "stepName": "binary-processor",
+            "stepType": "PIPELINE",
+            "description": "Processes binary content of documents",
+            "customConfigSchemaId": "binary-processor-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "extractImages": true,
+                "ocrEnabled": true
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["document.ingest.binary"],
+                "consumerGroupId": "binary-processor-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "binary-processor-service"
+            },
+            "outputs": {
+              "default_enrichment": {
+                "targetStepName": "text-enrichment",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "document.binary.processed",
+                  "kafkaProducerProperties": {
+                    "compression.type": "snappy"
+                  }
+                }
+              }
+            }
+          },
+          "text-enrichment": {
+            "stepName": "text-enrichment",
+            "stepType": "PIPELINE",
+            "description": "Enriches text with NLP processing",
+            "customConfigSchemaId": "text-enrichment-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "enableNER": true,
+                "enableSentimentAnalysis": true,
+                "enableKeywordExtraction": true
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["document.text.extracted", "document.binary.processed"],
+                "consumerGroupId": "text-enrichment-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "text-enrichment-service"
+            },
+            "outputs": {
+              "default_indexer": {
+                "targetStepName": "search-indexer",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "document.enriched",
+                  "kafkaProducerProperties": {
+                    "compression.type": "snappy"
+                  }
+                }
+              },
+              "default_analytics": {
+                "targetStepName": "analytics-processor",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "document.for.analytics",
+                  "kafkaProducerProperties": {
+                    "compression.type": "snappy"
+                  }
+                }
+              }
+            }
+          },
+          "search-indexer": {
+            "stepName": "search-indexer",
+            "stepType": "SINK",
+            "description": "Indexes documents in search engine",
+            "customConfigSchemaId": "search-indexer-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "indexName": "documents",
+                "shards": 3,
+                "replicas": 2
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["document.enriched"],
+                "consumerGroupId": "search-indexer-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "search-indexer-service"
+            },
+            "outputs": {}
+          }
+        }
+      },
+      "analytics-pipeline": {
+        "name": "analytics-pipeline",
+        "pipelineSteps": {
+          "analytics-processor": {
+            "stepName": "analytics-processor",
+            "stepType": "PIPELINE",
+            "description": "Processes documents for analytics",
+            "customConfigSchemaId": "analytics-processor-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "aggregationEnabled": true,
+                "trendAnalysisEnabled": true
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["document.for.analytics"],
+                "consumerGroupId": "analytics-processor-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "analytics-processor-service"
+            },
+            "outputs": {
+              "default_dashboard": {
+                "targetStepName": "dashboard-updater",
+                "transportType": "GRPC",
+                "grpcTransport": {
+                  "serviceName": "dashboard-service",
+                  "grpcClientProperties": {
+                    "deadline": "10s"
+                  }
+                }
+              }
+            }
+          },
+          "dashboard-updater": {
+            "stepName": "dashboard-updater",
+            "stepType": "SINK",
+            "description": "Updates analytics dashboards",
+            "customConfigSchemaId": "dashboard-updater-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "dashboardIds": ["main", "executive", "operational"],
+                "refreshInterval": "5m"
+              }
+            },
+            "processorInfo": {
+              "grpcServiceName": "dashboard-service"
+            },
+            "outputs": {}
+          }
+        }
+      }
+    }
+  },
+  "pipelineModuleMap": {
+    "availableModules": {
+      "document-ingest-service": {
+        "implementationName": "Document Ingest Service",
+        "implementationId": "document-ingest-service",
+        "customConfigSchemaReference": {
+          "subject": "document-ingest-schema",
+          "version": 1
+        }
+      },
+      "text-extractor-service": {
+        "implementationName": "Text Extractor Service",
+        "implementationId": "text-extractor-service",
+        "customConfigSchemaReference": {
+          "subject": "text-extractor-schema",
+          "version": 1
+        }
+      },
+      "binary-processor-service": {
+        "implementationName": "Binary Processor Service",
+        "implementationId": "binary-processor-service",
+        "customConfigSchemaReference": {
+          "subject": "binary-processor-schema",
+          "version": 1
+        }
+      },
+      "text-enrichment-service": {
+        "implementationName": "Text Enrichment Service",
+        "implementationId": "text-enrichment-service",
+        "customConfigSchemaReference": {
+          "subject": "text-enrichment-schema",
+          "version": 1
+        }
+      },
+      "search-indexer-service": {
+        "implementationName": "Search Indexer Service",
+        "implementationId": "search-indexer-service",
+        "customConfigSchemaReference": {
+          "subject": "search-indexer-schema",
+          "version": 1
+        }
+      },
+      "analytics-processor-service": {
+        "implementationName": "Analytics Processor Service",
+        "implementationId": "analytics-processor-service",
+        "customConfigSchemaReference": {
+          "subject": "analytics-processor-schema",
+          "version": 1
+        }
+      },
+      "dashboard-service": {
+        "implementationName": "Dashboard Service",
+        "implementationId": "dashboard-service",
+        "customConfigSchemaReference": {
+          "subject": "dashboard-updater-schema",
+          "version": 1
+        }
+      }
+    }
+  },
+  "defaultPipelineName": "search-pipeline",
+  "allowedKafkaTopics": [
+    "document.ingest.text",
+    "document.ingest.binary",
+    "document.text.extracted",
+    "document.binary.processed",
+    "document.enriched",
+    "document.for.analytics"
+  ],
+  "allowedGrpcServices": [
+    "document-ingest-service",
+    "text-extractor-service",
+    "binary-processor-service",
+    "text-enrichment-service",
+    "search-indexer-service",
+    "analytics-processor-service",
+    "dashboard-service"
+  ]
+}
