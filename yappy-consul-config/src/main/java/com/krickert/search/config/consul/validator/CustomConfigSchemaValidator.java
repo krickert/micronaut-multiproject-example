@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.schema.delegate.ConsulSchemaRegistryDelegate;
 import com.krickert.search.config.pipeline.model.*;
-import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.SpecVersion;
 import com.networknt.schema.ValidationMessage;
@@ -12,7 +11,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -20,7 +18,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -38,53 +35,17 @@ public class CustomConfigSchemaValidator implements ClusterValidationRule {
         this.schemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7);
     }
 
-    // Cache for schema content to prevent repeated lookups
-    private final Map<String, Optional<String>> schemaCache = new ConcurrentHashMap<>();
-
-    /**
-     * Gets schema content directly from the ConsulSchemaRegistryDelegate with caching.
-     * If schemaRegistryDelegate is null, returns an empty Optional.
-     * 
-     * @param schemaRef The schema reference
-     * @return Optional containing the schema content if found
-     */
-    private Optional<String> getSchemaContent(SchemaReference schemaRef) {
-        // If schemaRegistryDelegate is null (e.g., in tests), return empty Optional
-        if (schemaRegistryDelegate == null) {
-            LOG.debug("SchemaRegistryDelegate is null, cannot retrieve schema for: {}", schemaRef.subject());
-            return Optional.empty();
-        }
-
-        // Otherwise, try to get from cache or ConsulSchemaRegistryDelegate
-        return schemaCache.computeIfAbsent(schemaRef.subject(), subject -> {
-            try {
-                String schemaContent = schemaRegistryDelegate.getSchemaContent(subject).block();
-                if (schemaContent != null && !schemaContent.isBlank()) {
-                    LOG.debug("Schema found in registry for: {}", subject);
-                    return Optional.of(schemaContent);
-                }
-            } catch (Exception e) {
-                LOG.debug("Schema not found in registry for: {}. Error: {}", 
-                        subject, e.getMessage());
-            }
-
-            // If not found in registry, return empty Optional
-            return Optional.empty();
-        });
-    }
-
     @Override
-    public List<String> validate(PipelineClusterConfig clusterConfig,
+    public List<String> validate(PipelineClusterConfig clusterConfig, 
                                  Function<SchemaReference, Optional<String>> schemaContentProvider) {
-        // This method is kept for backward compatibility with the ClusterValidationRule interface
-        // but delegates to the new implementation that uses ConsulSchemaRegistryDelegate
+        // Ignore the schemaContentProvider and use the ConsulSchemaRegistryDelegate instead
+        LOG.warn("Schema content provider function is ignored. Using ConsulSchemaRegistryDelegate instead.");
         return validateUsingRegistry(clusterConfig);
     }
 
     /**
      * Validates the custom configuration in a PipelineClusterConfig using the ConsulSchemaRegistryDelegate.
-     * This method does not use a schemaContentProvider function, but instead gets schema content directly
-     * from the ConsulSchemaRegistryDelegate.
+     * This method gets schema content directly from the ConsulSchemaRegistryDelegate.
      *
      * @param clusterConfig The PipelineClusterConfig to validate
      * @return A list of validation error messages, or an empty list if validation succeeds

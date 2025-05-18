@@ -2,6 +2,7 @@ package com.krickert.search.config.consul;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.krickert.search.config.consul.schema.test.ConsulSchemaRegistrySeeder;
 import com.krickert.search.config.consul.validator.ClusterValidationRule;
 import com.krickert.search.config.consul.validator.CustomConfigSchemaValidator;
 import com.krickert.search.config.consul.validator.ReferentialIntegrityValidator;
@@ -11,6 +12,7 @@ import com.krickert.search.config.pipeline.model.test.PipelineConfigTestUtils;
 import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigObjects;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.slf4j.Logger;
@@ -39,6 +41,19 @@ class DefaultConfigurationValidatorMicronautTest {
 
     @Inject
     private List<ClusterValidationRule> standardValidationRules; // Injected list of standard rule beans
+
+    @Inject
+    private ConsulSchemaRegistrySeeder schemaRegistrySeeder; // For registering schemas in Consul
+
+    @BeforeEach
+    void setUp() {
+        // Seed the schema registry with test schemas
+        schemaRegistrySeeder.seedSchemas().block();
+
+        // Directly register the schema-subject-1 schema with its content
+        String schemaContent = "{\"type\":\"object\", \"properties\":{\"key\":{\"type\":\"string\"}}, \"required\":[\"key\"]}";
+        schemaRegistrySeeder.registerSchemaContent("schema-subject-1", schemaContent).block();
+    }
 
     // This rule is NOT a @Singleton. It's instantiated manually for a specific test.
     static class TestSpecificMisbehavingRule implements ClusterValidationRule {
