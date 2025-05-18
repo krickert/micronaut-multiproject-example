@@ -204,7 +204,14 @@ class DefaultConfigurationValidatorMicronautTest {
                 .allowedGrpcServices(allowedGrpcServices)
                 .build();
 
-        ValidationResult result = validator.validate(config, ref -> Optional.of("{}")); // Use the injected validator
+        // Use a schema content provider that returns empty Optional for the non-existent schema
+        // but returns a valid schema for other schemas
+        ValidationResult result = validator.validate(config, ref -> {
+            if (ref != null && ref.subject() != null && ref.subject().contains("non-existent-schema")) {
+                return Optional.empty(); // Return empty for non-existent schema
+            }
+            return Optional.of("{}"); // Return valid schema for other schemas
+        });
 
         assertFalse(result.isValid(), "Validation should fail due to multiple errors. Errors: " + result.errors());
         assertTrue(result.errors().size() >= 2, "Expected at least two errors from different rules.");

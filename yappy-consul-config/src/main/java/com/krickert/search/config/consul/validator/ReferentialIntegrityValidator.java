@@ -128,10 +128,19 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                                 currentStepContext, implementationKey, availableModules.keySet()));
                     } else {
                         PipelineModuleConfiguration module = availableModules.get(implementationKey);
-                        if (module != null && step.customConfig() != null &&
-                            (step.customConfig().jsonConfig() != null || (step.customConfig().configParams() != null && !step.customConfig().configParams().isEmpty())) &&
-                             module.customConfigSchemaReference() == null && (step.customConfigSchemaId() == null || step.customConfigSchemaId().isBlank())) {
-                            errors.add(String.format("%s has customConfig but its module '%s' does not define a customConfigSchemaReference, and step does not define customConfigSchemaId.",
+                        // Only report errors for non-empty customConfig (with actual content)
+                        boolean hasNonEmptyJsonConfig = step.customConfig() != null && 
+                                                       step.customConfig().jsonConfig() != null && 
+                                                       !step.customConfig().jsonConfig().isEmpty();
+                        boolean hasNonEmptyConfigParams = step.customConfig() != null && 
+                                                         step.customConfig().configParams() != null && 
+                                                         !step.customConfig().configParams().isEmpty();
+
+                        if (module != null && 
+                            (hasNonEmptyJsonConfig || hasNonEmptyConfigParams) &&
+                            module.customConfigSchemaReference() == null && 
+                            (step.customConfigSchemaId() == null || step.customConfigSchemaId().isBlank())) {
+                            errors.add(String.format("%s has non-empty customConfig but its module '%s' does not define a customConfigSchemaReference, and step does not define customConfigSchemaId.",
                                     currentStepContext, module.implementationId()));
                         }
                         if (step.customConfigSchemaId() != null && !step.customConfigSchemaId().isBlank() && module != null && module.customConfigSchemaReference() != null) {
@@ -143,7 +152,7 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                         }
                     }
                 }
-                
+
                 // Validate KafkaInputDefinition if present
                 if (step.kafkaInputs() != null) {
                     for (int i = 0; i < step.kafkaInputs().size(); i++) {
@@ -226,7 +235,7 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                 errors.add(String.format("%s: OutputTarget for key '%s' is null.", sourceStepContext, outputKey));
                 continue;
             }
-            
+
             // targetStepName non-null/blank is handled by OutputTarget constructor
             if (outputTarget.targetStepName() != null && !outputTarget.targetStepName().isBlank()) { // Check again for safety
                 if (!existingStepNamesInPipeline.contains(outputTarget.targetStepName())) {

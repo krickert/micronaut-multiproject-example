@@ -41,9 +41,17 @@ public class StepTypeValidator implements ClusterValidationRule {
             for (Map.Entry<String, PipelineStepConfig> stepEntry : pipelineConfig.pipelineSteps().entrySet()) {
                 PipelineStepConfig stepConfig = stepEntry.getValue();
 
-                if (stepConfig == null || stepConfig.stepName() == null || stepConfig.stepName().isBlank() || stepConfig.stepType() == null) {
+                if (stepConfig == null) {
                     errors.add(String.format(
-                        "Pipeline '%s', Step key '%s': Contains invalid step definition (null, missing name, or missing type).",
+                        "Pipeline '%s', Step key '%s': Contains invalid step definition (null).",
+                        pipelineName, stepEntry.getKey()
+                    ));
+                    continue;
+                }
+
+                if (stepConfig.stepName() == null || stepConfig.stepName().isBlank() || stepConfig.stepType() == null) {
+                    errors.add(String.format(
+                        "Pipeline '%s', Step key '%s': Contains invalid step definition (missing name or type).",
                         pipelineName, stepEntry.getKey()
                     ));
                     continue;
