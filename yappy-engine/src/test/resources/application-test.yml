@@ -7,3 +7,6 @@ app:
     cluster-name: test-cluster
 
 
+grpc.server:
+  enabled: true
+  port: ${random.port}
