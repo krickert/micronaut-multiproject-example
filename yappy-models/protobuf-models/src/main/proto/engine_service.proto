@@ -47,7 +47,7 @@ message ConnectorResponse {
 service PipeStreamEngine {
   // --- Existing RPCs (can be kept for specific internal/advanced use cases or deprecated over time) ---
   // --- NOTE: a sink has the same signature - the engine controls the outgoing routing, if it's a sink implementation then that will be noted in the step
-  rpc processPipe(com.krickert.search.model.PipeStream) returns (com.krickert.search.model.PipeStream);
+  rpc testPipeStream(com.krickert.search.model.PipeStream) returns (com.krickert.search.model.PipeStream);
   rpc processPipeAsync(com.krickert.search.model.PipeStream) returns (google.protobuf.Empty);
 
   // Ingests new data (as a PipeDoc identified by a source_identifier) into the system
