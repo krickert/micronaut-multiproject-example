@@ -7,9 +7,7 @@ import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class PipelineModuleMapTest {
 
@@ -23,8 +21,8 @@ class PipelineModuleMapTest {
         // Add a module to the map
         SchemaReference schemaReference = new SchemaReference("test-schema", 1);
         PipelineModuleConfiguration module = new PipelineModuleConfiguration(
-                "Test Module", 
-                "test-module", 
+                "Test Module",
+                "test-module",
                 schemaReference);
         modules.put("test-module", module);
 
@@ -72,8 +70,8 @@ class PipelineModuleMapTest {
         // Add a module to the map
         SchemaReference schemaReference = new SchemaReference("test-schema", 1);
         PipelineModuleConfiguration module = new PipelineModuleConfiguration(
-                "Test Module", 
-                "test-module", 
+                "Test Module",
+                "test-module",
                 schemaReference);
         modules.put("test-module", module);
 

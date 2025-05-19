@@ -51,10 +51,10 @@ public class MotoContainer extends GenericContainer<MotoContainer> {
         // Moto server's root path typically returns a 200 OK with a list of services.
         // We can use this as a basic health check.
         setWaitStrategy(
-            Wait.forHttp("/")
-                .forPort(MOTO_HTTP_PORT)
-                .forStatusCode(200)
-                .withStartupTimeout(DEFAULT_WAIT_TIMEOUT)
+                Wait.forHttp("/")
+                        .forPort(MOTO_HTTP_PORT)
+                        .forStatusCode(200)
+                        .withStartupTimeout(DEFAULT_WAIT_TIMEOUT)
         );
 
         withExposedPorts(MOTO_HTTP_PORT);
@@ -62,8 +62,8 @@ public class MotoContainer extends GenericContainer<MotoContainer> {
         withAccessToHost(true); // Allows container to access host network if needed
         withCommand("-H0.0.0.0"); // Listen on all interfaces within the container
         withEnv(Map.of(
-            "MOTO_SERVICE", "glue", // Example: configure to run only glue, or comma-separated list
-            "TEST_SERVER_MODE", "true" // Moto specific environment variable
+                "MOTO_SERVICE", "glue", // Example: configure to run only glue, or comma-separated list
+                "TEST_SERVER_MODE", "true" // Moto specific environment variable
         ));
         // withReuse(false) is typically managed by the TestResources framework or test setup,
         // not usually a direct property of the container class itself.
@@ -76,7 +76,7 @@ public class MotoContainer extends GenericContainer<MotoContainer> {
      */
     public String getEndpointUrl() {
         return String.format("http://%s:%d",
-                             getHost(),
-                             getMappedPort(MOTO_HTTP_PORT));
+                getHost(),
+                getMappedPort(MOTO_HTTP_PORT));
     }
 }

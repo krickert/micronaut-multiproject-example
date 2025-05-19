@@ -1,21 +1,13 @@
 package com.krickert.search.config.pipeline.model;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.krickert.search.config.pipeline.model.test.PipelineConfigTestUtils;
 import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigJson;
 import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigObjects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -80,7 +72,7 @@ class PipelineClusterConfigTest {
         }
 
         if (errorStepTargetNames != null) {
-            for(String errorTarget : errorStepTargetNames) {
+            for (String errorTarget : errorStepTargetNames) {
                 String outputKey = "onError_" + errorTarget.replaceAll("[^a-zA-Z0-9.-]", "_");
                 outputs.put(outputKey,
                         new PipelineStepConfig.OutputTarget(errorTarget, TransportType.INTERNAL, null, null) // Default error paths to INTERNAL
@@ -273,8 +265,8 @@ class PipelineClusterConfigTest {
     void testImmutabilityOfCollections() throws Exception {
         PipelineStepConfig.ProcessorInfo pi = new PipelineStepConfig.ProcessorInfo(null, "m1-bean");
         PipelineStepConfig step = new PipelineStepConfig(
-                "s1", StepType.PIPELINE, null,null, null, Collections.emptyMap(),
-                0,1L,1L,1.0,1L, pi);
+                "s1", StepType.PIPELINE, null, null, null, Collections.emptyMap(),
+                0, 1L, 1L, 1.0, 1L, pi);
 
         PipelineConfig pipeline = new PipelineConfig("p1", Map.of(step.stepName(), step));
         PipelineGraphConfig graphConfig = new PipelineGraphConfig(Map.of(pipeline.name(), pipeline));
@@ -309,14 +301,14 @@ class PipelineClusterConfigTest {
         Map<String, PipelineStepConfig.OutputTarget> outputs1 = Map.of("default_s2",
                 new PipelineStepConfig.OutputTarget("s2", TransportType.GRPC, new GrpcTransportConfig("svc-grpc-target", Collections.emptyMap()), null)
         );
-        PipelineStepConfig stepA1 = new PipelineStepConfig("s1", StepType.PIPELINE, "desc", "schema", createJsonConfigOptions("{}"), outputs1, 0,1L,1L,1.0,0L, procInfoKafkaMod);
+        PipelineStepConfig stepA1 = new PipelineStepConfig("s1", StepType.PIPELINE, "desc", "schema", createJsonConfigOptions("{}"), outputs1, 0, 1L, 1L, 1.0, 0L, procInfoKafkaMod);
 
         Map<String, PipelineStepConfig.OutputTarget> outputs2 = Collections.emptyMap(); // SINK
-        PipelineStepConfig stepA2 = new PipelineStepConfig("s2", StepType.SINK, "desc", "schema_grpc", createJsonConfigOptions("{}"), outputs2, 0,1L,1L,1.0,0L, procInfoGrpcMod);
+        PipelineStepConfig stepA2 = new PipelineStepConfig("s2", StepType.SINK, "desc", "schema_grpc", createJsonConfigOptions("{}"), outputs2, 0, 1L, 1L, 1.0, 0L, procInfoGrpcMod);
 
 
-        PipelineStepConfig stepB1 = new PipelineStepConfig("s1", StepType.PIPELINE, "desc", "schema", createJsonConfigOptions("{}"), outputs1, 0,1L,1L,1.0,0L, procInfoKafkaMod);
-        PipelineStepConfig stepB2 = new PipelineStepConfig("s2", StepType.SINK, "desc", "schema_grpc", createJsonConfigOptions("{}"), outputs2, 0,1L,1L,1.0,0L, procInfoGrpcMod);
+        PipelineStepConfig stepB1 = new PipelineStepConfig("s1", StepType.PIPELINE, "desc", "schema", createJsonConfigOptions("{}"), outputs1, 0, 1L, 1L, 1.0, 0L, procInfoKafkaMod);
+        PipelineStepConfig stepB2 = new PipelineStepConfig("s2", StepType.SINK, "desc", "schema_grpc", createJsonConfigOptions("{}"), outputs2, 0, 1L, 1L, 1.0, 0L, procInfoGrpcMod);
 
         PipelineGraphConfig graph1 = new PipelineGraphConfig(
                 Map.of("p1", new PipelineConfig("p1", Map.of(stepA1.stepName(), stepA1, stepA2.stepName(), stepA2)))
@@ -325,18 +317,18 @@ class PipelineClusterConfigTest {
                 Map.of("p1", new PipelineConfig("p1", Map.of(stepB1.stepName(), stepB1, stepB2.stepName(), stepB2)))
         );
 
-        PipelineStepConfig stepC1 = new PipelineStepConfig("s_other", StepType.SINK, "desc", "schema_other",null, Collections.emptyMap(),0,1L,1L,1.0,0L, procInfoInternalMod);
+        PipelineStepConfig stepC1 = new PipelineStepConfig("s_other", StepType.SINK, "desc", "schema_other", null, Collections.emptyMap(), 0, 1L, 1L, 1.0, 0L, procInfoInternalMod);
         PipelineGraphConfig graph3 = new PipelineGraphConfig( // Different graph
                 Map.of("p_other", new PipelineConfig("p_other", Map.of(stepC1.stepName(), stepC1)))
         );
 
         PipelineModuleMap modules1 = new PipelineModuleMap(
                 Map.of("m1", new PipelineModuleConfiguration("Mod1", "m1", new SchemaReference("schema", 1)),
-                        "m-grpc", new PipelineModuleConfiguration("ModGrpc", "m-grpc", new SchemaReference("schema-grpc",1)))
+                        "m-grpc", new PipelineModuleConfiguration("ModGrpc", "m-grpc", new SchemaReference("schema-grpc", 1)))
         );
         PipelineModuleMap modules2 = new PipelineModuleMap( // Identical to modules1
                 Map.of("m1", new PipelineModuleConfiguration("Mod1", "m1", new SchemaReference("schema", 1)),
-                        "m-grpc", new PipelineModuleConfiguration("ModGrpc", "m-grpc", new SchemaReference("schema-grpc",1)))
+                        "m-grpc", new PipelineModuleConfiguration("ModGrpc", "m-grpc", new SchemaReference("schema-grpc", 1)))
         );
 
         PipelineClusterConfig config1 = new PipelineClusterConfig("clusterA", graph1, modules1, "p1", Set.of("t1"), Set.of("g1"));

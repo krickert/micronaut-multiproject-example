@@ -1,5 +1,3 @@
-
-
 dependencies {
     implementation(platform(project(":bom")))
     annotationProcessor(platform(project(":bom")))

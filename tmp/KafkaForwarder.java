@@ -14,7 +14,7 @@ public class KafkaForwarder {
     @Inject
     KafkaForwarderClient kafkaForwarderClient;
 
-    public void forwardToKafka(PipeStream pipe,String topic) {
+    public void forwardToKafka(PipeStream pipe, String topic) {
         // The 'destination' field contains the Kafka topic name.
         kafkaForwarderClient.send(topic, ProtobufUtils.createKey(pipe.getStreamId()), pipe);
     }

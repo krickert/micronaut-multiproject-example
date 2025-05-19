@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory; // Added for default JsonNode
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -190,6 +190,7 @@ public record PipelineStepConfig(
         public JsonConfigOptions(JsonNode jsonNode) {
             this(jsonNode, Collections.emptyMap());
         }
+
         // Convenience for tests if only configParams are needed
         public JsonConfigOptions(Map<String, String> configParams) {
             this(null, configParams); // Or JsonNodeFactory.instance.objectNode() if jsonConfig should never be null in the object

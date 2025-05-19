@@ -1,11 +1,7 @@
 package com.krickert.search.config.consul.factory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.krickert.search.config.consul.CachedConfigHolder;
-import com.krickert.search.config.consul.ConfigurationValidator;
-import com.krickert.search.config.consul.ConsulConfigFetcher;
-import com.krickert.search.config.consul.DynamicConfigurationManager;
-import com.krickert.search.config.consul.DynamicConfigurationManagerImpl;
+import com.krickert.search.config.consul.*;
 import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
 import com.krickert.search.config.consul.service.ConsulKvService;
@@ -31,12 +27,12 @@ public class DynamicConfigurationManagerFactory {
     /**
      * Creates a new DynamicConfigurationManagerFactory with the specified dependencies.
      *
-     * @param consulConfigFetcher the ConsulConfigFetcher to use
+     * @param consulConfigFetcher    the ConsulConfigFetcher to use
      * @param configurationValidator the ConfigurationValidator to use
-     * @param cachedConfigHolder the CachedConfigHolder to use
-     * @param eventPublisher the ApplicationEventPublisher to use
-     * @param consulKvService the ConsulKvService to use
-     * @param objectMapper the ObjectMapper to use
+     * @param cachedConfigHolder     the CachedConfigHolder to use
+     * @param eventPublisher         the ApplicationEventPublisher to use
+     * @param consulKvService        the ConsulKvService to use
+     * @param objectMapper           the ObjectMapper to use
      */
     public DynamicConfigurationManagerFactory(
             ConsulConfigFetcher consulConfigFetcher,

@@ -1,6 +1,7 @@
 package com.krickert.search.config.consul;
 
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
+
 import java.util.Optional;
 
 /**
@@ -8,15 +9,15 @@ import java.util.Optional;
  * It can indicate a successful data retrieval, a key deletion,
  * or an error encountered during the fetch or deserialization process.
  *
- * @param config Optional containing the successfully fetched and deserialized {@link PipelineClusterConfig}.
- * Empty if the key was deleted, an error occurred, or the value was blank.
- * @param error Optional containing the {@link Throwable} if an error occurred. Empty otherwise.
+ * @param config  Optional containing the successfully fetched and deserialized {@link PipelineClusterConfig}.
+ *                Empty if the key was deleted, an error occurred, or the value was blank.
+ * @param error   Optional containing the {@link Throwable} if an error occurred. Empty otherwise.
  * @param deleted True if the watched key was confirmed to be deleted or its value became effectively empty/blank.
  */
 public record WatchCallbackResult(
-    Optional<PipelineClusterConfig> config,
-    Optional<Throwable> error,
-    boolean deleted // component 'deleted' of type boolean
+        Optional<PipelineClusterConfig> config,
+        Optional<Throwable> error,
+        boolean deleted // component 'deleted' of type boolean
 ) {
 
     /**

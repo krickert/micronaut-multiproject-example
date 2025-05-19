@@ -44,19 +44,19 @@ public class SchemaRegistryIntegrationTest {
     void testSchemasAreRegisteredAndCanBeRetrieved() {
         // List all schemas
         List<String> schemaIds = schemaRegistryDelegate.listSchemaIds().block();
-        
+
         log.info("Found {} schemas in registry: {}", schemaIds.size(), schemaIds);
-        
+
         // Verify that we have at least some schemas
         assertNotNull(schemaIds);
         assertFalse(schemaIds.isEmpty(), "No schemas found in registry");
-        
+
         // Verify that we can retrieve each schema
         for (String schemaId : schemaIds) {
             log.info("Retrieving schema: {}", schemaId);
-            
+
             Mono<String> schemaContentMono = schemaRegistryDelegate.getSchemaContent(schemaId);
-            
+
             StepVerifier.create(schemaContentMono)
                     .assertNext(content -> {
                         assertNotNull(content);
@@ -80,25 +80,25 @@ public class SchemaRegistryIntegrationTest {
                 return java.util.Optional.empty();
             }
         };
-        
+
         // List all schemas
         List<String> schemaIds = schemaRegistryDelegate.listSchemaIds().block();
         assertNotNull(schemaIds);
-        
+
         // Convert to SchemaReference objects
         List<SchemaReference> schemaRefs = schemaIds.stream()
                 .map(id -> new SchemaReference(id, 1))
                 .collect(Collectors.toList());
-        
+
         // Verify that we can retrieve each schema using the provider function
         for (SchemaReference schemaRef : schemaRefs) {
             log.info("Retrieving schema using provider function: {}", schemaRef);
-            
+
             java.util.Optional<String> schemaContentOpt = schemaContentProvider.apply(schemaRef);
-            
+
             assertTrue(schemaContentOpt.isPresent(), "Schema content not found for " + schemaRef);
             assertFalse(schemaContentOpt.get().isEmpty(), "Schema content is empty for " + schemaRef);
-            log.info("Successfully retrieved schema using provider function: {} ({} characters)", 
+            log.info("Successfully retrieved schema using provider function: {} ({} characters)",
                     schemaRef, schemaContentOpt.get().length());
         }
     }

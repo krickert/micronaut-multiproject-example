@@ -81,7 +81,7 @@ tasks.register("generateNewModule") {
             Files.move(originalAppFileInNewPath.toPath(), targetAppFileInNewPath.toPath(), StandardCopyOption.REPLACE_EXISTING)
         } else {
             val altOriginalAppFile = newJavaMainSrcPath.resolve("EchoApplication.java")
-            if (altOriginalAppFile.exists()){
+            if (altOriginalAppFile.exists()) {
                 println("Renaming file $altOriginalAppFile to $targetAppFileInNewPath")
                 Files.move(altOriginalAppFile.toPath(), targetAppFileInNewPath.toPath(), StandardCopyOption.REPLACE_EXISTING)
             } else {

@@ -13,7 +13,7 @@ import lombok.Builder;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @Builder
 public record KafkaPublishTopic(
-    @JsonProperty("topic") String topic
+        @JsonProperty("topic") String topic
 ) {
     public KafkaPublishTopic {
         if (topic == null || topic.isBlank()) {

@@ -72,9 +72,9 @@
 //            PipeStream streamToDispatch = currentStreamBuilder.build();
 //
 //            //TODO - this should be handled through a router service
-////            switch (stepConfig.transportType()) {
-////                case KAFKA ->
-////            }
+/// /            switch (stepConfig.transportType()) {
+/// /                case KAFKA ->
+/// /            }
 //            if (stepConfig.transportType() == TransportType.KAFKA) {
 //                KafkaTransportConfig kafkaConfig = stepConfig.kafkaConfig();
 //                if (kafkaConfig.publishTopicPattern() == null || kafkaConfig.publishTopicPattern().isEmpty()) {

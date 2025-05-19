@@ -23,9 +23,13 @@ import static org.mockito.ArgumentMatchers.anyString;
 // if all delegate interactions are mocked.
 class SchemaRegistryServiceErrorHandlingTest {
 
+    private final String TEST_SCHEMA_ID = "test-error-schema";
+    private final String TEST_SCHEMA_CONTENT = "{\"type\":\"string\"}";
     @Inject
     @GrpcChannel(GrpcServerChannel.NAME)
     SchemaRegistryServiceGrpc.SchemaRegistryServiceBlockingStub client;
+    @Inject
+    ConsulSchemaRegistryDelegate delegate; // This injected instance will be the mock
 
     // This will replace the actual ConsulSchemaRegistryDelegate bean with a mock
     @MockBean(ConsulSchemaRegistryDelegate.class)
@@ -33,22 +37,16 @@ class SchemaRegistryServiceErrorHandlingTest {
         return Mockito.mock(ConsulSchemaRegistryDelegate.class);
     }
 
-    @Inject
-    ConsulSchemaRegistryDelegate delegate; // This injected instance will be the mock
-
-    private final String TEST_SCHEMA_ID = "test-error-schema";
-    private final String TEST_SCHEMA_CONTENT = "{\"type\":\"string\"}";
-
     @Test
     void registerSchema_delegateThrowsRuntimeException_returnsSuccessFalseWithGenericError() {
         // Arrange: Configure the mock delegate to throw an unexpected RuntimeException
         Mockito.when(delegate.saveSchema(anyString(), anyString()))
-               .thenReturn(Mono.error(new RuntimeException("Unexpected delegate error during save")));
+                .thenReturn(Mono.error(new RuntimeException("Unexpected delegate error during save")));
 
         RegisterSchemaRequest request = RegisterSchemaRequest.newBuilder()
-            .setSchemaId(TEST_SCHEMA_ID)
-            .setSchemaContent(TEST_SCHEMA_CONTENT)
-            .build();
+                .setSchemaId(TEST_SCHEMA_ID)
+                .setSchemaContent(TEST_SCHEMA_CONTENT)
+                .build();
 
         // Act
         RegisterSchemaResponse response = client.registerSchema(request);
@@ -59,7 +57,7 @@ class SchemaRegistryServiceErrorHandlingTest {
         assertEquals(TEST_SCHEMA_ID, response.getSchemaId());
         assertFalse(response.getValidationErrorsList().isEmpty(), "Should have a validation error message.");
         assertEquals("An unexpected error occurred during registration.", response.getValidationErrors(0),
-            "Error message should be the generic one for unexpected delegate errors.");
+                "Error message should be the generic one for unexpected delegate errors.");
         assertTrue(response.hasTimestamp());
 
         // Verify mock interaction (optional, but good practice)
@@ -71,7 +69,7 @@ class SchemaRegistryServiceErrorHandlingTest {
         // Arrange
         String schemaId = "schema-internal-error";
         Mockito.when(delegate.getSchemaContent(schemaId))
-               .thenReturn(Mono.error(new RuntimeException("Delegate internal failure")));
+                .thenReturn(Mono.error(new RuntimeException("Delegate internal failure")));
 
         GetSchemaRequest request = GetSchemaRequest.newBuilder().setSchemaId(schemaId).build();
 
@@ -93,7 +91,7 @@ class SchemaRegistryServiceErrorHandlingTest {
         String schemaId = "schema-delete-fail";
         SchemaDeleteException schemaDeleteCause = new SchemaDeleteException("Delegate failed to delete from Consul", new RuntimeException("Consul communication error"));
         Mockito.when(delegate.deleteSchema(schemaId))
-               .thenReturn(Mono.error(schemaDeleteCause));
+                .thenReturn(Mono.error(schemaDeleteCause));
 
         DeleteSchemaRequest request = DeleteSchemaRequest.newBuilder().setSchemaId(schemaId).build();
 
@@ -105,7 +103,7 @@ class SchemaRegistryServiceErrorHandlingTest {
         assertEquals(io.grpc.Status.Code.INTERNAL, exception.getStatus().getCode());
         // The service implementation wraps the original message in "Internal error: "
         assertTrue(exception.getStatus().getDescription().contains("Internal error: Delegate failed to delete from Consul"),
-            "Description was: " + exception.getStatus().getDescription());
+                "Description was: " + exception.getStatus().getDescription());
 
 
         // Verify mock interaction
@@ -116,7 +114,7 @@ class SchemaRegistryServiceErrorHandlingTest {
     void listSchemas_delegateThrowsError_returnsStatusInternal() {
         // Arrange
         Mockito.when(delegate.listSchemaIds())
-               .thenReturn(Mono.error(new RuntimeException("Delegate list retrieval error")));
+                .thenReturn(Mono.error(new RuntimeException("Delegate list retrieval error")));
 
         ListSchemasRequest request = ListSchemasRequest.newBuilder().build();
 

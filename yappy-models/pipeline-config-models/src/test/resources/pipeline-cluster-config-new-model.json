@@ -8,12 +8,18 @@
           "kafkaIngest": {
             "pipelineStepId": "kafkaIngest",
             "pipelineImplementationId": "ingestMod",
-            "customConfig": {"jsonConfig": "{}"},
-            "nextSteps": ["processInternal"],
+            "customConfig": {
+              "jsonConfig": "{}"
+            },
+            "nextSteps": [
+              "processInternal"
+            ],
             "errorSteps": [],
             "transportType": "KAFKA",
             "kafkaConfig": {
-              "listenTopics": ["rawInput"],
+              "listenTopics": [
+                "rawInput"
+              ],
               "publishTopicPattern": "p1.ingest.out",
               "kafkaProperties": {}
             }
@@ -35,15 +41,24 @@
       "ingestMod": {
         "implementationName": "Ingest Module",
         "implementationId": "ingestMod",
-        "customConfigSchemaReference": {"subject": "ingestSchema", "version": 1}
+        "customConfigSchemaReference": {
+          "subject": "ingestSchema",
+          "version": 1
+        }
       },
       "procMod": {
         "implementationName": "Processing Module",
         "implementationId": "procMod",
-        "customConfigSchemaReference": {"subject": "procSchema", "version": 1}
+        "customConfigSchemaReference": {
+          "subject": "procSchema",
+          "version": 1
+        }
       }
     }
   },
-  "allowedKafkaTopics": ["rawInput", "p1.ingest.out"],
+  "allowedKafkaTopics": [
+    "rawInput",
+    "p1.ingest.out"
+  ],
   "allowedGrpcServices": []
 }

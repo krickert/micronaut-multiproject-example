@@ -1,7 +1,7 @@
-
 # Solution for Implementing Step Types in YAPPY
 
-Based on the requirements and analysis of the codebase, I'll provide a comprehensive solution to implement step types in YAPPY, removing the "suggested pipeline" logic from the gRPC layer and handling it in the config layer instead.
+Based on the requirements and analysis of the codebase, I'll provide a comprehensive solution to implement step types in YAPPY, removing
+the "suggested pipeline" logic from the gRPC layer and handling it in the config layer instead.
 
 ## 1. Create a `StepType` Enum
 
@@ -21,13 +21,13 @@ public enum StepType {
      * Standard pipeline step that can have both inputs and outputs.
      */
     PIPELINE,
-    
+
     /**
      * Initial pipeline step that can only have outputs, not inputs.
      * These steps serve as entry points to the pipeline.
      */
     INITIAL_PIPELINE,
-    
+
     /**
      * Terminal pipeline step that can have inputs but no outputs.
      */
@@ -40,35 +40,36 @@ public enum StepType {
 Next, we need to update the `PipelineStepConfig` record to include the new `stepType` field:
 
 ```java
+
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record PipelineStepConfig(
-    @JsonProperty("pipelineStepId") String pipelineStepId,
-    @JsonProperty("pipelineImplementationId") String pipelineImplementationId,
-    @JsonProperty("customConfig") JsonConfigOptions customConfig,
-    
-    // Logical flow definition
-    @JsonProperty("nextSteps") List<String> nextSteps,
-    @JsonProperty("errorSteps") List<String> errorSteps,
-    
-    // Physical transport configuration
-    @JsonProperty("transportType") TransportType transportType,
-    @JsonProperty("kafkaConfig") KafkaTransportConfig kafkaConfig,
-    @JsonProperty("grpcConfig") GrpcTransportConfig grpcConfig,
-    
-    // Step type (PIPELINE, INITIAL_PIPELINE, SINK)
-    @JsonProperty("stepType") StepType stepType
-) {
-    @JsonCreator
-    public PipelineStepConfig(
         @JsonProperty("pipelineStepId") String pipelineStepId,
         @JsonProperty("pipelineImplementationId") String pipelineImplementationId,
         @JsonProperty("customConfig") JsonConfigOptions customConfig,
+
+        // Logical flow definition
         @JsonProperty("nextSteps") List<String> nextSteps,
         @JsonProperty("errorSteps") List<String> errorSteps,
+
+        // Physical transport configuration
         @JsonProperty("transportType") TransportType transportType,
         @JsonProperty("kafkaConfig") KafkaTransportConfig kafkaConfig,
         @JsonProperty("grpcConfig") GrpcTransportConfig grpcConfig,
+
+        // Step type (PIPELINE, INITIAL_PIPELINE, SINK)
         @JsonProperty("stepType") StepType stepType
+) {
+    @JsonCreator
+    public PipelineStepConfig(
+            @JsonProperty("pipelineStepId") String pipelineStepId,
+            @JsonProperty("pipelineImplementationId") String pipelineImplementationId,
+            @JsonProperty("customConfig") JsonConfigOptions customConfig,
+            @JsonProperty("nextSteps") List<String> nextSteps,
+            @JsonProperty("errorSteps") List<String> errorSteps,
+            @JsonProperty("transportType") TransportType transportType,
+            @JsonProperty("kafkaConfig") KafkaTransportConfig kafkaConfig,
+            @JsonProperty("grpcConfig") GrpcTransportConfig grpcConfig,
+            @JsonProperty("stepType") StepType stepType
     ) {
         // --- Essential Validations ---
         if (pipelineStepId == null || pipelineStepId.isBlank()) {
@@ -217,13 +218,13 @@ public class StepTypeValidator implements ClusterValidationRule {
 
                 // Validate INITIAL_PIPELINE steps are not referenced by other steps
                 if (step.stepType() == StepType.INITIAL_PIPELINE && referencedStepIds.contains(stepId)) {
-                    errors.add(String.format("%s: is marked as INITIAL_PIPELINE but is referenced by other steps, which is not allowed.", 
+                    errors.add(String.format("%s: is marked as INITIAL_PIPELINE but is referenced by other steps, which is not allowed.",
                             stepContext));
                 }
 
                 // Validate SINK steps don't have next steps or error steps
                 if (step.stepType() == StepType.SINK && (!step.nextSteps().isEmpty() || !step.errorSteps().isEmpty())) {
-                    errors.add(String.format("%s: is marked as SINK but has next steps or error steps, which is not allowed.", 
+                    errors.add(String.format("%s: is marked as SINK but has next steps or error steps, which is not allowed.",
                             stepContext));
                 }
             }
@@ -252,7 +253,7 @@ public class DefaultConfigurationValidator implements ConfigurationValidator {
             InterPipelineLoopValidator interPipelineLoopValidator,
             CustomConfigSchemaValidator customConfigSchemaValidator,
             StepTypeValidator stepTypeValidator) { // Add this parameter
-        
+
         // Add the new validator to the rules list
         this.rules = List.of(
                 referentialIntegrityValidator,
@@ -263,77 +264,78 @@ public class DefaultConfigurationValidator implements ConfigurationValidator {
                 stepTypeValidator  // Add this to the list
         );
     }
-    
+
     // Rest of the class remains the same
 }
 ```
 
 ## 5. Update the `IngestionService.findConnectorPipelineTarget` Method
 
-Finally, let's update the `IngestionService.findConnectorPipelineTarget` method to use the new `StepType` instead of the current "suggested pipeline" logic:
+Finally, let's update the `IngestionService.findConnectorPipelineTarget` method to use the new `StepType` instead of the current "suggested
+pipeline" logic:
 
 ```java
 private ConnectorPipelineTarget findConnectorPipelineTarget(PipelineClusterConfig clusterConfig, String sourceIdentifier) {
     // Priority:
     // 1. Look for a pipeline with an INITIAL_PIPELINE step that matches the sourceIdentifier
     // 2. Use the default pipeline if specified
-    
+
     if (clusterConfig.pipelineGraphConfig() == null) {
         LOG.warn("No pipeline graph configuration found.");
         return null;
     }
-    
+
     // Search through all pipelines for an INITIAL_PIPELINE step that matches the sourceIdentifier
     for (Map.Entry<String, PipelineConfig> pipelineEntry : clusterConfig.pipelineGraphConfig().pipelines().entrySet()) {
         String pipelineName = pipelineEntry.getKey();
         PipelineConfig pipelineConfig = pipelineEntry.getValue();
-        
+
         if (pipelineConfig == null || pipelineConfig.pipelineSteps() == null) {
             continue;
         }
-        
+
         for (Map.Entry<String, PipelineStepConfig> stepEntry : pipelineConfig.pipelineSteps().entrySet()) {
             String stepId = stepEntry.getKey();
             PipelineStepConfig stepConfig = stepEntry.getValue();
-            
+
             if (stepConfig == null) {
                 continue;
             }
-            
+
             // Check if this is an INITIAL_PIPELINE step and if its ID matches the sourceIdentifier
             if (stepConfig.stepType() == StepType.INITIAL_PIPELINE && stepId.equals(sourceIdentifier)) {
                 LOG.info("Found initial step with ID matching source_identifier {}: pipeline={}, step={}",
-                    sourceIdentifier, pipelineName, stepId);
+                        sourceIdentifier, pipelineName, stepId);
                 return new ConnectorPipelineTarget(pipelineName, stepId);
             }
         }
     }
-    
+
     // No specific initial step found for this sourceIdentifier
     // Fall back to the default pipeline if configured
     String defaultPipelineName = clusterConfig.defaultPipelineName();
     if (defaultPipelineName != null && !defaultPipelineName.isEmpty()) {
         PipelineConfig defaultPipelineConfig = clusterConfig.pipelineGraphConfig().getPipelineConfig(defaultPipelineName);
-        
+
         if (defaultPipelineConfig != null && defaultPipelineConfig.pipelineSteps() != null) {
             // Find the first INITIAL_PIPELINE step in the default pipeline
             for (Map.Entry<String, PipelineStepConfig> stepEntry : defaultPipelineConfig.pipelineSteps().entrySet()) {
                 String stepId = stepEntry.getKey();
                 PipelineStepConfig stepConfig = stepEntry.getValue();
-                
+
                 if (stepConfig != null && stepConfig.stepType() == StepType.INITIAL_PIPELINE) {
                     LOG.info("Using default pipeline's initial step for source_identifier {}: pipeline={}, step={}",
-                        sourceIdentifier, defaultPipelineName, stepId);
+                            sourceIdentifier, defaultPipelineName, stepId);
                     return new ConnectorPipelineTarget(defaultPipelineName, stepId);
                 }
             }
-            
+
             LOG.warn("Default pipeline '{}' has no INITIAL_PIPELINE steps.", defaultPipelineName);
         } else {
             LOG.warn("Default pipeline '{}' not found in configuration or has no steps.", defaultPipelineName);
         }
     }
-    
+
     LOG.warn("No matching initial step found for source_identifier {} and no usable default pipeline.", sourceIdentifier);
     return null;
 }
@@ -344,6 +346,7 @@ private ConnectorPipelineTarget findConnectorPipelineTarget(PipelineClusterConfi
 We need to add the `defaultPipelineName` field to the `PipelineClusterConfig` record:
 
 ```java
+
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record PipelineClusterConfig(
         @JsonProperty("clusterName") String clusterName,
@@ -365,12 +368,12 @@ public record PipelineClusterConfig(
             @JsonProperty("allowedGrpcServices") Set<String> allowedGrpcServices
     ) {
         // Existing validation code...
-        
+
         this.clusterName = clusterName;
         this.pipelineGraphConfig = pipelineGraphConfig;
         this.pipelineModuleMap = pipelineModuleMap;
         this.defaultPipelineName = defaultPipelineName; // Can be null
-        
+
         // Existing validation code for allowedKafkaTopics and allowedGrpcServices...
     }
 }
@@ -384,9 +387,13 @@ public record PipelineClusterConfig(
     - `INITIAL_PIPELINE` steps are not referenced by any other steps
     - `SINK` steps don't have any next steps or error steps
 4. **Updated `DefaultConfigurationValidator`**: Added the new `StepTypeValidator` to the list of validation rules.
-5. **Updated `IngestionService.findConnectorPipelineTarget`**: Changed the method to use the new `StepType` instead of the current "suggested pipeline" logic.
+5. **Updated `IngestionService.findConnectorPipelineTarget`**: Changed the method to use the new `StepType` instead of the current "
+   suggested pipeline" logic.
 6. **Updated `PipelineClusterConfig`**: Added the `defaultPipelineName` field to support fallback to a default pipeline.
 
-These changes remove the "suggested pipeline" logic from the gRPC layer and handle it in the config layer instead. The initial registration of an initializer step is now nearly identical to any other step, but with the restriction of no inputs (enforced by the `StepTypeValidator`). Similarly, SINK steps are restricted to have no outputs.
+These changes remove the "suggested pipeline" logic from the gRPC layer and handle it in the config layer instead. The initial registration
+of an initializer step is now nearly identical to any other step, but with the restriction of no inputs (enforced by the
+`StepTypeValidator`). Similarly, SINK steps are restricted to have no outputs.
 
-This approach provides a clean, explicit way to define and validate pipeline steps with different roles, making it easy for a UI tool to create and modify these connections dynamically.
+This approach provides a clean, explicit way to define and validate pipeline steps with different roles, making it easy for a UI tool to
+create and modify these connections dynamically.

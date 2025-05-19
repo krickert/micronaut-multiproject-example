@@ -1,6 +1,7 @@
 package com.krickert.search.engine.orchestration;
 
 // Protobuf / gRPC Imports
+
 import com.krickert.search.engine.PipeStreamEngineGrpc; // Generated gRPC class for the service
 import com.krickert.search.model.PipeStream;           // Protobuf PipeStream model
 import com.google.protobuf.Empty;                     // Protobuf Empty
@@ -41,6 +42,7 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.FutureCallback; // Explicit import
 import com.google.common.util.concurrent.MoreExecutors; // For direct execution of callback
 import com.krickert.search.engine.exception.StepExecutionException;
+
 /**
  * Handles the execution of gRPC calls to forward PipeStreams to downstream services
  * implementing the PipeStreamEngine interface.
@@ -152,7 +154,6 @@ public class GrpcPipelineStepExecutor {
     }
 
 
-
     /**
      * Determines if a gRPC failure (StatusRuntimeException) is potentially retryable based on its status code.
      * Other exception types are considered non-retryable by this executor.
@@ -213,7 +214,7 @@ public class GrpcPipelineStepExecutor {
                     log.warn("Interrupted while shutting down channel for '{}'. Forcing shutdown.", serviceName, e);
                     channel.shutdownNow(); // Force shutdown if interrupted
                     Thread.currentThread().interrupt(); // Preserve interrupt status
-                } catch(Exception e) {
+                } catch (Exception e) {
                     log.error("Unexpected error shutting down channel for service '{}'", serviceName, e);
                     // Attempt shutdownNow again just in case
                     if (!channel.isShutdown()) channel.shutdownNow();

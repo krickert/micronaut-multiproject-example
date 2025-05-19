@@ -3,17 +3,8 @@ package com.krickert.yappy.modules.chunker; // Match the package of your EchoSer
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
-
-// Imports from yappy_core_types.proto (e.g., com.krickert.search.model)
 import com.krickert.search.model.*;
-
-// Imports from pipe_step_processor_service.proto (e.g., com.krickert.search.sdk)
-import com.krickert.search.sdk.PipeStepProcessorGrpc;
-import com.krickert.search.sdk.ProcessConfiguration;
-import com.krickert.search.sdk.ProcessRequest;
-import com.krickert.search.sdk.ProcessResponse;
-import com.krickert.search.sdk.ServiceMetadata;
-
+import com.krickert.search.sdk.*;
 import io.grpc.stub.StreamObserver;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.grpc.annotation.GrpcChannel;
@@ -46,7 +37,7 @@ class ChunkerServiceGrpcTest {
     @GrpcChannel(GrpcServerChannel.NAME)
     PipeStepProcessorGrpc.PipeStepProcessorStub asyncClient;
 
-    PipeDocAssertionTest assertionTest =  new PipeDocAssertionTest();
+    PipeDocAssertionTest assertionTest = new PipeDocAssertionTest();
 
     private ProcessRequest createTestProcessRequest(
             String pipelineName, String stepName, String streamId, String docId, long hopNumber,
@@ -106,7 +97,7 @@ class ChunkerServiceGrpcTest {
         // Create a semantic chunk
         SemanticChunk chunk = SemanticChunk.newBuilder()
                 .setChunkNumber(0)
-                .setChunkId( "stream-123_doc-abc_chunk_0")
+                .setChunkId("stream-123_doc-abc_chunk_0")
                 .setEmbeddingInfo(
                         ChunkEmbedding.newBuilder()
                                 .setTextContent("This is the body of the test document.")

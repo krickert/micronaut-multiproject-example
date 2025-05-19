@@ -2,16 +2,11 @@ package com.krickert.search.config.consul.validator;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.krickert.search.config.pipeline.model.*;
-// Explicit model imports
+import com.krickert.search.config.pipeline.model.PipelineStepConfig.JsonConfigOptions;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig.OutputTarget;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig.ProcessorInfo;
-import com.krickert.search.config.pipeline.model.PipelineStepConfig.JsonConfigOptions;
-
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-// import org.junit.jupiter.params.ParameterizedTest; // Not used in the provided test, can remove if still unused
-// import org.junit.jupiter.params.provider.ValueSource; // Not used
 
 import java.util.*;
 import java.util.function.Function;
@@ -56,7 +51,7 @@ class ReferentialIntegrityValidatorTest {
                                                   JsonConfigOptions customConfig,
                                                   String customConfigSchemaId) {
         return new PipelineStepConfig(
-                name, type, "Desc for " + name, customConfigSchemaId, 
+                name, type, "Desc for " + name, customConfigSchemaId,
                 customConfig != null ? customConfig : emptyInnerJsonConfig(),
                 kafkaInputs != null ? kafkaInputs : Collections.emptyList(),
                 outputs != null ? outputs : Collections.emptyMap(),
@@ -66,36 +61,36 @@ class ReferentialIntegrityValidatorTest {
     }
 
     private OutputTarget kafkaOutputTo(String targetStepName, String topic, Map<String, String> kafkaProducerProps) {
-        return new OutputTarget(targetStepName, TransportType.KAFKA, null, 
-                                new KafkaTransportConfig(topic, kafkaProducerProps != null ? kafkaProducerProps : Collections.emptyMap()));
+        return new OutputTarget(targetStepName, TransportType.KAFKA, null,
+                new KafkaTransportConfig(topic, kafkaProducerProps != null ? kafkaProducerProps : Collections.emptyMap()));
     }
 
     private OutputTarget grpcOutputTo(String targetStepName, String serviceName, Map<String, String> grpcClientProps) {
-        return new OutputTarget(targetStepName, TransportType.GRPC, 
-                                new GrpcTransportConfig(serviceName, grpcClientProps != null ? grpcClientProps : Collections.emptyMap()), null);
+        return new OutputTarget(targetStepName, TransportType.GRPC,
+                new GrpcTransportConfig(serviceName, grpcClientProps != null ? grpcClientProps : Collections.emptyMap()), null);
     }
 
     private OutputTarget internalOutputTo(String targetStepName) {
         return new OutputTarget(targetStepName, TransportType.INTERNAL, null, null);
     }
 
-     private KafkaInputDefinition kafkaInput(List<String> listenTopics, Map<String, String> kafkaConsumerProps) {
+    private KafkaInputDefinition kafkaInput(List<String> listenTopics, Map<String, String> kafkaConsumerProps) {
         // Ensure listenTopics is not null before passing to KafkaInputDefinition
         List<String> topics = (listenTopics != null) ? listenTopics : Collections.emptyList();
         // KafkaInputDefinition constructor requires non-empty listenTopics.
         // If an empty list is truly intended for a test scenario where KafkaInputDefinition exists but has no topics,
         // then KafkaInputDefinition's constructor needs to allow it, or this helper provides a default.
         if (topics.isEmpty() && listenTopics != null && !listenTopics.isEmpty()) {
-             // This case means listenTopics was explicitly an empty list, which the constructor might disallow.
-             // For tests here, we usually want valid topics if an inputDef is present.
-             throw new IllegalArgumentException("Test setup: listenTopics for KafkaInputDefinition should not be an empty list if the definition is meant to be valid.");
+            // This case means listenTopics was explicitly an empty list, which the constructor might disallow.
+            // For tests here, we usually want valid topics if an inputDef is present.
+            throw new IllegalArgumentException("Test setup: listenTopics for KafkaInputDefinition should not be an empty list if the definition is meant to be valid.");
         } else if (topics.isEmpty()) {
             // If kafkaInputs was null and defaulted to empty list for createDetailedStep,
             // but now we are creating a KafkaInputDefinition, it must have topics.
             topics = List.of("dummy-topic-for-input-def-helper"); // Provide a dummy if it must be non-empty
         }
-        return new KafkaInputDefinition(topics, "test-cg-" + UUID.randomUUID().toString().substring(0,8), 
-                                        kafkaConsumerProps != null ? kafkaConsumerProps : Collections.emptyMap());
+        return new KafkaInputDefinition(topics, "test-cg-" + UUID.randomUUID().toString().substring(0, 8),
+                kafkaConsumerProps != null ? kafkaConsumerProps : Collections.emptyMap());
     }
 
     private KafkaInputDefinition kafkaInput(String listenTopic) { // Corrected as per user's fix
@@ -188,7 +183,7 @@ class ReferentialIntegrityValidatorTest {
         PipelineStepConfig s1 = createBasicStep("s1", StepType.PIPELINE, internalBeanProcessor("unknown-bean"));
         PipelineConfig p1 = new PipelineConfig("p1", Map.of("s1", s1));
         // availableModules is empty for this test setup via buildClusterConfigWithModules
-        PipelineClusterConfig clusterConfig = buildClusterConfigWithModules(Map.of("p1", p1), new PipelineModuleMap(Collections.emptyMap())); 
+        PipelineClusterConfig clusterConfig = buildClusterConfigWithModules(Map.of("p1", p1), new PipelineModuleMap(Collections.emptyMap()));
 
         List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
         assertFalse(errors.isEmpty(), "Expected errors for unknown implementation ID.");
@@ -201,7 +196,7 @@ class ReferentialIntegrityValidatorTest {
         this.availableModules.put(moduleImplId, new PipelineModuleConfiguration("Module No Schema Display Name", moduleImplId, null));
 
         PipelineStepConfig s1 = createStepWithCustomConfig("s1", StepType.PIPELINE, internalBeanProcessor(moduleImplId),
-                jsonConfigWithData("data", "value"), null); 
+                jsonConfigWithData("data", "value"), null);
         PipelineConfig p1 = new PipelineConfig("p1", Map.of("s1", s1));
         PipelineClusterConfig clusterConfig = buildClusterConfig(Map.of("p1", p1)); // Uses this.availableModules
 
@@ -303,7 +298,7 @@ class ReferentialIntegrityValidatorTest {
     @Test
     void validate_grpcOutputPropertiesWithBlankKey_returnsError() {
         Map<String, String> grpcProps = new HashMap<>();
-        grpcProps.put("  ", "value1"); 
+        grpcProps.put("  ", "value1");
         OutputTarget output = grpcOutputTo("t1", "service", grpcProps);
         PipelineStepConfig s1 = createDetailedStep("s1", StepType.PIPELINE, internalBeanProcessor("bean1"), null, Map.of("out", output), null, null);
         PipelineConfig p1 = new PipelineConfig("p1", Map.of("s1", s1));
@@ -335,11 +330,11 @@ class ReferentialIntegrityValidatorTest {
         // Register the bean in availableModules to avoid unknown implementationKey error
         availableModules.put("beanSink", new PipelineModuleConfiguration("Bean Sink", "beanSink", null));
 
-        PipelineStepConfig s1 = createDetailedStep("s1", StepType.SINK, internalBeanProcessor("beanSink"), 
-            null, // null kafkaInputs list (will default to empty list in constructor)
-            null, // no outputs for SINK
-            null, // no customConfig to avoid validation error
-            null);
+        PipelineStepConfig s1 = createDetailedStep("s1", StepType.SINK, internalBeanProcessor("beanSink"),
+                null, // null kafkaInputs list (will default to empty list in constructor)
+                null, // no outputs for SINK
+                null, // no customConfig to avoid validation error
+                null);
         PipelineConfig p1 = new PipelineConfig("p1", Map.of("s1", s1));
         PipelineClusterConfig clusterConfig = buildClusterConfig(Map.of("p1", p1));
         List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
@@ -363,26 +358,26 @@ class ReferentialIntegrityValidatorTest {
 
         PipelineStepConfig s1 = createDetailedStep(
                 "s1-initial", StepType.INITIAL_PIPELINE, internalBeanProcessor(module1Id),
-                Collections.emptyList(), 
+                Collections.emptyList(),
                 Map.of("next_target", internalOutputTo("s2-process")),
                 jsonConfigWithData("s1data", "value"),
                 schema1.toIdentifier()
         );
 
         PipelineStepConfig s2 = createDetailedStep(
-            "s2-process", StepType.PIPELINE, internalBeanProcessor(module2Id),
-            List.of(kafkaInput("topic-for-s2")), // Corrected your fix
-            Map.of("to_sink", kafkaOutputTo("s3-sink", "s2-output-topic", Map.of("acks", "all"))),
-            jsonConfigWithData("s2data", "value"),
-            schema2.toIdentifier()
+                "s2-process", StepType.PIPELINE, internalBeanProcessor(module2Id),
+                List.of(kafkaInput("topic-for-s2")), // Corrected your fix
+                Map.of("to_sink", kafkaOutputTo("s3-sink", "s2-output-topic", Map.of("acks", "all"))),
+                jsonConfigWithData("s2data", "value"),
+                schema2.toIdentifier()
         );
 
         PipelineStepConfig s3 = createDetailedStep(
-            "s3-sink", StepType.SINK, internalBeanProcessor(sinkBeanId),
-            List.of(kafkaInput(List.of("s2-output-topic"), Map.of("fetch.max.wait.ms", "500"))), // Corrected your fix
-            Collections.emptyMap(), // No outputs for SINK
-            jsonConfigWithData("s3data", "value"),
-            schema3.toIdentifier()
+                "s3-sink", StepType.SINK, internalBeanProcessor(sinkBeanId),
+                List.of(kafkaInput(List.of("s2-output-topic"), Map.of("fetch.max.wait.ms", "500"))), // Corrected your fix
+                Collections.emptyMap(), // No outputs for SINK
+                jsonConfigWithData("s3data", "value"),
+                schema3.toIdentifier()
         );
 
         Map<String, PipelineStepConfig> steps = Map.of(s1.stepName(), s1, s2.stepName(), s2, s3.stepName(), s3);

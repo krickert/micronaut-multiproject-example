@@ -1,22 +1,18 @@
 package com.krickert.yappy.modules.chunker;
 
 import com.google.protobuf.ByteString;
-import com.krickert.search.model.Blob;
-import com.krickert.search.model.ChunkEmbedding;
-import com.krickert.search.model.PipeDoc;
-import com.krickert.search.model.SemanticChunk;
-import com.krickert.search.model.SemanticProcessingResult;
-import com.krickert.search.sdk.ProcessRequest; // Assuming ProcessRequest is in this package
-import com.krickert.search.sdk.ProcessResponse; // Assuming ProcessResponse is in this package
-import org.junit.jupiter.api.Test; // Or your testing framework's Test annotation
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
+import com.krickert.search.model.*;
+import com.krickert.search.sdk.ProcessRequest;
+import com.krickert.search.sdk.ProcessResponse;
+import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*; // Or your testing framework's assertions
+import static org.junit.jupiter.api.Assertions.*;
 
 // Assuming you have a gRPC client (blockingClient) and a method to create ProcessRequest (createTestProcessRequest)
 
@@ -111,7 +107,7 @@ class PipeDocAssertionTest {
         // The inputDoc for the request might not have the semantic result,
         // or it might have one with a placeholder ID if the service generates it.
         // For this example, let's assume the inputDoc is simpler and the service adds/modifies semantic results.
-         PipeDoc inputDocForRequest = PipeDoc.newBuilder()
+        PipeDoc inputDocForRequest = PipeDoc.newBuilder()
                 .setId(docId)
                 .setTitle("Test Document Title")
                 .setBody("This is the body of the test document.")

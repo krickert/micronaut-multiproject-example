@@ -6,7 +6,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
-import com.krickert.search.config.pipeline.model.*;
+import com.krickert.search.config.pipeline.model.GrpcTransportConfig;
+import com.krickert.search.config.pipeline.model.KafkaTransportConfig;
+import com.krickert.search.config.pipeline.model.PipelineStepConfig;
+import com.krickert.search.config.pipeline.model.TransportType;
 
 import java.io.IOException;
 import java.util.Map;
@@ -45,9 +48,9 @@ public class PipelineConfigTestUtils {
     /**
      * Deserializes a JSON string to a pipeline configuration object.
      *
-     * @param json The JSON string
+     * @param json      The JSON string
      * @param valueType The class of the object to deserialize to
-     * @param <T> The type of the object
+     * @param <T>       The type of the object
      * @return The deserialized object
      * @throws IOException If deserialization fails
      */
@@ -59,9 +62,9 @@ public class PipelineConfigTestUtils {
      * Performs a round-trip serialization and deserialization of an object.
      * This is useful for testing that an object can be correctly serialized and deserialized.
      *
-     * @param object The object to serialize and deserialize
+     * @param object    The object to serialize and deserialize
      * @param valueType The class of the object
-     * @param <T> The type of the object
+     * @param <T>       The type of the object
      * @return The deserialized object
      * @throws IOException If serialization or deserialization fails
      */
@@ -127,8 +130,8 @@ public class PipelineConfigTestUtils {
     /**
      * Creates an OutputTarget object for a Kafka transport.
      *
-     * @param targetStepName The name of the target step
-     * @param topic The Kafka topic
+     * @param targetStepName          The name of the target step
+     * @param topic                   The Kafka topic
      * @param kafkaProducerProperties The Kafka producer properties
      * @return The OutputTarget object
      */
@@ -141,8 +144,8 @@ public class PipelineConfigTestUtils {
     /**
      * Creates an OutputTarget object for a gRPC transport.
      *
-     * @param targetStepName The name of the target step
-     * @param serviceName The gRPC service name
+     * @param targetStepName       The name of the target step
+     * @param serviceName          The gRPC service name
      * @param grpcClientProperties The gRPC client properties
      * @return The OutputTarget object
      */
@@ -166,9 +169,9 @@ public class PipelineConfigTestUtils {
      * Performs a serialization test on a pipeline configuration object.
      * Serializes the object to JSON, deserializes it back, and compares the result with the original.
      *
-     * @param object The object to test
+     * @param object    The object to test
      * @param valueType The class of the object
-     * @param <T> The type of the object
+     * @param <T>       The type of the object
      * @return True if the test passes, false otherwise
      */
     public static <T> boolean testSerialization(T object, Class<T> valueType) {
@@ -184,10 +187,10 @@ public class PipelineConfigTestUtils {
      * Performs a serialization test on a pipeline configuration object with a custom equality check.
      * Serializes the object to JSON, deserializes it back, and compares the result with the original using the provided equality function.
      *
-     * @param object The object to test
-     * @param valueType The class of the object
+     * @param object           The object to test
+     * @param valueType        The class of the object
      * @param equalityFunction A function that compares two objects for equality
-     * @param <T> The type of the object
+     * @param <T>              The type of the object
      * @return True if the test passes, false otherwise
      */
     public static <T> boolean testSerialization(T object, Class<T> valueType, Function<T, Boolean> equalityFunction) {

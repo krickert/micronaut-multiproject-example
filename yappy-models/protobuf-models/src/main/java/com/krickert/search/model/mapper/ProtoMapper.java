@@ -24,7 +24,7 @@ public class ProtoMapper {
         // Instantiate default components
         this.ruleParser = new RuleParser();
         this.pathResolver = new PathResolver();
-         // ValueHandler needs PathResolver for some helpers, but PathResolver doesn't strictly need ValueHandler in this structure.
+        // ValueHandler needs PathResolver for some helpers, but PathResolver doesn't strictly need ValueHandler in this structure.
         this.valueHandler = new ValueHandler(this.pathResolver); // Pass dependency if needed by ValueHandler internally
         this.mappingExecutor = new MappingExecutor(this.ruleParser, this.pathResolver, this.valueHandler);
     }
@@ -41,8 +41,8 @@ public class ProtoMapper {
     /**
      * Applies mapping rules to transform a source message into a *new* target message type.
      *
-     * @param sourceMessage The source protobuf message instance.
-     * @param targetDescriptor The Descriptor for the target message type.
+     * @param sourceMessage      The source protobuf message instance.
+     * @param targetDescriptor   The Descriptor for the target message type.
      * @param mappingRuleStrings A list of strings defining the mapping operations.
      * @return A new Message instance of the target type, populated according to the rules.
      * @throws MappingException If any error occurs during parsing or mapping.
@@ -63,7 +63,7 @@ public class ProtoMapper {
         try {
             return targetBuilder.build();
         } catch (UninitializedMessageException e) {
-             // Original error handling
+            // Original error handling
             throw new MappingException("Error building final target message: Required fields missing. " + e.getMessage(), e, null);
         } catch (Exception e) {
             throw new MappingException("Error building final target message", e, null);
@@ -73,8 +73,8 @@ public class ProtoMapper {
     /**
      * Applies mapping rules from a source message onto an *existing* target message builder.
      *
-     * @param sourceMessage The source protobuf message instance.
-     * @param targetBuilder The builder for the target message, potentially pre-populated.
+     * @param sourceMessage      The source protobuf message instance.
+     * @param targetBuilder      The builder for the target message, potentially pre-populated.
      * @param mappingRuleStrings A list of strings defining the mapping operations.
      * @return The same targetBuilder instance, modified according to the rules.
      * @throws MappingException If any error occurs during parsing or mapping.

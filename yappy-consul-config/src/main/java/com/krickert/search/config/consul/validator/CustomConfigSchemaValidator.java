@@ -12,12 +12,7 @@ import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -36,7 +31,7 @@ public class CustomConfigSchemaValidator implements ClusterValidationRule {
     }
 
     @Override
-    public List<String> validate(PipelineClusterConfig clusterConfig, 
+    public List<String> validate(PipelineClusterConfig clusterConfig,
                                  Function<SchemaReference, Optional<String>> schemaContentProvider) {
         // Ignore the schemaContentProvider and use the ConsulSchemaRegistryDelegate instead
         LOG.warn("Schema content provider function is ignored. Using ConsulSchemaRegistryDelegate instead.");
@@ -68,7 +63,7 @@ public class CustomConfigSchemaValidator implements ClusterValidationRule {
 
         Map<String, PipelineModuleConfiguration> availableModules =
                 (clusterConfig.pipelineModuleMap() != null && clusterConfig.pipelineModuleMap().availableModules() != null) ?
-                clusterConfig.pipelineModuleMap().availableModules() : Collections.emptyMap();
+                        clusterConfig.pipelineModuleMap().availableModules() : Collections.emptyMap();
 
         if (clusterConfig.pipelineGraphConfig() != null && clusterConfig.pipelineGraphConfig().pipelines() != null) {
             for (Map.Entry<String, PipelineConfig> pipelineEntry : clusterConfig.pipelineGraphConfig().pipelines().entrySet()) {
@@ -124,7 +119,7 @@ public class CustomConfigSchemaValidator implements ClusterValidationRule {
                                                     validationMessages.stream().map(ValidationMessage::getMessage).collect(Collectors.joining("; "))));
                                         }
                                     } catch (Exception e) {
-                                        LOG.error("Error validating custom config for step '{}' against schema {}: {}", 
+                                        LOG.error("Error validating custom config for step '{}' against schema {}: {}",
                                                 step.stepName(), schemaId, e.getMessage(), e);
                                         errors.add(String.format("Error validating custom config for step '%s' against schema %s: %s",
                                                 step.stepName(), schemaId, e.getMessage()));
@@ -160,7 +155,7 @@ public class CustomConfigSchemaValidator implements ClusterValidationRule {
                                 } else {
                                     // If customConfig exists but jsonConfig is null, create an empty ObjectNode
                                     LOG.debug("Custom config for step '{}' is present but its jsonConfig is null. " +
-                                             "Validating against schema with an empty JSON object.", step.stepName());
+                                            "Validating against schema with an empty JSON object.", step.stepName());
                                     configNode = objectMapper.createObjectNode();
                                 }
                             }
@@ -178,7 +173,7 @@ public class CustomConfigSchemaValidator implements ClusterValidationRule {
                                                 schemaErrors.stream().map(ValidationMessage::getMessage).collect(Collectors.joining("; "))));
                                     }
                                 } catch (Exception e) {
-                                    LOG.error("Error validating custom config for step '{}' using ConsulSchemaRegistryDelegate: {}", 
+                                    LOG.error("Error validating custom config for step '{}' using ConsulSchemaRegistryDelegate: {}",
                                             step.stepName(), e.getMessage(), e);
                                     errors.add(String.format("Error validating custom config for step '%s' against schema %s: %s",
                                             step.stepName(),

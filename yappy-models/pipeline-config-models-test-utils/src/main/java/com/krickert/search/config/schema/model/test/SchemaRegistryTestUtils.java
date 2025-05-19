@@ -42,9 +42,9 @@ public class SchemaRegistryTestUtils {
     /**
      * Deserializes a JSON string to a schema registry model object.
      *
-     * @param json The JSON string
+     * @param json      The JSON string
      * @param valueType The class of the object to deserialize to
-     * @param <T> The type of the object
+     * @param <T>       The type of the object
      * @return The deserialized object
      * @throws IOException If deserialization fails
      */
@@ -56,9 +56,9 @@ public class SchemaRegistryTestUtils {
      * Performs a round-trip serialization and deserialization of an object.
      * This is useful for testing that an object can be correctly serialized and deserialized.
      *
-     * @param object The object to serialize and deserialize
+     * @param object    The object to serialize and deserialize
      * @param valueType The class of the object
-     * @param <T> The type of the object
+     * @param <T>       The type of the object
      * @return The deserialized object
      * @throws IOException If serialization or deserialization fails
      */
@@ -71,9 +71,9 @@ public class SchemaRegistryTestUtils {
      * Performs a serialization test on a schema registry model object.
      * Serializes the object to JSON, deserializes it back, and compares the result with the original.
      *
-     * @param object The object to test
+     * @param object    The object to test
      * @param valueType The class of the object
-     * @param <T> The type of the object
+     * @param <T>       The type of the object
      * @return True if the test passes, false otherwise
      */
     public static <T> boolean testSerialization(T object, Class<T> valueType) {
@@ -89,10 +89,10 @@ public class SchemaRegistryTestUtils {
      * Performs a serialization test on a schema registry model object with a custom equality check.
      * Serializes the object to JSON, deserializes it back, and compares the result with the original using the provided equality function.
      *
-     * @param object The object to test
-     * @param valueType The class of the object
+     * @param object           The object to test
+     * @param valueType        The class of the object
      * @param equalityFunction A function that compares two objects for equality
-     * @param <T> The type of the object
+     * @param <T>              The type of the object
      * @return True if the test passes, false otherwise
      */
     public static <T> boolean testSerialization(T object, Class<T> valueType, Function<T, Boolean> equalityFunction) {

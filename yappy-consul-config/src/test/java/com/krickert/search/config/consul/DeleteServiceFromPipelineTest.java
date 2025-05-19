@@ -5,8 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
 import com.krickert.search.config.consul.schema.test.ConsulSchemaRegistrySeeder;
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
-// Removed import for ConsulKvService as per issue requirements
-// All Consul operations should go through ConsulBusinessOperationsService
 import com.krickert.search.config.pipeline.model.*;
 import com.krickert.search.config.pipeline.model.test.PipelineConfigTestUtils;
 import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigJson;
@@ -15,13 +13,7 @@ import io.micronaut.context.event.ApplicationEventPublisher;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-import org.kiwiproject.consul.Consul;
-import org.kiwiproject.consul.KeyValueClient;
+import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,10 +33,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * 1. Load comprehensive-pipeline-cluster-config.json into Consul
  * 2. Validate the configuration
  * 3. Make edits to the pipeline:
- *    a. Make a Kafka topic "allowable"
- *    b. Edit a pipeline step to send to the Kafka topic
- *    c. Test validation failure when a step tries to read from a topic that would cause an endless loop
- *    d. Delete a service and update all connections to/from it
+ * a. Make a Kafka topic "allowable"
+ * b. Edit a pipeline step to send to the Kafka topic
+ * c. Test validation failure when a step tries to read from a topic that would cause an endless loop
+ * d. Delete a service and update all connections to/from it
  */
 @MicronautTest(startApplication = false, environments = {"test-dynamic-manager-full"}) // Use the same environment as the working test
 @Property(name = "micronaut.config-client.enabled", value = "false")
@@ -53,10 +45,9 @@ import static org.junit.jupiter.api.Assertions.*;
 @Property(name = "app.config.cluster-name", value = DeleteServiceFromPipelineTest.TEST_EXECUTION_CLUSTER)
 class DeleteServiceFromPipelineTest {
 
-    private static final Logger LOG = LoggerFactory.getLogger(DeleteServiceFromPipelineTest.class);
     static final String DEFAULT_PROPERTY_CLUSTER = "propertyClusterDeleteServiceDefault";
     static final String TEST_EXECUTION_CLUSTER = "comprehensive-cluster"; // Match the name in the JSON file
-
+    private static final Logger LOG = LoggerFactory.getLogger(DeleteServiceFromPipelineTest.class);
     // Removed direct Consul client injection as per issue requirements
     // All Consul operations should go through ConsulBusinessOperationsService
     @Inject
@@ -86,32 +77,6 @@ class DeleteServiceFromPipelineTest {
 
     @Inject
     private DynamicConfigurationManagerImpl dynamicConfigurationManager;
-
-    // Event listener for capturing configuration update events
-    @Singleton
-    static class TestApplicationEventListener {
-        private static final Logger EVENT_LISTENER_LOG = LoggerFactory.getLogger(TestApplicationEventListener.class);
-        private final BlockingQueue<ClusterConfigUpdateEvent> receivedEvents = new ArrayBlockingQueue<>(10);
-
-        @io.micronaut.runtime.event.annotation.EventListener
-        void onClusterConfigUpdate(ClusterConfigUpdateEvent event) {
-            EVENT_LISTENER_LOG.info("TestApplicationEventListener received event for cluster '{}'. Old present: {}, New cluster: {}",
-                    event.newConfig().clusterName(), event.oldConfig().isPresent(), event.newConfig().clusterName());
-            if (TEST_EXECUTION_CLUSTER.equals(event.newConfig().clusterName()) ||
-                (event.oldConfig().isPresent() && TEST_EXECUTION_CLUSTER.equals(event.oldConfig().get().clusterName()))) {
-                receivedEvents.offer(event);
-            } else {
-                EVENT_LISTENER_LOG.warn("TestApplicationEventListener ignored event for different cluster: {}. Expected: {}",
-                        event.newConfig().clusterName(), TEST_EXECUTION_CLUSTER);
-            }
-        }
-        public ClusterConfigUpdateEvent pollEvent(long timeout, TimeUnit unit) throws InterruptedException {
-            return receivedEvents.poll(timeout, unit);
-        }
-        public void clear() {
-            receivedEvents.clear();
-        }
-    }
 
     @BeforeEach
     void setUp() {
@@ -186,7 +151,7 @@ class DeleteServiceFromPipelineTest {
     }
 
     private void seedConsulKv(String key, Object object) throws JsonProcessingException {
-        LOG.info("Seeding Consul KV: {} = {}", key, 
+        LOG.info("Seeding Consul KV: {} = {}", key,
                 object.toString().length() > 150 ? object.toString().substring(0, 150) + "..." : object.toString());
 
         // Determine if this is a cluster config or schema version based on the key
@@ -325,16 +290,16 @@ class DeleteServiceFromPipelineTest {
 
                     // Create a schema version data
                     com.krickert.search.config.schema.model.SchemaVersionData schemaData =
-                        new com.krickert.search.config.schema.model.SchemaVersionData(
-                            (long) (Math.random() * 1000000),
-                            schemaRef.subject(),
-                            schemaRef.version(),
-                            schemaContent,
-                            com.krickert.search.config.schema.model.SchemaType.JSON_SCHEMA,
-                            com.krickert.search.config.schema.model.SchemaCompatibility.NONE,
-                            java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS),
-                            "Test schema for " + schemaRef.subject()
-                        );
+                            new com.krickert.search.config.schema.model.SchemaVersionData(
+                                    (long) (Math.random() * 1000000),
+                                    schemaRef.subject(),
+                                    schemaRef.version(),
+                                    schemaContent,
+                                    com.krickert.search.config.schema.model.SchemaType.JSON_SCHEMA,
+                                    com.krickert.search.config.schema.model.SchemaCompatibility.NONE,
+                                    java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS),
+                                    "Test schema for " + schemaRef.subject()
+                            );
 
                     seedConsulKv(fullSchemaKey, schemaData);
                 }
@@ -363,20 +328,20 @@ class DeleteServiceFromPipelineTest {
 
                                 // Create a schema version data
                                 com.krickert.search.config.schema.model.SchemaVersionData schemaData =
-                                    new com.krickert.search.config.schema.model.SchemaVersionData(
-                                        (long) (Math.random() * 1000000),
-                                        subject,
-                                        version,
-                                        schemaContent,
-                                        com.krickert.search.config.schema.model.SchemaType.JSON_SCHEMA,
-                                        com.krickert.search.config.schema.model.SchemaCompatibility.NONE,
-                                        java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS),
-                                        "Test schema for " + subject
-                                    );
+                                        new com.krickert.search.config.schema.model.SchemaVersionData(
+                                                (long) (Math.random() * 1000000),
+                                                subject,
+                                                version,
+                                                schemaContent,
+                                                com.krickert.search.config.schema.model.SchemaType.JSON_SCHEMA,
+                                                com.krickert.search.config.schema.model.SchemaCompatibility.NONE,
+                                                java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS),
+                                                "Test schema for " + subject
+                                        );
 
                                 seedConsulKv(fullSchemaKey, schemaData);
                             } catch (Exception e) {
-                                LOG.error("Error creating schema for customConfigSchemaId {}: {}", 
+                                LOG.error("Error creating schema for customConfigSchemaId {}: {}",
                                         step.customConfigSchemaId(), e.getMessage());
                             }
                         }
@@ -423,7 +388,7 @@ class DeleteServiceFromPipelineTest {
         }
 
         ValidationResult validationResult = realConfigurationValidator.validate(
-                initialConfig, 
+                initialConfig,
                 schemaRef -> {
                     Optional<String> content = testCachedConfigHolder.getSchemaContent(schemaRef);
                     LOG.info("Validator requesting schema for {}: {}", schemaRef, content.isPresent() ? "found" : "not found");
@@ -623,7 +588,7 @@ class DeleteServiceFromPipelineTest {
         }
 
         assertNotNull(updatedConfig, "Updated configuration should be available in cache");
-        assertTrue(updatedConfig.allowedKafkaTopics().contains(newKafkaTopic), 
+        assertTrue(updatedConfig.allowedKafkaTopics().contains(newKafkaTopic),
                 "Updated config should contain the new Kafka topic");
         LOG.info("Kafka topic update verified.");
 
@@ -663,7 +628,7 @@ class DeleteServiceFromPipelineTest {
         PipelineConfig pipeline = configWithUpdatedStep.pipelineGraphConfig().pipelines().get("search-pipeline");
         PipelineStepConfig step = pipeline.pipelineSteps().get("text-enrichment");
         assertTrue(step.outputs().containsKey("feedback_loop"), "Step should have the new output");
-        assertEquals(newKafkaTopic, step.outputs().get("feedback_loop").kafkaTransport().topic(), 
+        assertEquals(newKafkaTopic, step.outputs().get("feedback_loop").kafkaTransport().topic(),
                 "Output should use the new Kafka topic");
         LOG.info("Pipeline step update verified.");
 
@@ -685,8 +650,8 @@ class DeleteServiceFromPipelineTest {
         long deleteServiceEndTime = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(appWatchSeconds + 20);
         while (System.currentTimeMillis() < deleteServiceEndTime) {
             Optional<PipelineClusterConfig> currentConfig = testCachedConfigHolder.getCurrentConfig();
-            if (currentConfig.isPresent() && 
-                !currentConfig.get().allowedGrpcServices().contains("dashboard-service")) {
+            if (currentConfig.isPresent() &&
+                    !currentConfig.get().allowedGrpcServices().contains("dashboard-service")) {
                 configWithDeletedService = currentConfig.get();
                 break;
             }
@@ -700,17 +665,17 @@ class DeleteServiceFromPipelineTest {
         assertNotNull(configWithDeletedService, "Updated configuration with deleted service should be available in cache");
 
         // Verify that the service was deleted and connections were updated
-        assertFalse(configWithDeletedService.allowedGrpcServices().contains("dashboard-service"), 
+        assertFalse(configWithDeletedService.allowedGrpcServices().contains("dashboard-service"),
                 "Dashboard service should be removed from allowed services");
 
         // Verify that the analytics-processor step no longer has an output to dashboard-updater
         PipelineConfig analyticsPipeline = configWithDeletedService.pipelineGraphConfig().pipelines().get("analytics-pipeline");
         PipelineStepConfig analyticsProcessor = analyticsPipeline.pipelineSteps().get("analytics-processor");
-        assertFalse(analyticsProcessor.outputs().containsKey("default_dashboard"), 
+        assertFalse(analyticsProcessor.outputs().containsKey("default_dashboard"),
                 "Analytics processor should no longer have an output to dashboard-updater");
 
         // Verify that the dashboard-updater step is removed
-        assertFalse(analyticsPipeline.pipelineSteps().containsKey("dashboard-updater"), 
+        assertFalse(analyticsPipeline.pipelineSteps().containsKey("dashboard-updater"),
                 "Dashboard-updater step should be removed");
 
         LOG.info("Service deletion and connection updates verified.");
@@ -917,7 +882,7 @@ class DeleteServiceFromPipelineTest {
         PipelineGraphConfig updatedGraphConfig = new PipelineGraphConfig(updatedPipelines);
 
         // Remove the dashboard-service from the module map
-        Map<String, PipelineModuleConfiguration> updatedModules = 
+        Map<String, PipelineModuleConfiguration> updatedModules =
                 new java.util.HashMap<>(updatedConfig.pipelineModuleMap().availableModules());
         updatedModules.remove("dashboard-service");
         PipelineModuleMap updatedModuleMap = new PipelineModuleMap(updatedModules);
@@ -956,6 +921,34 @@ class DeleteServiceFromPipelineTest {
             return objectMapper.readValue(json, PipelineClusterConfig.class);
         } catch (IOException e) {
             throw new RuntimeException("Failed to create deep copy of config", e);
+        }
+    }
+
+    // Event listener for capturing configuration update events
+    @Singleton
+    static class TestApplicationEventListener {
+        private static final Logger EVENT_LISTENER_LOG = LoggerFactory.getLogger(TestApplicationEventListener.class);
+        private final BlockingQueue<ClusterConfigUpdateEvent> receivedEvents = new ArrayBlockingQueue<>(10);
+
+        @io.micronaut.runtime.event.annotation.EventListener
+        void onClusterConfigUpdate(ClusterConfigUpdateEvent event) {
+            EVENT_LISTENER_LOG.info("TestApplicationEventListener received event for cluster '{}'. Old present: {}, New cluster: {}",
+                    event.newConfig().clusterName(), event.oldConfig().isPresent(), event.newConfig().clusterName());
+            if (TEST_EXECUTION_CLUSTER.equals(event.newConfig().clusterName()) ||
+                    (event.oldConfig().isPresent() && TEST_EXECUTION_CLUSTER.equals(event.oldConfig().get().clusterName()))) {
+                receivedEvents.offer(event);
+            } else {
+                EVENT_LISTENER_LOG.warn("TestApplicationEventListener ignored event for different cluster: {}. Expected: {}",
+                        event.newConfig().clusterName(), TEST_EXECUTION_CLUSTER);
+            }
+        }
+
+        public ClusterConfigUpdateEvent pollEvent(long timeout, TimeUnit unit) throws InterruptedException {
+            return receivedEvents.poll(timeout, unit);
+        }
+
+        public void clear() {
+            receivedEvents.clear();
         }
     }
 }

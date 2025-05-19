@@ -22,7 +22,7 @@ public interface ConsulConfigFetcher extends Closeable {
      * Establishes a watch on the PipelineClusterConfig key for the given cluster name.
      * The updateHandler will be invoked when the configuration changes in Consul or an error occurs.
      *
-     * @param clusterName The name of the cluster whose config key to watch.
+     * @param clusterName   The name of the cluster whose config key to watch.
      * @param updateHandler A consumer that processes the {@link WatchCallbackResult}.
      */
     void watchClusterConfig(String clusterName, Consumer<WatchCallbackResult> updateHandler);

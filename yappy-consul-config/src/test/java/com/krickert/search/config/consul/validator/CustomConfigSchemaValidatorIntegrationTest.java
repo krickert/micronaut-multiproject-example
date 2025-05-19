@@ -2,11 +2,9 @@ package com.krickert.search.config.consul.validator;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.krickert.search.config.consul.schema.delegate.ConsulSchemaRegistryDelegate;
 import com.krickert.search.config.consul.schema.test.ConsulSchemaRegistrySeeder;
 import com.krickert.search.config.pipeline.model.*;
-import com.krickert.search.config.schema.model.test.ConsulSchemaRegistryTestHelper;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
@@ -14,9 +12,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Mono;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -30,19 +30,6 @@ import static org.junit.jupiter.api.Assertions.*;
 @Property(name = "consul.client.config.path", value = "config/test-pipeline")
 public class CustomConfigSchemaValidatorIntegrationTest {
     private static final Logger log = LoggerFactory.getLogger(CustomConfigSchemaValidatorIntegrationTest.class);
-
-    @Inject
-    private CustomConfigSchemaValidator validator;
-
-    @Inject
-    private ConsulSchemaRegistryDelegate schemaRegistryDelegate;
-
-    @Inject
-    private ConsulSchemaRegistrySeeder schemaRegistrySeeder;
-
-    @Inject
-    private ObjectMapper objectMapper;
-
     private static final String TEST_SCHEMA_ID = "test-schema";
     private static final String TEST_SCHEMA_CONTENT = """
             {
@@ -55,18 +42,24 @@ public class CustomConfigSchemaValidatorIntegrationTest {
               },
               "required": ["name", "value"]
             }""";
-
     private static final String VALID_CONFIG = """
             {
               "name": "test",
               "value": 42
             }""";
-
     private static final String INVALID_CONFIG = """
             {
               "name": "t",
               "value": 0
             }""";
+    @Inject
+    private CustomConfigSchemaValidator validator;
+    @Inject
+    private ConsulSchemaRegistryDelegate schemaRegistryDelegate;
+    @Inject
+    private ConsulSchemaRegistrySeeder schemaRegistrySeeder;
+    @Inject
+    private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() {
@@ -161,7 +154,7 @@ public class CustomConfigSchemaValidatorIntegrationTest {
         assertFalse(invalidErrors.isEmpty(), "Invalid config should produce errors.");
         assertEquals(1, invalidErrors.size(), "Expected one error message grouping schema violations.");
         assertTrue(invalidErrors.get(0).contains("Step 'invalid-step' custom config failed schema validation"));
-        
+
         // Print the actual error message for debugging
         log.info("Actual error message: {}", invalidErrors.get(0));
 

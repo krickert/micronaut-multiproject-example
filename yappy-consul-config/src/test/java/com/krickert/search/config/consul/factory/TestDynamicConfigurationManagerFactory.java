@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.CachedConfigHolder;
 import com.krickert.search.config.consul.ConfigurationValidator;
 import com.krickert.search.config.consul.ConsulConfigFetcher;
-import com.krickert.search.config.consul.DynamicConfigurationManager;
 import com.krickert.search.config.consul.DynamicConfigurationManagerImpl;
 import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
@@ -21,12 +20,12 @@ public class TestDynamicConfigurationManagerFactory {
      * Creates a new DynamicConfigurationManager with the specified dependencies.
      * This method is used in tests to create a DynamicConfigurationManager with mock dependencies.
      *
-     * @param clusterName the name of the cluster
-     * @param consulConfigFetcher the ConsulConfigFetcher to use
+     * @param clusterName            the name of the cluster
+     * @param consulConfigFetcher    the ConsulConfigFetcher to use
      * @param configurationValidator the ConfigurationValidator to use
-     * @param cachedConfigHolder the CachedConfigHolder to use
-     * @param eventPublisher the ApplicationEventPublisher to use
-     * @param objectMapper the ObjectMapper to use
+     * @param cachedConfigHolder     the CachedConfigHolder to use
+     * @param eventPublisher         the ApplicationEventPublisher to use
+     * @param objectMapper           the ObjectMapper to use
      * @return a new DynamicConfigurationManager
      */
     public static DynamicConfigurationManagerImpl createDynamicConfigurationManager(

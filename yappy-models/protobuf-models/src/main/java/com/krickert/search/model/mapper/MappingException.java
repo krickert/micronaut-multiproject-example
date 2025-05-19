@@ -13,15 +13,15 @@ public class MappingException extends Exception {
         this.failedRule = failedRule;
     }
 
-     public MappingException(String message, String failedRule) {
+    public MappingException(String message, String failedRule) {
         super(message);
         this.failedRule = failedRule;
     }
 
-     public MappingException(String message, Throwable cause) {
-         super(message,cause);
-         this.failedRule = null;
-     }
+    public MappingException(String message, Throwable cause) {
+        super(message, cause);
+        this.failedRule = null;
+    }
 
     public MappingException(String s) {
         super(s);

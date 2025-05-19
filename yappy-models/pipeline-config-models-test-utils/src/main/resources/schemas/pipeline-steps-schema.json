@@ -3,7 +3,11 @@
   "title": "PipelineStepConfig Schema",
   "description": "JSON Schema for validating PipelineStepConfig objects",
   "type": "object",
-  "required": ["stepName", "stepType", "processorInfo"],
+  "required": [
+    "stepName",
+    "stepType",
+    "processorInfo"
+  ],
   "properties": {
     "stepName": {
       "type": "string",
@@ -13,7 +17,11 @@
     "stepType": {
       "type": "string",
       "description": "The type of the pipeline step",
-      "enum": ["PIPELINE", "SINK", "INITIAL_PIPELINE"]
+      "enum": [
+        "PIPELINE",
+        "SINK",
+        "INITIAL_PIPELINE"
+      ]
     },
     "description": {
       "type": "string",
@@ -45,7 +53,10 @@
       "description": "Kafka input definitions for the pipeline step",
       "items": {
         "type": "object",
-        "required": ["listenTopics", "consumerGroupId"],
+        "required": [
+          "listenTopics",
+          "consumerGroupId"
+        ],
         "properties": {
           "listenTopics": {
             "type": "array",
@@ -75,7 +86,10 @@
       "description": "Output targets for the pipeline step",
       "additionalProperties": {
         "type": "object",
-        "required": ["targetStepName", "transportType"],
+        "required": [
+          "targetStepName",
+          "transportType"
+        ],
         "properties": {
           "targetStepName": {
             "type": "string",
@@ -85,12 +99,18 @@
           "transportType": {
             "type": "string",
             "description": "The type of transport to use",
-            "enum": ["KAFKA", "GRPC", "INTERNAL"]
+            "enum": [
+              "KAFKA",
+              "GRPC",
+              "INTERNAL"
+            ]
           },
           "grpcTransport": {
             "type": "object",
             "description": "gRPC transport configuration",
-            "required": ["serviceName"],
+            "required": [
+              "serviceName"
+            ],
             "properties": {
               "serviceName": {
                 "type": "string",
@@ -109,7 +129,9 @@
           "kafkaTransport": {
             "type": "object",
             "description": "Kafka transport configuration",
-            "required": ["topic"],
+            "required": [
+              "topic"
+            ],
             "properties": {
               "topic": {
                 "type": "string",
@@ -131,24 +153,32 @@
             "if": {
               "properties": {
                 "transportType": {
-                  "enum": ["KAFKA"]
+                  "enum": [
+                    "KAFKA"
+                  ]
                 }
               }
             },
             "then": {
-              "required": ["kafkaTransport"]
+              "required": [
+                "kafkaTransport"
+              ]
             }
           },
           {
             "if": {
               "properties": {
                 "transportType": {
-                  "enum": ["GRPC"]
+                  "enum": [
+                    "GRPC"
+                  ]
                 }
               }
             },
             "then": {
-              "required": ["grpcTransport"]
+              "required": [
+                "grpcTransport"
+              ]
             }
           }
         ]
@@ -194,10 +224,14 @@
       },
       "oneOf": [
         {
-          "required": ["grpcServiceName"]
+          "required": [
+            "grpcServiceName"
+          ]
         },
         {
-          "required": ["internalProcessorBeanName"]
+          "required": [
+            "internalProcessorBeanName"
+          ]
         }
       ]
     }

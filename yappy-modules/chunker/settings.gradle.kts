@@ -1,4 +1,2 @@
-
-
-rootProject.name="ChunkerApplication"
+rootProject.name = "ChunkerApplication"
 

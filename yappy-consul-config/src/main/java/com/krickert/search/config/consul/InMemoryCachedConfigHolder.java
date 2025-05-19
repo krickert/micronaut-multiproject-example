@@ -15,20 +15,6 @@ import java.util.concurrent.atomic.AtomicReference;
 public class InMemoryCachedConfigHolder implements CachedConfigHolder {
 
     private static final Logger LOG = LoggerFactory.getLogger(InMemoryCachedConfigHolder.class);
-
-    // Made record package-private so test class in same package can see its type
-    record CachedState(
-            PipelineClusterConfig clusterConfig,
-            Map<SchemaReference, String> schemaCache
-    ) {
-        CachedState {
-            if (clusterConfig == null) {
-                throw new IllegalArgumentException("PipelineClusterConfig cannot be null in CachedState.");
-            }
-            schemaCache = (schemaCache == null) ? Collections.emptyMap() : Map.copyOf(schemaCache);
-        }
-    }
-
     private final AtomicReference<CachedState> currentCachedState = new AtomicReference<>(null);
 
     public InMemoryCachedConfigHolder() {
@@ -44,7 +30,6 @@ public class InMemoryCachedConfigHolder implements CachedConfigHolder {
     CachedState getCachedStateSnapshotForTest() {
         return currentCachedState.get();
     }
-
 
     @Override
     public Optional<PipelineClusterConfig> getCurrentConfig() {
@@ -88,6 +73,19 @@ public class InMemoryCachedConfigHolder implements CachedConfigHolder {
             LOG.info("Cached configuration cleared for cluster: {}", oldState.clusterConfig().clusterName());
         } else {
             LOG.debug("Attempted to clear configuration, but cache was already empty or in an uninitialized state.");
+        }
+    }
+
+    // Made record package-private so test class in same package can see its type
+    record CachedState(
+            PipelineClusterConfig clusterConfig,
+            Map<SchemaReference, String> schemaCache
+    ) {
+        CachedState {
+            if (clusterConfig == null) {
+                throw new IllegalArgumentException("PipelineClusterConfig cannot be null in CachedState.");
+            }
+            schemaCache = (schemaCache == null) ? Collections.emptyMap() : Map.copyOf(schemaCache);
         }
     }
 }

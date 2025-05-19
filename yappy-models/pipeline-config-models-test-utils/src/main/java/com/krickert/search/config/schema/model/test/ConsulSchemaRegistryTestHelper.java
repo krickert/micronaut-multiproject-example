@@ -2,7 +2,7 @@ package com.krickert.search.config.schema.model.test;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.IOException;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -97,7 +97,7 @@ public class ConsulSchemaRegistryTestHelper {
 
     /**
      * Loads all schemas from the "json" directory in the resources and returns them as a map.
-     * 
+     *
      * @return A map of schema IDs to schema contents
      */
     public static Map<String, String> loadAllSchemas() {
@@ -118,7 +118,7 @@ public class ConsulSchemaRegistryTestHelper {
 
     /**
      * Loads a specific schema from the resources.
-     * 
+     *
      * @param resourceName The name of the resource file (relative to the classpath)
      * @return A map entry with the schema ID and content
      */

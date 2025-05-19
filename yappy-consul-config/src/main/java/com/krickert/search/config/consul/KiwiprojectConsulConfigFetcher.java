@@ -25,20 +25,18 @@ import java.util.function.Consumer;
 public class KiwiprojectConsulConfigFetcher implements ConsulConfigFetcher {
 
     private static final Logger LOG = LoggerFactory.getLogger(KiwiprojectConsulConfigFetcher.class);
-
-    private final ObjectMapper objectMapper;
-    private final String consulHostForInfo;
-    private final int consulPortForInfo;
     final String clusterConfigKeyPrefix;
     final String schemaVersionsKeyPrefix;
     final int appWatchSeconds;
-
+    final AtomicBoolean connected = new AtomicBoolean(false);
+    final AtomicBoolean watcherStarted = new AtomicBoolean(false);
+    private final ObjectMapper objectMapper;
+    private final String consulHostForInfo;
+    private final int consulPortForInfo;
     // Package-private for test access
     Consul consulClient;
     KeyValueClient kvClient;
     KVCache clusterConfigCache;
-    final AtomicBoolean connected = new AtomicBoolean(false);
-    final AtomicBoolean watcherStarted = new AtomicBoolean(false);
 
     @Inject
     public KiwiprojectConsulConfigFetcher(
@@ -114,7 +112,7 @@ public class KiwiprojectConsulConfigFetcher implements ConsulConfigFetcher {
         try {
             Optional<String> valueAsString = kvClient.getValueAsString(key);
             if (valueAsString.isPresent() && !valueAsString.get().isBlank()) {
-                LOG.trace("Raw JSON for key {}: {}", key, valueAsString.get().length() > 200 ? valueAsString.get().substring(0,200) + "..." : valueAsString.get());
+                LOG.trace("Raw JSON for key {}: {}", key, valueAsString.get().length() > 200 ? valueAsString.get().substring(0, 200) + "..." : valueAsString.get());
                 return Optional.of(objectMapper.readValue(valueAsString.get(), PipelineClusterConfig.class));
             } else {
                 LOG.warn("PipelineClusterConfig not found or value is blank in Consul at key: {}", key);
@@ -135,7 +133,7 @@ public class KiwiprojectConsulConfigFetcher implements ConsulConfigFetcher {
         try {
             Optional<String> valueAsString = kvClient.getValueAsString(key);
             if (valueAsString.isPresent() && !valueAsString.get().isBlank()) {
-                LOG.trace("Raw JSON for key {}: {}", key, valueAsString.get().length() > 200 ? valueAsString.get().substring(0,200) + "..." : valueAsString.get());
+                LOG.trace("Raw JSON for key {}: {}", key, valueAsString.get().length() > 200 ? valueAsString.get().substring(0, 200) + "..." : valueAsString.get());
                 return Optional.of(objectMapper.readValue(valueAsString.get(), SchemaVersionData.class));
             } else {
                 LOG.warn("SchemaVersionData not found or value is blank in Consul for subject '{}', version {} at key: {}", subject, version, key);

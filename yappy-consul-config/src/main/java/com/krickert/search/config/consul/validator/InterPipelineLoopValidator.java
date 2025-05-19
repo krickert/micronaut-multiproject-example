@@ -9,15 +9,8 @@ import org.jgrapht.graph.DefaultEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Singleton
 public class InterPipelineLoopValidator implements ClusterValidationRule {
@@ -49,7 +42,7 @@ public class InterPipelineLoopValidator implements ClusterValidationRule {
         for (String pipelineMapKey : pipelinesMap.keySet()) {
             PipelineConfig pipeline = pipelinesMap.get(pipelineMapKey);
             if (pipeline != null && pipeline.name() != null && !pipeline.name().isBlank()) {
-                 if (!pipelineMapKey.equals(pipeline.name())) {
+                if (!pipelineMapKey.equals(pipeline.name())) {
                     errors.add(String.format("Cluster '%s': Pipeline map key '%s' does not match pipeline name '%s'.",
                             currentClusterName, pipelineMapKey, pipeline.name()));
                 }
@@ -114,7 +107,7 @@ public class InterPipelineLoopValidator implements ClusterValidationRule {
                 // Don't skip self-loops for the same pipeline - we want to detect when a pipeline
                 // publishes to and listens from the same topic
                 if (sourcePipelineName.equals(targetPipelineName)) {
-                    LOG.debug("Checking self-loop for pipeline '{}' in cluster '{}'", 
+                    LOG.debug("Checking self-loop for pipeline '{}' in cluster '{}'",
                             sourcePipelineName, currentClusterName);
                     // continue; - removed to allow self-loop detection
                 }
@@ -128,14 +121,14 @@ public class InterPipelineLoopValidator implements ClusterValidationRule {
                         if (inputDef.listenTopics() != null) {
                             for (String listenTopicPattern : inputDef.listenTopics()) {
                                 String resolvedListenTopic = resolvePattern(
-                                    listenTopicPattern,
-                                    targetStep, // context of the listening step in the target pipeline
-                                    targetPipelineName,
-                                    currentClusterName
+                                        listenTopicPattern,
+                                        targetStep, // context of the listening step in the target pipeline
+                                        targetPipelineName,
+                                        currentClusterName
                                 );
                                 if (resolvedListenTopic != null && publishedTopics.contains(resolvedListenTopic)) {
                                     if (interPipelineGraph.containsVertex(sourcePipelineName) && interPipelineGraph.containsVertex(targetPipelineName)) {
-                                         if (!interPipelineGraph.containsEdge(sourcePipelineName, targetPipelineName)) {
+                                        if (!interPipelineGraph.containsEdge(sourcePipelineName, targetPipelineName)) {
                                             try {
                                                 interPipelineGraph.addEdge(sourcePipelineName, targetPipelineName);
                                                 LOG.trace("Added inter-pipeline edge from '{}' to '{}' via topic '{}'",

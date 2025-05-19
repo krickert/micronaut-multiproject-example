@@ -3,20 +3,9 @@ package com.krickert.yappy.modules.echo; // Match the package of your EchoServic
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
-
-// Imports from yappy_core_types.proto (e.g., com.krickert.search.model)
-import com.krickert.search.model.Blob; // Assuming Blob is still useful for construction, though it's in PipeDoc
+import com.krickert.search.model.Blob;
 import com.krickert.search.model.PipeDoc;
-import com.krickert.search.model.ErrorData; // For ServiceMetadata
-import com.krickert.search.model.StepExecutionRecord; // For ServiceMetadata
-
-// Imports from pipe_step_processor_service.proto (e.g., com.krickert.search.sdk)
-import com.krickert.search.sdk.PipeStepProcessorGrpc;
-import com.krickert.search.sdk.ProcessConfiguration;
-import com.krickert.search.sdk.ProcessRequest;
-import com.krickert.search.sdk.ProcessResponse;
-import com.krickert.search.sdk.ServiceMetadata;
-
+import com.krickert.search.sdk.*;
 import io.grpc.stub.StreamObserver;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.grpc.annotation.GrpcChannel;

@@ -11,9 +11,9 @@ import java.util.Map;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @Builder
 public record KafkaInputDefinition(
-    @JsonProperty("listenTopics") @NotEmpty List<String> listenTopics,
-    @JsonProperty("consumerGroupId") String consumerGroupId, // Now truly optional in config
-    @JsonProperty("kafkaConsumerProperties") Map<String, String> kafkaConsumerProperties
+        @JsonProperty("listenTopics") @NotEmpty List<String> listenTopics,
+        @JsonProperty("consumerGroupId") String consumerGroupId, // Now truly optional in config
+        @JsonProperty("kafkaConsumerProperties") Map<String, String> kafkaConsumerProperties
 ) {
     public KafkaInputDefinition {
         // ... (validations for listenTopics, properties) ...

@@ -55,7 +55,7 @@ public class TestSchemaLoader {
     /**
      * Validates JSON content against a schema.
      *
-     * @param jsonContent The JSON content to validate
+     * @param jsonContent   The JSON content to validate
      * @param schemaContent The schema content to validate against
      * @return A set of validation messages if validation fails, or an empty set if validation succeeds
      */
@@ -66,7 +66,7 @@ public class TestSchemaLoader {
     /**
      * Validates a JsonNode against a schema.
      *
-     * @param jsonNode The JsonNode to validate
+     * @param jsonNode      The JsonNode to validate
      * @param schemaContent The schema content to validate against
      * @return A set of validation messages if validation fails, or an empty set if validation succeeds
      */

@@ -1,6 +1,5 @@
 package com.krickert.yappy.modules.echo;
 
-import com.krickert.search.schema.registry.SchemaRegistryServiceGrpc;
 import com.krickert.search.sdk.PipeStepProcessorGrpc;
 import io.grpc.ManagedChannel;
 import io.micronaut.context.annotation.Bean;
@@ -12,7 +11,7 @@ import io.micronaut.grpc.server.GrpcServerChannel;
 public class Clients {
 
     @Bean
-    PipeStepProcessorGrpc.PipeStepProcessorBlockingStub  pipeStepProcessorBlockingStub(
+    PipeStepProcessorGrpc.PipeStepProcessorBlockingStub pipeStepProcessorBlockingStub(
             @GrpcChannel(GrpcServerChannel.NAME)
             ManagedChannel channel) {
         return PipeStepProcessorGrpc.newBlockingStub(

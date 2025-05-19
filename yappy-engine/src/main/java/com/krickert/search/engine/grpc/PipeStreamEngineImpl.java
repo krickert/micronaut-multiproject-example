@@ -26,11 +26,9 @@ import java.util.UUID;
 @Singleton
 public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineImplBase {
 
+    private static final Logger LOG = LoggerFactory.getLogger(PipeStreamEngineImpl.class);
     private final String cluster;
     private final String pipelineName;
-
-    private static final Logger LOG = LoggerFactory.getLogger(PipeStreamEngineImpl.class);
-
     private final DynamicConfigurationManager configProvider;
     private final PipelineOrchestrator orchestrator;
 
@@ -145,7 +143,7 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
 
     @Override
     public void process(PipeStream request, StreamObserver<PipeStream> responseObserver) {
-       //TODO: Implement this method
+        //TODO: Implement this method
     }
 
     @Override

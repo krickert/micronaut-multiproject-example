@@ -3,44 +3,53 @@ package com.krickert.search.config.consul.validator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.krickert.search.config.pipeline.model.*; // Assuming this wildcard covers all needed models
-// Specific imports that might be needed if wildcard doesn't cover nested records for some compilers/IDEs
+import com.krickert.search.config.consul.schema.delegate.ConsulSchemaRegistryDelegate;
+import com.krickert.search.config.pipeline.model.*;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig.JsonConfigOptions;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig.ProcessorInfo;
-// import com.krickert.search.config.pipeline.model.StepType; // Covered by wildcard
-// import com.krickert.search.config.pipeline.model.SchemaReference; // Covered by wildcard
-// import com.krickert.search.config.pipeline.model.PipelineModuleConfiguration; // Covered
-// import com.krickert.search.config.pipeline.model.PipelineModuleMap; // Covered
-// import com.krickert.search.config.pipeline.model.PipelineConfig; // Covered
-// import com.krickert.search.config.pipeline.model.PipelineGraphConfig; // Covered
-// import com.krickert.search.config.pipeline.model.PipelineClusterConfig; // Covered
-
-
+import com.krickert.search.config.schema.model.test.SchemaValidator;
+import com.networknt.schema.ValidationMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import static org.mockito.Mockito.*;
-
-import java.util.*; // Covers Map, List, Set, Collections, HashMap
-import java.util.function.Function;
-
-import com.krickert.search.config.consul.schema.delegate.ConsulSchemaRegistryDelegate;
-import com.krickert.search.config.consul.schema.test.SchemaRegistrySeeder;
-import com.krickert.search.config.consul.schema.test.TestSchemaLoader;
-import com.krickert.search.config.schema.model.test.SchemaValidator;
-import com.networknt.schema.ValidationMessage;
 import reactor.core.publisher.Mono;
 
+import java.util.*;
+
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class CustomConfigSchemaValidatorTest {
 
+    // Test JSON schemas
+    private static final String USER_SCHEMA_V1_CONTENT = """
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "UserConfig",
+              "type": "object",
+              "properties": {
+                "username": { "type": "string", "minLength": 3 },
+                "maxConnections": { "type": "integer", "minimum": 1, "maximum": 100 }
+              },
+              "required": ["username", "maxConnections"]
+            }""";
+    private static final String ADDRESS_SCHEMA_V1_CONTENT = """
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "AddressConfig",
+              "type": "object",
+              "properties": {
+                "street": { "type": "string" },
+                "city": { "type": "string" }
+              },
+              "required": ["street"]
+            }""";
+    private static final String MALFORMED_SCHEMA_CONTENT = "{ not a valid json schema";
     private CustomConfigSchemaValidator validator;
     private ObjectMapper objectMapper;
     private Map<String, PipelineModuleConfiguration> availableModules;
     private Map<SchemaReference, String> schemaContentsMap; // Renamed for clarity
-
     @Mock
     private ConsulSchemaRegistryDelegate schemaRegistryDelegate;
 
@@ -55,33 +64,6 @@ class CustomConfigSchemaValidatorTest {
         // Assuming gRPC services are identified by their implementationId which is the service name
         return new ProcessorInfo(serviceImplementationId, null);
     }
-
-    // Test JSON schemas
-    private static final String USER_SCHEMA_V1_CONTENT = """
-            {
-              "$schema": "http://json-schema.org/draft-07/schema#",
-              "title": "UserConfig",
-              "type": "object",
-              "properties": {
-                "username": { "type": "string", "minLength": 3 },
-                "maxConnections": { "type": "integer", "minimum": 1, "maximum": 100 }
-              },
-              "required": ["username", "maxConnections"]
-            }""";
-
-    private static final String ADDRESS_SCHEMA_V1_CONTENT = """
-            {
-              "$schema": "http://json-schema.org/draft-07/schema#",
-              "title": "AddressConfig",
-              "type": "object",
-              "properties": {
-                "street": { "type": "string" },
-                "city": { "type": "string" }
-              },
-              "required": ["street"]
-            }""";
-    private static final String MALFORMED_SCHEMA_CONTENT = "{ not a valid json schema";
-
 
     @BeforeEach
     void setUp() {
@@ -102,8 +84,8 @@ class CustomConfigSchemaValidatorTest {
             String schemaId = invocation.getArgument(0);
             // Find the SchemaReference with the matching subject
             Optional<SchemaReference> matchingRef = schemaContentsMap.keySet().stream()
-                .filter(ref -> ref.subject().equals(schemaId))
-                .findFirst();
+                    .filter(ref -> ref.subject().equals(schemaId))
+                    .findFirst();
 
             if (matchingRef.isPresent()) {
                 String content = schemaContentsMap.get(matchingRef.get());
@@ -130,7 +112,7 @@ class CustomConfigSchemaValidatorTest {
 
             // Mock the saveSchema method to return a completed Mono
             when(schemaRegistryDelegate.saveSchema(eq(schemaId), eq(schemaContent)))
-                .thenReturn(Mono.empty());
+                    .thenReturn(Mono.empty());
         }
     }
 
@@ -235,9 +217,9 @@ class CustomConfigSchemaValidatorTest {
         String moduleImplementationId = "bean-missing-schema-impl";
         SchemaReference missingSchemaRef = new SchemaReference("module-with-missing-schema-subject", 1);
         availableModules.put(moduleImplementationId, new PipelineModuleConfiguration(
-            "Missing Schema Module Display",
-            moduleImplementationId,
-            missingSchemaRef
+                "Missing Schema Module Display",
+                moduleImplementationId,
+                missingSchemaRef
         ));
         // IMPORTANT: Do NOT add missingSchemaRef to schemaContentsMap
 
@@ -264,9 +246,9 @@ class CustomConfigSchemaValidatorTest {
         String moduleImplementationId = "bean-no-schema-ref-impl";
         // Module exists but does not define a customConfigSchemaReference (pass null)
         availableModules.put(moduleImplementationId, new PipelineModuleConfiguration(
-            "No Schema Ref Module Display",
-            moduleImplementationId,
-            null // No schema reference
+                "No Schema Ref Module Display",
+                moduleImplementationId,
+                null // No schema reference
         ));
 
         PipelineStepConfig step = new PipelineStepConfig(
@@ -292,9 +274,9 @@ class CustomConfigSchemaValidatorTest {
         String moduleImplementationId = "bean-user-module-no-config-impl";
         SchemaReference userSchemaRef = new SchemaReference("user-module-schema-subject", 1); // Use the existing schema
         availableModules.put(moduleImplementationId, new PipelineModuleConfiguration(
-            "User Module No Config Display",
-            moduleImplementationId,
-            userSchemaRef
+                "User Module No Config Display",
+                moduleImplementationId,
+                userSchemaRef
         ));
 
         PipelineStepConfig step = new PipelineStepConfig(
@@ -318,21 +300,21 @@ class CustomConfigSchemaValidatorTest {
         String moduleImplementationId = "bean-empty-config-impl";
         SchemaReference schemaRef = new SchemaReference("empty-test-schema-subject", 1);
         String schemaAcceptingEmpty = """
-            {
-              "type": "object",
-              "properties": { "optionalField": { "type": "string" }}
-            }""";
+                {
+                  "type": "object",
+                  "properties": { "optionalField": { "type": "string" }}
+                }""";
         availableModules.put(moduleImplementationId, new PipelineModuleConfiguration(
-            "Empty Config Module Display",
-            moduleImplementationId,
-            schemaRef
+                "Empty Config Module Display",
+                moduleImplementationId,
+                schemaRef
         ));
         // Add the schema to the schemaContentsMap so it can be found by the mock schemaRegistryDelegate
         schemaContentsMap.put(schemaRef, schemaAcceptingEmpty);
 
         // Configure the mock schemaRegistryDelegate to return this schema
         when(schemaRegistryDelegate.getSchemaContent(eq(schemaRef.subject())))
-            .thenReturn(Mono.just(schemaAcceptingEmpty));
+                .thenReturn(Mono.just(schemaAcceptingEmpty));
 
         PipelineStepConfig step = new PipelineStepConfig(
                 "step-empty-json", StepType.PIPELINE,
@@ -355,16 +337,16 @@ class CustomConfigSchemaValidatorTest {
         String moduleImplementationId = "bean-malformed-schema-impl";
         SchemaReference malformedSchemaRef = new SchemaReference("module-malformed-schema-subject", 1);
         availableModules.put(moduleImplementationId, new PipelineModuleConfiguration(
-            "Malformed Schema Module Display",
-            moduleImplementationId,
-            malformedSchemaRef
+                "Malformed Schema Module Display",
+                moduleImplementationId,
+                malformedSchemaRef
         ));
         // Add the malformed schema to the schemaContentsMap
         schemaContentsMap.put(malformedSchemaRef, MALFORMED_SCHEMA_CONTENT);
 
         // Configure the mock schemaRegistryDelegate to return this malformed schema
         when(schemaRegistryDelegate.getSchemaContent(eq(malformedSchemaRef.subject())))
-            .thenReturn(Mono.just(MALFORMED_SCHEMA_CONTENT));
+                .thenReturn(Mono.just(MALFORMED_SCHEMA_CONTENT));
 
         PipelineStepConfig step = new PipelineStepConfig(
                 "step-malformed-schema", StepType.PIPELINE,
@@ -395,21 +377,21 @@ class CustomConfigSchemaValidatorTest {
         String moduleImplementationId = "bean-null-node-impl";
         SchemaReference schemaRef = new SchemaReference("null-node-schema-subject", 1);
         String permissiveSchema = """
-            {
-              "type": "object",
-              "properties": { "optionalField": { "type": "string" }}
-            }""";
+                {
+                  "type": "object",
+                  "properties": { "optionalField": { "type": "string" }}
+                }""";
         availableModules.put(moduleImplementationId, new PipelineModuleConfiguration(
-            "Null Node Module Display",
-            moduleImplementationId,
-            schemaRef
+                "Null Node Module Display",
+                moduleImplementationId,
+                schemaRef
         ));
         // Add the schema to the schemaContentsMap
         schemaContentsMap.put(schemaRef, permissiveSchema);
 
         // Configure the mock schemaRegistryDelegate to return this schema
         when(schemaRegistryDelegate.getSchemaContent(eq(schemaRef.subject())))
-            .thenReturn(Mono.just(permissiveSchema));
+                .thenReturn(Mono.just(permissiveSchema));
 
         PipelineStepConfig.JsonConfigOptions configWithNullNode = new PipelineStepConfig.JsonConfigOptions(null, Collections.emptyMap());
         PipelineStepConfig step = new PipelineStepConfig(
@@ -433,22 +415,22 @@ class CustomConfigSchemaValidatorTest {
         String moduleImplementationId = "bean-null-node-strict-impl";
         SchemaReference schemaRef = new SchemaReference("null-node-strict-schema-subject", 1);
         String strictSchema = """
-            {
-              "type": "object",
-              "properties": { "requiredField": { "type": "string" }},
-              "required": ["requiredField"]
-            }""";
+                {
+                  "type": "object",
+                  "properties": { "requiredField": { "type": "string" }},
+                  "required": ["requiredField"]
+                }""";
         availableModules.put(moduleImplementationId, new PipelineModuleConfiguration(
-            "Null Node Strict Module Display",
-            moduleImplementationId,
-            schemaRef
+                "Null Node Strict Module Display",
+                moduleImplementationId,
+                schemaRef
         ));
         // Add the schema to the schemaContentsMap
         schemaContentsMap.put(schemaRef, strictSchema);
 
         // Configure the mock schemaRegistryDelegate to return this schema
         when(schemaRegistryDelegate.getSchemaContent(eq(schemaRef.subject())))
-            .thenReturn(Mono.just(strictSchema));
+                .thenReturn(Mono.just(strictSchema));
 
         PipelineStepConfig.JsonConfigOptions configWithNullNode = new PipelineStepConfig.JsonConfigOptions(null, Collections.emptyMap());
         PipelineStepConfig step = new PipelineStepConfig(

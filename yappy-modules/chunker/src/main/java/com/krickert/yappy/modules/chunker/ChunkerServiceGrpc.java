@@ -2,31 +2,22 @@ package com.krickert.yappy.modules.chunker;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.Struct;
-import com.google.protobuf.Value; // Make sure this is com.google.protobuf.Value
+import com.google.protobuf.Value;
 import com.google.protobuf.util.JsonFormat;
 import com.krickert.search.model.ChunkEmbedding;
 import com.krickert.search.model.PipeDoc;
-import com.krickert.search.model.SemanticChunk; // Added import
-import com.krickert.search.model.SemanticProcessingResult; // Added import
-import com.krickert.search.sdk.PipeStepProcessorGrpc;
-import com.krickert.search.sdk.ProcessConfiguration;
-import com.krickert.search.sdk.ProcessRequest;
-import com.krickert.search.sdk.ProcessResponse;
-import com.krickert.search.sdk.ServiceMetadata;
+import com.krickert.search.model.SemanticChunk;
+import com.krickert.search.model.SemanticProcessingResult;
+import com.krickert.search.model.mapper.MappingException;
+import com.krickert.search.sdk.*;
 import io.grpc.stub.StreamObserver;
-// import io.micronaut.context.annotation.Context; // Not typically needed for GrpcService
-// import io.micronaut.core.annotation.ReflectiveAccess; // Needed for ChunkerOptions if reflection used
-import io.micronaut.scheduling.TaskExecutors; // Keep if you use it, but gRPC handles its own threads
 import jakarta.inject.Inject;
-import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.krickert.search.model.mapper.MappingException;
-
 
 import java.util.List;
-import java.util.Map; // For metadata
+import java.util.Map;
 import java.util.UUID;
 // import java.util.concurrent.ExecutorService; // Keep if used for other async tasks
 
@@ -82,7 +73,7 @@ public class ChunkerServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessorI
                 return;
             }
             // The ChunkerOptions record now has defaults, so this check might be less critical unless an empty string is explicitly passed
-            if (chunkerOptions.chunkIdTemplate() == null || chunkerOptions.chunkIdTemplate().isEmpty()){
+            if (chunkerOptions.chunkIdTemplate() == null || chunkerOptions.chunkIdTemplate().isEmpty()) {
                 log.warn("chunkIdTemplate not specified in ChunkerOptions, ChunkerOptions should provide a default. streamId: {}, pipeStepName: {}", streamId, pipeStepName);
                 // ChunkerOptions constructor now handles defaults.
             }
@@ -153,8 +144,7 @@ public class ChunkerServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessorI
             String errorMessage = String.format("Mapping error in ChunkerService for step %s, stream %s, field '%s': %s", pipeStepName, streamId, e.getFailedRule(), e.getMessage());
             log.error(errorMessage, e);
             setErrorResponseAndComplete(responseBuilder, errorMessage, e, responseObserver);
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             String errorMessage = String.format("Error in ChunkerService for step %s, stream %s: %s", pipeStepName, streamId, e.getMessage());
             log.error(errorMessage, e);
             setErrorResponseAndComplete(responseBuilder, errorMessage, e, responseObserver);

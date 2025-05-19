@@ -1,13 +1,11 @@
 package com.krickert.search.config.consul;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
 import com.krickert.search.config.consul.exception.ConfigurationManagerInitializationException;
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import com.krickert.search.config.pipeline.model.*;
-
 import com.krickert.search.config.schema.model.SchemaVersionData;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.event.ApplicationEventPublisher;
@@ -28,7 +26,6 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
     private static final Logger LOG = LoggerFactory.getLogger(DynamicConfigurationManagerImpl.class);
 
     private final String defaultClusterName;
-    private String effectiveClusterName;
     private final ConsulConfigFetcher consulConfigFetcher;
     private final ConfigurationValidator configurationValidator;
     private final CachedConfigHolder cachedConfigHolder;
@@ -37,6 +34,7 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
     private final ConsulKvService consulKvService;
     private final ConsulBusinessOperationsService consulBusinessOperationsService;
     private final ObjectMapper objectMapper;
+    private String effectiveClusterName;
 
     public DynamicConfigurationManagerImpl(
             @Value("${app.config.cluster-name}") String clusterName,
@@ -149,8 +147,8 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                 ClusterConfigUpdateEvent event = new ClusterConfigUpdateEvent(oldConfigForEvent, effectivelyEmptyConfig);
                 publishEvent(event);
             } else {
-                 LOG.info("Cache was already empty or no previous config to compare for deletion event from source '{}' for cluster '{}'.",
-                         updateSource, this.effectiveClusterName);
+                LOG.info("Cache was already empty or no previous config to compare for deletion event from source '{}' for cluster '{}'.",
+                        updateSource, this.effectiveClusterName);
             }
             return;
         }
@@ -179,7 +177,7 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
 
                 // If any schema is missing, skip validation and treat it as a validation failure
                 if (missingSchemaDetected) {
-                    LOG.error("CRITICAL: New configuration for cluster '{}' from source '{}' has missing schemas.", 
+                    LOG.error("CRITICAL: New configuration for cluster '{}' from source '{}' has missing schemas.",
                             this.effectiveClusterName, updateSource);
 
                     // For initial load, clear the cache and don't publish events. For watch updates, keep the old config.
@@ -194,8 +192,8 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                 }
 
                 ValidationResult validationResult = configurationValidator.validate(
-                    newConfig,
-                    (schemaRef) -> Optional.ofNullable(schemaCacheForNewConfig.get(schemaRef))
+                        newConfig,
+                        (schemaRef) -> Optional.ofNullable(schemaCacheForNewConfig.get(schemaRef))
                 );
 
                 if (validationResult.isValid()) {
@@ -232,7 +230,7 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
             }
         } else {
             LOG.warn("Received ambiguous WatchCallbackResult (no config, no error, not deleted) from source '{}' for cluster '{}'. No action taken.",
-                     updateSource, this.effectiveClusterName);
+                    updateSource, this.effectiveClusterName);
         }
     }
 
@@ -247,7 +245,7 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                 }
             });
             LOG.info("Notified listeners of configuration update for cluster '{}'. Old config present: {}, New config cluster: {}",
-                this.effectiveClusterName, event.oldConfig().isPresent(), event.newConfig().clusterName());
+                    this.effectiveClusterName, event.oldConfig().isPresent(), event.newConfig().clusterName());
         } catch (Exception e) {
             LOG.error("Error publishing ClusterConfigUpdateEvent for cluster {}: {}", this.effectiveClusterName, e.getMessage(), e);
         }
@@ -328,12 +326,12 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
             }
 
             ValidationResult validationResult = configurationValidator.validate(
-                updatedConfig,
-                (schemaRef) -> Optional.ofNullable(schemaCacheForConfig.get(schemaRef))
+                    updatedConfig,
+                    (schemaRef) -> Optional.ofNullable(schemaCacheForConfig.get(schemaRef))
             );
 
             if (!validationResult.isValid()) {
-                LOG.error("Cannot save configuration to Consul for cluster '{}' as it failed validation. Errors: {}", 
+                LOG.error("Cannot save configuration to Consul for cluster '{}' as it failed validation. Errors: {}",
                         updatedConfig.clusterName(), validationResult.errors());
                 return false;
             }
@@ -351,7 +349,7 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                 return false;
             }
         } catch (Exception e) {
-            LOG.error("Error saving updated configuration to Consul for cluster {}: {}", 
+            LOG.error("Error saving updated configuration to Consul for cluster {}: {}",
                     updatedConfig.clusterName(), e.getMessage(), e);
             return false;
         }
@@ -391,9 +389,9 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
     }
 
     @Override
-    public boolean updatePipelineStepToUseKafkaTopic(String pipelineName, String stepName, 
-                                                    String outputKey, String newTopic, String targetStepName) {
-        LOG.info("Updating pipeline step '{}' in pipeline '{}' to use Kafka topic '{}' for output '{}' targeting '{}'", 
+    public boolean updatePipelineStepToUseKafkaTopic(String pipelineName, String stepName,
+                                                     String outputKey, String newTopic, String targetStepName) {
+        LOG.info("Updating pipeline step '{}' in pipeline '{}' to use Kafka topic '{}' for output '{}' targeting '{}'",
                 stepName, pipelineName, newTopic, outputKey, targetStepName);
 
         Optional<PipelineClusterConfig> currentConfigOpt = getCurrentPipelineClusterConfig();
@@ -498,7 +496,7 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
         updatedServices.remove(serviceName);
 
         // Remove the service from the module map
-        Map<String, PipelineModuleConfiguration> updatedModules = 
+        Map<String, PipelineModuleConfiguration> updatedModules =
                 new HashMap<>(updatedConfig.pipelineModuleMap().availableModules());
         updatedModules.remove(serviceName);
         PipelineModuleMap updatedModuleMap = new PipelineModuleMap(updatedModules);
@@ -520,11 +518,11 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
 
                 // Check if this step uses the service to be deleted
                 boolean stepUsesService = false;
-                if (step.processorInfo() != null && 
-                    serviceName.equals(step.processorInfo().grpcServiceName())) {
+                if (step.processorInfo() != null &&
+                        serviceName.equals(step.processorInfo().grpcServiceName())) {
                     stepUsesService = true;
                     pipelineModified = true;
-                    LOG.info("Step '{}' in pipeline '{}' uses service '{}' and will be removed", 
+                    LOG.info("Step '{}' in pipeline '{}' uses service '{}' and will be removed",
                             stepName, pipelineName, serviceName);
                     continue; // Skip this step (remove it)
                 }
@@ -540,9 +538,9 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                     boolean outputUsesService = false;
 
                     // Check if this output uses the service via gRPC
-                    if (output.transportType() == TransportType.GRPC && 
-                        output.grpcTransport() != null && 
-                        serviceName.equals(output.grpcTransport().serviceName())) {
+                    if (output.transportType() == TransportType.GRPC &&
+                            output.grpcTransport() != null &&
+                            serviceName.equals(output.grpcTransport().serviceName())) {
                         outputUsesService = true;
                     }
 
@@ -558,18 +556,18 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                             PipelineConfig targetPipeline = updatedConfig.pipelineGraphConfig().pipelines().get(targetPipelineName);
                             if (targetPipeline != null) {
                                 PipelineStepConfig targetStep = targetPipeline.pipelineSteps().get(targetStepNameInPipeline);
-                                if (targetStep != null && 
-                                    targetStep.processorInfo() != null && 
-                                    serviceName.equals(targetStep.processorInfo().grpcServiceName())) {
+                                if (targetStep != null &&
+                                        targetStep.processorInfo() != null &&
+                                        serviceName.equals(targetStep.processorInfo().grpcServiceName())) {
                                     outputUsesService = true;
                                 }
                             }
                         } else {
                             // Same pipeline
                             PipelineStepConfig targetStep = pipeline.pipelineSteps().get(targetStepName);
-                            if (targetStep != null && 
-                                targetStep.processorInfo() != null && 
-                                serviceName.equals(targetStep.processorInfo().grpcServiceName())) {
+                            if (targetStep != null &&
+                                    targetStep.processorInfo() != null &&
+                                    serviceName.equals(targetStep.processorInfo().grpcServiceName())) {
                                 outputUsesService = true;
                             }
                         }
@@ -580,7 +578,7 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                     } else {
                         outputsModified = true;
                         pipelineModified = true;
-                        LOG.info("Output '{}' from step '{}' in pipeline '{}' uses service '{}' and will be removed", 
+                        LOG.info("Output '{}' from step '{}' in pipeline '{}' uses service '{}' and will be removed",
                                 outputKey, stepName, pipelineName, serviceName);
                     }
                 }
@@ -611,7 +609,7 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                         updatedSteps
                 );
                 updatedPipelines.put(pipelineName, updatedPipeline);
-                LOG.info("Pipeline '{}' modified to remove connections to/from service '{}'", 
+                LOG.info("Pipeline '{}' modified to remove connections to/from service '{}'",
                         pipelineName, serviceName);
             } else {
                 // Keep the pipeline unchanged

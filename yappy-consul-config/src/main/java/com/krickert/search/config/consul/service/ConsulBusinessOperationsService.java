@@ -7,7 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
-import javax.annotation.PreDestroy;
 import java.util.Objects;
 
 /**
@@ -27,9 +26,9 @@ public class ConsulBusinessOperationsService {
     /**
      * Creates a new ConsulBusinessOperationsService with the specified dependencies.
      *
-     * @param consulKvService the ConsulKvService to use for KV operations
-     * @param objectMapper the ObjectMapper to use for serialization/deserialization
-     * @param clusterConfigKeyPrefix the base path for cluster configurations in Consul KV store
+     * @param consulKvService         the ConsulKvService to use for KV operations
+     * @param objectMapper            the ObjectMapper to use for serialization/deserialization
+     * @param clusterConfigKeyPrefix  the base path for cluster configurations in Consul KV store
      * @param schemaVersionsKeyPrefix the base path for schema versions in Consul KV store
      */
     public ConsulBusinessOperationsService(
@@ -41,7 +40,7 @@ public class ConsulBusinessOperationsService {
         this.objectMapper = objectMapper;
         this.clusterConfigKeyPrefix = clusterConfigKeyPrefix;
         this.schemaVersionsKeyPrefix = schemaVersionsKeyPrefix;
-        LOG.info("ConsulBusinessOperationsService initialized with cluster config path: {} and schema versions path: {}", 
+        LOG.info("ConsulBusinessOperationsService initialized with cluster config path: {} and schema versions path: {}",
                 clusterConfigKeyPrefix, schemaVersionsKeyPrefix);
     }
 
@@ -76,7 +75,7 @@ public class ConsulBusinessOperationsService {
     /**
      * Stores a value in Consul.
      *
-     * @param key the key to store the value under
+     * @param key   the key to store the value under
      * @param value the value to store
      * @return a Mono that emits true if the operation was successful, false otherwise
      */
@@ -173,7 +172,7 @@ public class ConsulBusinessOperationsService {
     /**
      * Stores a cluster configuration in Consul.
      *
-     * @param clusterName the name of the cluster
+     * @param clusterName   the name of the cluster
      * @param clusterConfig the cluster configuration to store
      * @return a Mono that emits true if the operation was successful, false otherwise
      */
@@ -188,8 +187,8 @@ public class ConsulBusinessOperationsService {
     /**
      * Stores a schema version in Consul.
      *
-     * @param subject the schema subject
-     * @param version the schema version
+     * @param subject    the schema subject
+     * @param version    the schema version
      * @param schemaData the schema data to store
      * @return a Mono that emits true if the operation was successful, false otherwise
      */
@@ -205,7 +204,7 @@ public class ConsulBusinessOperationsService {
     /**
      * Cleans up test resources by deleting cluster configurations and schema versions.
      *
-     * @param clusterNames the names of the clusters to delete
+     * @param clusterNames   the names of the clusters to delete
      * @param schemaSubjects the schema subjects to delete (all versions)
      * @return a Mono that completes when all operations are done
      */

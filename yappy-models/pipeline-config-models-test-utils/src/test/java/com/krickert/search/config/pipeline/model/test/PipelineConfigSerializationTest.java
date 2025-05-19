@@ -5,7 +5,8 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Example test class demonstrating how to use the test utilities for serialization testing.
@@ -23,20 +24,20 @@ public class PipelineConfigSerializationTest {
 
         // Serialize to JSON
         String json = PipelineConfigTestUtils.toJson(config);
-        
+
         // Verify that the JSON contains expected elements
         assertTrue(json.contains("\"clusterName\" : \"minimal-cluster\""));
         assertTrue(json.contains("\"defaultPipelineName\" : \"minimal-pipeline\""));
         assertTrue(json.contains("\"stepName\" : \"minimal-step\""));
         assertTrue(json.contains("\"stepType\" : \"PIPELINE\""));
         assertTrue(json.contains("\"grpcServiceName\" : \"minimal-service\""));
-        
+
         // Deserialize back to object
         PipelineClusterConfig deserialized = PipelineConfigTestUtils.fromJson(json, PipelineClusterConfig.class);
-        
+
         // Verify that the deserialized object equals the original
         assertEquals(config, deserialized);
-        
+
         // Verify specific properties
         assertEquals("minimal-cluster", deserialized.clusterName());
         assertEquals("minimal-pipeline", deserialized.defaultPipelineName());
@@ -56,20 +57,20 @@ public class PipelineConfigSerializationTest {
 
         // Serialize to JSON
         String json = PipelineConfigTestUtils.toJson(config);
-        
+
         // Verify that the JSON contains expected elements
         assertTrue(json.contains("\"clusterName\" : \"search-indexing-cluster\""));
         assertTrue(json.contains("\"defaultPipelineName\" : \"search-indexing-pipeline\""));
         assertTrue(json.contains("\"stepName\" : \"file-connector\""));
         assertTrue(json.contains("\"stepType\" : \"INITIAL_PIPELINE\""));
         assertTrue(json.contains("\"topic\" : \"search.files.incoming\""));
-        
+
         // Deserialize back to object
         PipelineClusterConfig deserialized = PipelineConfigTestUtils.fromJson(json, PipelineClusterConfig.class);
-        
+
         // Verify that the deserialized object equals the original
         assertEquals(config, deserialized);
-        
+
         // Verify specific properties
         assertEquals("search-indexing-cluster", deserialized.clusterName());
         assertEquals("search-indexing-pipeline", deserialized.defaultPipelineName());
@@ -90,18 +91,18 @@ public class PipelineConfigSerializationTest {
 
         // Serialize to JSON
         String json = PipelineConfigTestUtils.toJson(config);
-        
+
         // Verify that the JSON contains expected elements
         assertTrue(json.contains("\"clusterName\" : \"empty-pipeline-cluster\""));
         assertTrue(json.contains("\"defaultPipelineName\" : \"empty-pipeline\""));
         assertTrue(json.contains("\"pipelineSteps\" : { }"));
-        
+
         // Deserialize back to object
         PipelineClusterConfig deserialized = PipelineConfigTestUtils.fromJson(json, PipelineClusterConfig.class);
-        
+
         // Verify that the deserialized object equals the original
         assertEquals(config, deserialized);
-        
+
         // Verify specific properties
         assertEquals("empty-pipeline-cluster", deserialized.clusterName());
         assertEquals("empty-pipeline", deserialized.defaultPipelineName());
@@ -120,7 +121,7 @@ public class PipelineConfigSerializationTest {
 
         // Serialize to JSON
         String json = PipelineConfigTestUtils.toJson(config);
-        
+
         // Verify that the JSON contains expected elements
         assertTrue(json.contains("\"clusterName\" : \"orphan-steps-cluster\""));
         assertTrue(json.contains("\"defaultPipelineName\" : \"orphan-steps-pipeline\""));
@@ -128,13 +129,13 @@ public class PipelineConfigSerializationTest {
         assertTrue(json.contains("\"stepName\" : \"orphan-step-2\""));
         assertTrue(json.contains("\"stepName\" : \"orphan-step-3\""));
         assertTrue(json.contains("\"outputs\" : { }"));
-        
+
         // Deserialize back to object
         PipelineClusterConfig deserialized = PipelineConfigTestUtils.fromJson(json, PipelineClusterConfig.class);
-        
+
         // Verify that the deserialized object equals the original
         assertEquals(config, deserialized);
-        
+
         // Verify specific properties
         assertEquals("orphan-steps-cluster", deserialized.clusterName());
         assertEquals("orphan-steps-pipeline", deserialized.defaultPipelineName());
@@ -156,20 +157,20 @@ public class PipelineConfigSerializationTest {
 
         // Serialize to JSON
         String json = PipelineConfigTestUtils.toJson(config);
-        
+
         // Verify that the JSON contains expected elements
         assertTrue(json.contains("\"clusterName\" : \"initial-seeded-cluster\""));
         assertTrue(json.contains("\"defaultPipelineName\" : \"initial-seeded-pipeline\""));
         assertTrue(json.contains("\"stepName\" : \"initial-service\""));
         assertTrue(json.contains("\"stepType\" : \"INITIAL_PIPELINE\""));
         assertTrue(json.contains("\"outputs\" : { }"));
-        
+
         // Deserialize back to object
         PipelineClusterConfig deserialized = PipelineConfigTestUtils.fromJson(json, PipelineClusterConfig.class);
-        
+
         // Verify that the deserialized object equals the original
         assertEquals(config, deserialized);
-        
+
         // Verify specific properties
         assertEquals("initial-seeded-cluster", deserialized.clusterName());
         assertEquals("initial-seeded-pipeline", deserialized.defaultPipelineName());
@@ -218,7 +219,7 @@ public class PipelineConfigSerializationTest {
         assertTrue(PipelineConfigTestUtils.testSerialization(config, PipelineClusterConfig.class));
 
         // Test serialization with a custom equality function
-        assertTrue(PipelineConfigTestUtils.testSerialization(config, PipelineClusterConfig.class, 
+        assertTrue(PipelineConfigTestUtils.testSerialization(config, PipelineClusterConfig.class,
                 deserialized -> deserialized.clusterName().equals("minimal-cluster")));
     }
 }

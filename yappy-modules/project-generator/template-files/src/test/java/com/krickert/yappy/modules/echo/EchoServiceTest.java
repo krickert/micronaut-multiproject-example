@@ -1,4 +1,4 @@
-package @@BASE_PACKAGE@@; // Match the package of your @@MODULE_NAME_PASCAL_CASE@@Service
+package@ @BASE_PACKAGE @ @; // Match the package of your @@MODULE_NAME_PASCAL_CASE@@Service
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Struct;
@@ -32,14 +32,15 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions .*;
 
 @MicronautTest
 @Property(name = "grpc.client.plaintext", value = "true")
-@Property(name = "micronaut.test.resources.enabled", value = "false")
-class @@MODULE_NAME_PASCAL_CASE@@ServiceTest {
+@Property(name = "micronaut.test.resources.enabled", value = "false") class
 
-    private static final Logger LOG = LoggerFactory.getLogger(@@MODULE_NAME_PASCAL_CASE@@ServiceTest.class);
+@ @MODULE_NAME_PASCAL_CASE @ @ServiceTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger( @ @MODULE_NAME_PASCAL_CASE @ @ServiceTest.class);
 
     @Inject
     @GrpcChannel(GrpcServerChannel.NAME)
@@ -49,9 +50,9 @@ class @@MODULE_NAME_PASCAL_CASE@@ServiceTest {
     @GrpcChannel(GrpcServerChannel.NAME)
     PipeStepProcessorGrpc.PipeStepProcessorStub asyncClient;
 
-    private ProcessRequest createTestProcessRequest(
-            String pipelineName, String stepName, String streamId, String docId, long hopNumber,
-            PipeDoc document, Struct customJsonConfig, java.util.Map<String, String> configParams) {
+    private ProcessRequest createTestProcessRequest (
+            String pipelineName, String stepName, String streamId, String docId,long hopNumber,
+    PipeDoc document, Struct customJsonConfig, java.util.Map < String, String > configParams){
 
         ServiceMetadata.Builder metadataBuilder = ServiceMetadata.newBuilder()
                 .setPipelineName(pipelineName)
@@ -77,7 +78,7 @@ class @@MODULE_NAME_PASCAL_CASE@@ServiceTest {
 
     @Test
     @DisplayName("Should echo back the document (with blob) successfully (Blocking Client)")
-    void testProcessData_echoesSuccessfully_blocking() {
+    void testProcessData_echoesSuccessfully_blocking () {
         // 1. Prepare input data
         String pipelineName = "test-pipeline";
         String stepName = "echo-step-1";
@@ -135,7 +136,7 @@ class @@MODULE_NAME_PASCAL_CASE@@ServiceTest {
 
     @Test
     @DisplayName("Should echo back successfully with custom log prefix (Blocking Client)")
-    void testProcessData_withCustomLogPrefix_blocking() {
+    void testProcessData_withCustomLogPrefix_blocking () {
         String pipelineName = "test-pipeline-custom";
         String stepName = "echo-step-custom";
         String streamId = "stream-456";
@@ -170,7 +171,7 @@ class @@MODULE_NAME_PASCAL_CASE@@ServiceTest {
 
     @Test
     @DisplayName("Should handle request with an empty document (Blocking Client)")
-    void testProcessData_emptyDoc_blocking() {
+    void testProcessData_emptyDoc_blocking () {
         String pipelineName = "test-pipeline-empty-doc";
         String stepName = "echo-step-empty-doc";
         String streamId = "stream-789";
@@ -202,7 +203,7 @@ class @@MODULE_NAME_PASCAL_CASE@@ServiceTest {
 
     @Test
     @DisplayName("Should echo back the document (with blob) successfully (Async Client)")
-    void testProcessData_echoesSuccessfully_async() throws InterruptedException {
+    void testProcessData_echoesSuccessfully_async () throws InterruptedException {
         // 1. Prepare input data
         String pipelineName = "test-pipeline-async";
         String stepName = "echo-step-async-1";

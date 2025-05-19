@@ -1,9 +1,8 @@
 package com.krickert.search.config.pipeline.model;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.exc.ValueInstantiationException; // Import the correct exception
+import com.fasterxml.jackson.databind.exc.ValueInstantiationException;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import org.junit.jupiter.api.BeforeEach;
@@ -79,19 +78,19 @@ class StepTypeTest {
 
         PipelineStepConfig pipelineStep = new PipelineStepConfig(
                 "pipeline-step", StepType.PIPELINE, null, null, null,
-                emptyOutputs, 0,1L,1L,1.0,0L, processorInfo
+                emptyOutputs, 0, 1L, 1L, 1.0, 0L, processorInfo
         );
 
         PipelineStepConfig initialStep = new PipelineStepConfig(
                 "initial-step", StepType.INITIAL_PIPELINE, null, null, null,
                 initialOutputs, // Must have outputs
-                0,1L,1L,1.0,0L, processorInfo
+                0, 1L, 1L, 1.0, 0L, processorInfo
         );
 
         PipelineStepConfig sinkStep = new PipelineStepConfig(
                 "sink-step", StepType.SINK, null, null, null,
                 emptyOutputs, // Must have no outputs
-                0,1L,1L,1.0,0L, processorInfo
+                0, 1L, 1L, 1.0, 0L, processorInfo
         );
 
         assertEquals(StepType.PIPELINE, pipelineStep.stepType());
@@ -136,24 +135,24 @@ class StepTypeTest {
         // JSON reflecting the NEW PipelineStepConfig structure, but omitting stepType
         // It also needs other required fields like stepName and processorInfo.
         String json = """
-        {
-          "stepName": "test-step-missing-type",
-          "description": "A step description",
-          "customConfigSchemaId": "some-schema",
-          "customConfig": { "jsonConfig": {"mode":"test"}, "configParams": {} },
-          "outputs": {
-            "default": {
-              "targetStepName": "next-target",
-              "transportType": "INTERNAL"
-            }
-          },
-          "maxRetries": 0,
-          "retryBackoffMs": 1000,
-          "maxRetryBackoffMs": 30000,
-          "retryBackoffMultiplier": 2.0,
-          "processorInfo": { "internalProcessorBeanName": "test-module" }
-        }
-        """;
+                {
+                  "stepName": "test-step-missing-type",
+                  "description": "A step description",
+                  "customConfigSchemaId": "some-schema",
+                  "customConfig": { "jsonConfig": {"mode":"test"}, "configParams": {} },
+                  "outputs": {
+                    "default": {
+                      "targetStepName": "next-target",
+                      "transportType": "INTERNAL"
+                    }
+                  },
+                  "maxRetries": 0,
+                  "retryBackoffMs": 1000,
+                  "maxRetryBackoffMs": 30000,
+                  "retryBackoffMultiplier": 2.0,
+                  "processorInfo": { "internalProcessorBeanName": "test-module" }
+                }
+                """;
         // The @JsonCreator constructor for PipelineStepConfig requires stepType to be non-null due to Objects.requireNonNull.
         // Jackson will fail to deserialize if a non-nullable constructor argument is missing from JSON.
         // This results in a ValueInstantiationException, caused by the NullPointerException.

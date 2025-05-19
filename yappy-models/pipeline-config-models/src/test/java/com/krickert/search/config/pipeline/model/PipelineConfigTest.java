@@ -2,25 +2,16 @@ package com.krickert.search.config.pipeline.model;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.krickert.search.config.pipeline.model.test.PipelineConfigTestUtils;
 import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigJson;
 import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigObjects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -80,7 +71,7 @@ class PipelineConfigTest {
         }
 
         if (errorStepTargetNames != null) {
-            for(String errorTarget : errorStepTargetNames) {
+            for (String errorTarget : errorStepTargetNames) {
                 String outputKey = "onError_" + errorTarget.replaceAll("[^a-zA-Z0-9.-]", "_");
                 outputs.put(outputKey,
                         new PipelineStepConfig.OutputTarget(errorTarget, TransportType.INTERNAL, null, null)
@@ -273,9 +264,9 @@ class PipelineConfigTest {
 
         // Extract the pipeline node
         JsonNode pipelineNode = clusterNode
-            .path("pipelineGraphConfig")
-            .path("pipelines")
-            .path(pipelineName);
+                .path("pipelineGraphConfig")
+                .path("pipelines")
+                .path(pipelineName);
 
         // Convert the pipeline node back to JSON
         return objectMapper.writeValueAsString(pipelineNode);
@@ -290,7 +281,7 @@ class PipelineConfigTest {
                 "s1", StepType.PIPELINE, "desc", "schema",
                 createJsonConfigOptions(null), // customConfig
                 Collections.emptyMap(), // outputs
-                0,1L,1L,1.0,1L, // retry & timeout
+                0, 1L, 1L, 1.0, 1L, // retry & timeout
                 pi);
         initialSteps.put(internalStep.stepName(), internalStep);
 
@@ -304,7 +295,7 @@ class PipelineConfigTest {
         PipelineStepConfig anotherStep = new PipelineStepConfig(
                 "s2", StepType.PIPELINE, "desc2", "schema2",
                 createJsonConfigOptions(null), Collections.emptyMap(),
-                0,1L,1L,1.0,1L,
+                0, 1L, 1L, 1.0, 1L,
                 pi2);
         initialSteps.put("s2", anotherStep);
         assertEquals(1, config.pipelineSteps().size(), "Modifying the original map should not affect the config's map.");

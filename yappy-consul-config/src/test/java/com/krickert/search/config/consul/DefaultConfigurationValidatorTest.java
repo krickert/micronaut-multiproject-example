@@ -1,19 +1,16 @@
 package com.krickert.search.config.consul;
 
 import com.krickert.search.config.consul.validator.ClusterValidationRule;
-// Import the model classes that will be used to create a minimal PipelineClusterConfig
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineGraphConfig;
 import com.krickert.search.config.pipeline.model.PipelineModuleMap;
-import com.krickert.search.config.pipeline.model.SchemaReference; // For the schemaContentProvider lambda
-
+import com.krickert.search.config.pipeline.model.SchemaReference;
 import org.junit.jupiter.api.Test;
-import org.mockito.InOrder; // For inOrder verification
+import org.mockito.InOrder;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set; // For Collections.emptySet()
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;

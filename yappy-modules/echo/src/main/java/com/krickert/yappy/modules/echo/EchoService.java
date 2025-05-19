@@ -2,20 +2,8 @@ package com.krickert.yappy.modules.echo;
 
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
-
-// Imports from yappy_core_types.proto (assuming java_package = "com.krickert.search.model")
 import com.krickert.search.model.PipeDoc;
-// Blob is now part of PipeDoc, so direct import might not be needed at this level if always accessed via PipeDoc.
-// import com.krickert.search.model.Blob;
-
-
-// Imports from pipe_step_processor_service.proto (assuming java_package = "com.krickert.search.sdk")
-import com.krickert.search.sdk.PipeStepProcessorGrpc;
-import com.krickert.search.sdk.ProcessConfiguration;
-import com.krickert.search.sdk.ProcessRequest;
-import com.krickert.search.sdk.ProcessResponse;
-import com.krickert.search.sdk.ServiceMetadata;
-
+import com.krickert.search.sdk.*;
 import io.grpc.stub.StreamObserver;
 import io.micronaut.grpc.annotation.GrpcService;
 import jakarta.inject.Singleton;
@@ -39,8 +27,8 @@ public class EchoService extends PipeStepProcessorGrpc.PipeStepProcessorImplBase
 
         String streamId = metadata.getStreamId();
         String docId = document.getId(); // Assuming document will always be present, even if empty.
-                                         // Add hasDocument() check if PipeDoc can be entirely absent from ProcessRequest.
-                                         // Based on new proto, PipeDoc is a required field in ProcessRequest.
+        // Add hasDocument() check if PipeDoc can be entirely absent from ProcessRequest.
+        // Based on new proto, PipeDoc is a required field in ProcessRequest.
 
         LOG.debug("(Unary) Stream ID: {}, Document ID: {}", streamId, docId);
 
@@ -70,11 +58,11 @@ public class EchoService extends PipeStepProcessorGrpc.PipeStepProcessorImplBase
 
 
         String logMessage = String.format("%sEchoService (Unary) successfully processed step '%s' for pipeline '%s'. Stream ID: %s, Doc ID: %s",
-                                          logPrefix,
-                                          metadata.getPipeStepName(),   // From ServiceMetadata
-                                          metadata.getPipelineName(),  // From ServiceMetadata
-                                          streamId,                    // From ServiceMetadata
-                                          docId);
+                logPrefix,
+                metadata.getPipeStepName(),   // From ServiceMetadata
+                metadata.getPipelineName(),  // From ServiceMetadata
+                streamId,                    // From ServiceMetadata
+                docId);
         responseBuilder.addProcessorLogs(logMessage);
         LOG.info("(Unary) Sending response for stream ID: {}", streamId);
 

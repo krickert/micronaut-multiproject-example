@@ -31,7 +31,7 @@ public class RuleParser {
         }
 
         for (String ruleString : ruleStrings) {
-             if (ruleString == null) continue;
+            if (ruleString == null) continue;
             String trimmedRule = ruleString.trim();
             if (trimmedRule.isEmpty() || trimmedRule.startsWith("#")) {
                 continue;
@@ -44,13 +44,13 @@ public class RuleParser {
                     parsedRules.add(rule);
                 }
             } catch (MappingException e) {
-                 if (e.getFailedRule() == null || e.getFailedRule().isEmpty()) {
-                     throw new MappingException(e.getMessage(), e.getCause(), trimmedRule);
-                 } else {
-                      throw e;
-                 }
+                if (e.getFailedRule() == null || e.getFailedRule().isEmpty()) {
+                    throw new MappingException(e.getMessage(), e.getCause(), trimmedRule);
+                } else {
+                    throw e;
+                }
             } catch (Exception e) {
-                 throw new MappingException("Unexpected parsing error for rule: " + trimmedRule, e, trimmedRule);
+                throw new MappingException("Unexpected parsing error for rule: " + trimmedRule, e, trimmedRule);
             }
         }
         parsedRules.addAll(deleteRules);
@@ -65,10 +65,10 @@ public class RuleParser {
         Matcher deleteMatcher = DELETE_PATTERN.matcher(ruleString);
         if (deleteMatcher.matches()) {
             String targetPath = deleteMatcher.group(1).trim(); // Trim captured target
-             // Check if the trimmed target still contains invalid operators
-             // (This implies the original raw path had them, as '-' rules shouldn't)
+            // Check if the trimmed target still contains invalid operators
+            // (This implies the original raw path had them, as '-' rules shouldn't)
             if (targetPath.contains("=") || targetPath.contains("+")) {
-                 throw new MappingException("Invalid delete rule syntax: target path cannot contain '+' or '='", ruleString);
+                throw new MappingException("Invalid delete rule syntax: target path cannot contain '+' or '='", ruleString);
             }
             // Regex already ensures targetPath is not empty due to \\S
             return MappingRule.createDeleteRule(targetPath, ruleString);
@@ -79,9 +79,9 @@ public class RuleParser {
             String targetMapPath = mapPutMatcher.group(1).trim();
             String mapKey = mapPutMatcher.group(2).trim();
             String sourcePath = mapPutMatcher.group(3).trim(); // Regex \\S.* ensures not empty
-             // Check for double equals edge case explicitly
-             if (mapPutMatcher.group(3).trim().startsWith("=")) {
-                 throw new MappingException("Invalid map put rule syntax: source path starts with '='", ruleString);
+            // Check for double equals edge case explicitly
+            if (mapPutMatcher.group(3).trim().startsWith("=")) {
+                throw new MappingException("Invalid map put rule syntax: source path starts with '='", ruleString);
             }
             return MappingRule.createMapPutRule(targetMapPath, mapKey, sourcePath, ruleString);
         }
@@ -92,7 +92,7 @@ public class RuleParser {
             String sourcePath = appendMatcher.group(2).trim(); // Regex \\S.* ensures not empty
             // Check for double equals edge case explicitly
             if (appendMatcher.group(2).trim().startsWith("=")) {
-                 throw new MappingException("Invalid append rule syntax: source path starts with '='", ruleString);
+                throw new MappingException("Invalid append rule syntax: source path starts with '='", ruleString);
             }
             return MappingRule.createAppendRule(targetPath, sourcePath, ruleString);
         }
@@ -102,8 +102,8 @@ public class RuleParser {
             String targetPath = assignMatcher.group(1).trim();
             String sourcePath = assignMatcher.group(2).trim(); // Regex \\S.* ensures not empty
             // Check for double equals edge case explicitly
-             if (assignMatcher.group(2).trim().startsWith("=")) {
-                 throw new MappingException("Invalid assign rule syntax: source path starts with '='", ruleString);
+            if (assignMatcher.group(2).trim().startsWith("=")) {
+                throw new MappingException("Invalid assign rule syntax: source path starts with '='", ruleString);
             }
             return MappingRule.createAssignRule(targetPath, sourcePath, ruleString);
         }

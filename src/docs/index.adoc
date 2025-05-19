@@ -39,10 +39,10 @@ pre, code {
 
 Abstract
 
-This document is Part I of four parts in an immersive tutorial which builds an enterprise fully-open-source search indexing pipeline and
-search engine that scales with both indexing and searching your document corpus.
+This document is Part I of four parts in an immersive tutorial which builds an enterprise fully-open-source search indexing pipeline and search engine that scales with both indexing and searching your document corpus.
 
-The project builds upon itself.  We will start from a clean slate and build the product up.
+The project builds upon itself.
+We will start from a clean slate and build the product up.
 
 The sections are planned as follows:
 
@@ -50,8 +50,8 @@ Part I (this document)
 
 1. Deep-dive into the micronaut framework
 2. How to setup a multi-module enterprise project using
-  a. Gradle
-  b. JDK21
+a. Gradle
+b. JDK21
 3. Creating google protocol buffers
 
 Part II: creating a search pipeline
@@ -59,10 +59,10 @@ Part II: creating a search pipeline
 1. Creating a kafka pipeline with pure open source projects
 2. Expanding a kafka pipeline for a Search Engine
 3. Search microservices
-   a. Chunker
-   b. Embeddings
-   c. NLP - NER, Keyword Extraction
-   d. Mapping protocol buffers
+a. Chunker
+b. Embeddings
+c. NLP - NER, Keyword Extraction
+d. Mapping protocol buffers
 
 Part III: Designing a search API
 
@@ -80,34 +80,32 @@ Part IV: Analytics
 
 Part V: Deploying Microservices
 
-
 To create this HTML file, you n
 
-this tutorial. It's open and used to demonstrate how one can build a multi-module build
- for containers in a single repository using the Micronaut framework.  At the same time, this tutorial will build a kafka/grpc-based text
- processing pipeline.
+this tutorial.
+It's open and used to demonstrate how one can build a multi-module build for containers in a single repository using the Micronaut framework.
+At the same time, this tutorial will build a kafka/grpc-based text processing pipeline.
 
 We build the entire project using the following components:
 
 . Base components
-  a. Micronaut framework
-  b. JDK21
-  c. Gradle build system (Kotlin syntax)
+a. Micronaut framework
+b. JDK21
+c. Gradle build system (Kotlin syntax)
 . External servers
- a. Kafka (latest vanilla version)
- b. Apicurio (Schema registry)
- c. Consul (Service discovery)
- d. Open Search (Search Engine)
- e. MongoDB (Document Store)
+a. Kafka (latest vanilla version)
+b. Apicurio (Schema registry)
+c. Consul (Service discovery)
+d. Open Search (Search Engine)
+e. MongoDB (Document Store)
 
-
-
-
-Managing dependencies and ensuring build consistency across multiple projects can be a significant challenge, especially as systems grow in complexity. This tutorial provides a step-by-step guide to establishing a robust multi-project build structure using *Gradle with the Kotlin DSL* (even if your projects use *Java*), targeting *JDK 21*.
+Managing dependencies and ensuring build consistency across multiple projects can be a significant challenge, especially as systems grow in complexity.
+This tutorial provides a step-by-step guide to establishing a robust multi-project build structure using *Gradle with the Kotlin DSL* (even if your projects use *Java*), targeting *JDK 21*.
 
 == What We're Building
 
-Imagine a system designed for processing data pipelines. This system consists of several parts:
+Imagine a system designed for processing data pipelines.
+This system consists of several parts:
 
 * *Shared Libraries:* A core library containing the main pipeline logic (`pipeline-service-core`), data models defined using Protocol Buffers (`protobuf-models`), and common helper functions (`util`).
 * *Testing Utilities:* A dedicated library (`pipeline-service-test-utils`) to assist in testing the pipeline components.
@@ -115,7 +113,8 @@ Imagine a system designed for processing data pipelines. This system consists of
 
 == The Goal
 
-Our goal is to manage this system effectively within a single repository (monorepo) using Gradle. We'll focus on:
+Our goal is to manage this system effectively within a single repository (monorepo) using Gradle.
+We'll focus on:
 
 . *Centralized Dependency Management:* Creating a custom Bill of Materials (BOM) and using Gradle's version catalog (`libs.versions.toml`) to ensure all modules use consistent library versions.
 . *Consistent Build Environment:* Using Gradle Kotlin DSL and configuring for JDK 21.
@@ -127,7 +126,7 @@ Our goal is to manage this system effectively within a single repository (monore
 The following diagrams illustrate the relationships between the different project modules we'll be configuring.
 
 .High-Level Module Dependencies:
-[plantuml, target="diagram‑dependencies.svg"]
+[plantuml,target="diagram‑dependencies.svg"]
 ----
 @startuml diagram-dependencies
 skinparam linetype ortho
@@ -146,7 +145,7 @@ B --> E
 ----
 
 .Dependency on the Custom BOM:
-[plantuml, target="diagram-bom", format="png"]
+[plantuml,target="diagram-bom",format="png"]
 ----
 @startuml diagram-bom
 skinparam linetype ortho
@@ -169,7 +168,6 @@ E --> F
 @enduml
 ----
 
-
 This tutorial will guide you through setting up this structure step-by-step, providing CLI commands and code examples along the way.
 
 == Prerequisites
@@ -183,7 +181,8 @@ Let's begin!
 
 == Step 1: Verify Project Setup and Initialize Gradle Wrapper (CLI)
 
-This step assumes your project's directory structure is already in place. We will verify the structure and ensure the Gradle wrapper is initialized for consistent builds.
+This step assumes your project's directory structure is already in place.
+We will verify the structure and ensure the Gradle wrapper is initialized for consistent builds.
 
 . *Verify Project Structure:* Ensure your project root (e.g., `micronaut-multiproject-example`) contains the necessary subproject directories and configuration files:
 +
@@ -209,7 +208,10 @@ Navigate into your project's root directory:
 cd path/to/your/micronaut-multiproject-example
 ----
 
-. *Initialize or Verify Gradle Wrapper:* Run this command in the root directory to ensure the correct Gradle version is configured via the wrapper. If the wrapper files (`gradlew`, `gradlew.bat`, `gradle/wrapper`) already exist, this command can update them if needed. We'll use Gradle 8.13 (or your preferred compatible version). Check the link:https://docs.gradle.org/current/userguide/compatibility.html[Gradle Compatibility Matrix] for the latest recommendations.
+. *Initialize or Verify Gradle Wrapper:* Run this command in the root directory to ensure the correct Gradle version is configured via the wrapper.
+If the wrapper files (`gradlew`, `gradlew.bat`, `gradle/wrapper`) already exist, this command can update them if needed.
+We'll use Gradle 8.13 (or your preferred compatible version).
+Check the link:https://docs.gradle.org/current/userguide/compatibility.html[Gradle Compatibility Matrix] for the latest recommendations.
 +
 [source,bash]
 ----
@@ -217,7 +219,8 @@ cd path/to/your/micronaut-multiproject-example
 gradle wrapper --gradle-version 8.13
 ----
 +
-This ensures `gradlew`, `gradlew.bat`, and the `gradle/wrapper` directory are present and configured. From now on, use `./gradlew` to run Gradle tasks for consistency.
+This ensures `gradlew`, `gradlew.bat`, and the `gradle/wrapper` directory are present and configured.
+From now on, use `./gradlew` to run Gradle tasks for consistency.
 
 . *Initialize Git Repository (if not already done):* If your project isn't already a Git repository, initialize it and create a `.gitignore` file.
 +
@@ -247,7 +250,8 @@ include::.gitignore[]
 
 == Step 2: Configure Project Settings (`settings.gradle.kts`)
 
-This file defines which subprojects are included in the build and configures plugin/dependency resolution. (Content remains the same as previous version - ensure your file matches).
+This file defines which subprojects are included in the build and configures plugin/dependency resolution.
+(Content remains the same as previous version - ensure your file matches).
 
 . *Edit `settings.gradle.kts`:* Open the `settings.gradle.kts` file and ensure it has the following content:
 +
@@ -271,7 +275,8 @@ include::settings.gradle.kts[]
 
 == Step 3: Configure Root Build File (`build.gradle.kts`)
 
-Configure global settings and apply common test configurations. (Content remains the same as previous version - ensure your file matches).
+Configure global settings and apply common test configurations.
+(Content remains the same as previous version - ensure your file matches).
 
 . *Create/Edit `build.gradle.kts`:* In the root directory, ensure `build.gradle.kts` contains:
 +
@@ -296,7 +301,8 @@ NOTE: The `subprojects {}` block configures `useJUnitPlatform()` globally, so yo
 
 == Step 4: Configure Version Catalog (`gradle/libs.versions.toml`)
 
-Centralize dependency versions and aliases. (Content remains the same as previous version - ensure your file exists and matches).
+Centralize dependency versions and aliases.
+(Content remains the same as previous version - ensure your file exists and matches).
 
 . *Create/Verify `gradle/libs.versions.toml`:*
 +
@@ -317,10 +323,10 @@ include::gradle/libs.versions.toml[]
 </details>
 ++++
 
-
 == Step 5: Create the Custom BOM Project (`bom`)
 
-Define and publish your custom Bill of Materials. (Content remains the same - ensure your `bom/build.gradle.kts` matches).
+Define and publish your custom Bill of Materials.
+(Content remains the same - ensure your `bom/build.gradle.kts` matches).
 
 . *Create/Verify build of materials `bom/build.gradle.kts`:*
 +
@@ -351,7 +357,8 @@ include::bom/build.gradle.kts[]
 
 == Step 6: Configure Subprojects
 
-Configure subprojects to use the BOM. (Ensure your subproject build files and source code exist and match the following configurations).
+Configure subprojects to use the BOM.
+(Ensure your subproject build files and source code exist and match the following configurations).
 
 === 6a. Protobuf Models (`protobuf-models`)
 
@@ -624,7 +631,8 @@ Here are commands run from the root directory (`your-monorepo`) that affect the 
 
 == Step 8: Conditional CI/CD (Conceptual)
 
-As discussed previously, the goal for CI/CD is to build/test/deploy only what changed. This typically involves:
+As discussed previously, the goal for CI/CD is to build/test/deploy only what changed.
+This typically involves:
 
 . Detecting Changes: Using `git diff`, Nx, or a Gradle plugin.
 . Identifying Affected Projects: Including downstream dependents.
@@ -637,7 +645,8 @@ Implementing this requires additional scripting or tooling setup in your CI envi
 
 == Step 9: Versioning and Releasing (Conceptual)
 
-Choose a versioning strategy (Unified or Independent). Use a release plugin for automation.
+Choose a versioning strategy (Unified or Independent).
+Use a release plugin for automation.
 
 * *If using `gradle-release` (Unified Versioning Example - CLI):*
 +
@@ -654,4 +663,5 @@ This will guide you through setting the release version (e.g., `1.0.0`) and the 
 
 == Conclusion: Building for the Future
 
-This step-by-step guide provides a practical path to setting up a well-structured, maintainable multi-project build using Gradle Kotlin DSL, a custom BOM, and modern dependency management techniques. Remember to adapt the specific configurations and commands to your exact project needs.
+This step-by-step guide provides a practical path to setting up a well-structured, maintainable multi-project build using Gradle Kotlin DSL, a custom BOM, and modern dependency management techniques.
+Remember to adapt the specific configurations and commands to your exact project needs.

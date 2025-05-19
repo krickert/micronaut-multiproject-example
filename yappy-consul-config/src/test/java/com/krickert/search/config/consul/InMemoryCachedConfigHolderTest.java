@@ -1,27 +1,24 @@
 package com.krickert.search.config.consul;
 
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
-import com.krickert.search.config.pipeline.model.SchemaReference;
-// Import other necessary model classes for creating a valid PipelineClusterConfig
 import com.krickert.search.config.pipeline.model.PipelineGraphConfig;
 import com.krickert.search.config.pipeline.model.PipelineModuleMap;
-
+import com.krickert.search.config.pipeline.model.SchemaReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.slf4j.Logger; // Added for consistency if LOG is used
-import org.slf4j.LoggerFactory; // Added for consistency
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set; // Added for Collections.emptySet()
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference; // For the multi-threaded test
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -122,7 +119,7 @@ class InMemoryCachedConfigHolderTest {
         cachedConfigHolder.updateConfiguration(config1, null); // Clear schemas by passing null map
         assertTrue(cachedConfigHolder.getSchemaContent(ref1).isEmpty(), "Schema content should be empty after updating with null schemas map.");
     }
-    
+
     @Test
     void updateConfiguration_withEmptySchemas_clearsExistingSchemas() {
         PipelineClusterConfig config1 = createMinimalClusterConfig("cluster1");
@@ -155,7 +152,7 @@ class InMemoryCachedConfigHolderTest {
                     Map<SchemaReference, String> newSchemas = new HashMap<>();
                     SchemaReference ref = new SchemaReference("subject-write-" + i, i + 1);
                     newSchemas.put(ref, "{\"version\":" + (i + 1) + "}");
-                    
+
                     lastWrittenConfig.set(newConfig); // Update before actual write for readers to potentially see intermediate state
                     lastWrittenSchemas.set(Collections.unmodifiableMap(new HashMap<>(newSchemas))); // Store a copy
 
@@ -190,7 +187,7 @@ class InMemoryCachedConfigHolderTest {
                         Optional<PipelineClusterConfig> currentConfigOpt = cachedConfigHolder.getCurrentConfig();
                         PipelineClusterConfig currentConfigSnapshot = currentConfigOpt.orElse(null); // For consistent check against lastWrittenConfig
                         Map<SchemaReference, String> currentSchemasSnapshot = new HashMap<>();
-                        
+
                         // Grab a copy of last written schemas to check against if config is present
                         // This is a tricky part of testing concurrent reads of multiple related items.
                         // We are checking for *eventual consistency* after a write.
@@ -211,10 +208,10 @@ class InMemoryCachedConfigHolderTest {
                                             testFailed.set(true);
                                         }
                                     } else {
-                                         // Schema that was expected (part of lastWrittenSchemas for currentConfigSnapshot) was not found
-                                         LOG.error("Reader [{}]: Expected schema {} not found for config '{}'",
-                                                    readerId, ref.toIdentifier(), currentConfigSnapshot.clusterName());
-                                         testFailed.set(true);
+                                        // Schema that was expected (part of lastWrittenSchemas for currentConfigSnapshot) was not found
+                                        LOG.error("Reader [{}]: Expected schema {} not found for config '{}'",
+                                                readerId, ref.toIdentifier(), currentConfigSnapshot.clusterName());
+                                        testFailed.set(true);
                                     }
                                 }
                             }
@@ -240,7 +237,7 @@ class InMemoryCachedConfigHolderTest {
         assertTrue(latch.await(15, TimeUnit.SECONDS), "Test threads did not complete in time.");
         executor.shutdown();
         assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS), "Executor did not terminate gracefully.");
-        
+
         assertFalse(testFailed.get(), "One or more threads reported a failure/inconsistency. Check error logs for details.");
     }
 }

@@ -5,11 +5,7 @@ import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -85,7 +81,7 @@ public class WhitelistValidator implements ClusterValidationRule {
                             step.stepName(), pipelineName, currentClusterName);
 
                     // Check if the service referenced in processorInfo is in the allowedGrpcServices list
-                    if (step.processorInfo() != null && step.processorInfo().grpcServiceName() != null 
+                    if (step.processorInfo() != null && step.processorInfo().grpcServiceName() != null
                             && !step.processorInfo().grpcServiceName().isBlank()) {
                         String serviceName = step.processorInfo().grpcServiceName();
                         if (!allowedGrpcServices.contains(serviceName)) {
@@ -148,9 +144,9 @@ public class WhitelistValidator implements ClusterValidationRule {
      * Checks if the resolved topic name matches the defined Kafka topic naming convention.
      * This version assumes pipelineName and stepName do not contain dots.
      *
-     * @param resolvedTopicName The fully resolved topic name (no variables like ${...}).
+     * @param resolvedTopicName    The fully resolved topic name (no variables like ${...}).
      * @param expectedPipelineName The name of the pipeline this topic should belong to.
-     * @param expectedStepName The name of the step this topic should belong to.
+     * @param expectedStepName     The name of the step this topic should belong to.
      * @return true if the topic matches the convention, false otherwise.
      */
     private boolean topicMatchesNamingConvention(String resolvedTopicName, String expectedPipelineName, String expectedStepName) {
@@ -181,11 +177,11 @@ public class WhitelistValidator implements ClusterValidationRule {
     /**
      * Determines if a Kafka topic is permitted, either by explicit whitelist or by conforming to a naming convention.
      *
-     * @param topicNameInConfig The topic name as defined in the configuration (may contain variables).
-     * @param allowedKafkaTopics Set of explicitly whitelisted topic names.
-     * @param currentClusterName The actual name of the current cluster.
+     * @param topicNameInConfig   The topic name as defined in the configuration (may contain variables).
+     * @param allowedKafkaTopics  Set of explicitly whitelisted topic names.
+     * @param currentClusterName  The actual name of the current cluster.
      * @param currentPipelineName The actual name of the current pipeline.
-     * @param currentStepName The actual name of the current step.
+     * @param currentStepName     The actual name of the current step.
      * @return true if the topic is permitted, false otherwise.
      */
     private boolean isKafkaTopicPermitted(String topicNameInConfig, Set<String> allowedKafkaTopics,

@@ -1,15 +1,12 @@
 package com.krickert.search.config.consul;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.krickert.search.config.consul.schema.test.ConsulSchemaRegistrySeeder;
 import com.krickert.search.config.consul.validator.ClusterValidationRule;
 import com.krickert.search.config.consul.validator.CustomConfigSchemaValidator;
 import com.krickert.search.config.consul.validator.ReferentialIntegrityValidator;
 import com.krickert.search.config.consul.validator.WhitelistValidator;
 import com.krickert.search.config.pipeline.model.*;
-import com.krickert.search.config.pipeline.model.test.PipelineConfigTestUtils;
-import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigObjects;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,8 +17,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.function.Function;
-import java.util.stream.Collectors;
-
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -53,16 +48,6 @@ class DefaultConfigurationValidatorMicronautTest {
         // Directly register the schema-subject-1 schema with its content
         String schemaContent = "{\"type\":\"object\", \"properties\":{\"key\":{\"type\":\"string\"}}, \"required\":[\"key\"]}";
         schemaRegistrySeeder.registerSchemaContent("schema-subject-1", schemaContent).block();
-    }
-
-    // This rule is NOT a @Singleton. It's instantiated manually for a specific test.
-    static class TestSpecificMisbehavingRule implements ClusterValidationRule {
-        public static boolean wasCalled = false;
-        @Override
-        public List<String> validate(PipelineClusterConfig clusterConfig, Function<SchemaReference, Optional<String>> schemaContentProvider) {
-            wasCalled = true;
-            throw new RuntimeException("Simulated unexpected error in TestSpecificMisbehavingRule!");
-        }
     }
 
     @Test
@@ -120,7 +105,6 @@ class DefaultConfigurationValidatorMicronautTest {
         assertEquals("PipelineClusterConfig clusterName cannot be null or blank.", exception.getMessage());
     }
 
-
     @Test
     void testValidateInvalidConfigFromInjectedRule() {
         Map<String, PipelineStepConfig> steps = new HashMap<>();
@@ -154,6 +138,7 @@ class DefaultConfigurationValidatorMicronautTest {
         assertTrue(result.errors().stream().anyMatch(error -> error.contains("references unknown implementationKey 'non-existent-module'")),
                 "At least one error should indicate an unknown implementation ID");
     }
+
     @Test
     void testValidateConfigWithMultipleRuleViolations() {
         Map<String, PipelineStepConfig> stepsInvalidModule = new HashMap<>();
@@ -174,10 +159,10 @@ class DefaultConfigurationValidatorMicronautTest {
 
         // Create a KafkaInputDefinition with a non-whitelisted listen topic
         List<KafkaInputDefinition> kafkaInputs = List.of(
-            KafkaInputDefinition.builder()
-                .listenTopics(List.of("non-whitelisted-listen-topic"))
-                .consumerGroupId("test-group")
-                .build()
+                KafkaInputDefinition.builder()
+                        .listenTopics(List.of("non-whitelisted-listen-topic"))
+                        .consumerGroupId("test-group")
+                        .build()
         );
 
         // Create a step with the non-whitelisted kafka input and invalid output target
@@ -295,10 +280,10 @@ class DefaultConfigurationValidatorMicronautTest {
 
         // Create KafkaInputDefinition for p1s1
         List<KafkaInputDefinition> p1s1KafkaInputs = List.of(
-            KafkaInputDefinition.builder()
-                .listenTopics(List.of("input-topic"))
-                .consumerGroupId("p1s1-group")
-                .build()
+                KafkaInputDefinition.builder()
+                        .listenTopics(List.of("input-topic"))
+                        .consumerGroupId("p1s1-group")
+                        .build()
         );
 
         // Create output target for p1s1
@@ -326,10 +311,10 @@ class DefaultConfigurationValidatorMicronautTest {
 
         // Create KafkaInputDefinition for p1s2
         List<KafkaInputDefinition> p1s2KafkaInputs = List.of(
-            KafkaInputDefinition.builder()
-                .listenTopics(List.of("p1s2-listens-topic"))
-                .consumerGroupId("p1s2-group")
-                .build()
+                KafkaInputDefinition.builder()
+                        .listenTopics(List.of("p1s2-listens-topic"))
+                        .consumerGroupId("p1s2-group")
+                        .build()
         );
 
         // Create output target for p1s2
@@ -408,5 +393,16 @@ class DefaultConfigurationValidatorMicronautTest {
         // --- Assert ---
         assertTrue(result.isValid(), "Complex configuration designed to be valid should produce no errors. Errors: " + result.errors());
         assertTrue(result.errors().isEmpty(), "Error list should be empty for this valid configuration. Errors: " + result.errors());
+    }
+
+    // This rule is NOT a @Singleton. It's instantiated manually for a specific test.
+    static class TestSpecificMisbehavingRule implements ClusterValidationRule {
+        public static boolean wasCalled = false;
+
+        @Override
+        public List<String> validate(PipelineClusterConfig clusterConfig, Function<SchemaReference, Optional<String>> schemaContentProvider) {
+            wasCalled = true;
+            throw new RuntimeException("Simulated unexpected error in TestSpecificMisbehavingRule!");
+        }
     }
 }

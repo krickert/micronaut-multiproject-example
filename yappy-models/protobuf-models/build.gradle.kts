@@ -1,4 +1,3 @@
-
 var grpcVersion = libs.versions.grpc.get()
 var protobufVersion = libs.versions.protobuf.get()
 

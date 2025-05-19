@@ -56,7 +56,9 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["pdf.files.incoming"],
+                "listenTopics": [
+                  "pdf.files.incoming"
+                ],
                 "consumerGroupId": "pdf-metadata-extractor-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest",
@@ -99,7 +101,12 @@
               "jsonConfig": {
                 "extractionMethod": "pdfbox",
                 "fallbackToOcr": true,
-                "ocrLanguages": ["eng", "spa", "fra", "deu"],
+                "ocrLanguages": [
+                  "eng",
+                  "spa",
+                  "fra",
+                  "deu"
+                ],
                 "preserveFormatting": true,
                 "extractByPage": true,
                 "detectTables": true
@@ -107,7 +114,9 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["pdf.metadata.extracted"],
+                "listenTopics": [
+                  "pdf.metadata.extracted"
+                ],
                 "consumerGroupId": "pdf-text-extractor-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -167,7 +176,9 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["pdf.text.extracted"],
+                "listenTopics": [
+                  "pdf.text.extracted"
+                ],
                 "consumerGroupId": "pdf-structure-analyzer-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -210,13 +221,19 @@
                 "minImageResolution": 150,
                 "extractImageMetadata": true,
                 "saveImagesPath": "/data/pdf/images",
-                "supportedFormats": ["jpg", "png", "tiff"],
+                "supportedFormats": [
+                  "jpg",
+                  "png",
+                  "tiff"
+                ],
                 "performOcrOnImages": true
               }
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["pdf.for.image.extraction"],
+                "listenTopics": [
+                  "pdf.for.image.extraction"
+                ],
                 "consumerGroupId": "pdf-image-extractor-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -266,7 +283,10 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["pdf.structure.analyzed", "pdf.images.extracted"],
+                "listenTopics": [
+                  "pdf.structure.analyzed",
+                  "pdf.images.extracted"
+                ],
                 "consumerGroupId": "pdf-content-enricher-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -316,7 +336,9 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["pdf.content.enriched"],
+                "listenTopics": [
+                  "pdf.content.enriched"
+                ],
                 "consumerGroupId": "pdf-document-store-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -356,7 +378,9 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["pdf.processing.errors"],
+                "listenTopics": [
+                  "pdf.processing.errors"
+                ],
                 "consumerGroupId": "pdf-error-handler-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"

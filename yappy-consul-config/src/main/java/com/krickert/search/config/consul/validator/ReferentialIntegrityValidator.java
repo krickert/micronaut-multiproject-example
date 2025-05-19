@@ -1,6 +1,6 @@
 package com.krickert.search.config.consul.validator;
 
-import com.krickert.search.config.pipeline.model.*; // Ensure KafkaInputDefinition is imported if not covered by *
+import com.krickert.search.config.pipeline.model.*;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,7 +51,7 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                 errors.add(String.format("%s: definition is null.", pipelineContextForKey));
                 continue;
             }
-             if (pipeline.name() == null || pipeline.name().isBlank()) { // Ensure pipeline name itself is valid
+            if (pipeline.name() == null || pipeline.name().isBlank()) { // Ensure pipeline name itself is valid
                 errors.add(String.format("%s: pipeline name field is null or blank.", pipelineContextForKey));
                 // continue; // Don't continue if we want to check key mismatch even with bad name
             }
@@ -114,7 +114,7 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                     } else if (step.processorInfo().internalProcessorBeanName() != null && !step.processorInfo().internalProcessorBeanName().isBlank()) {
                         implementationKey = step.processorInfo().internalProcessorBeanName();
                     } else {
-                         // This case should be prevented by ProcessorInfo constructor validation
+                        // This case should be prevented by ProcessorInfo constructor validation
                         errors.add(String.format("%s: processorInfo must have either grpcServiceName or internalProcessorBeanName correctly set.", currentStepContext));
                     }
                 } else {
@@ -129,17 +129,17 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                     } else {
                         PipelineModuleConfiguration module = availableModules.get(implementationKey);
                         // Only report errors for non-empty customConfig (with actual content)
-                        boolean hasNonEmptyJsonConfig = step.customConfig() != null && 
-                                                       step.customConfig().jsonConfig() != null && 
-                                                       !step.customConfig().jsonConfig().isEmpty();
-                        boolean hasNonEmptyConfigParams = step.customConfig() != null && 
-                                                         step.customConfig().configParams() != null && 
-                                                         !step.customConfig().configParams().isEmpty();
+                        boolean hasNonEmptyJsonConfig = step.customConfig() != null &&
+                                step.customConfig().jsonConfig() != null &&
+                                !step.customConfig().jsonConfig().isEmpty();
+                        boolean hasNonEmptyConfigParams = step.customConfig() != null &&
+                                step.customConfig().configParams() != null &&
+                                !step.customConfig().configParams().isEmpty();
 
-                        if (module != null && 
-                            (hasNonEmptyJsonConfig || hasNonEmptyConfigParams) &&
-                            module.customConfigSchemaReference() == null && 
-                            (step.customConfigSchemaId() == null || step.customConfigSchemaId().isBlank())) {
+                        if (module != null &&
+                                (hasNonEmptyJsonConfig || hasNonEmptyConfigParams) &&
+                                module.customConfigSchemaReference() == null &&
+                                (step.customConfigSchemaId() == null || step.customConfigSchemaId().isBlank())) {
                             errors.add(String.format("%s has non-empty customConfig but its module '%s' does not define a customConfigSchemaReference, and step does not define customConfigSchemaId.",
                                     currentStepContext, module.implementationId()));
                         }
@@ -147,7 +147,7 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                             // Using toIdentifier() as fixed previously
                             if (!step.customConfigSchemaId().equals(module.customConfigSchemaReference().toIdentifier())) {
                                 LOG.warn("{}: step's customConfigSchemaId ('{}') differs from module's schema reference identifier ('{}'). Assuming step's ID is an override or specific reference.",
-                                         currentStepContext, step.customConfigSchemaId(), module.customConfigSchemaReference().toIdentifier());
+                                        currentStepContext, step.customConfigSchemaId(), module.customConfigSchemaReference().toIdentifier());
                             }
                         }
                     }
@@ -165,8 +165,8 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                         // listenTopics @NotEmpty and elements non-blank is handled by KafkaInputDefinition constructor
                         // consumerGroupId is optional
                         if (inputDef.kafkaConsumerProperties() != null) {
-                            for(Map.Entry<String, String> propEntry : inputDef.kafkaConsumerProperties().entrySet()){
-                                if(propEntry.getKey() == null || propEntry.getKey().isBlank()){
+                            for (Map.Entry<String, String> propEntry : inputDef.kafkaConsumerProperties().entrySet()) {
+                                if (propEntry.getKey() == null || propEntry.getKey().isBlank()) {
                                     errors.add(String.format("%s kafkaConsumerProperties contains a null or blank key.", inputContext));
                                 }
                                 // Null values for Kafka properties might be acceptable.
@@ -191,8 +191,8 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                         if (outputTarget.transportType() == TransportType.KAFKA && outputTarget.kafkaTransport() != null) {
                             KafkaTransportConfig kafkaConfig = outputTarget.kafkaTransport();
                             if (kafkaConfig.kafkaProducerProperties() != null) {
-                                for(Map.Entry<String, String> propEntry : kafkaConfig.kafkaProducerProperties().entrySet()){
-                                    if(propEntry.getKey() == null || propEntry.getKey().isBlank()){
+                                for (Map.Entry<String, String> propEntry : kafkaConfig.kafkaProducerProperties().entrySet()) {
+                                    if (propEntry.getKey() == null || propEntry.getKey().isBlank()) {
                                         errors.add(String.format("%s kafkaTransport.kafkaProducerProperties contains a null or blank key.", outputContext));
                                     }
                                 }
@@ -200,8 +200,8 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                         } else if (outputTarget.transportType() == TransportType.GRPC && outputTarget.grpcTransport() != null) {
                             GrpcTransportConfig grpcConfig = outputTarget.grpcTransport();
                             if (grpcConfig.grpcClientProperties() != null) {
-                                for(Map.Entry<String, String> propEntry : grpcConfig.grpcClientProperties().entrySet()){
-                                    if(propEntry.getKey() == null || propEntry.getKey().isBlank()){
+                                for (Map.Entry<String, String> propEntry : grpcConfig.grpcClientProperties().entrySet()) {
+                                    if (propEntry.getKey() == null || propEntry.getKey().isBlank()) {
                                         errors.add(String.format("%s grpcTransport.grpcClientProperties contains a null or blank key.", outputContext));
                                     }
                                 }
@@ -250,8 +250,8 @@ public class ReferentialIntegrityValidator implements ClusterValidationRule {
                             sourceStepContext, outputKey, outputTarget.targetStepName(), pipelineName, existingStepNamesInPipeline));
                 }
             } else {
-                 // This case should be caught by OutputTarget's constructor if targetStepName is @NotBlank
-                 errors.add(String.format("%s: output '%s' has a null or blank targetStepName (should be caught by model validation).", sourceStepContext, outputKey));
+                // This case should be caught by OutputTarget's constructor if targetStepName is @NotBlank
+                errors.add(String.format("%s: output '%s' has a null or blank targetStepName (should be caught by model validation).", sourceStepContext, outputKey));
             }
         }
     }

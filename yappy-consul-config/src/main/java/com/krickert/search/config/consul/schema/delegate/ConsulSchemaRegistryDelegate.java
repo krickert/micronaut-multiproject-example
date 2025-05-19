@@ -35,14 +35,6 @@ public class ConsulSchemaRegistryDelegate {
     private final JsonSchemaFactory schemaFactory;
     private final JsonSchema metaSchema;
 
-    private SchemaValidatorsConfig getSchemaValidationConfig() {
-        return SchemaValidatorsConfig.builder()
-                .pathType(PathType.LEGACY)
-                .errorMessageKeyword("message")
-                .nullableKeywordEnabled(true)
-                .build();
-    }
-
     @Inject
     public ConsulSchemaRegistryDelegate(
             ConsulKvService consulKvService,
@@ -88,6 +80,14 @@ public class ConsulSchemaRegistryDelegate {
         this.fullSchemaKvPrefix = sanitizedBaseConfigPath + "schemas/";
         log.info("ConsulSchemaRegistryDelegate initialized with Draft 7 meta-schema (loaded from classpath), using Consul KV prefix: {}", this.fullSchemaKvPrefix);
 
+    }
+
+    private SchemaValidatorsConfig getSchemaValidationConfig() {
+        return SchemaValidatorsConfig.builder()
+                .pathType(PathType.LEGACY)
+                .errorMessageKeyword("message")
+                .nullableKeywordEnabled(true)
+                .build();
     }
 
     public Mono<Void> saveSchema(@NonNull String schemaId, @NonNull String schemaContent) {
@@ -244,7 +244,7 @@ public class ConsulSchemaRegistryDelegate {
     /**
      * Validates a JSON content against a JSON Schema.
      *
-     * @param jsonContent The JSON content to validate
+     * @param jsonContent   The JSON content to validate
      * @param schemaContent The JSON Schema content to validate against
      * @return A Mono that emits a Set of ValidationMessage objects if validation fails, or an empty Set if validation succeeds
      */

@@ -5,10 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class PipelineModuleConfigurationTest {
 
@@ -21,8 +18,8 @@ class PipelineModuleConfigurationTest {
 
         // Create a PipelineModuleConfiguration instance
         PipelineModuleConfiguration config = new PipelineModuleConfiguration(
-                "Test Module", 
-                "test-module", 
+                "Test Module",
+                "test-module",
                 schemaReference);
 
         // Serialize to JSON
@@ -69,8 +66,8 @@ class PipelineModuleConfigurationTest {
 
         // Create a PipelineModuleConfiguration instance
         PipelineModuleConfiguration config = new PipelineModuleConfiguration(
-                "Test Module", 
-                "test-module", 
+                "Test Module",
+                "test-module",
                 schemaReference);
 
         // Serialize to JSON

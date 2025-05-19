@@ -14,11 +14,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.DecimalFormat;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Pattern;
 
 @Singleton
@@ -124,8 +120,8 @@ public class ChunkMetadataExtractor {
         metadataMap.put("is_first_chunk", Value.newBuilder().setBoolValue(chunkNumber == 0).build());
         metadataMap.put("is_last_chunk", Value.newBuilder().setBoolValue(chunkNumber == totalChunksInDocument - 1).build());
         if (totalChunksInDocument > 0) {
-            double relativePosition = (totalChunksInDocument == 1) ? 0.5 : (double) chunkNumber / (totalChunksInDocument -1) ; // Avoid div by zero for single chunk; scale 0 to 1
-             if (totalChunksInDocument ==1) relativePosition = 0.0; // Or 0.5 to indicate it's the only one. Let's stick to 0.0 for first.
+            double relativePosition = (totalChunksInDocument == 1) ? 0.5 : (double) chunkNumber / (totalChunksInDocument - 1); // Avoid div by zero for single chunk; scale 0 to 1
+            if (totalChunksInDocument == 1) relativePosition = 0.0; // Or 0.5 to indicate it's the only one. Let's stick to 0.0 for first.
             else relativePosition = (double) chunkNumber / (totalChunksInDocument - 1);
 
             metadataMap.put("relative_position", Value.newBuilder().setNumberValue(Double.parseDouble(DECIMAL_FORMAT.format(relativePosition))).build());
@@ -162,23 +158,34 @@ public class ChunkMetadataExtractor {
 
         // Higher uppercase ratio (e.g., title case or all caps)
         long uppercaseWords = Arrays.stream(tokens)
-                                  .filter(token -> token.length() > 0 && Character.isUpperCase(token.charAt(0)))
-                                  .count();
+                .filter(token -> token.length() > 0 && Character.isUpperCase(token.charAt(0)))
+                .count();
         if ((double) uppercaseWords / tokens.length > 0.7) { // Most words start with uppercase
             score += 0.2;
         }
         if (StringUtils.isAllUpperCase(chunkText.replaceAll("\\s+", ""))) { // All caps
-             score += 0.2; // Extra boost for all caps
+            score += 0.2; // Extra boost for all caps
         }
 
 
         return Math.min(1.0, Double.parseDouble(DECIMAL_FORMAT.format(score))); // Normalize to 0-1
     }
 
-     // Helper to convert String to Protobuf Value - not strictly needed if done inline
-    private Value toValue(String s) { return Value.newBuilder().setStringValue(s).build(); }
-    private Value toValue(double d) { return Value.newBuilder().setNumberValue(d).build(); }
-    private Value toValue(long l) { return Value.newBuilder().setNumberValue(l).build(); }
-    private Value toValue(boolean b) { return Value.newBuilder().setBoolValue(b).build(); }
+    // Helper to convert String to Protobuf Value - not strictly needed if done inline
+    private Value toValue(String s) {
+        return Value.newBuilder().setStringValue(s).build();
+    }
+
+    private Value toValue(double d) {
+        return Value.newBuilder().setNumberValue(d).build();
+    }
+
+    private Value toValue(long l) {
+        return Value.newBuilder().setNumberValue(l).build();
+    }
+
+    private Value toValue(boolean b) {
+        return Value.newBuilder().setBoolValue(b).build();
+    }
 
 }

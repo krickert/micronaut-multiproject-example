@@ -2,8 +2,8 @@ package com.krickert.yappy.modules.chunker;
 
 import com.google.protobuf.Message;
 import com.krickert.search.model.PipeDoc;
-import com.krickert.search.model.mapper.ValueHandler;
 import com.krickert.search.model.mapper.MappingException;
+import com.krickert.search.model.mapper.ValueHandler;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,8 +18,8 @@ import java.util.Optional;
 public class OverlapChunker {
 
     private static final Logger log = LoggerFactory.getLogger(OverlapChunker.class);
-    private final ValueHandler valueHandler;
     private static final long MAX_TEXT_BYTES = 100 * 1024 * 1024; // 100MB limit
+    private final ValueHandler valueHandler;
 
     public OverlapChunker(ValueHandler valueHandler) {
         this.valueHandler = valueHandler;

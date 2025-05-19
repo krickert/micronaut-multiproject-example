@@ -60,7 +60,7 @@ public class GrpcForwarder {
      * Note: The initial discovery of the service (if not cached) is blocking.
      *
      * @param pipeStreamProto The PipeStream protobuf message to send.
-     * @param pipeStepName  The name of the target pipestream service (used for discovery and channel caching).
+     * @param pipeStepName    The name of the target pipestream service (used for discovery and channel caching).
      */
     public void forwardToGrpc(PipeStream pipeStreamProto, String pipeStepName) {
         // Your original code used a domain model `com.krickert.search.model.PipeStream pipe`.

@@ -13,7 +13,11 @@
             "customConfig": {
               "jsonConfig": {
                 "sourcePath": "/input/documents",
-                "filePatterns": ["*.pdf", "*.docx", "*.txt"]
+                "filePatterns": [
+                  "*.pdf",
+                  "*.docx",
+                  "*.txt"
+                ]
               }
             },
             "processorInfo": {
@@ -53,12 +57,18 @@
               "jsonConfig": {
                 "extractMetadata": true,
                 "extractText": true,
-                "languages": ["en", "es", "fr"]
+                "languages": [
+                  "en",
+                  "es",
+                  "fr"
+                ]
               }
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["document.ingest.text"],
+                "listenTopics": [
+                  "document.ingest.text"
+                ],
                 "consumerGroupId": "text-extractor-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest",
@@ -95,7 +105,9 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["document.ingest.binary"],
+                "listenTopics": [
+                  "document.ingest.binary"
+                ],
                 "consumerGroupId": "binary-processor-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -132,7 +144,10 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["document.text.extracted", "document.binary.processed"],
+                "listenTopics": [
+                  "document.text.extracted",
+                  "document.binary.processed"
+                ],
                 "consumerGroupId": "text-enrichment-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -179,7 +194,9 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["document.enriched.for.indexing"],
+                "listenTopics": [
+                  "document.enriched.for.indexing"
+                ],
                 "consumerGroupId": "search-indexer-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -209,7 +226,9 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["document.for.analytics"],
+                "listenTopics": [
+                  "document.for.analytics"
+                ],
                 "consumerGroupId": "analytics-processor-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -239,7 +258,11 @@
             "customConfigSchemaId": "dashboard-updater-schema",
             "customConfig": {
               "jsonConfig": {
-                "dashboardIds": ["main", "executive", "operational"],
+                "dashboardIds": [
+                  "main",
+                  "executive",
+                  "operational"
+                ],
                 "refreshInterval": "5m"
               }
             },

@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.networknt.schema.*;
 
 import java.io.IOException;
-import java.util.Collections;
 import java.util.Set;
 
 /**
@@ -32,7 +31,7 @@ public class SchemaValidator {
     /**
      * Validates JSON content against a JSON Schema.
      *
-     * @param jsonContent The JSON content to validate
+     * @param jsonContent   The JSON content to validate
      * @param schemaContent The JSON Schema content to validate against
      * @return A set of validation messages if validation fails, or an empty set if validation succeeds
      */
@@ -59,7 +58,7 @@ public class SchemaValidator {
     /**
      * Validates a JsonNode against a JSON Schema.
      *
-     * @param jsonNode The JsonNode to validate
+     * @param jsonNode      The JsonNode to validate
      * @param schemaContent The JSON Schema content to validate against
      * @return A set of validation messages if validation fails, or an empty set if validation succeeds
      */
@@ -85,7 +84,7 @@ public class SchemaValidator {
     /**
      * Validates a JsonNode against a JSON Schema.
      *
-     * @param jsonNode The JsonNode to validate
+     * @param jsonNode   The JsonNode to validate
      * @param schemaNode The JSON Schema as a JsonNode
      * @return A set of validation messages if validation fails, or an empty set if validation succeeds
      */

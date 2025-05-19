@@ -7,11 +7,11 @@
     </appender>
 
     <root level="INFO">
-        <appender-ref ref="STDOUT" />
+        <appender-ref ref="STDOUT"/>
     </root>
 
     <!-- Set specific logger levels -->
-    <logger name="com.krickert.search" level="INFO" />
-    <logger name="io.micronaut" level="INFO" />
-    <logger name="io.netty" level="INFO" />
+    <logger name="com.krickert.search" level="INFO"/>
+    <logger name="io.micronaut" level="INFO"/>
+    <logger name="io.netty" level="INFO"/>
 </configuration>

@@ -11,12 +11,12 @@ import lombok.Builder;
  * Validation against a schema is handled by the service layer.
  *
  * @param jsonConfig The JSON configuration as a string for a specific step.
- * Cannot be null. Must be at least an empty JSON object string "{}".
+ *                   Cannot be null. Must be at least an empty JSON object string "{}".
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @Builder
 public record JsonConfigOptions(
-    @JsonProperty("jsonConfig") String jsonConfig
+        @JsonProperty("jsonConfig") String jsonConfig
 ) {
     // Public constant for the default empty JSON object string
     public static final String DEFAULT_EMPTY_JSON = "{}";

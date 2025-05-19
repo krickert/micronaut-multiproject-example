@@ -11,7 +11,7 @@ import io.micronaut.grpc.server.GrpcServerChannel;
 public class Clients {
 
     @Bean
-    SchemaRegistryServiceGrpc.SchemaRegistryServiceBlockingStub  schemaBlockingStub(
+    SchemaRegistryServiceGrpc.SchemaRegistryServiceBlockingStub schemaBlockingStub(
             @GrpcChannel(GrpcServerChannel.NAME)
             ManagedChannel channel) {
         return SchemaRegistryServiceGrpc.newBlockingStub(

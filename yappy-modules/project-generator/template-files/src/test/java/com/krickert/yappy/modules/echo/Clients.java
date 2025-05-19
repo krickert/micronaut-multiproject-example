@@ -1,4 +1,4 @@
-package @@BASE_PACKAGE@@;
+package@ @BASE_PACKAGE @ @;
 
 import com.krickert.search.schema.registry.SchemaRegistryServiceGrpc;
 import com.krickert.search.sdk.PipeStepProcessorGrpc;
@@ -12,7 +12,7 @@ import io.micronaut.grpc.server.GrpcServerChannel;
 public class Clients {
 
     @Bean
-    PipeStepProcessorGrpc.PipeStepProcessorBlockingStub  pipeStepProcessorBlockingStub(
+    PipeStepProcessorGrpc.PipeStepProcessorBlockingStub pipeStepProcessorBlockingStub(
             @GrpcChannel(GrpcServerChannel.NAME)
             ManagedChannel channel) {
         return PipeStepProcessorGrpc.newBlockingStub(

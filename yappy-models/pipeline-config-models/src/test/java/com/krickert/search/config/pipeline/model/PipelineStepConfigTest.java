@@ -2,23 +2,15 @@ package com.krickert.search.config.pipeline.model;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.krickert.search.config.pipeline.model.test.PipelineConfigTestUtils;
 import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigJson;
-import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigObjects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -211,23 +203,23 @@ class PipelineStepConfigTest {
         Map<String, PipelineStepConfig.OutputTarget> emptyOutputs = Collections.emptyMap();
 
         Exception e1 = assertThrows(NullPointerException.class, () -> new PipelineStepConfig(
-                null, StepType.PIPELINE, null, null, null, emptyOutputs, 0,0L,0L,0.0,0L, validProcessorInfo));
+                null, StepType.PIPELINE, null, null, null, emptyOutputs, 0, 0L, 0L, 0.0, 0L, validProcessorInfo));
         assertTrue(e1.getMessage().contains("stepName cannot be null"));
 
         Exception e3 = assertThrows(NullPointerException.class, () -> new PipelineStepConfig(
-                "s", StepType.PIPELINE, null, null, null, emptyOutputs, 0,0L,0L,0.0,0L, null));
+                "s", StepType.PIPELINE, null, null, null, emptyOutputs, 0, 0L, 0L, 0.0, 0L, null));
         assertTrue(e3.getMessage().contains("processorInfo cannot be null"));
 
         Exception eStepTypeNull = assertThrows(NullPointerException.class, () -> new PipelineStepConfig(
-                "s", null, null, null, null, emptyOutputs, 0,0L,0L,0.0,0L, validProcessorInfo));
+                "s", null, null, null, null, emptyOutputs, 0, 0L, 0L, 0.0, 0L, validProcessorInfo));
         assertTrue(eStepTypeNull.getMessage().contains("stepType cannot be null"));
 
         Exception e4 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                "s", StepType.PIPELINE, null, null, null, emptyOutputs, 0,0L,0L,0.0,0L, new PipelineStepConfig.ProcessorInfo(null, null) ));
+                "s", StepType.PIPELINE, null, null, null, emptyOutputs, 0, 0L, 0L, 0.0, 0L, new PipelineStepConfig.ProcessorInfo(null, null)));
         assertTrue(e4.getMessage().contains("ProcessorInfo must have either grpcServiceName or internalProcessorBeanName set."));
 
         Exception e5 = assertThrows(IllegalArgumentException.class, () -> new PipelineStepConfig(
-                "s", StepType.PIPELINE, null, null, null, emptyOutputs, 0,0L,0L,0.0,0L, new PipelineStepConfig.ProcessorInfo("grpc", "internal") ));
+                "s", StepType.PIPELINE, null, null, null, emptyOutputs, 0, 0L, 0L, 0.0, 0L, new PipelineStepConfig.ProcessorInfo("grpc", "internal")));
         assertTrue(e5.getMessage().contains("ProcessorInfo cannot have both grpcServiceName and internalProcessorBeanName set."));
 
         PipelineStepConfig configWithNullOutputs = new PipelineStepConfig(
@@ -276,7 +268,7 @@ class PipelineStepConfigTest {
         Map<String, PipelineStepConfig.OutputTarget> outputs = new HashMap<>();
         outputs.put("default", new PipelineStepConfig.OutputTarget(
                 "next-step-id", TransportType.KAFKA, null,
-                new KafkaTransportConfig("topic-for-next-step", Map.of("prop","val"))
+                new KafkaTransportConfig("topic-for-next-step", Map.of("prop", "val"))
         ));
         outputs.put("errorPath", new PipelineStepConfig.OutputTarget(
                 "error-step-id", TransportType.INTERNAL, null, null
@@ -407,11 +399,11 @@ class PipelineStepConfigTest {
 
         // Extract the pipeline step node
         JsonNode stepNode = clusterNode
-            .path("pipelineGraphConfig")
-            .path("pipelines")
-            .path(pipelineName)
-            .path("pipelineSteps")
-            .path(stepName);
+                .path("pipelineGraphConfig")
+                .path("pipelines")
+                .path(pipelineName)
+                .path("pipelineSteps")
+                .path(stepName);
 
         // Convert the step node back to JSON
         return objectMapper.writeValueAsString(stepNode);

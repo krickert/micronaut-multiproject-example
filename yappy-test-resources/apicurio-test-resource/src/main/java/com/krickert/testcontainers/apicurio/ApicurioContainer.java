@@ -3,6 +3,7 @@ package com.krickert.testcontainers.apicurio; // Assuming same package as your p
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
+
 import java.time.Duration;
 
 /**
@@ -54,10 +55,10 @@ public class ApicurioContainer extends GenericContainer<ApicurioContainer> {
         // Apicurio Registry (built with Quarkus) exposes a health check endpoint.
         // We wait for the /q/health/ready endpoint to be available and return HTTP 200.
         setWaitStrategy(
-            Wait.forHttp("/q/health/ready")
-                .forPort(APICURIO_HTTP_PORT)
-                .forStatusCode(200)
-                .withStartupTimeout(DEFAULT_WAIT_TIMEOUT)
+                Wait.forHttp("/q/health/ready")
+                        .forPort(APICURIO_HTTP_PORT)
+                        .forStatusCode(200)
+                        .withStartupTimeout(DEFAULT_WAIT_TIMEOUT)
         );
 
         // As seen in your ApicurioTestResourceProvider, setting QUARKUS_PROFILE to "prod"
@@ -75,8 +76,8 @@ public class ApicurioContainer extends GenericContainer<ApicurioContainer> {
      */
     public String getRegistryApiV3Url() {
         return String.format("http://%s:%d/apis/registry/v3",
-                             getHost(),
-                             getMappedPort(APICURIO_HTTP_PORT));
+                getHost(),
+                getMappedPort(APICURIO_HTTP_PORT));
     }
 
     /**
@@ -86,7 +87,7 @@ public class ApicurioContainer extends GenericContainer<ApicurioContainer> {
      */
     public String getRegistryUiUrl() {
         return String.format("http://%s:%d/ui",
-                             getHost(),
-                             getMappedPort(APICURIO_HTTP_PORT));
+                getHost(),
+                getMappedPort(APICURIO_HTTP_PORT));
     }
 }

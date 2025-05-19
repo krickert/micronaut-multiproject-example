@@ -68,7 +68,7 @@ public class ConsulSchemaRegistrySeeder {
     /**
      * Registers a single schema with the schema registry.
      *
-     * @param schemaId The ID to register the schema under
+     * @param schemaId     The ID to register the schema under
      * @param resourceName The name of the resource file containing the schema
      * @return A Mono that completes when the schema has been registered
      */
@@ -87,7 +87,7 @@ public class ConsulSchemaRegistrySeeder {
     /**
      * Registers a single schema with the schema registry using the provided schema content.
      *
-     * @param schemaId The ID to register the schema under
+     * @param schemaId      The ID to register the schema under
      * @param schemaContent The schema content as a string
      * @return A Mono that completes when the schema has been registered
      */

@@ -62,8 +62,8 @@ public class TestSchemaLoader {
      * Registers a schema with the ConsulSchemaRegistryDelegate.
      *
      * @param schemaRegistryDelegate The ConsulSchemaRegistryDelegate to register the schema with
-     * @param schemaId The ID to register the schema under
-     * @param resourceName The name of the resource file containing the schema
+     * @param schemaId               The ID to register the schema under
+     * @param resourceName           The name of the resource file containing the schema
      * @return true if the schema was registered successfully, false otherwise
      */
     public static boolean registerTestSchema(
@@ -76,7 +76,7 @@ public class TestSchemaLoader {
             log.info("Successfully registered test schema '{}' from resource '{}'", schemaId, resourceName);
             return true;
         } catch (Exception e) {
-            log.error("Failed to register test schema '{}' from resource '{}': {}", 
+            log.error("Failed to register test schema '{}' from resource '{}': {}",
                     schemaId, resourceName, e.getMessage(), e);
             return false;
         }
@@ -86,8 +86,8 @@ public class TestSchemaLoader {
      * Validates JSON content against a schema using the ConsulSchemaRegistryDelegate.
      *
      * @param schemaRegistryDelegate The ConsulSchemaRegistryDelegate to use for validation
-     * @param jsonContent The JSON content to validate
-     * @param schemaContent The schema content to validate against
+     * @param jsonContent            The JSON content to validate
+     * @param schemaContent          The schema content to validate against
      * @return A set of validation messages if validation fails, or an empty set if validation succeeds
      */
     public static Set<ValidationMessage> validateContent(
@@ -107,8 +107,8 @@ public class TestSchemaLoader {
      * Validates a JsonNode against a schema using the ConsulSchemaRegistryDelegate.
      *
      * @param schemaRegistryDelegate The ConsulSchemaRegistryDelegate to use for validation
-     * @param jsonNode The JsonNode to validate
-     * @param schemaContent The schema content to validate against
+     * @param jsonNode               The JsonNode to validate
+     * @param schemaContent          The schema content to validate against
      * @return A set of validation messages if validation fails, or an empty set if validation succeeds
      */
     public static Set<ValidationMessage> validateJsonNode(

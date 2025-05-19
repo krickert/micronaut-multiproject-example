@@ -3,7 +3,6 @@ package com.krickert.search.config.consul;
 import com.krickert.search.config.consul.validator.ClusterValidationRule;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.SchemaReference;
-
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;

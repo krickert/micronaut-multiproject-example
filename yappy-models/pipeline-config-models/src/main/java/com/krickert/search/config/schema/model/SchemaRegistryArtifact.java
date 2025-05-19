@@ -12,21 +12,21 @@ import java.time.Instant;
  * It acts as a container for multiple versions of a schema.
  * This record is immutable.
  *
- * @param subject The unique subject or name of the schema artifact. Must not be null or blank.
- * @param description An optional description of the schema artifact. Can be null.
- * @param schemaType The type of schemas contained under this artifact. Defaults to JSON_SCHEMA. Cannot be null.
- * @param createdAt Timestamp of when this artifact was first created. Cannot be null.
- * @param updatedAt Timestamp of the last modification to this artifact. Cannot be null.
+ * @param subject             The unique subject or name of the schema artifact. Must not be null or blank.
+ * @param description         An optional description of the schema artifact. Can be null.
+ * @param schemaType          The type of schemas contained under this artifact. Defaults to JSON_SCHEMA. Cannot be null.
+ * @param createdAt           Timestamp of when this artifact was first created. Cannot be null.
+ * @param updatedAt           Timestamp of the last modification to this artifact. Cannot be null.
  * @param latestVersionNumber The version number of the schema currently considered "latest". Can be null.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record SchemaRegistryArtifact(
-    @JsonProperty("subject") String subject,
-    @JsonProperty("description") String description,
-    @JsonProperty("schemaType") SchemaType schemaType,
-    @JsonProperty("createdAt") @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "UTC") Instant createdAt,
-    @JsonProperty("updatedAt") @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "UTC") Instant updatedAt,
-    @JsonProperty("latestVersionNumber") Integer latestVersionNumber
+        @JsonProperty("subject") String subject,
+        @JsonProperty("description") String description,
+        @JsonProperty("schemaType") SchemaType schemaType,
+        @JsonProperty("createdAt") @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "UTC") Instant createdAt,
+        @JsonProperty("updatedAt") @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "UTC") Instant updatedAt,
+        @JsonProperty("latestVersionNumber") Integer latestVersionNumber
 ) {
     public SchemaRegistryArtifact {
         if (subject == null || subject.isBlank()) {

@@ -39,5 +39,7 @@
   },
   "defaultPipelineName": "initial-seeded-pipeline",
   "allowedKafkaTopics": [],
-  "allowedGrpcServices": ["initial-service"]
+  "allowedGrpcServices": [
+    "initial-service"
+  ]
 }

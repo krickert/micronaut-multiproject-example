@@ -1,12 +1,10 @@
 package com.krickert.search.config.consul.validator;
 
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.krickert.search.config.pipeline.model.*;
-// Explicit model imports for clarity
+import com.krickert.search.config.pipeline.model.PipelineStepConfig.JsonConfigOptions;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig.OutputTarget;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig.ProcessorInfo;
-import com.krickert.search.config.pipeline.model.PipelineStepConfig.JsonConfigOptions;
-
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -48,7 +46,7 @@ class InterPipelineLoopValidatorTest {
     }
 
     private KafkaInputDefinition kafkaInput(List<String> listenTopics) {
-        return new KafkaInputDefinition(listenTopics, "test-cg-" + UUID.randomUUID().toString().substring(0,8), Collections.emptyMap());
+        return new KafkaInputDefinition(listenTopics, "test-cg-" + UUID.randomUUID().toString().substring(0, 8), Collections.emptyMap());
     }
 
     private KafkaInputDefinition kafkaInput(String listenTopic) {
@@ -106,7 +104,7 @@ class InterPipelineLoopValidatorTest {
         ProcessorInfo pi1 = internalBeanProcessor("p1s1-proc");
         // Step with no Kafka inputs or outputs
         PipelineStepConfig step1 = createStep("p1s1", StepType.INITIAL_PIPELINE, pi1, null, null);
-        
+
         PipelineConfig pipeline1 = createPipeline("p1-single", Map.of(step1.stepName(), step1));
         PipelineClusterConfig clusterConfig = createClusterConfig(Map.of("p1-single", pipeline1));
         List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
@@ -132,7 +130,7 @@ class InterPipelineLoopValidatorTest {
                 Map.of("out", kafkaOutput(null, "topicB")) // pB publishes topicB
         );
         PipelineConfig pipelineB = createPipeline("pipelineB", Map.of(pB_s1.stepName(), pB_s1));
-        
+
         Map<String, PipelineConfig> pipelines = Map.of("pipelineA", pipelineA, "pipelineB", pipelineB);
         PipelineClusterConfig clusterConfig = createClusterConfig(pipelines);
         List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
@@ -181,7 +179,7 @@ class InterPipelineLoopValidatorTest {
         PipelineStepConfig pB_s1 = createStep("pB_s1", StepType.PIPELINE, pB_proc,
                 List.of(kafkaInput("topicA")), Map.of("out", kafkaOutput(null, "topicB")));
         PipelineConfig pipelineB = createPipeline("pipelineB", Map.of(pB_s1.stepName(), pB_s1));
-        
+
         ProcessorInfo pC_proc = internalBeanProcessor("pC_proc");
         PipelineStepConfig pC_s1 = createStep("pC_s1", StepType.PIPELINE, pC_proc,
                 List.of(kafkaInput("topicB")), Map.of("out", kafkaOutput(null, "topicC")));
@@ -198,10 +196,10 @@ class InterPipelineLoopValidatorTest {
         assertFalse(errors.isEmpty(), "Three-pipeline loop should produce an error.");
         assertTrue(errors.get(0).contains("Inter-pipeline loop detected"));
         assertTrue(errors.get(0).contains("pipelineA -> pipelineB -> pipelineC -> pipelineA") ||
-                   errors.get(0).contains("pipelineB -> pipelineC -> pipelineA -> pipelineB") ||
-                   errors.get(0).contains("pipelineC -> pipelineA -> pipelineB -> pipelineC") );
+                errors.get(0).contains("pipelineB -> pipelineC -> pipelineA -> pipelineB") ||
+                errors.get(0).contains("pipelineC -> pipelineA -> pipelineB -> pipelineC"));
     }
-    
+
     @Test
     void validate_pipelinePublishesAndListensToSameTopic_interLoopDetected() {
         // P_A publishes to "shared-topic"
@@ -210,7 +208,7 @@ class InterPipelineLoopValidatorTest {
         // that any step (even the same one) in P_A listens to.
         ProcessorInfo pA_proc = internalBeanProcessor("pA_proc");
         PipelineStepConfig pA_s1 = createStep("pA_s1", StepType.PIPELINE, pA_proc,
-                List.of(kafkaInput("shared-topic")), 
+                List.of(kafkaInput("shared-topic")),
                 Map.of("out", kafkaOutput(null, "shared-topic"))
         );
         PipelineConfig pipelineA = createPipeline("pipelineA", Map.of(pA_s1.stepName(), pA_s1));
@@ -218,7 +216,7 @@ class InterPipelineLoopValidatorTest {
         Map<String, PipelineConfig> pipelines = Map.of(pipelineA.name(), pipelineA);
         PipelineClusterConfig clusterConfig = createClusterConfig(pipelines);
         List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
-        
+
         assertFalse(errors.isEmpty(), "Pipeline publishing to and listening from the same topic should form a P_A -> P_A loop.");
         assertTrue(errors.get(0).contains("Inter-pipeline loop detected"));
         assertTrue(errors.get(0).contains("pipelineA -> pipelineA"));
@@ -229,19 +227,19 @@ class InterPipelineLoopValidatorTest {
         String clusterName = "cluster-ph"; // Passed to resolvePattern in validator
         String pipelineAName = "pipelineA-ph";
         String pipelineBName = "pipelineB-ph";
-        
+
         // P_A listens to "topic-${pipelineName}-from-B" (expects topic-pipelineB-ph-from-B after resolution in validator)
         // P_A publishes to "topic-${pipelineName}-from-A" (becomes topic-pipelineA-ph-from-A after resolution)
         ProcessorInfo paProc = internalBeanProcessor("paProc");
         PipelineStepConfig pAs1 = createStep("pAs1", StepType.PIPELINE, paProc,
-            List.of(kafkaInput("topic-" + pipelineBName + "-from-B")), // Topic explicitly resolved for listener for clarity
-            Map.of("out", kafkaOutput(null, "topic-" + pipelineAName + "-from-A")) // Topic explicitly resolved for publisher
+                List.of(kafkaInput("topic-" + pipelineBName + "-from-B")), // Topic explicitly resolved for listener for clarity
+                Map.of("out", kafkaOutput(null, "topic-" + pipelineAName + "-from-A")) // Topic explicitly resolved for publisher
         );
         // To test placeholder resolution, let's make the configured topics contain placeholders.
         // The validator's resolvePattern will use the *pipelineName* of the step's parent pipeline.
-         pAs1 = createStep("pAs1", StepType.PIPELINE, paProc,
-            List.of(kafkaInput("topic-${pipelineName}-from-B")), // Listens: topic-pipelineA-ph-from-B (using pA's name)
-            Map.of("out", kafkaOutput(null, "topic-${pipelineName}-from-A"))  // Publishes: topic-pipelineA-ph-from-A
+        pAs1 = createStep("pAs1", StepType.PIPELINE, paProc,
+                List.of(kafkaInput("topic-${pipelineName}-from-B")), // Listens: topic-pipelineA-ph-from-B (using pA's name)
+                Map.of("out", kafkaOutput(null, "topic-${pipelineName}-from-A"))  // Publishes: topic-pipelineA-ph-from-A
         );
         // This setup above won't cause a loop as P_A listens to topic-pipelineA-ph-from-B and P_B (below) publishes topic-pipelineB-ph-from-B.
         // Let's adjust for a loop:
@@ -254,23 +252,23 @@ class InterPipelineLoopValidatorTest {
         String topicFromB = "topic-from-${pipelineName}"; // will be "topic-from-pipelineB-ph" when published by P_B
 
         pAs1 = createStep("pAs1", StepType.PIPELINE, paProc,
-            List.of(kafkaInput(topicFromB.replace("${pipelineName}", pipelineBName))), // P_A listens to concrete topic from P_B
-            Map.of("out", kafkaOutput(null, topicFromA)) // P_A publishes with placeholder (resolves to its own name)
+                List.of(kafkaInput(topicFromB.replace("${pipelineName}", pipelineBName))), // P_A listens to concrete topic from P_B
+                Map.of("out", kafkaOutput(null, topicFromA)) // P_A publishes with placeholder (resolves to its own name)
         );
         PipelineConfig pipelineA_config = createPipeline(pipelineAName, Map.of(pAs1.stepName(), pAs1));
 
         ProcessorInfo pbProc = internalBeanProcessor("pbProc");
         PipelineStepConfig pBs1 = createStep("pBs1", StepType.PIPELINE, pbProc,
-            List.of(kafkaInput(topicFromA.replace("${pipelineName}", pipelineAName))), // P_B listens to concrete topic from P_A
-            Map.of("out", kafkaOutput(null, topicFromB))  // P_B publishes with placeholder (resolves to its own name)
+                List.of(kafkaInput(topicFromA.replace("${pipelineName}", pipelineAName))), // P_B listens to concrete topic from P_A
+                Map.of("out", kafkaOutput(null, topicFromB))  // P_B publishes with placeholder (resolves to its own name)
         );
         PipelineConfig pipelineB_config = createPipeline(pipelineBName, Map.of(pBs1.stepName(), pBs1));
 
         Map<String, PipelineConfig> pipelines = Map.of(pipelineAName, pipelineA_config, pipelineBName, pipelineB_config);
         PipelineClusterConfig clusterConfig = createNamedClusterConfig(clusterName, pipelines);
-        
+
         List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
-        
+
         assertFalse(errors.isEmpty(), "Inter-pipeline loop with resolved placeholder topics should be detected.");
         assertTrue(errors.get(0).contains("Inter-pipeline loop detected"));
         assertTrue(errors.get(0).contains(pipelineAName) && errors.get(0).contains(pipelineBName));

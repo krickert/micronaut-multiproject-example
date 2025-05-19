@@ -30,6 +30,7 @@ public interface DynamicConfigurationManager {
     Optional<PipelineClusterConfig> getCurrentPipelineClusterConfig();
 
     Optional<PipelineConfig> getPipelineConfig(String pipelineId);
+
     /**
      * Retrieves the content of a specific schema version if it's actively referenced and cached.
      *
@@ -64,10 +65,10 @@ public interface DynamicConfigurationManager {
      * Updates a pipeline step to use a new Kafka topic.
      * Specifically, modifies the text-enrichment step to send to the new topic.
      *
-     * @param pipelineName The name of the pipeline containing the step to update.
-     * @param stepName The name of the step to update.
-     * @param outputKey The key for the new output.
-     * @param newTopic The new Kafka topic to use.
+     * @param pipelineName   The name of the pipeline containing the step to update.
+     * @param stepName       The name of the step to update.
+     * @param outputKey      The key for the new output.
+     * @param newTopic       The new Kafka topic to use.
      * @param targetStepName The name of the target step.
      * @return True if the operation was successful, false otherwise.
      */

@@ -38,10 +38,10 @@ public class ConsulKvService {
      * Creates a new ConsulKvService with the specified KeyValueClient.
      *
      * @param keyValueClient the KeyValueClient to use for KV operations
-     * @param configPath the base path for configuration in Consul KV store
+     * @param configPath     the base path for configuration in Consul KV store
      */
     public ConsulKvService(KeyValueClient keyValueClient,
-                          @Value("${consul.client.config.path:config/pipeline}") String configPath) {
+                           @Value("${consul.client.config.path:config/pipeline}") String configPath) {
         this.keyValueClient = keyValueClient;
         this.configPath = configPath;
         LOG.info("ConsulKvService initialized with config path: {}", configPath);
@@ -111,7 +111,7 @@ public class ConsulKvService {
     /**
      * Puts a value into Consul KV store.
      *
-     * @param key the key to put
+     * @param key   the key to put
      * @param value the value to put
      * @return a Mono that emits true if the operation was successful, false otherwise
      */
@@ -167,14 +167,14 @@ public class ConsulKvService {
                 ConsulResponse<TxResponse> response = keyValueClient.performTransaction(operations);
 
                 // Check if the transaction was successful
-                if (response != null && response.getResponse() != null && 
-                    response.getResponse().errors() == null || response.getResponse().errors().isEmpty()) {
+                if (response != null && response.getResponse() != null &&
+                        response.getResponse().errors() == null || response.getResponse().errors().isEmpty()) {
                     LOG.info("Successfully wrote all values to Consul KV using transaction: {}", keys);
                     return true;
                 } else {
                     LOG.error("Failed to write values to Consul KV using transaction. Errors: {}",
                             response.getResponse() != null ?
-                            response.getResponse().errors() : "Unknown error");
+                                    response.getResponse().errors() : "Unknown error");
                     return false;
                 }
             } catch (Exception e) {
@@ -295,43 +295,43 @@ public class ConsulKvService {
 
         // First attempt to delete keys
         return deleteKeysWithPrefix(path)
-            .flatMap(result -> {
-                // Verify that keys were actually deleted
-                return getKeysWithPrefix(path)
-                    .flatMap(remainingKeys -> {
-                        if (remainingKeys != null && !remainingKeys.isEmpty()) {
-                            LOG.warn("Keys still exist after deletion attempt: {}", remainingKeys);
-                            // Try one more time with a small delay
-                            return Mono.delay(java.time.Duration.ofMillis(100))
-                                .then(Mono.fromCallable(() -> {
-                                    try {
-                                        String encodedPath = encodeKey(path);
-                                        keyValueClient.deleteKeys(encodedPath);
-                                        return true;
-                                    } catch (Exception e) {
-                                        LOG.error("Error in second attempt to delete keys: {}", path, e);
-                                        return false;
-                                    }
-                                }))
-                                .flatMap(secondResult -> {
-                                    // Check again
-                                    return getKeysWithPrefix(path)
-                                        .map(keysAfterRetry -> {
-                                            if (keysAfterRetry != null && !keysAfterRetry.isEmpty()) {
-                                                LOG.error("Failed to delete keys after second attempt: {}", keysAfterRetry);
-                                                return false;
-                                            }
-                                            return secondResult;
-                                        });
-                                });
-                        }
-                        return Mono.just(result);
-                    })
-                    .onErrorResume(e -> {
-                        LOG.error("Error verifying key deletion: {}", path, e);
-                        return Mono.just(false);
-                    });
-            });
+                .flatMap(result -> {
+                    // Verify that keys were actually deleted
+                    return getKeysWithPrefix(path)
+                            .flatMap(remainingKeys -> {
+                                if (remainingKeys != null && !remainingKeys.isEmpty()) {
+                                    LOG.warn("Keys still exist after deletion attempt: {}", remainingKeys);
+                                    // Try one more time with a small delay
+                                    return Mono.delay(java.time.Duration.ofMillis(100))
+                                            .then(Mono.fromCallable(() -> {
+                                                try {
+                                                    String encodedPath = encodeKey(path);
+                                                    keyValueClient.deleteKeys(encodedPath);
+                                                    return true;
+                                                } catch (Exception e) {
+                                                    LOG.error("Error in second attempt to delete keys: {}", path, e);
+                                                    return false;
+                                                }
+                                            }))
+                                            .flatMap(secondResult -> {
+                                                // Check again
+                                                return getKeysWithPrefix(path)
+                                                        .map(keysAfterRetry -> {
+                                                            if (keysAfterRetry != null && !keysAfterRetry.isEmpty()) {
+                                                                LOG.error("Failed to delete keys after second attempt: {}", keysAfterRetry);
+                                                                return false;
+                                                            }
+                                                            return secondResult;
+                                                        });
+                                            });
+                                }
+                                return Mono.just(result);
+                            })
+                            .onErrorResume(e -> {
+                                LOG.error("Error verifying key deletion: {}", path, e);
+                                return Mono.just(false);
+                            });
+                });
     }
 
     /**
@@ -391,13 +391,13 @@ public class ConsulKvService {
                 String encodedKey = encodeKey(key);
 
                 // Use consistent read to ensure we get the latest index
-                org.kiwiproject.consul.option.QueryOptions consistentQueryOptions = 
-                    org.kiwiproject.consul.option.ImmutableQueryOptions.builder()
-                        .consistencyMode(org.kiwiproject.consul.option.ConsistencyMode.CONSISTENT)
-                        .build();
+                org.kiwiproject.consul.option.QueryOptions consistentQueryOptions =
+                        org.kiwiproject.consul.option.ImmutableQueryOptions.builder()
+                                .consistencyMode(org.kiwiproject.consul.option.ConsistencyMode.CONSISTENT)
+                                .build();
 
-                Optional<org.kiwiproject.consul.model.kv.Value> valueOpt = 
-                    keyValueClient.getValue(encodedKey, consistentQueryOptions);
+                Optional<org.kiwiproject.consul.model.kv.Value> valueOpt =
+                        keyValueClient.getValue(encodedKey, consistentQueryOptions);
 
                 if (valueOpt.isPresent()) {
                     long modifyIndex = valueOpt.get().getModifyIndex();
@@ -422,12 +422,13 @@ public class ConsulKvService {
      * For new pipelines (where expectedVersionModifyIndex is 0), this method will use a simple
      * transaction without a CHECK_INDEX operation.
      * <br/>
-     * @param pipelineName              The name of the pipeline.
-     * @param newVersion                The new version number to set.
-     * @param newLastUpdated            The new timestamp to set.
+     *
+     * @param pipelineName               The name of the pipeline.
+     * @param newVersion                 The new version number to set.
+     * @param newLastUpdated             The new timestamp to set.
      * @param expectedVersionModifyIndex The ModifyIndex of the version key read just before attempting this update.
-     * The transaction will fail if the index has changed. Use 0 for new pipelines.
-     * @param otherKeysToSet            An optional map of other full key paths -> values to set atomically. Can be null or empty.
+     *                                   The transaction will fail if the index has changed. Use 0 for new pipelines.
+     * @param otherKeysToSet             An optional map of other full key paths -> values to set atomically. Can be null or empty.
      * @return A Mono emitting true if the CAS transaction succeeded, false otherwise (e.g., CAS check failed or other error).
      */
     public Mono<Boolean> savePipelineUpdateWithCas(
@@ -494,18 +495,18 @@ public class ConsulKvService {
                                 .build());
                         otherKeysLog.add(entry.getKey()); // Log the original key
                     }
-                    LOG.debug("Adding {} other keys to {} transaction: {}", 
-                            otherKeysToSet.size(), 
-                            isNewPipeline ? "new pipeline" : "CAS", 
+                    LOG.debug("Adding {} other keys to {} transaction: {}",
+                            otherKeysToSet.size(),
+                            isNewPipeline ? "new pipeline" : "CAS",
                             otherKeysLog);
                 }
 
                 Operation[] operations = operationList.toArray(new Operation[0]);
 
                 // --- Perform Transaction ---
-                LOG.debug("Executing {} transaction with {} operations for pipeline '{}'", 
+                LOG.debug("Executing {} transaction with {} operations for pipeline '{}'",
                         isNewPipeline ? "new pipeline" : "CAS",
-                        operations.length, 
+                        operations.length,
                         pipelineName);
                 ConsulResponse<TxResponse> response = keyValueClient.performTransaction(operations);
 
@@ -515,8 +516,8 @@ public class ConsulKvService {
                         (response.getResponse().errors() == null || response.getResponse().errors().isEmpty());
 
                 if (success) {
-                    LOG.info("Successfully {} pipeline via transaction for: {}", 
-                            isNewPipeline ? "created" : "updated", 
+                    LOG.info("Successfully {} pipeline via transaction for: {}",
+                            isNewPipeline ? "created" : "updated",
                             pipelineName);
                     return true;
                 } else {
@@ -524,30 +525,31 @@ public class ConsulKvService {
                     String errors = (response != null && response.getResponse() != null && response.getResponse().errors() != null)
                             ? response.getResponse().errors().toString() : "Unknown reason";
 
-                    if (!isNewPipeline && errors.contains("invalid index") || 
-                        (response != null && response.getResponse() != null && 
-                         response.getResponse().errors() != null && 
-                         !response.getResponse().errors().isEmpty() && 
-                         response.getResponse().errors().getFirst().opIndex().get().intValue() == 0)) {
+                    if (!isNewPipeline && errors.contains("invalid index") ||
+                            (response != null && response.getResponse() != null &&
+                                    response.getResponse().errors() != null &&
+                                    !response.getResponse().errors().isEmpty() &&
+                                    response.getResponse().errors().getFirst().opIndex().get().intValue() == 0)) {
                         // This is a CAS check failure for an existing pipeline
-                        LOG.warn("CAS check failed for pipeline update '{}'. Expected index: {}. Errors: {}", 
+                        LOG.warn("CAS check failed for pipeline update '{}'. Expected index: {}. Errors: {}",
                                 pipelineName, expectedVersionModifyIndex, errors);
                     } else {
                         // Other transaction failure
-                        LOG.error("Consul transaction failed for pipeline {}. Errors: {}", 
-                                isNewPipeline ? "creation" : "update", 
+                        LOG.error("Consul transaction failed for pipeline {}. Errors: {}",
+                                isNewPipeline ? "creation" : "update",
                                 errors);
                     }
                     return false; // Transaction failed
                 }
             } catch (Exception e) {
-                LOG.error("Error performing {} transaction for pipeline: {}", 
-                        expectedVersionModifyIndex == 0 ? "new pipeline" : "CAS update", 
+                LOG.error("Error performing {} transaction for pipeline: {}",
+                        expectedVersionModifyIndex == 0 ? "new pipeline" : "CAS update",
                         pipelineName, e);
                 return false; // General error during transaction attempt
             }
         });
     }
+
     /**
      * Gets the version of a pipeline from Consul KV store.
      * This is useful for verifying pipeline state directly in Consul.
@@ -559,17 +561,17 @@ public class ConsulKvService {
         String versionKey = getFullPath("pipeline.configs." + pipelineName + ".version");
         LOG.debug("Getting pipeline version for pipeline '{}' from key: {}", pipelineName, versionKey);
         return getValue(versionKey)
-            .doOnSuccess(versionOpt -> {
-                if (versionOpt.isPresent()) {
-                    LOG.debug("Found version for pipeline '{}': {}", pipelineName, versionOpt.get());
-                } else {
-                    LOG.debug("No version found for pipeline '{}'", pipelineName);
-                }
-            })
-            .onErrorResume(e -> {
-                LOG.error("Error getting version for pipeline '{}': {}", pipelineName, e.getMessage(), e);
-                return Mono.just(Optional.empty());
-            });
+                .doOnSuccess(versionOpt -> {
+                    if (versionOpt.isPresent()) {
+                        LOG.debug("Found version for pipeline '{}': {}", pipelineName, versionOpt.get());
+                    } else {
+                        LOG.debug("No version found for pipeline '{}'", pipelineName);
+                    }
+                })
+                .onErrorResume(e -> {
+                    LOG.error("Error getting version for pipeline '{}': {}", pipelineName, e.getMessage(), e);
+                    return Mono.just(Optional.empty());
+                });
     }
 
     /**
@@ -583,35 +585,35 @@ public class ConsulKvService {
     public Mono<Boolean> ensureKeysDeleted(String prefix) {
         LOG.debug("Ensuring all keys with prefix are deleted: {}", prefix);
         return deleteKeysWithPrefix(prefix)
-            .flatMap(result -> {
-                // Verify that keys were actually deleted
-                return getKeysWithPrefix(prefix)
-                    .flatMap(remainingKeys -> {
-                        if (remainingKeys != null && !remainingKeys.isEmpty()) {
-                            LOG.debug("Keys still exist after initial cleanup: {}", remainingKeys);
-                            // Try one more time
-                            return deleteKeysWithPrefix(prefix)
-                                .flatMap(secondResult -> {
-                                    // Verify again
-                                    return getKeysWithPrefix(prefix)
-                                        .map(keysAfterRetry -> {
-                                            if (keysAfterRetry != null && !keysAfterRetry.isEmpty()) {
-                                                LOG.debug("Keys still exist after second cleanup attempt: {}", keysAfterRetry);
-                                                return false;
-                                            }
-                                            LOG.debug("Successfully deleted all keys with prefix: {}", prefix);
-                                            return true;
-                                        });
-                                });
-                        }
-                        LOG.debug("Verified no keys exist with prefix: {}", prefix);
-                        return Mono.just(true);
-                    })
-                    .onErrorResume(e -> {
-                        LOG.error("Error verifying key deletion: {}", prefix, e);
-                        return Mono.just(false);
-                    });
-            });
+                .flatMap(result -> {
+                    // Verify that keys were actually deleted
+                    return getKeysWithPrefix(prefix)
+                            .flatMap(remainingKeys -> {
+                                if (remainingKeys != null && !remainingKeys.isEmpty()) {
+                                    LOG.debug("Keys still exist after initial cleanup: {}", remainingKeys);
+                                    // Try one more time
+                                    return deleteKeysWithPrefix(prefix)
+                                            .flatMap(secondResult -> {
+                                                // Verify again
+                                                return getKeysWithPrefix(prefix)
+                                                        .map(keysAfterRetry -> {
+                                                            if (keysAfterRetry != null && !keysAfterRetry.isEmpty()) {
+                                                                LOG.debug("Keys still exist after second cleanup attempt: {}", keysAfterRetry);
+                                                                return false;
+                                                            }
+                                                            LOG.debug("Successfully deleted all keys with prefix: {}", prefix);
+                                                            return true;
+                                                        });
+                                            });
+                                }
+                                LOG.debug("Verified no keys exist with prefix: {}", prefix);
+                                return Mono.just(true);
+                            })
+                            .onErrorResume(e -> {
+                                LOG.error("Error verifying key deletion: {}", prefix, e);
+                                return Mono.just(false);
+                            });
+                });
     }
 
     @PreDestroy

@@ -26,16 +26,16 @@ protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "p
 grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
 grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
 grpc-protocGen = { module = "io.grpc:protoc-gen-grpc-java", version.ref = "grpc" }
-protobufcommon = { module = "com.google.api.grpc:proto-google-common-protos", version.ref="proto-common" }
-protobuf-util = { module = "com.google.protobuf:protobuf-java-util", version.ref="protobuf" }
+protobufcommon = { module = "com.google.api.grpc:proto-google-common-protos", version.ref = "proto-common" }
+protobuf-util = { module = "com.google.protobuf:protobuf-java-util", version.ref = "protobuf" }
 
 # Testing with explicit versions
 junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit" }
 
 # Amazon
-amazon-glue = {  module = "software.amazon.glue:schema-registry-serde", version.ref = "amazonGlueSerde" }
-amazon-msk-iam = { module = "software.amazon.msk:aws-msk-iam-auth", version.ref = "amazonMskIamAuth"}
+amazon-glue = { module = "software.amazon.glue:schema-registry-serde", version.ref = "amazonGlueSerde" }
+amazon-msk-iam = { module = "software.amazon.msk:aws-msk-iam-auth", version.ref = "amazonMskIamAuth" }
 amazon-connection-client = { module = "software.amazon.awssdk:url-connection-client", version.ref = "amazonConnection" }
 # Other libraries
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }

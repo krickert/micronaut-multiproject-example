@@ -1,12 +1,10 @@
 package com.krickert.search.config.consul.validator;
 
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.krickert.search.config.pipeline.model.*;
-// Explicit model imports for clarity
+import com.krickert.search.config.pipeline.model.PipelineStepConfig.JsonConfigOptions;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig.OutputTarget;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig.ProcessorInfo;
-import com.krickert.search.config.pipeline.model.PipelineStepConfig.JsonConfigOptions;
-
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -47,7 +45,7 @@ class IntraPipelineLoopValidatorTest {
         return new OutputTarget(targetStepName, TransportType.KAFKA, null,
                 new KafkaTransportConfig(topic, Collections.emptyMap()));
     }
-    
+
     // Helper to create an OutputTarget for Internal/gRPC (if targetStepName is enough)
     private OutputTarget internalOutput(String targetStepName) {
         return new OutputTarget(targetStepName, TransportType.INTERNAL, null, null);
@@ -94,7 +92,7 @@ class IntraPipelineLoopValidatorTest {
     @Test
     void validate_noPipelines_returnsNoErrors() {
         PipelineClusterConfig clusterConfig = new PipelineClusterConfig(
-            "test-cluster", new PipelineGraphConfig(Collections.emptyMap()), null, null, Collections.emptySet(), Collections.emptySet()
+                "test-cluster", new PipelineGraphConfig(Collections.emptyMap()), null, null, Collections.emptySet(), Collections.emptySet()
         );
         List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
         assertTrue(errors.isEmpty(), "Cluster with no pipelines should not produce errors");
@@ -183,7 +181,9 @@ class IntraPipelineLoopValidatorTest {
 
     @Test
     void validate_threeStepLoop_returnsError() {
-        String t12 = "t12"; String t23 = "t23"; String t31 = "t31";
+        String t12 = "t12";
+        String t23 = "t23";
+        String t31 = "t31";
         ProcessorInfo p1 = internalBeanProcessor("b1");
         ProcessorInfo p2 = internalBeanProcessor("b2");
         ProcessorInfo p3 = internalBeanProcessor("b3");
@@ -199,10 +199,10 @@ class IntraPipelineLoopValidatorTest {
         assertFalse(errors.isEmpty(), "Three-step loop should produce an error.");
         assertTrue(errors.get(0).contains("Intra-pipeline loop detected"));
         assertTrue(errors.get(0).contains("s1 -> s2 -> s3 -> s1") || // Order might vary
-                   errors.get(0).contains("s2 -> s3 -> s1 -> s2") ||
-                   errors.get(0).contains("s3 -> s1 -> s2 -> s3"));
+                errors.get(0).contains("s2 -> s3 -> s1 -> s2") ||
+                errors.get(0).contains("s3 -> s1 -> s2 -> s3"));
     }
-    
+
     @Test
     void validate_topicResolutionWithPlaceholders_noLoop() {
         ProcessorInfo pi1 = internalBeanProcessor("beanRes1");

@@ -22,5 +22,7 @@
   },
   "defaultPipelineName": "empty-pipeline",
   "allowedKafkaTopics": [],
-  "allowedGrpcServices": ["placeholder-service"]
+  "allowedGrpcServices": [
+    "placeholder-service"
+  ]
 }

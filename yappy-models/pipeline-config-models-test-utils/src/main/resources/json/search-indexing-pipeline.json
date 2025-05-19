@@ -14,7 +14,13 @@
               "jsonConfig": {
                 "directory": "/data/incoming",
                 "pollingIntervalMs": 5000,
-                "filePatterns": ["*.pdf", "*.docx", "*.txt", "*.html", "*.xml"]
+                "filePatterns": [
+                  "*.pdf",
+                  "*.docx",
+                  "*.txt",
+                  "*.html",
+                  "*.xml"
+                ]
               }
             },
             "processorInfo": {
@@ -47,7 +53,9 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["search.files.incoming"],
+                "listenTopics": [
+                  "search.files.incoming"
+                ],
                 "consumerGroupId": "document-parser-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest",
@@ -96,7 +104,9 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["search.documents.parsed"],
+                "listenTopics": [
+                  "search.documents.parsed"
+                ],
                 "consumerGroupId": "text-analyzer-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -144,7 +154,9 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["search.documents.analyzed"],
+                "listenTopics": [
+                  "search.documents.analyzed"
+                ],
                 "consumerGroupId": "search-indexer-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -181,7 +193,9 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["search.errors"],
+                "listenTopics": [
+                  "search.errors"
+                ],
                 "consumerGroupId": "error-handler-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"

@@ -28,5 +28,7 @@
   },
   "defaultPipelineName": "minimal-pipeline",
   "allowedKafkaTopics": [],
-  "allowedGrpcServices": ["minimal-service"]
+  "allowedGrpcServices": [
+    "minimal-service"
+  ]
 }

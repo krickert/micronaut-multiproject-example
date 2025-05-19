@@ -1,9 +1,13 @@
 # Project Guidelines for YAPPY (Yet Another Pipeline Processor: YAPPY)
 
 ## Project Overview
-YAPPY is a multi-project Micronaut application that serves as a configurable pipeline platform for creating multiple indexes through a scalable container-based microservice architecture. The system is designed for processing data pipelines with a decentralized approach where information is shared between components in a control plane and configuration changes happen in near real-time.
+
+YAPPY is a multi-project Micronaut application that serves as a configurable pipeline platform for creating multiple indexes through a
+scalable container-based microservice architecture. The system is designed for processing data pipelines with a decentralized approach where
+information is shared between components in a control plane and configuration changes happen in near real-time.
 
 The goal is to provide a low-cost, free, enterprise-grade secure document index with the following mission goals:
+
 1. Easy to install - deployable to either a cloud environment or a localized laptop for development
 2. Free - built with 100% open source projects
 3. Streaming orchestration - documents are indexed through a network of pipelines either synchronously or asynchronously
@@ -14,44 +18,54 @@ The goal is to provide a low-cost, free, enterprise-grade secure document index 
 8. Secure - utilizes multiple configurable security standards
 
 ## Architecture Overview
+
 The system is designed with a modular architecture following these core principles:
-- **Decoupled Configuration**: Pipeline structure, module definitions, and schema definitions are managed as distinct but related data models
-- **Centralized Schema Management**: Custom configuration schemas for pipeline modules are stored and versioned in a dedicated "Schema Registry"
+
+- **Decoupled Configuration**: Pipeline structure, module definitions, and schema definitions are managed as distinct but related data
+  models
+- **Centralized Schema Management**: Custom configuration schemas for pipeline modules are stored and versioned in a dedicated "Schema
+  Registry"
 - **Modularity**: The system is divided into logical modules
-- **Framework Agnostic Models**: The core data models are plain Java objects using Jackson for JSON serialization and Lombok for boilerplate reduction
+- **Framework Agnostic Models**: The core data models are plain Java objects using Jackson for JSON serialization and Lombok for boilerplate
+  reduction
 - **Live Configuration**: The system allows for live updates to configurations
 
 ### Key Components
+
 1. **Configuration Management Subsystem**:
-   - **DynamicConfigurationManager**: Orchestrates loading, validation, caching, and live updates from Consul
-   - **ConsulConfigFetcher**: Connects to Consul, fetches KVs, deserializes JSON, and implements live watches
-   - **ConfigurationValidator**: Validates configurations including referential integrity, schema validation, and loop detection
-   - **InMemoryCachedConfigHolder**: Provides thread-safe, atomic caching
+    - **DynamicConfigurationManager**: Orchestrates loading, validation, caching, and live updates from Consul
+    - **ConsulConfigFetcher**: Connects to Consul, fetches KVs, deserializes JSON, and implements live watches
+    - **ConfigurationValidator**: Validates configurations including referential integrity, schema validation, and loop detection
+    - **InMemoryCachedConfigHolder**: Provides thread-safe, atomic caching
 
 2. **Pipeline Execution System**:
-   - **PipeStreamEngine**: Central orchestrator service that manages pipeline execution
-   - **PipeStepProcessor**: Interface implemented by individual processing steps
-   - **Pipeline Models**: Core data structures like PipeDoc, Blob, PipeStream, and HistoryEntry
+    - **PipeStreamEngine**: Central orchestrator service that manages pipeline execution
+    - **PipeStepProcessor**: Interface implemented by individual processing steps
+    - **Pipeline Models**: Core data structures like PipeDoc, Blob, PipeStream, and HistoryEntry
 
 3. **gRPC Communication**:
-   - Services communicate using gRPC for efficient cross-service communication
-   - Protocol Buffers are used for strongly-typed data contracts
+    - Services communicate using gRPC for efficient cross-service communication
+    - Protocol Buffers are used for strongly-typed data contracts
 
 ## Project Structure
+
 - **Root Directory**: Contains build configuration, documentation, and subproject definitions
 - **bom**: Bill of Materials for centralized dependency management
 - **docker-dev**: Docker development environment setup
 - **docs**: Project documentation
 - **util**: Utility code and shared functionality
-- **yappy-consul-config**: Dynamic Configuration Management Service for loading, watching, validating, and providing live updates of pipeline and schema configurations stored in Consul
+- **yappy-consul-config**: Dynamic Configuration Management Service for loading, watching, validating, and providing live updates of
+  pipeline and schema configurations stored in Consul
 - **yappy-models**: Contains multiple submodules:
-  - **pipeline-config-models**: Defines the structure of pipelines, steps, and their configurations
-  - **schema-registry-models**: Defines the structure of schema artifacts and their versions
-  - **protobuf-models**: Protocol Buffer model definitions for gRPC communication
+    - **pipeline-config-models**: Defines the structure of pipelines, steps, and their configurations
+    - **schema-registry-models**: Defines the structure of schema artifacts and their versions
+    - **protobuf-models**: Protocol Buffer model definitions for gRPC communication
 - **yappy-test-resources**: TestContainers configuration and test resources
 
 ## Development Environment
+
 A Docker-based development environment is available in the `docker-dev` directory, which includes:
+
 - **Kafka** (in Kraft mode): Message broker (localhost:9092)
 - **Apicurio Registry**: Schema registry (http://localhost:8080)
 - **Solr** (in cloud mode): Search platform (http://localhost:8983)
@@ -60,98 +74,107 @@ A Docker-based development environment is available in the `docker-dev` director
 - **Consul**: Service discovery and configuration storage
 
 To start the development environment:
+
 ```bash
 cd docker-dev
 docker-compose up -d
 ```
 
 To stop all services:
+
 ```bash
 cd docker-dev
 docker-compose down
 ```
 
 To verify the setup:
+
 ```bash
 cd docker-dev
 ./test-docker-setup.sh
 ```
 
 ## Testing Guidelines
+
 1. **Running Tests**:
-   - Tests should be run using the standard Gradle test task: `./gradlew test`
-   - For specific modules: `./gradlew :module-name:test`
-   - For specific tests: `./gradlew :module-name:test --tests "com.krickert.search.TestClass"`
+    - Tests should be run using the standard Gradle test task: `./gradlew test`
+    - For specific modules: `./gradlew :module-name:test`
+    - For specific tests: `./gradlew :module-name:test --tests "com.krickert.search.TestClass"`
 
 2. **Test Structure**:
-   - Unit tests should be placed in the same package as the class being tested
-   - Integration tests should be placed in a separate package with "integration" in the name
-   - Use Micronaut's testing support for integration tests
-   - Use TestContainers for tests that require external services
+    - Unit tests should be placed in the same package as the class being tested
+    - Integration tests should be placed in a separate package with "integration" in the name
+    - Use Micronaut's testing support for integration tests
+    - Use TestContainers for tests that require external services
 
 3. **TestContainers Configuration**:
-   - TestContainers can be enabled or disabled globally or individually using configuration properties
-   - Available containers include Kafka, Consul, Moto, and Apicurio
-   - Configure in your `application-test.yml` file:
-     ```yaml
-     testcontainers:
-       enabled: true  # Global setting
-       kafka: true    # Enable Kafka container
-       moto: false    # Disable Moto container
-       consul: true   # Enable Consul container
-       apicurio: true # Enable Apicurio container
-     ```
+    - TestContainers can be enabled or disabled globally or individually using configuration properties
+    - Available containers include Kafka, Consul, Moto, and Apicurio
+    - Configure in your `application-test.yml` file:
+      ```yaml
+      testcontainers:
+        enabled: true  # Global setting
+        kafka: true    # Enable Kafka container
+        moto: false    # Disable Moto container
+        consul: true   # Enable Consul container
+        apicurio: true # Enable Apicurio container
+      ```
 
 4. **Test Verification**:
-   - Always run tests to verify changes
-   - Ensure all tests pass before submitting changes
-   - Add new tests for new functionality
+    - Always run tests to verify changes
+    - Ensure all tests pass before submitting changes
+    - Add new tests for new functionality
 
 ## Build Guidelines
+
 1. **Building the Project**:
-   - Use Gradle with the Kotlin DSL: `./gradlew build`
-   - For specific modules: `./gradlew :module-name:build`
+    - Use Gradle with the Kotlin DSL: `./gradlew build`
+    - For specific modules: `./gradlew :module-name:build`
 
 2. **Dependency Management**:
-   - Use the BOM for centralized dependency management
-   - Add new dependencies to the appropriate module's build.gradle.kts file
-   - Use the libs.versions.toml file for version management
-   - Always favor the Micronaut BOM for Micronaut dependencies
+    - Use the BOM for centralized dependency management
+    - Add new dependencies to the appropriate module's build.gradle.kts file
+    - Use the libs.versions.toml file for version management
+    - Always favor the Micronaut BOM for Micronaut dependencies
 
 ## Code Style Guidelines
+
 1. **Java Version**: The project uses Java 21
 2. **Testing Framework**: JUnit 5 with Micronaut's testing support
 3. **Logging**: Use SLF4J with Logback
 4. **Documentation**: Document public APIs with Javadoc
 5. **Naming Conventions**:
-   - Classes: PascalCase
-   - Methods and variables: camelCase
-   - Constants: UPPER_SNAKE_CASE
+    - Classes: PascalCase
+    - Methods and variables: camelCase
+    - Constants: UPPER_SNAKE_CASE
 6. **Error Handling**:
-   - Use appropriate exception types
-   - Log exceptions with context information
-   - Provide meaningful error messages
+    - Use appropriate exception types
+    - Log exceptions with context information
+    - Provide meaningful error messages
 
 ## Pipeline Development Guidelines
+
 1. **Pipeline Configuration**:
-   - Pipelines are defined in the `PipelineClusterConfig` model
-   - Each pipeline consists of multiple steps defined in `PipelineStepConfig`
-   - Steps can be connected via explicit `nextSteps`/`errorSteps` or through Kafka topics
+    - Pipelines are defined in the `PipelineClusterConfig` model
+    - Each pipeline consists of multiple steps defined in `PipelineStepConfig`
+    - Steps can be connected via explicit `nextSteps`/`errorSteps` or through Kafka topics
 
 2. **Implementing Pipeline Steps**:
-   - Implement the `PipeStepProcessor` gRPC service interface
-   - Focus on implementing the `ProcessDocument` method
-   - Handle the input document, perform processing, and return the updated document
-   - Use the provided configuration parameters for customization
+    - Implement the `PipeStepProcessor` gRPC service interface
+    - Focus on implementing the `ProcessDocument` method
+    - Handle the input document, perform processing, and return the updated document
+    - Use the provided configuration parameters for customization
 
 3. **New Service Guidelines**:
-   - Implement the `PipelineService` interface
-   - Create a test for that service
-   - Add the service to the appropriate module
-   - Create a unit test that will automatically test the forwarding and processing of messages by extending "AbstractPipelineTest"
+    - Implement the `PipelineService` interface
+    - Create a test for that service
+    - Add the service to the appropriate module
+    - Create a unit test that will automatically test the forwarding and processing of messages by extending "AbstractPipelineTest"
 
 ## Working with Junie
+
 When working with Junie on this project:
+
 1. **Run Tests**: Always run tests to verify changes
 2. **Check Build**: Ensure the project builds successfully
 3. **Follow Code Style**: Adhere to the project's code style guidelines
@@ -159,6 +182,7 @@ When working with Junie on this project:
 5. **Consider Dependencies**: Be aware of dependencies between modules
 
 ## Additional Resources
+
 - [Micronaut Documentation](https://docs.micronaut.io/)
 - [Gradle Documentation](https://docs.gradle.org/)
 - [Protocol Buffers Documentation](https://developers.google.com/protocol-buffers)

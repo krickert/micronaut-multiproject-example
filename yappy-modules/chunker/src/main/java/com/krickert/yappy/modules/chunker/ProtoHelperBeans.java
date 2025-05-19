@@ -9,12 +9,12 @@ import io.micronaut.context.annotation.Factory;
 public class ProtoHelperBeans {
 
     @Bean
-    PathResolver pathResolver () {
+    PathResolver pathResolver() {
         return new PathResolver();
     }
 
     @Bean
-    ValueHandler valueHandler () {
+    ValueHandler valueHandler() {
         return new ValueHandler(pathResolver());
     }
 }

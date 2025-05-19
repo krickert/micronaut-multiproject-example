@@ -9,8 +9,6 @@ import org.testcontainers.utility.DockerImageName;
 import java.util.*;
 
 public class ConsulTestResourceProvider extends AbstractTestContainersProvider<ConsulContainer> {
-    private static final Logger LOG = LoggerFactory.getLogger(ConsulTestResourceProvider.class);
-
     // ... (Keep constants like TESTCONTAINERS_PREFIX, CLIENT_PREFIX, etc.)
     public static final String TESTCONTAINERS_PREFIX = "testcontainers";
     public static final String PROPERTY_TESTCONTAINERS_ENABLED = TESTCONTAINERS_PREFIX + ".enabled";
@@ -25,7 +23,6 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
     public static final String REGISTRATION_PREFIX = "consul.client.registration";
     public static final String PROPERTY_CONSUL_REGISTRATION_HOST = REGISTRATION_PREFIX + ".host";
     public static final String PROPERTY_CONSUL_REGISTRATION_PORT = REGISTRATION_PREFIX + ".port";
-
     public static final List<String> RESOLVABLE_PROPERTIES_LIST = Collections.unmodifiableList(Arrays.asList(
             PROPERTY_CONSUL_CLIENT_HOST,
             PROPERTY_CONSUL_CLIENT_PORT,
@@ -35,13 +32,12 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
             PROPERTY_CONSUL_REGISTRATION_HOST,
             PROPERTY_CONSUL_REGISTRATION_PORT
     ));
-
     public static final String HASHICORP_CONSUL_KV_PROPERTIES_KEY = "containers.hashicorp-consul.kv-properties";
     public static final String DEFAULT_IMAGE = "hashicorp/consul"; // Consider specifying a version, e.g., "hashicorp/consul:1.18"
     public static final int CONSUL_HTTP_PORT = 8500;
     public static final String SIMPLE_NAME = "hashicorp-consul";
     public static final String DISPLAY_NAME = "Consul";
-
+    private static final Logger LOG = LoggerFactory.getLogger(ConsulTestResourceProvider.class);
 
     // ... (Keep getResolvableProperties, getDisplayName, getSimpleName, getDefaultImageName methods as is) ...
     @Override

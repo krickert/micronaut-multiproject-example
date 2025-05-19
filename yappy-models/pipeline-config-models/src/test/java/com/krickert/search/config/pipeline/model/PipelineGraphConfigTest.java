@@ -1,6 +1,5 @@
 package com.krickert.search.config.pipeline.model;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
@@ -9,15 +8,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects; // Added for Objects.requireNonNull in helper (though not strictly needed for this fix)
-import java.util.Set;    // Added for testJsonPropertyNames_WithNewModel
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -298,7 +293,7 @@ class PipelineGraphConfigTest {
                 "next-step-id",
                 TransportType.KAFKA,
                 null,
-                new KafkaTransportConfig("topic-for-next-step", Map.of("prop","val"))
+                new KafkaTransportConfig("topic-for-next-step", Map.of("prop", "val"))
         ));
         outputs.put("error", new PipelineStepConfig.OutputTarget(
                 "error-step-id",
@@ -385,68 +380,68 @@ class PipelineGraphConfigTest {
     @Test
     void testLoadFromJsonFile_WithNewModel() throws Exception {
         String jsonToLoad = """
-        {
-          "pipelines": {
-            "dataIngestionPipeline": {
-              "name": "dataIngestionPipeline",
-              "pipelineSteps": {
-                "receiveRawData": {
-                  "stepName": "receiveRawData",
-                  "stepType": "INITIAL_PIPELINE",
-                  "description": "Receives raw data",
-                  "customConfigSchemaId": "rawDocEventSchema_v1",
-                  "customConfig": {
-                    "jsonConfig": {"validationSchemaId":"rawDocEventSchema_v1"}
-                  },
-                  "processorInfo": {
-                    "internalProcessorBeanName": "kafkaGenericIngestor"
-                  },
-                  "maxRetries": 1,
-                  "outputs": {
-                    "default": {
-                      "targetStepName": "normalizeData",
-                      "transportType": "INTERNAL"
-                    },
-                    "onError": {
-                      "targetStepName": "logIngestionError",
-                      "transportType": "INTERNAL"
+                {
+                  "pipelines": {
+                    "dataIngestionPipeline": {
+                      "name": "dataIngestionPipeline",
+                      "pipelineSteps": {
+                        "receiveRawData": {
+                          "stepName": "receiveRawData",
+                          "stepType": "INITIAL_PIPELINE",
+                          "description": "Receives raw data",
+                          "customConfigSchemaId": "rawDocEventSchema_v1",
+                          "customConfig": {
+                            "jsonConfig": {"validationSchemaId":"rawDocEventSchema_v1"}
+                          },
+                          "processorInfo": {
+                            "internalProcessorBeanName": "kafkaGenericIngestor"
+                          },
+                          "maxRetries": 1,
+                          "outputs": {
+                            "default": {
+                              "targetStepName": "normalizeData",
+                              "transportType": "INTERNAL"
+                            },
+                            "onError": {
+                              "targetStepName": "logIngestionError",
+                              "transportType": "INTERNAL"
+                            }
+                          }
+                        },
+                        "normalizeData": {
+                          "stepName": "normalizeData",
+                          "stepType": "PIPELINE",
+                          "description": "Normalizes data",
+                          "processorInfo": { "internalProcessorBeanName": "normalizer" },
+                          "outputs": {
+                            "default": { "targetStepName": "enrichData", "transportType": "INTERNAL" }
+                          }
+                        },
+                        "enrichData": {
+                          "stepName": "enrichData",
+                          "stepType": "PIPELINE",
+                          "description": "Enriches data",
+                          "processorInfo": { "grpcServiceName": "geo-enrichment-grpc-service" },
+                          "outputs": {
+                            "default": {
+                               "targetStepName": "chunkText",
+                               "transportType": "GRPC",
+                               "grpcTransport": {"serviceName": "chunker-service", "grpcClientProperties": {"timeout": "10s"}}
+                            }
+                          }
+                        },
+                        "logIngestionError": {
+                            "stepName": "logIngestionError",
+                            "stepType": "SINK",
+                            "description": "Logs errors",
+                            "processorInfo": {"internalProcessorBeanName": "errorLogger"},
+                            "outputs": {}
+                        }
+                      }
                     }
                   }
-                },
-                "normalizeData": {
-                  "stepName": "normalizeData",
-                  "stepType": "PIPELINE",
-                  "description": "Normalizes data",
-                  "processorInfo": { "internalProcessorBeanName": "normalizer" },
-                  "outputs": {
-                    "default": { "targetStepName": "enrichData", "transportType": "INTERNAL" }
-                  }
-                },
-                "enrichData": {
-                  "stepName": "enrichData",
-                  "stepType": "PIPELINE",
-                  "description": "Enriches data",
-                  "processorInfo": { "grpcServiceName": "geo-enrichment-grpc-service" },
-                  "outputs": {
-                    "default": {
-                       "targetStepName": "chunkText",
-                       "transportType": "GRPC",
-                       "grpcTransport": {"serviceName": "chunker-service", "grpcClientProperties": {"timeout": "10s"}}
-                    }
-                  }
-                },
-                "logIngestionError": {
-                    "stepName": "logIngestionError",
-                    "stepType": "SINK",
-                    "description": "Logs errors",
-                    "processorInfo": {"internalProcessorBeanName": "errorLogger"},
-                    "outputs": {}
                 }
-              }
-            }
-          }
-        }
-        """;
+                """;
         PipelineGraphConfig graphConfig = objectMapper.readValue(new ByteArrayInputStream(jsonToLoad.getBytes(StandardCharsets.UTF_8)), PipelineGraphConfig.class);
 
         assertNotNull(graphConfig.pipelines(), "Pipelines map should not be null");

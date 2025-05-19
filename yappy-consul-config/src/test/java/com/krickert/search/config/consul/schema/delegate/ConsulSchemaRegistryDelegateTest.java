@@ -29,17 +29,6 @@ import static org.mockito.Mockito.when;
 @Property(name = "consul.client.config.path", value = "test/config/pipeline")
 class ConsulSchemaRegistryDelegateTest {
 
-    ConsulKvService mockConsulKvService;
-
-    @Inject
-    ObjectMapper objectMapper;
-
-    @Inject
-    @Property(name = "consul.client.config.path")
-    String baseConfigPath;
-
-    ConsulSchemaRegistryDelegate delegate;
-
     private final String TEST_SCHEMA_ID = "test-schema-1";
     private final String VALID_SCHEMA_CONTENT_MINIMAL = "{\"type\": \"object\"}";
     private final String INVALID_JSON_CONTENT = "{ type: \"object\" }"; // Malformed JSON
@@ -47,7 +36,13 @@ class ConsulSchemaRegistryDelegateTest {
     private final String STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_PATTERN = "{\"type\": \"string\", \"pattern\": \"([\"}"; // Invalid regex
     private final String STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_REF = "{\"$ref\": \"#/definitions/nonExistent\"}"; // Unresolvable local ref, but networknt is lenient on this during syntax check
     private final String SCHEMA_WITH_UNKNOWN_KEYWORD = "{\"invalid_prop\": \"object\", \"type\": \"object\"}"; // Unknown keyword, networknt is lenient on this during syntax check
-
+    ConsulKvService mockConsulKvService;
+    @Inject
+    ObjectMapper objectMapper;
+    @Inject
+    @Property(name = "consul.client.config.path")
+    String baseConfigPath;
+    ConsulSchemaRegistryDelegate delegate;
     private String expectedFullSchemaPrefix;
 
     @BeforeEach

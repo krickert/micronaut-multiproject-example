@@ -4,8 +4,12 @@
   "customConfig": {
     "jsonConfig": "{\"validationLevel\":\"strict\", \"checkBlacklist\":true}"
   },
-  "nextSteps": ["updateUserRecord"],
-  "errorSteps": ["suspendUserAccount"],
+  "nextSteps": [
+    "updateUserRecord"
+  ],
+  "errorSteps": [
+    "suspendUserAccount"
+  ],
   "transportType": "GRPC",
   "kafkaConfig": null,
   "grpcConfig": {

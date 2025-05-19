@@ -3,8 +3,6 @@ package com.krickert.search.model.mapper;
 import com.google.protobuf.*;
 import com.krickert.search.model.Embedding;
 import com.krickert.search.model.PipeDoc;
-import com.krickert.search.model.SemanticChunk;
-import com.krickert.search.model.ChunkEmbedding;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -171,7 +169,7 @@ class ValueHandlerTest {
         Object value = valueHandler.getValue(emptySource, "named_embeddings", "ruleMapEmpty");
         assertNotNull(value);
         assertInstanceOf(Map.class, value);
-        assertTrue(((Map<?,?>)value).isEmpty());
+        assertTrue(((Map<?, ?>) value).isEmpty());
     }
 
     @Test
@@ -180,7 +178,7 @@ class ValueHandlerTest {
         Object value = valueHandler.getValue(emptySource, "keywords", "ruleListEmpty");
         assertNotNull(value);
         assertInstanceOf(List.class, value);
-        assertTrue(((List<?>)value).isEmpty());
+        assertTrue(((List<?>) value).isEmpty());
     }
 
     @Test
@@ -401,7 +399,7 @@ class ValueHandlerTest {
                 .addValues(Value.newBuilder().setStringValue("a"))
                 .addValues(Value.newBuilder().setBoolValue(true))
                 .addValues(Value.newBuilder().setNumberValue(123.0))
-                ).build();
+        ).build();
 
         valueHandler.setValue(targetBuilder, path, sourceValue, "=", "ruleSetStructList");
 
@@ -418,7 +416,7 @@ class ValueHandlerTest {
         Value expectedValueProto = Value.newBuilder().setStructValue(Struct.newBuilder()
                 .putFields("innerStr", Value.newBuilder().setStringValue("hello").build())
                 .putFields("innerNum", Value.newBuilder().setNumberValue(42.0).build())
-                ).build();
+        ).build();
 
         valueHandler.setValue(targetBuilder, path, sourceMap, "=", "ruleSetStructMap");
 

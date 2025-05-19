@@ -1,6 +1,7 @@
 package com.krickert.search.config.pipeline.model; // Or your chosen package
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+
 /**
  * Defines the transport mechanism for a pipeline step.
  */

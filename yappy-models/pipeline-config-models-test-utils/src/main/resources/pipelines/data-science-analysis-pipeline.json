@@ -63,7 +63,9 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["data.science.raw"],
+                "listenTopics": [
+                  "data.science.raw"
+                ],
                 "consumerGroupId": "data-cleaner-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest",
@@ -115,7 +117,9 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["data.science.cleaned"],
+                "listenTopics": [
+                  "data.science.cleaned"
+                ],
                 "consumerGroupId": "feature-engineering-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -165,18 +169,28 @@
             "customConfigSchemaId": "model-training-schema",
             "customConfig": {
               "jsonConfig": {
-                "algorithms": ["random-forest", "gradient-boosting", "neural-network"],
+                "algorithms": [
+                  "random-forest",
+                  "gradient-boosting",
+                  "neural-network"
+                ],
                 "hyperparameterTuning": {
                   "method": "grid-search",
                   "crossValidationFolds": 5
                 },
-                "evaluationMetrics": ["accuracy", "f1", "roc_auc"],
+                "evaluationMetrics": [
+                  "accuracy",
+                  "f1",
+                  "roc_auc"
+                ],
                 "saveModelPath": "/models/trained"
               }
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["data.science.features.training"],
+                "listenTopics": [
+                  "data.science.features.training"
+                ],
                 "consumerGroupId": "model-training-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -224,7 +238,9 @@
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["data.science.features.prediction"],
+                "listenTopics": [
+                  "data.science.features.prediction"
+                ],
                 "consumerGroupId": "model-prediction-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -312,13 +328,18 @@
               "jsonConfig": {
                 "outputFormat": "parquet",
                 "outputPath": "/data/results",
-                "partitionBy": ["date", "model_version"],
+                "partitionBy": [
+                  "date",
+                  "model_version"
+                ],
                 "compressionCodec": "snappy"
               }
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["data.science.predictions"],
+                "listenTopics": [
+                  "data.science.predictions"
+                ],
                 "consumerGroupId": "results-processor-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"
@@ -339,13 +360,18 @@
               "jsonConfig": {
                 "errorLogPath": "/var/log/data-science/errors",
                 "alertThreshold": 10,
-                "alertChannels": ["email", "slack"],
+                "alertChannels": [
+                  "email",
+                  "slack"
+                ],
                 "retryEnabled": true
               }
             },
             "kafkaInputs": [
               {
-                "listenTopics": ["data.science.errors"],
+                "listenTopics": [
+                  "data.science.errors"
+                ],
                 "consumerGroupId": "data-error-handler-group",
                 "kafkaConsumerProperties": {
                   "auto.offset.reset": "earliest"

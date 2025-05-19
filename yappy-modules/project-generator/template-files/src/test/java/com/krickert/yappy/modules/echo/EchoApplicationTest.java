@@ -1,4 +1,4 @@
-package @@BASE_PACKAGE@@;
+package@ @BASE_PACKAGE @ @;
 
 import io.micronaut.runtime.EmbeddedApplication;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
@@ -7,14 +7,15 @@ import org.junit.jupiter.api.Assertions;
 
 import jakarta.inject.Inject;
 
-@MicronautTest
-class @@MODULE_NAME_PASCAL_CASE@@ApplicationTest {
+@MicronautTest class
+
+@ @MODULE_NAME_PASCAL_CASE @ @ApplicationTest {
 
     @Inject
     EmbeddedApplication<?> application;
 
     @Test
-    void testItWorks() {
+    void testItWorks () {
         Assertions.assertTrue(application.isRunning());
     }
 

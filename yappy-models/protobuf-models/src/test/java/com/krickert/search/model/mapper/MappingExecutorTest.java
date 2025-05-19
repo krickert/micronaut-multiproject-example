@@ -127,9 +127,9 @@ class MappingExecutorTest {
         List<String> invalidRules = Collections.singletonList("invalid rule syntax = =");
 
         // This should throw a MappingException
-        MappingException e = assertThrows(MappingException.class, 
+        MappingException e = assertThrows(MappingException.class,
                 () -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, invalidRules));
-        
+
         assertTrue(e.getMessage().contains("Invalid") || e.getMessage().contains("syntax"));
     }
 
@@ -138,9 +138,9 @@ class MappingExecutorTest {
         List<String> rules = Collections.singletonList("title = non_existent_field");
 
         // This should throw a MappingException
-        MappingException e = assertThrows(MappingException.class, 
+        MappingException e = assertThrows(MappingException.class,
                 () -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, rules));
-        
+
         assertTrue(e.getMessage().contains("Field not found") || e.getMessage().contains("Cannot resolve path"));
     }
 
@@ -149,9 +149,9 @@ class MappingExecutorTest {
         List<String> rules = Collections.singletonList("non_existent_field = title");
 
         // This should throw a MappingException
-        MappingException e = assertThrows(MappingException.class, 
+        MappingException e = assertThrows(MappingException.class,
                 () -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, rules));
-        
+
         assertTrue(e.getMessage().contains("Field not found") || e.getMessage().contains("Cannot resolve path"));
     }
 
@@ -160,9 +160,9 @@ class MappingExecutorTest {
         List<String> rules = Collections.singletonList("creation_date = title"); // String -> Timestamp
 
         // This should throw a MappingException
-        MappingException e = assertThrows(MappingException.class, 
+        MappingException e = assertThrows(MappingException.class,
                 () -> mappingExecutor.applyRulesToBuilder(sourceMessage, targetBuilder, rules));
-        
+
         assertTrue(e.getMessage().contains("Type mismatch") || e.getMessage().contains("Cannot convert"));
     }
 

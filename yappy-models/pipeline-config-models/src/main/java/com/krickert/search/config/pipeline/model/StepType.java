@@ -11,13 +11,13 @@ public enum StepType {
      * Standard pipeline step that can have both inputs and outputs.
      */
     PIPELINE,
-    
+
     /**
      * Initial pipeline step that can only have outputs, not inputs.
      * These steps serve as entry points to the pipeline.
      */
     INITIAL_PIPELINE,
-    
+
     /**
      * Terminal pipeline step that can have inputs but no outputs.
      */

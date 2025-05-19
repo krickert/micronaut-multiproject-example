@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Singleton
 public class IntraPipelineLoopValidator implements ClusterValidationRule {
@@ -99,10 +98,10 @@ public class IntraPipelineLoopValidator implements ClusterValidationRule {
                                 if (inputDef.listenTopics() != null) {
                                     for (String listenTopicPattern : inputDef.listenTopics()) {
                                         String resolvedListenTopic = resolvePattern(
-                                            listenTopicPattern,
-                                            listeningStep, // context of the listening step for resolution
-                                            pipelineName,
-                                            currentClusterName
+                                                listenTopicPattern,
+                                                listeningStep, // context of the listening step for resolution
+                                                pipelineName,
+                                                currentClusterName
                                         );
                                         if (publishedTopicName.equals(resolvedListenTopic)) {
                                             listensToPublishedTopic = true;
@@ -115,7 +114,7 @@ public class IntraPipelineLoopValidator implements ClusterValidationRule {
 
                             if (listensToPublishedTopic) {
                                 if (!pipelineStepGraph.containsVertex(publishingStep.stepName()) ||
-                                    !pipelineStepGraph.containsVertex(listeningStep.stepName())) {
+                                        !pipelineStepGraph.containsVertex(listeningStep.stepName())) {
                                     LOG.warn("Vertex missing for intra-pipeline edge: {} -> {} in pipeline {}. This should not happen if vertices were added correctly.",
                                             publishingStep.stepName(), listeningStep.stepName(), pipelineName);
                                     continue;

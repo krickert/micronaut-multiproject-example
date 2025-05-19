@@ -1,20 +1,18 @@
 package com.krickert.search.config.consul.validator;
 
-import com.krickert.search.config.pipeline.model.*; // Wildcard for models
-// Explicit imports for clarity if needed, especially for nested records
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.krickert.search.config.pipeline.model.*;
+import com.krickert.search.config.pipeline.model.PipelineStepConfig.JsonConfigOptions;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig.OutputTarget;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig.ProcessorInfo;
-import com.krickert.search.config.pipeline.model.PipelineStepConfig.JsonConfigOptions;
-
-
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
 import java.util.function.Function;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WhitelistValidatorTest {
 
@@ -218,7 +216,7 @@ class WhitelistValidatorTest {
         List<String> errors = validator.validate(clusterConfig, schemaContentProvider);
         assertTrue(errors.isEmpty(), "Topic matching convention should be permitted even if not in explicit list. Errors: " + errors);
     }
-    
+
     @Test
     void validate_topicWithResolvablePlaceholdersMatchingConvention_returnsNoErrors() {
         String pipelineName = "pipeRes";
@@ -256,11 +254,11 @@ class WhitelistValidatorTest {
         String stepName = "stepExpl";
         String resolvedTopic = "explicitly-allowed-topic";
         String topicWithPlaceholders = "prefix-${pipelineName}-${stepName}"; // Assume this resolves to "explicitly-allowed-topic"
-                                                                    // For this test, we'll ensure it does by how we set it up.
-                                                                    // The WhitelistValidator's isKafkaTopicPermitted will do the replace.
-                                                                    // We need to make sure our WhitelistValidator's resolvePattern uses these exact placeholder names.
-                                                                    // Let's assume `pipelineName` is "pipeExpl" and `stepName` is "stepExpl" making it "prefix-pipeExpl-stepExpl"
-                                                                    // And "prefix-pipeExpl-stepExpl" is in the whitelist.
+        // For this test, we'll ensure it does by how we set it up.
+        // The WhitelistValidator's isKafkaTopicPermitted will do the replace.
+        // We need to make sure our WhitelistValidator's resolvePattern uses these exact placeholder names.
+        // Let's assume `pipelineName` is "pipeExpl" and `stepName` is "stepExpl" making it "prefix-pipeExpl-stepExpl"
+        // And "prefix-pipeExpl-stepExpl" is in the whitelist.
         String actualResolvedTopic = "prefix-" + pipelineName + "-" + stepName;
 
 

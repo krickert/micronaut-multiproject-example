@@ -1,6 +1,7 @@
 package com.krickert.search.config.consul;
 
-import com.fasterxml.jackson.annotation.JsonProperty; // If serialized
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.Collections;
 import java.util.List;
 
@@ -11,8 +12,8 @@ import java.util.List;
  * @param errors  A list of error messages if validation failed. Empty if valid.
  */
 public record ValidationResult(
-    @JsonProperty("isValid") boolean isValid,
-    @JsonProperty("errors") List<String> errors
+        @JsonProperty("isValid") boolean isValid,
+        @JsonProperty("errors") List<String> errors
 ) {
     // Canonical constructor, getters, equals, hashCode, toString are automatically provided.
 

@@ -15,22 +15,13 @@ import io.micronaut.context.event.ApplicationEventPublisher;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-// Removed direct Consul imports as per issue requirements
+import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -49,12 +40,11 @@ import static org.mockito.Mockito.*;
 @Property(name = "app.config.cluster-name", value = DynamicConfigurationManagerImplMicronautTest.DEFAULT_PROPERTY_CLUSTER)
 class DynamicConfigurationManagerImplMicronautTest {
 
-    private static final Logger LOG = LoggerFactory.getLogger(DynamicConfigurationManagerImplMicronautTest.class);
     static final String DEFAULT_PROPERTY_CLUSTER = "propertyClusterDefault"; // For @Value in SUT constructor
     static final String TEST_EXECUTION_CLUSTER = "dynamicManagerTestCluster"; // Cluster name used in tests
+    private static final Logger LOG = LoggerFactory.getLogger(DynamicConfigurationManagerImplMicronautTest.class);
 
     // Removed direct Consul client injection as per issue requirements
-
     @Inject
     ObjectMapper objectMapper;
 
@@ -163,7 +153,7 @@ class DynamicConfigurationManagerImplMicronautTest {
     }
 
     private void seedConsulKv(String key, Object object) throws JsonProcessingException {
-        LOG.info("Seeding Consul KV: {} = {}", key, 
+        LOG.info("Seeding Consul KV: {} = {}", key,
                 object.toString().length() > 150 ? object.toString().substring(0, 150) + "..." : object.toString());
 
         // Determine if this is a cluster config or schema version based on the key
@@ -206,71 +196,10 @@ class DynamicConfigurationManagerImplMicronautTest {
         }
     }
 
-    // Test-specific event listener bean
-    @Singleton
-    static class TestApplicationEventListener {
-        private static final Logger EVENT_LISTENER_LOG = LoggerFactory.getLogger(TestApplicationEventListener.class);
-        private final BlockingQueue<ClusterConfigUpdateEvent> receivedEvents = new ArrayBlockingQueue<>(10);
-
-        @io.micronaut.runtime.event.annotation.EventListener
-        void onClusterConfigUpdate(ClusterConfigUpdateEvent event) {
-            EVENT_LISTENER_LOG.info("TestApplicationEventListener received event for cluster '{}'. Old present: {}, New cluster: {}",
-                    event.newConfig().clusterName(), event.oldConfig().isPresent(), event.newConfig().clusterName());
-            // Only offer events relevant to the cluster name used in these tests
-            if (TEST_EXECUTION_CLUSTER.equals(event.newConfig().clusterName()) ||
-                (event.oldConfig().isPresent() && TEST_EXECUTION_CLUSTER.equals(event.oldConfig().get().clusterName()))) {
-                receivedEvents.offer(event);
-            } else {
-                EVENT_LISTENER_LOG.warn("TestApplicationEventListener ignored event for different cluster: {}. Expected: {}",
-                        event.newConfig().clusterName(), TEST_EXECUTION_CLUSTER);
-            }
-        }
-
-        public ClusterConfigUpdateEvent pollEvent(long timeout, TimeUnit unit) throws InterruptedException {
-            return receivedEvents.poll(timeout, unit);
-        }
-
-        public void clear() {
-            receivedEvents.clear();
-        }
-    }
-
-    // Simple in-memory cache holder for testing
-    static class SimpleMapCachedConfigHolder implements CachedConfigHolder {
-        private PipelineClusterConfig currentConfig;
-        private Map<SchemaReference, String> currentSchemas = new HashMap<>();
-
-        @Override
-        public synchronized Optional<PipelineClusterConfig> getCurrentConfig() {
-            return Optional.ofNullable(currentConfig);
-        }
-
-        @Override
-        public synchronized Optional<String> getSchemaContent(SchemaReference schemaRef) {
-            return Optional.ofNullable(currentSchemas.get(schemaRef));
-        }
-
-        @Override
-        public synchronized void updateConfiguration(PipelineClusterConfig newConfig, Map<SchemaReference, String> schemaCache) {
-            this.currentConfig = newConfig;
-            this.currentSchemas = new HashMap<>(schemaCache);
-            LOG.info("SimpleMapCachedConfigHolder updated. Config: {}, Schemas: {}",
-                    newConfig != null ? newConfig.clusterName() : "null", schemaCache.keySet());
-        }
-
-        @Override
-        public synchronized void clearConfiguration() {
-            this.currentConfig = null;
-            this.currentSchemas.clear();
-            LOG.info("SimpleMapCachedConfigHolder cleared.");
-        }
-    }
-
-    // --- Actual Test Methods ---
-
     @Test
     @DisplayName("Integration: Successful initial load with schema, then watch update")
-    @Timeout(value = 60, unit = TimeUnit.SECONDS) // Generous timeout for integration test with watches
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
+        // Generous timeout for integration test with watches
     void integration_initialLoad_thenWatchUpdate() throws Exception {
         // --- Setup Data ---
         SchemaReference schemaRef1 = new SchemaReference("integSchemaSubject1", 1);
@@ -325,7 +254,7 @@ class DynamicConfigurationManagerImplMicronautTest {
         // We are interested in the event that reflects the 'updatedConfig'.
         ClusterConfigUpdateEvent updateEvent = null;
         long endTime = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(appWatchSeconds + 15);
-        while(System.currentTimeMillis() < endTime) {
+        while (System.currentTimeMillis() < endTime) {
             ClusterConfigUpdateEvent polledEvent = testApplicationEventListener.pollEvent(1, TimeUnit.SECONDS);
             if (polledEvent != null && updatedConfig.equals(polledEvent.newConfig())) {
                 updateEvent = polledEvent;
@@ -398,9 +327,12 @@ class DynamicConfigurationManagerImplMicronautTest {
         LOG.info("integration_noConfigFound_thenAppears: Config discovered by watch and processed successfully.");
     }
 
+    // --- Actual Test Methods ---
+
     @Test
     @DisplayName("Integration: Initial load - config present but fails validation")
-    @Timeout(value = 30, unit = TimeUnit.SECONDS) // Shorter, as no successful watch event is expected immediately
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        // Shorter, as no successful watch event is expected immediately
     void integration_initialLoad_configFailsValidation() throws Exception {
         // --- Setup Data ---
         // Create an invalid config that will fail validation with the real validator
@@ -649,6 +581,7 @@ class DynamicConfigurationManagerImplMicronautTest {
         // Clean up schema keys
         consulBusinessOperationsService.deleteSchemaVersion(initialSchemaRef.subject(), initialSchemaRef.version()).block();
     }
+
     @Test
     @DisplayName("Integration: Watch update - new config references missing schema, keeps old config")
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
@@ -852,7 +785,8 @@ class DynamicConfigurationManagerImplMicronautTest {
 
     @Test
     @DisplayName("Integration: initialize() - when consulConfigFetcher.connect() fails, throws ConfigurationManagerInitializationException")
-    @Timeout(value = 15, unit = TimeUnit.SECONDS) // Shorter timeout, not waiting for watches
+    @Timeout(value = 15, unit = TimeUnit.SECONDS)
+        // Shorter timeout, not waiting for watches
     void integration_initialize_whenConnectFails_throwsInitializationException() throws InterruptedException, Exception {
         // Create a real CachedConfigHolder to verify that clearConfiguration() is called
         InMemoryCachedConfigHolder realCachedConfigHolder = new InMemoryCachedConfigHolder();
@@ -908,7 +842,8 @@ class DynamicConfigurationManagerImplMicronautTest {
 
     @Test
     @DisplayName("Integration: initialize() - when consulConfigFetcher.watchClusterConfig() fails, throws ConfigurationManagerInitializationException")
-    @Timeout(value = 15, unit = TimeUnit.SECONDS) // Shorter timeout
+    @Timeout(value = 15, unit = TimeUnit.SECONDS)
+        // Shorter timeout
     void integration_initialize_whenWatchClusterConfigFails_throwsInitializationException() throws Exception {
         // Create a real CachedConfigHolder to verify that clearConfiguration() is called
         InMemoryCachedConfigHolder realCachedConfigHolder = new InMemoryCachedConfigHolder();
@@ -966,5 +901,65 @@ class DynamicConfigurationManagerImplMicronautTest {
         LOG.info("integration_initialize_watchFails: Verifications complete.");
 
         // No need to call localDcmForTest.shutdown() as initialize failed before watch was fully active
+    }
+
+    // Test-specific event listener bean
+    @Singleton
+    static class TestApplicationEventListener {
+        private static final Logger EVENT_LISTENER_LOG = LoggerFactory.getLogger(TestApplicationEventListener.class);
+        private final BlockingQueue<ClusterConfigUpdateEvent> receivedEvents = new ArrayBlockingQueue<>(10);
+
+        @io.micronaut.runtime.event.annotation.EventListener
+        void onClusterConfigUpdate(ClusterConfigUpdateEvent event) {
+            EVENT_LISTENER_LOG.info("TestApplicationEventListener received event for cluster '{}'. Old present: {}, New cluster: {}",
+                    event.newConfig().clusterName(), event.oldConfig().isPresent(), event.newConfig().clusterName());
+            // Only offer events relevant to the cluster name used in these tests
+            if (TEST_EXECUTION_CLUSTER.equals(event.newConfig().clusterName()) ||
+                    (event.oldConfig().isPresent() && TEST_EXECUTION_CLUSTER.equals(event.oldConfig().get().clusterName()))) {
+                receivedEvents.offer(event);
+            } else {
+                EVENT_LISTENER_LOG.warn("TestApplicationEventListener ignored event for different cluster: {}. Expected: {}",
+                        event.newConfig().clusterName(), TEST_EXECUTION_CLUSTER);
+            }
+        }
+
+        public ClusterConfigUpdateEvent pollEvent(long timeout, TimeUnit unit) throws InterruptedException {
+            return receivedEvents.poll(timeout, unit);
+        }
+
+        public void clear() {
+            receivedEvents.clear();
+        }
+    }
+
+    // Simple in-memory cache holder for testing
+    static class SimpleMapCachedConfigHolder implements CachedConfigHolder {
+        private PipelineClusterConfig currentConfig;
+        private Map<SchemaReference, String> currentSchemas = new HashMap<>();
+
+        @Override
+        public synchronized Optional<PipelineClusterConfig> getCurrentConfig() {
+            return Optional.ofNullable(currentConfig);
+        }
+
+        @Override
+        public synchronized Optional<String> getSchemaContent(SchemaReference schemaRef) {
+            return Optional.ofNullable(currentSchemas.get(schemaRef));
+        }
+
+        @Override
+        public synchronized void updateConfiguration(PipelineClusterConfig newConfig, Map<SchemaReference, String> schemaCache) {
+            this.currentConfig = newConfig;
+            this.currentSchemas = new HashMap<>(schemaCache);
+            LOG.info("SimpleMapCachedConfigHolder updated. Config: {}, Schemas: {}",
+                    newConfig != null ? newConfig.clusterName() : "null", schemaCache.keySet());
+        }
+
+        @Override
+        public synchronized void clearConfiguration() {
+            this.currentConfig = null;
+            this.currentSchemas.clear();
+            LOG.info("SimpleMapCachedConfigHolder cleared.");
+        }
     }
 }

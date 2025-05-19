@@ -2,22 +2,17 @@ package com.krickert.search.config.consul;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineGraphConfig;
 import com.krickert.search.config.pipeline.model.PipelineModuleMap;
 import com.krickert.search.config.schema.model.SchemaCompatibility;
 import com.krickert.search.config.schema.model.SchemaType;
 import com.krickert.search.config.schema.model.SchemaVersionData;
-import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-import org.kiwiproject.consul.Consul;
+import org.junit.jupiter.api.*;
 import org.kiwiproject.consul.KeyValueClient;
 import org.kiwiproject.consul.cache.KVCache;
 import org.mockito.MockedStatic;
@@ -45,34 +40,26 @@ import static org.mockito.Mockito.*;
 class KiwiprojectConsulConfigFetcherMicronautTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(KiwiprojectConsulConfigFetcherMicronautTest.class);
-
-    @Inject
-    KiwiprojectConsulConfigFetcher configFetcher; // SUT
-
-    @Inject
-    ObjectMapper objectMapper;
+    private final String testClusterForWatch = "watchTestClusterDelta"; // Unique name
+    private final String testSchemaSubject1 = "integTestSchemaSubjectDelta1";
 
     // Removed direct Consul client injection as per issue requirements
     // All Consul operations should go through ConsulBusinessOperationsService
-
+    private final int testSchemaVersion1 = 1;
+    @Inject
+    KiwiprojectConsulConfigFetcher configFetcher; // SUT
+    @Inject
+    ObjectMapper objectMapper;
     @Property(name = "app.config.consul.key-prefixes.pipeline-clusters")
     String clusterConfigKeyPrefixWithSlash;
-
     @Property(name = "app.config.consul.key-prefixes.schema-versions")
     String schemaVersionsKeyPrefixWithSlash;
-
     @Property(name = "app.config.cluster-name")
     String defaultTestClusterNameFromProperties;
-
     @Property(name = "app.config.consul.watch-seconds")
     int appWatchSeconds;
-
     @Inject
     ConsulBusinessOperationsService consulBusinessOperations;
-    private final String testClusterForWatch = "watchTestClusterDelta"; // Unique name
-    private final String testSchemaSubject1 = "integTestSchemaSubjectDelta1";
-    private final int testSchemaVersion1 = 1;
-
     private String fullWatchClusterKey;
     private String fullDefaultClusterKey;
     private String fullTestSchemaKey1;
@@ -161,7 +148,7 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
     }
 
     private void seedConsulKv(String key, Object object) throws JsonProcessingException {
-        LOG.info("Seeding Consul KV: {} = {}", key, 
+        LOG.info("Seeding Consul KV: {} = {}", key,
                 object.toString().length() > 200 ? object.toString().substring(0, 200) + "..." : object.toString());
 
         // Determine if this is a cluster config or schema version based on the key
@@ -369,7 +356,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
     @Test
     @DisplayName("watchClusterConfig - re-watching same key replaces handler")
-    @Timeout(value = 30, unit = TimeUnit.SECONDS) // Adjust timeout as needed
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        // Adjust timeout as needed
     void watchClusterConfig_rewatchSameKey_replacesHandler() throws Exception {
         BlockingQueue<WatchCallbackResult> updatesA = new ArrayBlockingQueue<>(5);
         Consumer<WatchCallbackResult> handlerA = updatesA::offer;
@@ -430,7 +418,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
     @Test
     @DisplayName("watchClusterConfig - watching a different key stops previous watch")
-    @Timeout(value = 45, unit = TimeUnit.SECONDS) // May need adjustment
+    @Timeout(value = 45, unit = TimeUnit.SECONDS)
+        // May need adjustment
     void watchClusterConfig_watchDifferentKey_stopsPreviousWatch() throws Exception {
         String clusterNameA = "clusterToWatchA";
         String fullClusterKeyA = (clusterConfigKeyPrefixWithSlash.endsWith("/") ? clusterConfigKeyPrefixWithSlash : clusterConfigKeyPrefixWithSlash + "/") + clusterNameA;
@@ -761,7 +750,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
     @Test
     @DisplayName("watchClusterConfig - when KVCache.start() fails, throws RuntimeException and marks watcher as not started")
-    @Timeout(value = 15, unit = TimeUnit.SECONDS) // Shorter timeout as it's not waiting for Consul events
+    @Timeout(value = 15, unit = TimeUnit.SECONDS)
+        // Shorter timeout as it's not waiting for Consul events
     void watchClusterConfig_whenKVCacheStartFails_throwsAndMarksNotStarted() throws Exception {
         // Ensure connected state for kvClient
         configFetcher.connect();

@@ -19,6 +19,9 @@ class ProtobufUtilsTest {
 
     // --- Timestamp Tests ---
 
+    @TempDir
+    Path tempDir; // JUnit 5 Temp Directory injection
+
     /**
      * Tests the {@link ProtobufUtils#now} method.
      * The method should return a {@link Timestamp} object representing the current time
@@ -50,13 +53,15 @@ class ProtobufUtilsTest {
         assertTrue(now2.getSeconds() >= now1.getSeconds()); // Could be same second
         // If same second, nanos should generally increase (though not guaranteed if clock resolution is low)
         if (now2.getSeconds() == now1.getSeconds()) {
-             assertTrue(now2.getNanos() >= now1.getNanos());
+            assertTrue(now2.getNanos() >= now1.getNanos());
         }
 
         assertTrue(now3.getSeconds() > now1.getSeconds(), "Timestamp after 1s sleep should have larger seconds value");
         assertTrue(now3.getSeconds() > now2.getSeconds());
 
     }
+
+    // --- UUID Tests ---
 
     @Test
     void stamp() {
@@ -73,8 +78,6 @@ class ProtobufUtilsTest {
         assertEquals(-1234567890L, stampNegative.getSeconds());
         assertEquals(0, stampNegative.getNanos());
     }
-
-    // --- UUID Tests ---
 
     @Test
     void createKeyFromString() {
@@ -131,13 +134,16 @@ class ProtobufUtilsTest {
             ProtobufUtils.createKey((PipeDoc) null);
         });
 
-         // Test document with null ID - should throw NullPointerException when accessing id
-         PipeDoc docNullId = PipeDoc.newBuilder().build(); // ID defaults to "", not null technically
-         UUID keyFromDefaultEmptyId = ProtobufUtils.createKey(docNullId);
-         assertEquals(keyEmpty, keyFromDefaultEmptyId);
+        // Test document with null ID - should throw NullPointerException when accessing id
+        PipeDoc docNullId = PipeDoc.newBuilder().build(); // ID defaults to "", not null technically
+        UUID keyFromDefaultEmptyId = ProtobufUtils.createKey(docNullId);
+        assertEquals(keyEmpty, keyFromDefaultEmptyId);
 
 
     }
+
+
+    // --- Disk Saving Tests (Requires Temp Directory) ---
 
     // --- ListValue Test ---
     @Test
@@ -157,10 +163,10 @@ class ProtobufUtilsTest {
         assertNotNull(emptyListValue);
         assertEquals(0, emptyListValue.getValuesCount());
 
-         // Test with collection containing null - Protobuf Value doesn't allow null strings directly, check behavior
-         // The current implementation would likely throw NPE on addValues(Value.newBuilder().setStringValue(null)...)
-         Collection<String> listWithNull = Arrays.asList("a", null, "c");
-         assertThrows(NullPointerException.class, ()-> ProtobufUtils.createListValueFromCollection(listWithNull), "setStringValue(null) should throw NPE");
+        // Test with collection containing null - Protobuf Value doesn't allow null strings directly, check behavior
+        // The current implementation would likely throw NPE on addValues(Value.newBuilder().setStringValue(null)...)
+        Collection<String> listWithNull = Arrays.asList("a", null, "c");
+        assertThrows(NullPointerException.class, () -> ProtobufUtils.createListValueFromCollection(listWithNull), "setStringValue(null) should throw NPE");
 
 
         // Test with null collection - should throw NullPointerException
@@ -169,12 +175,6 @@ class ProtobufUtilsTest {
             ProtobufUtils.createListValueFromCollection(null);
         });
     }
-
-
-    // --- Disk Saving Tests (Requires Temp Directory) ---
-
-    @TempDir
-    Path tempDir; // JUnit 5 Temp Directory injection
 
     @Test
     void saveProtobufToDisk_Single() throws IOException {
@@ -251,7 +251,7 @@ class ProtobufUtilsTest {
         assertEquals(doc11, PipeDoc.parseFrom(Files.readAllBytes(path3))); // Check 3rd item
     }
 
-     @Test
+    @Test
     void saveProtocoBufsToDisk_EmptyList() throws IOException {
         List<PipeDoc> docs = Collections.emptyList();
         String prefix = tempDir.resolve("multi_empty_").toString();
@@ -262,8 +262,8 @@ class ProtobufUtilsTest {
         // Verify no files with the prefix were created
         @SuppressWarnings("resource")
         List<Path> files = Files.list(tempDir)
-                                .filter(p -> p.getFileName().toString().startsWith("multi_empty_"))
-                                .toList();
+                .filter(p -> p.getFileName().toString().startsWith("multi_empty_"))
+                .toList();
         assertTrue(files.isEmpty());
     }
 

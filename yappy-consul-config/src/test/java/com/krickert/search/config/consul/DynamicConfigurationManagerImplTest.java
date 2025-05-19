@@ -1,11 +1,11 @@
 package com.krickert.search.config.consul;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
 import com.krickert.search.config.consul.exception.ConfigurationManagerInitializationException;
 import com.krickert.search.config.consul.factory.TestDynamicConfigurationManagerFactory;
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
 import com.krickert.search.config.consul.service.ConsulKvService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineModuleConfiguration;
 import com.krickert.search.config.pipeline.model.PipelineModuleMap;
@@ -13,7 +13,6 @@ import com.krickert.search.config.pipeline.model.SchemaReference;
 import com.krickert.search.config.schema.model.SchemaCompatibility;
 import com.krickert.search.config.schema.model.SchemaType;
 import com.krickert.search.config.schema.model.SchemaVersionData;
-
 import io.micronaut.context.event.ApplicationEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,8 +31,8 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -454,6 +453,7 @@ class DynamicConfigurationManagerImplTest {
         verify(mockEventPublisher, never()).publishEvent(any(ClusterConfigUpdateEvent.class));
         // Add log verification if you have a test utility for it, to ensure the error was logged.
     }
+
     @Test
     void handleConsulWatchUpdate_validationItselfThrowsRuntimeException_logsAndKeepsOldConfig() {
         PipelineClusterConfig oldValidConfig = PipelineClusterConfig.builder()
@@ -488,6 +488,7 @@ class DynamicConfigurationManagerImplTest {
         verify(mockCachedConfigHolder, never()).clearConfiguration();
         verify(mockEventPublisher, never()).publishEvent(any(ClusterConfigUpdateEvent.class));
     }
+
     @Test
     void handleConsulWatchUpdate_cacheUpdateThrowsRuntimeException_logsError_eventNotPublished() {
         PipelineClusterConfig oldValidConfig = PipelineClusterConfig.builder()
@@ -523,6 +524,7 @@ class DynamicConfigurationManagerImplTest {
         verify(mockCachedConfigHolder).updateConfiguration(eq(newConfigFromWatch), any()); // It was attempted
         verify(mockEventPublisher, never()).publishEvent(any(ClusterConfigUpdateEvent.class)); // But event not published
     }
+
     @Test
     void publishEvent_directListenerThrows_continuesNotifyingOtherListenersAndMicronautPublisher() {
         PipelineClusterConfig currentConfig = PipelineClusterConfig.builder()
@@ -588,6 +590,7 @@ class DynamicConfigurationManagerImplTest {
         dynamicConfigurationManager.unregisterConfigUpdateListener(misbehavingListener);
         dynamicConfigurationManager.unregisterConfigUpdateListener(wellBehavedListener);
     }
+
     @Test
     void handleConsulWatchUpdate_ambiguousWatchResult_logsAndNoAction() {
         PipelineClusterConfig oldValidConfig = PipelineClusterConfig.builder()
@@ -615,8 +618,6 @@ class DynamicConfigurationManagerImplTest {
         verifyNoInteractions(mockEventPublisher);
         // Add log verification if possible
     }
-
-
 
 
 }

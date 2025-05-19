@@ -3,4 +3,4 @@ defaultPackage: @@BASE_PACKAGE@@
 testFramework: junit
 sourceLanguage: java
 buildTool: gradle_kotlin
-features: [app-name, discovery-core, gradle, grpc, http-client-test, java, java-application, junit, logback, micronaut-build, readme, serialization-jackson, shade, yaml, yaml-build]
+features: [ app-name, discovery-core, gradle, grpc, http-client-test, java, java-application, junit, logback, micronaut-build, readme, serialization-jackson, shade, yaml, yaml-build ]

@@ -4,7 +4,9 @@
   "customConfig": {
     "jsonConfig": "{\"metricName\":\"processedDocuments\", \"incrementBy\":1}"
   },
-  "nextSteps": ["logCurrentCount"],
+  "nextSteps": [
+    "logCurrentCount"
+  ],
   "errorSteps": [],
   "transportType": "INTERNAL",
   "kafkaConfig": null,

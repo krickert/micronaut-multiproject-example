@@ -32,9 +32,9 @@ public interface CachedConfigHolder {
      * Updates the cached configuration with a new, validated PipelineClusterConfig
      * and its associated schema contents. This operation should be atomic.
      *
-     * @param newConfig The new, validated PipelineClusterConfig.
+     * @param newConfig      The new, validated PipelineClusterConfig.
      * @param newSchemaCache A map of SchemaReferences to their schema content strings,
-     * representing all schemas referenced by the newConfig.
+     *                       representing all schemas referenced by the newConfig.
      */
     void updateConfiguration(PipelineClusterConfig newConfig, Map<SchemaReference, String> newSchemaCache);
 

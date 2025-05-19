@@ -111,11 +111,12 @@ If you encounter issues:
 ### Common Issues and Solutions
 
 1. **Kafka Script Path Issues**:
-   - If you see errors like `kafka-storage.sh: command not found`, the scripts might be in a different location.
-   - Solution: The docker-compose.yml now automatically checks for scripts in both /opt/kafka/bin/ and in the PATH.
-   - If issues persist, you may need to modify the paths in the docker-compose.yml file based on your Kafka image.
+    - If you see errors like `kafka-storage.sh: command not found`, the scripts might be in a different location.
+    - Solution: The docker-compose.yml now automatically checks for scripts in both /opt/kafka/bin/ and in the PATH.
+    - If issues persist, you may need to modify the paths in the docker-compose.yml file based on your Kafka image.
 
 2. **Solr ZooKeeper Connection Issues**:
-   - If Solr fails with `Connection refused` errors when trying to connect to ZooKeeper, check the ZK_HOST setting and ensure the -c flag is present.
-   - Solution: The current configuration uses the -c flag to start an embedded ZooKeeper server and sets ZK_HOST=localhost:9983.
-   - Also sets SOLR_HOST=solr to explicitly define the hostname for better network resolution.
+    - If Solr fails with `Connection refused` errors when trying to connect to ZooKeeper, check the ZK_HOST setting and ensure the -c flag
+      is present.
+    - Solution: The current configuration uses the -c flag to start an embedded ZooKeeper server and sets ZK_HOST=localhost:9983.
+    - Also sets SOLR_HOST=solr to explicitly define the hostname for better network resolution.

@@ -1,4 +1,4 @@
-package @@BASE_PACKAGE@@;
+package@ @BASE_PACKAGE @ @;
 
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
@@ -24,12 +24,14 @@ import org.slf4j.LoggerFactory;
 
 @Singleton
 @GrpcService
-public class @@MODULE_NAME_PASCAL_CASE@@Service extends PipeStepProcessorGrpc.PipeStepProcessorImplBase {
+public class@ @MODULE_NAME_PASCAL_CASE @ @Service extends PipeStepProcessorGrpc.
 
-    private static final Logger LOG = LoggerFactory.getLogger(@@MODULE_NAME_PASCAL_CASE@@Service.class);
+PipeStepProcessorImplBase {
+
+    private static final Logger LOG = LoggerFactory.getLogger( @ @MODULE_NAME_PASCAL_CASE @ @Service.class);
 
     @Override
-    public void processData(ProcessRequest request, StreamObserver<ProcessResponse> responseObserver) {
+    public void processData (ProcessRequest request, StreamObserver < ProcessResponse > responseObserver){
         ServiceMetadata metadata = request.getMetadata();
         ProcessConfiguration config = request.getConfig();
         PipeDoc document = request.getDocument(); // Document now contains the blob
@@ -39,8 +41,8 @@ public class @@MODULE_NAME_PASCAL_CASE@@Service extends PipeStepProcessorGrpc.Pi
 
         String streamId = metadata.getStreamId();
         String docId = document.getId(); // Assuming document will always be present, even if empty.
-                                         // Add hasDocument() check if PipeDoc can be entirely absent from ProcessRequest.
-                                         // Based on new proto, PipeDoc is a required field in ProcessRequest.
+        // Add hasDocument() check if PipeDoc can be entirely absent from ProcessRequest.
+        // Based on new proto, PipeDoc is a required field in ProcessRequest.
 
         LOG.debug("(Unary) Stream ID: {}, Document ID: {}", streamId, docId);
 
@@ -70,11 +72,11 @@ public class @@MODULE_NAME_PASCAL_CASE@@Service extends PipeStepProcessorGrpc.Pi
 
 
         String logMessage = String.format("%s@@MODULE_NAME_PASCAL_CASE@@Service (Unary) successfully processed step '%s' for pipeline '%s'. Stream ID: %s, Doc ID: %s",
-                                          logPrefix,
-                                          metadata.getPipeStepName(),   // From ServiceMetadata
-                                          metadata.getPipelineName(),  // From ServiceMetadata
-                                          streamId,                    // From ServiceMetadata
-                                          docId);
+                logPrefix,
+                metadata.getPipeStepName(),   // From ServiceMetadata
+                metadata.getPipelineName(),  // From ServiceMetadata
+                streamId,                    // From ServiceMetadata
+                docId);
         responseBuilder.addProcessorLogs(logMessage);
         LOG.info("(Unary) Sending response for stream ID: {}", streamId);
 

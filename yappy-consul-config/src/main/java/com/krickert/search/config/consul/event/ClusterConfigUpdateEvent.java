@@ -1,7 +1,8 @@
 package com.krickert.search.config.consul.event; // Example sub-package for events
 
-import com.krickert.search.config.pipeline.model.PipelineClusterConfig; // From your models module
-import com.fasterxml.jackson.annotation.JsonProperty; // If you were to serialize this event itself
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
+
 import java.util.Optional;
 
 /**
@@ -11,9 +12,9 @@ import java.util.Optional;
  * @param newConfig The new, validated configuration.
  */
 public record ClusterConfigUpdateEvent(
-    @JsonProperty("oldConfig") Optional<PipelineClusterConfig> oldConfig,
-    @JsonProperty("newConfig") PipelineClusterConfig newConfig
-    // Optional: Map<String, String> diffSummary for more detailed changes
+        @JsonProperty("oldConfig") Optional<PipelineClusterConfig> oldConfig,
+        @JsonProperty("newConfig") PipelineClusterConfig newConfig
+        // Optional: Map<String, String> diffSummary for more detailed changes
 ) {
     // Records provide a canonical constructor, getters, equals, hashCode, and toString.
     // No Lombok needed here.

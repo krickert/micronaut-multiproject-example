@@ -9,13 +9,22 @@
           "customConfig": {
             "jsonConfig": "{\"validationSchemaId\":\"rawDocEventSchema_v1\"}"
           },
-          "nextSteps": ["normalizeData"],
-          "errorSteps": ["logIngestionError"],
+          "nextSteps": [
+            "normalizeData"
+          ],
+          "errorSteps": [
+            "logIngestionError"
+          ],
           "transportType": "KAFKA",
           "kafkaConfig": {
-            "listenTopics": ["topic-raw-documents", "topic-other-source"],
+            "listenTopics": [
+              "topic-raw-documents",
+              "topic-other-source"
+            ],
             "publishTopicPattern": "ingestion.receiveRawData.processed",
-            "kafkaProperties": {"group.id":"ingestion-group-1"}
+            "kafkaProperties": {
+              "group.id": "ingestion-group-1"
+            }
           }
         },
         "normalizeData": {
@@ -24,8 +33,12 @@
           "customConfig": {
             "jsonConfig": "{\"targetFormat\":\"internalCanonicalV2\"}"
           },
-          "nextSteps": ["enrichData"],
-          "errorSteps": ["logNormalizationError"],
+          "nextSteps": [
+            "enrichData"
+          ],
+          "errorSteps": [
+            "logNormalizationError"
+          ],
           "transportType": "INTERNAL"
         },
         "enrichData": {
@@ -34,26 +47,41 @@
           "customConfig": {
             "jsonConfig": "{\"serviceType\":\"geolocation\", \"timeoutMillis\":500}"
           },
-          "nextSteps": ["routeToProcessing"],
-          "errorSteps": ["logEnrichmentError"],
+          "nextSteps": [
+            "routeToProcessing"
+          ],
+          "errorSteps": [
+            "logEnrichmentError"
+          ],
           "transportType": "GRPC",
           "grpcConfig": {
             "serviceId": "geo-enrichment-grpc-service",
-            "grpcProperties": {"loadBalancingPolicy":"round_robin"}
+            "grpcProperties": {
+              "loadBalancingPolicy": "round_robin"
+            }
           }
         },
         "routeToProcessing": {
           "pipelineStepId": "routeToProcessing",
           "pipelineImplementationId": "content-based-router",
-          "customConfig": {"jsonConfig":"{\"routingField\":\"document_type\"}"},
-          "nextSteps": ["publishToDocProcessing", "publishToImageProcessing"],
-          "errorSteps": ["logRoutingError"],
+          "customConfig": {
+            "jsonConfig": "{\"routingField\":\"document_type\"}"
+          },
+          "nextSteps": [
+            "publishToDocProcessing",
+            "publishToImageProcessing"
+          ],
+          "errorSteps": [
+            "logRoutingError"
+          ],
           "transportType": "INTERNAL"
         },
         "publishToDocProcessing": {
           "pipelineStepId": "publishToDocProcessing",
           "pipelineImplementationId": "kafka-selective-publisher",
-          "customConfig": {"jsonConfig":"{\"condition\":\"document_type == 'TEXT_DOCUMENT'\"}"},
+          "customConfig": {
+            "jsonConfig": "{\"condition\":\"document_type == 'TEXT_DOCUMENT'\"}"
+          },
           "transportType": "KAFKA",
           "kafkaConfig": {
             "listenTopics": [],
@@ -63,7 +91,9 @@
         "publishToImageProcessing": {
           "pipelineStepId": "publishToImageProcessing",
           "pipelineImplementationId": "kafka-selective-publisher",
-          "customConfig": {"jsonConfig":"{\"condition\":\"document_type == 'IMAGE_DOCUMENT'\"}"},
+          "customConfig": {
+            "jsonConfig": "{\"condition\":\"document_type == 'IMAGE_DOCUMENT'\"}"
+          },
           "transportType": "KAFKA",
           "kafkaConfig": {
             "listenTopics": [],
@@ -101,11 +131,17 @@
           "customConfig": {
             "jsonConfig": "{\"languages\":[\"eng\",\"fra\"], \"minConfidence\":0.7}"
           },
-          "nextSteps": ["chunkText"],
-          "errorSteps": ["logOcrError"],
+          "nextSteps": [
+            "chunkText"
+          ],
+          "errorSteps": [
+            "logOcrError"
+          ],
           "transportType": "KAFKA",
           "kafkaConfig": {
-            "listenTopics": ["documents.forTextProcessing.v1"],
+            "listenTopics": [
+              "documents.forTextProcessing.v1"
+            ],
             "publishTopicPattern": "processing.ocrContent.textOutput"
           }
         },
@@ -115,8 +151,12 @@
           "customConfig": {
             "jsonConfig": "{\"strategy\":\"fixedTokenSize\", \"size\":500, \"overlap\":50}"
           },
-          "nextSteps": ["generateEmbeddings"],
-          "errorSteps": ["logChunkingError"],
+          "nextSteps": [
+            "generateEmbeddings"
+          ],
+          "errorSteps": [
+            "logChunkingError"
+          ],
           "transportType": "INTERNAL"
         },
         "generateEmbeddings": {
@@ -125,8 +165,12 @@
           "customConfig": {
             "jsonConfig": "{\"modelId\":\"text-embedding-ada-002\"}"
           },
-          "nextSteps": ["indexDocument"],
-          "errorSteps": ["logEmbeddingError"],
+          "nextSteps": [
+            "indexDocument"
+          ],
+          "errorSteps": [
+            "logEmbeddingError"
+          ],
           "transportType": "GRPC",
           "grpcConfig": {
             "serviceId": "embedding-service-v2"

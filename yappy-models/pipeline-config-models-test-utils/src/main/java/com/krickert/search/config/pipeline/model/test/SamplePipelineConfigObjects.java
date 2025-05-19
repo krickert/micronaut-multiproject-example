@@ -1,6 +1,5 @@
 package com.krickert.search.config.pipeline.model.test;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.krickert.search.config.pipeline.model.*;

@@ -23,20 +23,16 @@ import static org.junit.jupiter.api.Assertions.*;
 class SchemaRegistryServiceImplTest {
 
     private static final Logger testLog = LoggerFactory.getLogger(SchemaRegistryServiceImplTest.class);
-
-
+    // CORRECTED: This should match the prefix your ConsulSchemaRegistryDelegate uses internally.
+    private static final String SCHEMA_KV_DELEGATE_PREFIX = "config/pipeline/schemas/";
     // Inject the gRPC client stub. Micronaut handles creating this client
     // configured to talk to the embedded gRPC server.
     @Inject
     @GrpcChannel(GrpcServerChannel.NAME) // Targets the in-process gRPC server
             SchemaRegistryServiceGrpc.SchemaRegistryServiceBlockingStub client;
-
     // Inject ConsulKvService to help with setup/cleanup if needed
     @Inject
     ConsulKvService consulKvService;
-
-    // CORRECTED: This should match the prefix your ConsulSchemaRegistryDelegate uses internally.
-    private static final String SCHEMA_KV_DELEGATE_PREFIX = "config/pipeline/schemas/";
 
     @BeforeEach
     void setUp() {
@@ -338,7 +334,6 @@ class SchemaRegistryServiceImplTest {
         assertTrue(response.getValidationErrors(0).contains("does not have a value in the enumeration"),
                 "Error message should indicate the 'type' value is not in the allowed enumeration. Actual: " + response.getValidationErrors(0));
     }
-
 
 
 }

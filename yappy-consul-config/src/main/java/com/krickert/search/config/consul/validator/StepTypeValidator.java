@@ -1,14 +1,9 @@
 package com.krickert.search.config.consul.validator;
 
-import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
-import com.krickert.search.config.pipeline.model.PipelineConfig;
-import com.krickert.search.config.pipeline.model.PipelineStepConfig;
-import com.krickert.search.config.pipeline.model.SchemaReference;
-import com.krickert.search.config.pipeline.model.StepType; // Ensure this is your enum: INITIAL_PIPELINE, SINK, PIPELINE
+import com.krickert.search.config.pipeline.model.*;
 import io.micronaut.core.util.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,16 +38,16 @@ public class StepTypeValidator implements ClusterValidationRule {
 
                 if (stepConfig == null) {
                     errors.add(String.format(
-                        "Pipeline '%s', Step key '%s': Contains invalid step definition (null).",
-                        pipelineName, stepEntry.getKey()
+                            "Pipeline '%s', Step key '%s': Contains invalid step definition (null).",
+                            pipelineName, stepEntry.getKey()
                     ));
                     continue;
                 }
 
                 if (stepConfig.stepName() == null || stepConfig.stepName().isBlank() || stepConfig.stepType() == null) {
                     errors.add(String.format(
-                        "Pipeline '%s', Step key '%s': Contains invalid step definition (missing name or type).",
-                        pipelineName, stepEntry.getKey()
+                            "Pipeline '%s', Step key '%s': Contains invalid step definition (missing name or type).",
+                            pipelineName, stepEntry.getKey()
                     ));
                     continue;
                 }
@@ -67,14 +62,14 @@ public class StepTypeValidator implements ClusterValidationRule {
                     case INITIAL_PIPELINE: // Changed from SOURCE
                         if (hasKafkaInputs) {
                             errors.add(String.format(
-                                "Pipeline '%s', Step '%s' of type INITIAL_PIPELINE: must not have kafkaInputs defined. Found %d.",
-                                pipelineName, stepName, stepConfig.kafkaInputs() != null ? stepConfig.kafkaInputs().size() : 0
+                                    "Pipeline '%s', Step '%s' of type INITIAL_PIPELINE: must not have kafkaInputs defined. Found %d.",
+                                    pipelineName, stepName, stepConfig.kafkaInputs() != null ? stepConfig.kafkaInputs().size() : 0
                             ));
                         }
                         if (!hasOutputs) {
                             errors.add(String.format(
-                                "Pipeline '%s', Step '%s' of type INITIAL_PIPELINE: should ideally have outputs defined.",
-                                pipelineName, stepName
+                                    "Pipeline '%s', Step '%s' of type INITIAL_PIPELINE: should ideally have outputs defined.",
+                                    pipelineName, stepName
                             ));
                         }
                         break;
@@ -83,14 +78,14 @@ public class StepTypeValidator implements ClusterValidationRule {
                         // Logic for SINK remains the same (no outputs, ideally has inputs)
                         if (!hasKafkaInputs && (stepConfig.processorInfo() == null || stepConfig.processorInfo().internalProcessorBeanName() == null || stepConfig.processorInfo().internalProcessorBeanName().isBlank())) {
                             errors.add(String.format(
-                                "Pipeline '%s', Step '%s' of type SINK: should ideally have kafkaInputs defined or be an internal processor that receives data via other pipeline steps.",
-                                pipelineName, stepName
+                                    "Pipeline '%s', Step '%s' of type SINK: should ideally have kafkaInputs defined or be an internal processor that receives data via other pipeline steps.",
+                                    pipelineName, stepName
                             ));
                         }
                         if (hasOutputs) {
                             errors.add(String.format(
-                                "Pipeline '%s', Step '%s' of type SINK: must not have any outputs defined. Found %d.",
-                                pipelineName, stepName, stepConfig.outputs() != null ? stepConfig.outputs().size() : 0
+                                    "Pipeline '%s', Step '%s' of type SINK: must not have any outputs defined. Found %d.",
+                                    pipelineName, stepName, stepConfig.outputs() != null ? stepConfig.outputs().size() : 0
                             ));
                         }
                         break;
@@ -114,8 +109,8 @@ public class StepTypeValidator implements ClusterValidationRule {
 
                     default:
                         errors.add(String.format(
-                            "Pipeline '%s', Step '%s': Encountered an unknown or unhandled StepType '%s'.",
-                            pipelineName, stepName, stepType
+                                "Pipeline '%s', Step '%s': Encountered an unknown or unhandled StepType '%s'.",
+                                pipelineName, stepName, stepType
                         ));
                         break;
                 }

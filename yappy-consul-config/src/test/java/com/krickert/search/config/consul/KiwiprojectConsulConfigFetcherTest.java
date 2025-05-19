@@ -4,7 +4,6 @@ package com.krickert.search.config.consul;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
-import com.krickert.search.config.schema.model.SchemaCompatibility;
 import com.krickert.search.config.schema.model.SchemaType;
 import com.krickert.search.config.schema.model.SchemaVersionData;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.kiwiproject.consul.Consul;
 import org.kiwiproject.consul.KeyValueClient;
-import org.kiwiproject.consul.cache.ConsulCache; // Listener interface
+import org.kiwiproject.consul.cache.ConsulCache;
 import org.kiwiproject.consul.cache.KVCache;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
@@ -24,14 +23,10 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -159,7 +154,8 @@ class KiwiprojectConsulConfigFetcherTest {
         String invalidJson = "{invalid-json}";
         when(mockKeyValueClient.getValueAsString(clusterConfigKey)).thenReturn(Optional.of(invalidJson));
         when(mockObjectMapper.readValue(invalidJson, PipelineClusterConfig.class))
-                .thenThrow(new JsonProcessingException("Invalid JSON Test") {});
+                .thenThrow(new JsonProcessingException("Invalid JSON Test") {
+                });
         Optional<PipelineClusterConfig> result = consulConfigFetcher.fetchPipelineClusterConfig(TEST_CLUSTER_NAME);
         assertFalse(result.isPresent()); // Verify Optional.empty() is returned
         verify(mockObjectMapper).readValue(invalidJson, PipelineClusterConfig.class); // Verify attempt
@@ -283,7 +279,8 @@ class KiwiprojectConsulConfigFetcherTest {
         when(consulApiValue.getValueAsString()).thenReturn(Optional.of(malformedJson));
         Map<String, org.kiwiproject.consul.model.kv.Value> newValuesMap = Collections.singletonMap(clusterConfigKey, consulApiValue);
 
-        JsonProcessingException mockJsonException = new JsonProcessingException("Test Malformed JSON") {};
+        JsonProcessingException mockJsonException = new JsonProcessingException("Test Malformed JSON") {
+        };
         when(mockObjectMapper.readValue(malformedJson, PipelineClusterConfig.class)).thenThrow(mockJsonException);
 
         try (MockedStatic<KVCache> mockedStaticKVCache = mockStatic(KVCache.class)) {
