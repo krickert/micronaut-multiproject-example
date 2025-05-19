@@ -9,16 +9,14 @@ option java_outer_classname = "EngineServiceProto";
 import "yappy_core_types.proto"; // This should define com.krickert.search.model.PipeDoc
 import "google/protobuf/empty.proto";
 
-// --- Messages for the IngestDataAsync RPC ---
-
-message IngestDataRequest {
+// --- Messages for the Connector RPC ---
+message ConnectorRequest {
   // REQUIRED. An identifier for the connector or data source submitting this data.
   // The engine will use this ID to look up the pre-configured target pipeline and initial step.
   // Example: "s3-landing-bucket-connector", "customer-api-ingest-v1".
   string source_identifier = 1;
 
   // REQUIRED. The initial document data to be processed.
-  // The Blob is expected to be within this PipeDoc as per your updated yappy_core_types.proto.
   com.krickert.search.model.PipeDoc document = 2;
 
   // Optional. Key-value parameters to be included in the PipeStream's context_params.
@@ -31,7 +29,7 @@ message IngestDataRequest {
   optional string suggested_stream_id = 4;
 }
 
-message IngestDataResponse {
+message ConnectorResponse {
   // The unique stream_id assigned by the engine to this ingestion flow.
   // This allows the connector to correlate this ingestion with the pipeline execution.
   string stream_id = 1;
@@ -48,17 +46,15 @@ message IngestDataResponse {
 // PipeStreamEngine service orchestrates pipeline execution.
 service PipeStreamEngine {
   // --- Existing RPCs (can be kept for specific internal/advanced use cases or deprecated over time) ---
-
-  rpc process(com.krickert.search.model.PipeStream) returns (com.krickert.search.model.PipeStream);
-  rpc processAsync(com.krickert.search.model.PipeStream) returns (google.protobuf.Empty);
-
-  // --- New Recommended RPC for Connectors ---
+  // --- NOTE: a sink has the same signature - the engine controls the outgoing routing, if it's a sink implementation then that will be noted in the step
+  rpc processPipe(com.krickert.search.model.PipeStream) returns (com.krickert.search.model.PipeStream);
+  rpc processPipeAsync(com.krickert.search.model.PipeStream) returns (google.protobuf.Empty);
 
   // Ingests new data (as a PipeDoc identified by a source_identifier) into the system
   // to start a pipeline asynchronously. The engine will:
   // 1. Use source_identifier to look up the configured target pipeline and initial step.
   // 2. Create the PipeStream, generate a stream_id.
   // 3. Initiate the pipeline.
-  rpc IngestDataAsync(IngestDataRequest) returns (IngestDataResponse);
+  rpc processConnectorDoc(ConnectorRequest) returns (ConnectorResponse);
 }
 

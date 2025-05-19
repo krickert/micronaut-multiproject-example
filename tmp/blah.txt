@@ -1,76 +1,81 @@
 We are trying to implement PipeSteamEngineImpl.java
 
-pay special attention to details along the way.  Do not change any outside service code and limit 	changes to yappy-engine.
+pay special attention to details along the way.  Do not change any outside service code and limit changes to yappy-engine.
 
-Do not yet worry abotu setting up the testing environment, let's get the skeleton of all this going first then we will make all the tests for it and write tests for all the components.  This is to get the basic interfaces and components done.
+Let's first setup all interfaces that would work on this - no actual implementation yet except for the main logic in the PipeStreamEngineImpl and the execution client factory / execution of the PipeStepExecutor.  It should demonstrate the flow of what we're going to do.
+
+Do not yet worry about setting up the testing environment, let's get the skeleton of all this going first then we will make all the tests for it and write tests for all the components.  This is to get the basic interfaces and components done.
+
+What we CAN implement is the PipeStreamGrpcForwarder and the PipelineStepGrpcProcessor.  The com.krickert.search.pipeline.step.grpc package is where this should go and would need a client factory to call it as well (Note: there will NOT be any GRPC implementations IN this project - but we developed the chunker and echo implementations already in the pipeline-modules that can be used to test this in the future.)
+
+As part of this skeleton,
+1) When a request comes in to any of the services, it begins by starting to create the response object.
+2) For readibility, we will make a builder structure meant to build up the full response but also carry metadata for easier readibility.  This is because we are controlling 3 states:
+    a) Request state
+    b) present state
+    c) response state.
+
 
 Try to have the work with interfaces so we can stub it easily in the tests.
 
+Below talks about the FULL implementation - that is just for reference.  You ONLY need to create the initial interfaces at this point
+
+=== REFERENCE SECTION ===
+We are building a pipeline service that allows for any node to fan-in or fan-out the same PipeStream between requests.
+
+We have to create the central processing for the PipeStep execution that is, in itself, it's own grpc service that is fully synchronous.
+
+Every engine implementation (processPipe/processPipeAsync/processConnectorDoc has exactly 1 grpc subscription attached to it.  There is already a chunker and an echo service as examples - you can check out those and feel free to make those test implementations we can use in testing for integration tests.
+
+The engine is just a manager for routing.  The pipe step is the execution step and would be hosted locally.  This management is still incomplete and needs to be implemented.  However, it is safe to assume that we would have application configuration that sets up this step appropriately.  (this setup should be all configuration driven, but it is safe to assume that a running grpc service is running via localhost for now.  The INTERNAL part is in case we have it running in the same JVM)
+
+keep in mind, the processor step should happen 1x per request.  Then the fan-out will create the next pipestream for each step (this is important, as likely the present state data should be a builder and not a PipeStream so we can "clone" these each as a protobuf we'll send to grpc/kafka)
+
+Every node interfaces a pipestream.  Internally for the business logic, it will call a localhost service (this is where the "step" com.krickert.search.pipeline.step package will do the logic)
+
+Review over all the grpc definitions to understand the relationship between consul config classes and the grpc execution.  yappy-models/protobuf-models/src/main/proto
+
 The components between the models and consul-config contain a lot of the structure of what we are doing.
+
+We have not yet defined any application properties for this, but it will be consul driven through micronaut's application property management.  So as you code, feel free to add more application properties.  These would be managed through service discovery and shared with all instances of the pipeengine (where each pipe engine is on the module basis)
 
 We want this to (not necessary for it to be this order - whatever is most readable and effective):
 
 1) When a request comes in to any of the services, it begins by starting to create the response object.
-2) For readibility, we will make a builder structure meant to build up the full response but also carry metadata for easier readibility.  This is because we are controlling 3 states: 
-	a) Request state 
+2) For easier understanding, we will make a builder structure meant to build up the full response but also carry metadata for easier readability.
+
+This is because we are controlling 3 states:
+
+	a) Request state
 	b) present state 
 	c) response state.   
-The request states and response states are immutible while the present one changes.  So you have full control of the present state. The present one would be a builder object that does the bookkeeping along the way to create the immutable response obeject.  It's fully up to the developer how to setup the present state as it's there for readability and convenience
+
+The request states and response states are immutable while the present one changes.  So you have full control of the present state. The present one would be a builder object that does the bookkeeping along the way to create the immutable response object.
+It's fully up to the developer how to setup the present state as it's there for readability and convenience
+
 3) the present state would want to:
 	a) create any routing response objects (response destinations, response next steps, etc...)
 	b) update the hop number
 	c) add a logging step 
 	d) anything that can help fill out the response object 
 	e) the actual response builder is OK to fill out along the way too
+	f) anything else - this is the temporary storage to pass around to other things while the processing is happening.  It won't be serialized.
 4) MetaData calculations
 	a) the time to create the response will be timed
-	b) have a generic pre- and post- processing internal step processors (we will have a universaol interface so we can create new steps along the way for pre- and post- processing between steps
+	b) what metadata is the same for all pipelines?  that should go here too..
 5) process the data to the PipeStep dedicated to the engine step
 6) package the response and route to the next routes
- - grpc router (looks up next steps with consul management)
- - kafka router (routes to the next kafka step if it's filled out.  It will forward to the response kafka steps and the kafka steps that are specified.  
+ - grpc router (looks up next steps with consul management - this is specific to the processor or sink steps)
+ - kafka router (routes to the next kafka step if it's filled out.  It will forward to the response kafka steps and the kafka steps that are specified.  Also, kafka forwarding keys are all UUID.  The UUID calculations are going to be based on the entity IDs it is processing.)
  - it's best to calculate the routes AFTER the processing step since that state could change while the process is happening
 7) clean up response and hydrate all other needed data
 9) send all the routes
 10) mark as completed in the logs
 
-another subsystem we should stub out:
+== END REFERENCE SECTION ==
 
+TODO (not yet - but soon!)
+1) Kaka pool of listeners
 We would need to create an initial kafka pool of listeners based off of the routing in the consul-config pipeline routing of expected kafka listening.  It would need to listen to changes for it's own pipeline step.
-
-We should write tests for this along the way.  
-
-
-I don't see where you're doing the actual step process?  So far I just see metadata added and no focus on the actual step process that is meant to happen.
-
-Review over all the grpc definitions to understand. this relationship.  yappy-models/protobuf-models/src/main/proto
-
-Also, kafka forwarding keys are all UUID.  The UUID calculations are going to be based on the entity IDs it is processing.  
-
-We have to create the central processing for the PipeStep execution that is, in itself, it's own grpc service that is fully syncronous.    Every engine implementation has exactly 1 grpc subscription attached to it.  There is already a chunker and an echo service as examples - you can check out those and feel free to make those test implementations we can use in testing for integration tests. 
-
-We have not yet defined any application properties for this, but it will be consul driven through micronaut's application property management.  So as you code, feel free to add more application properties.  These would be managed through service discovery and shared with all instances of the pipeengine (where each pipe engine is on the module basis)
-
+2) Testing framework for module processing
 Also, we would create an integration test that runs these two steps as an example.  The integration test would need to get full the grpc engines for these two steps done.  This is going to be complex, so laying the groundwork for that would be great as we'll also, eventually, include a testing framework for the each module to test that it's processing is sound and would work.
-
-The engine is just a manager for routing.  The pipe step is the execution step and would be hosted locally.  This management is still incomplete and needs to be implemented.  However, it is safe to assume that we would have application configuration that sets up this step appropriately.  (this setup should be all configuration driven, but it is safe to assume that a running grpc service is running via localhost for now.  The INTERNAL part is in case we have it running in the same JVM)
-
-You likely don't need to do any of the schema registry steps, as that's all done by the config manager already.  In fact, from this perspective, you should never change any configuration from yappy-consul-config.
-
-
-processAsync is what is called in between engine steps, which I do think is captured.
-
-I didn't see the helper structure to control the present state (you can call it ProcessorData or something like that if there's a better name for it - feel free to change it)
-
-
-
-
-So I think I see one example of it:
-
-
-// Create and add execution record to history
-            StepExecutionRecord record = createExecutionRecord(pipeStream, stepConfig, "SUCCESS");
-
-This should happen 1x and the response to fill out in the pipestream should come from here. 
-
-Also the instructions mentioned interfaces for pre- and post- internal steps that the developer can add in the engine itself (this can be new metadata we add later or custom logic we want to add in the future)

@@ -57,8 +57,7 @@ The system is designed with a modular architecture following these core principl
 - **yappy-consul-config**: Dynamic Configuration Management Service for loading, watching, validating, and providing live updates of
   pipeline and schema configurations stored in Consul
 - **yappy-models**: Contains multiple submodules:
-    - **pipeline-config-models**: Defines the structure of pipelines, steps, and their configurations
-    - **schema-registry-models**: Defines the structure of schema artifacts and their versions
+    - **pipeline-config-models**: Defines the structure of pipelines, steps, schema registration, and their configurations
     - **protobuf-models**: Protocol Buffer model definitions for gRPC communication
 - **yappy-test-resources**: TestContainers configuration and test resources
 
@@ -108,17 +107,7 @@ cd docker-dev
     - Use TestContainers for tests that require external services
 
 3. **TestContainers Configuration**:
-    - TestContainers can be enabled or disabled globally or individually using configuration properties
-    - Available containers include Kafka, Consul, Moto, and Apicurio
-    - Configure in your `application-test.yml` file:
-      ```yaml
-      testcontainers:
-        enabled: true  # Global setting
-        kafka: true    # Enable Kafka container
-        moto: false    # Disable Moto container
-        consul: true   # Enable Consul container
-        apicurio: true # Enable Apicurio container
-      ```
+    - see the README for the 
 
 4. **Test Verification**:
     - Always run tests to verify changes

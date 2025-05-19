@@ -76,6 +76,8 @@ dependencies {
     implementation(mn.protobuf.java.util)
     implementation(mn.grpc.protobuf)
     implementation(mn.micronaut.grpc.runtime)
+    runtimeOnly(mn.logback.classic)
+    runtimeOnly(mn.snakeyaml)
 
 }
 

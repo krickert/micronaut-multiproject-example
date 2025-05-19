@@ -33,8 +33,7 @@ include(
     "yappy-models:pipeline-config-models",
     "yappy-models:pipeline-config-models-test-utils",
     "yappy-models:protobuf-models",
-    "yappy-schema-registry",
     "yappy-modules:echo",
-    "yappy-modules:chunker"
-    //"yappy-engine"
+    "yappy-modules:chunker",
+    "yappy-engine"
 )

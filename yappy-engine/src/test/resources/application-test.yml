@@ -5,3 +5,5 @@ micronaut:
 app:
   config:
     cluster-name: test-cluster
+
+
