@@ -64,6 +64,10 @@ dependencies {
     testImplementation(project(":yappy-test-resources:consul-test-resource"))
     testResourcesImplementation(mn.testcontainers.consul)
     testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
+    testImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
+    testImplementation(project(":yappy-test-resources:apicurio-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     testImplementation(mn.reactor.test)
     testImplementation(mn.assertj.core)
 
