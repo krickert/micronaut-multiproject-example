@@ -61,7 +61,7 @@ public class PipeStreamGrpcForwarder {
         PipeStream pipe = pipeBuilder.build();
         ManagedChannel channel = getManagedChannel(route.destination());
         PipeStreamEngineGrpc.PipeStreamEngineBlockingStub stub = PipeStreamEngineGrpc.newBlockingStub(channel);
-        stub.processAsync(pipe);
+        stub.processPipeAsync(pipe);
     }
 
     @Builder
