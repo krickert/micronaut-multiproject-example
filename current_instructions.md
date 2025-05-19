@@ -324,6 +324,20 @@ public record RouteData(
 }
 ```
 
+**Field Descriptions**:
+- `targetPipeline`: The name of the pipeline that the next step belongs to
+- `nextTargetStep`: The logical name of the next step in the pipeline that should process the message. This is set in the PipeStream's targetStepName field before forwarding, so the receiving service knows which step should process the message.
+- `destination`: The physical endpoint where the message will be sent. For gRPC, it's the service name that will be looked up in the service discovery system (Consul). For Kafka, it's the topic name.
+- `streamId`: The unique identifier for the stream being processed
+- `transportType`: The type of transport to use (GRPC or KAFKA)
+- `usePlainText`: Whether to use plaintext communication for gRPC (vs TLS/SSL)
+
+The key difference between `destination` and `nextTargetStep` is that:
+- `destination` is about where to send the message (physical routing)
+- `nextTargetStep` is about which step should process the message (logical routing)
+
+For example, when forwarding to a gRPC service, the `destination` might be "text-extractor-service" (the actual service name in Consul), while the `nextTargetStep` might be "extract-text" (the logical step name in the pipeline configuration).
+
 ### 5. PipeStreamStateBuilder Interface and Implementation
 
 This component manages the three states (request, present, response) during processing and handles routing.
@@ -398,19 +412,6 @@ public interface PipeStreamStateBuilder {
  * Implementation of PipeStreamStateBuilder that manages pipeline stream state and routing.
  */
 @Singleton
-/**
- * Route data for forwarding PipeStream to the next step.
- * This record is used by both gRPC and Kafka forwarders.
- */
-@Builder
-public record RouteData(
-        String targetPipeline,
-        String nextTargetStep,
-        String destination,
-        String streamId,
-        TransportType transportType,
-        @Value("${grpc.client.plaintext:true}") boolean usePlainText) {
-}
 
 public class PipeStreamStateBuilderImpl implements PipeStreamStateBuilder {
     private final PipeStream requestState;
