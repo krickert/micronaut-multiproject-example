@@ -2,26 +2,14 @@ package com.krickert.search.config.pipeline.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-// No Lombok needed for a simple record
 
-/**
- * Represents a reference to a specific version of a schema stored in a schema registry.
- * This record is immutable.
- *
- * @param subject The subject or name under which the schema artifact is registered.
- * This typically corresponds to the PipelineModuleConfiguration's implementationId.
- * @param version The specific version of the schema to be used.
- */
+// ... (javadoc)
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record SchemaReference(
-    @JsonProperty("subject") String subject,
-    @JsonProperty("version") Integer version
+        @JsonProperty("subject") String subject,
+        @JsonProperty("version") Integer version
 ) {
-    // Canonical constructor, accessors (subject(), version()), equals(), hashCode(),
-    // and toString() are automatically provided.
-
-    // You can add custom constructors or static factory methods if needed.
-    // Example: Validating constructor
+    // Validating constructor
     public SchemaReference {
         if (subject == null || subject.isBlank()) {
             throw new IllegalArgumentException("SchemaReference subject cannot be null or blank.");
@@ -30,4 +18,19 @@ public record SchemaReference(
             throw new IllegalArgumentException("SchemaReference version cannot be null and must be positive.");
         }
     }
+
+    /**
+     * Returns a string representation combining subject and version,
+     * suitable for logging or as a unique identifier.
+     * Example: "my-schema-subject:3"
+     *
+     * @return A string combining subject and version.
+     */
+    public String toIdentifier() {
+        return String.format("%s:%s", subject, version);
+    }
+
+    // The default toString() for a record is already quite good:
+    // SchemaReference[subject=my-schema-subject, version=3]
+    // but toIdentifier() gives you a more specific format if needed.
 }
