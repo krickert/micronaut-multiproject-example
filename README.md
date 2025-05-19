@@ -1,12 +1,8 @@
-Okay, this is a significant and interesting shift in the architectural perspective, moving towards a more decentralized or "smart pipe" model where each step embodies more of the engine's routing and configuration awareness. This aligns well with a highly event-driven or actor-like system.
-
-Here's the revised README structure based on the idea that **"each pipeline step (or its hosting environment/framework) has engine-like capabilities"** to process its part of the pipeline.
-
-## 1\. Summary
+## 1. Summary
 
 YAPPY (Yet Another Pipeline Processor) is a highly flexible and scalable platform for building, managing, and executing dynamic data processing pipelines. It leverages a microservices architecture where **each pipeline step, supported by an underlying framework or embedded engine logic, dynamically fetches its configuration and determines onward routing.** Communication primarily utilizes gRPC for synchronous processing within a step and Kafka for asynchronous handoff between steps, ensuring decoupling and resilience. Consul serves as the dynamic configuration store and service discovery mechanism, with a Schema Registry guaranteeing data and configuration integrity. YAPPY empowers users to define complex workflows for diverse applications like data science and search indexing by allowing custom processing modules to be easily integrated. The system's design for live configuration updates facilitates agile pipeline evolution and A/B testing without requiring full service redeployments.
 
-## 2\. Overview of Components
+## 2. Overview of Components
 
 The YAPPY ecosystem comprises several key components that interact to provide a robust and decentralized pipeline processing environment. Each Pipeline Module operates with an awareness of its role and the next steps, guided by the shared Pipeline Configuration and its own embedded engine logic or supporting framework.
 
@@ -87,7 +83,7 @@ graph TD
 | **Consul** | Service discovery and distributed Key-Value store for `PipelineClusterConfig` and runtime parameters.                                                                                                                                    | Stores `PipelineClusterConfig`; Provides service addresses for gRPC modules; Read by all Module Frameworks/Embedded Engines for configuration.                                                                                                                                 |
 | **Kafka** | Acts as the primary message bus for `PipeStream` objects, decoupling pipeline steps and providing resilience.                                                                                                                              | `PipeStream` messages are published to topics corresponding to target steps; Consumed by the Module Framework/Embedded Engine of the respective step.                                                                                                                     |
 
-## 3\. Example Usage of Pipeline
+## 3. Example Usage of Pipeline
 
 YAPPY's decentralized engine logic within each step allows for robust and scalable pipeline execution.
 
@@ -150,16 +146,16 @@ graph LR
 
 **Description:**
 
-1.  **Data Ingestion & Kick-off:** An external connector or service sends an `IngestDataRequest` (as per `engine_service.proto`) to an **Initial Engine Logic** (e.g., a dedicated Ingest Service). This logic creates a `PipeStream`, populates it with the initial `PipeDoc`, `source_identifier`, `context_params`, `stream_id`, `current_pipeline_name` (e.g., "DataSciencePipeline-P1"), and `target_step_name` (e.g., "P1\_S1\_ValidateData"). It then publishes this `PipeStream` to the Kafka topic designated for "P1\_S1\_ValidateData\_In".
-2.  **Step 1: ValidateData (S1\_FW & M1\_Val):**
-    * The **Step 1 Framework/Embedded Engine (S1\_FW)** consumes the `PipeStream` from `Kafka: P1_S1_ValidateData_In`.
-    * It uses `PipeStream.target_step_name` ("P1\_S1\_ValidateData") and `current_pipeline_name` ("DataSciencePipeline-P1") to fetch its specific `PipelineStepConfig` from Consul (via `DynamicConfigurationManager`). This config includes the `pipelineImplementationId` for the Validator Module, its `custom_json_config` (e.g., validation rules), and `config_params`, along with `nextSteps` and `errorSteps`.
-    * S1\_FW validates the `custom_json_config` against its schema from the Pipeline Schema Registry.
-    * S1\_FW constructs the `ProcessRequest` (as per `pipe_step_processor.proto`) and invokes the **Validator Module (M1\_Val)** (a gRPC service).
-    * Upon receiving the `ProcessResponse` from M1\_Val, S1\_FW updates the `PipeStream` (e.g., adds to history, updates `PipeDoc` if changed).
-    * Based on `ProcessResponse.success` and its `PipelineStepConfig`, S1\_FW determines the next target (e.g., "P1\_S2\_CleanData" if success). It updates `PipeStream.target_step_name` and publishes the `PipeStream` to `Kafka: P1_S2_CleanData_In`. If failed, it routes to `Kafka: P1_Error_Topic`.
-3.  **Subsequent Steps (S2\_FW, S3\_FW, etc.):** Each subsequent step (DataCleaner, FeatureEngineer, ModelTrainer, ArtifactStorage) follows a similar pattern:
-    * Its dedicated **Module Framework/Embedded Engine (Sx\_FW)** consumes the `PipeStream` from its input Kafka topic.
+1.  **Data Ingestion & Kick-off:** An external connector or service sends an `IngestDataRequest` (as per `engine_service.proto`) to an **Initial Engine Logic** (e.g., a dedicated Ingest Service). This logic creates a `PipeStream`, populates it with the initial `PipeDoc`, `source_identifier`, `context_params`, `stream_id`, `current_pipeline_name` (e.g., "DataSciencePipeline-P1"), and `target_step_name` (e.g., "P1_S1_ValidateData"). It then publishes this `PipeStream` to the Kafka topic designated for "P1_S1_ValidateData_In".
+2.  **Step 1: ValidateData (S1_FW & M1_Val):**
+    * The **Step 1 Framework/Embedded Engine (S1_FW)** consumes the `PipeStream` from `Kafka: P1_S1_ValidateData_In`.
+    * It uses `PipeStream.target_step_name` ("P1_S1_ValidateData") and `current_pipeline_name` ("DataSciencePipeline-P1") to fetch its specific `PipelineStepConfig` from Consul (via `DynamicConfigurationManager`). This config includes the `pipelineImplementationId` for the Validator Module, its `custom_json_config` (e.g., validation rules), and `config_params`, along with `nextSteps` and `errorSteps`.
+    * S1_FW validates the `custom_json_config` against its schema from the Pipeline Schema Registry.
+    * S1_FW constructs the `ProcessRequest` (as per `pipe_step_processor.proto`) and invokes the **Validator Module (M1_Val)** (a gRPC service).
+    * Upon receiving the `ProcessResponse` from M1_Val, S1_FW updates the `PipeStream` (e.g., adds to history, updates `PipeDoc` if changed).
+    * Based on `ProcessResponse.success` and its `PipelineStepConfig`, S1_FW determines the next target (e.g., "P1_S2_CleanData" if success). It updates `PipeStream.target_step_name` and publishes the `PipeStream` to `Kafka: P1_S2_CleanData_In`. If failed, it routes to `Kafka: P1_Error_Topic`.
+3.  **Subsequent Steps (S2_FW, S3_FW, etc.):** Each subsequent step (DataCleaner, FeatureEngineer, ModelTrainer, ArtifactStorage) follows a similar pattern:
+    * Its dedicated **Module Framework/Embedded Engine (Sx_FW)** consumes the `PipeStream` from its input Kafka topic.
     * It fetches its own configuration from Consul.
     * It validates its custom config.
     * It invokes its associated **Module Processor (Mx)**.
@@ -167,7 +163,7 @@ graph LR
 4.  **Data Structures:** The `PipeDoc` within the `PipeStream` evolves, potentially storing cleaned data in `body`, engineered features in `custom_data` or `semantic_results`, and model artifacts as `Blob` or URIs.
 5.  **UIs:**
     * **Pipeline Editor UI:** Defines "DataSciencePipeline-P1", its steps, the `pipelineImplementationId` for each, their respective `custom_json_config` (and its schema reference), and the `nextSteps`/`errorSteps` (which implicitly define the Kafka topics, e.g., by a convention like `<pipelineName>_<stepName>_In`).
-    * **Pipeline Status UI:** Collects `StepExecutionRecord`s and `ErrorData` logged by each Sx\_FW to a central Log/Metrics Store, providing a consolidated view of the distributed execution.
+    * **Pipeline Status UI:** Collects `StepExecutionRecord`s and `ErrorData` logged by each Sx_FW to a central Log/Metrics Store, providing a consolidated view of the distributed execution.
     * **Admin UI:** Manages schemas for `custom_json_config` of each module type.
 
 ### 3.2. Search Engine Indexing Pipeline
@@ -228,19 +224,19 @@ graph LR
 
 **Description:**
 
-1.  **Document Ingestion & Kick-off:** Similar to the data science use case, an **Initial Engine Logic** receives an `IngestDataRequest`. It creates a `PipeStream` for "SearchIndexingPipeline-P2", sets the initial `target_step_name` to "P2\_S1\_FetchContent", and publishes it to `Kafka: P2_S1_FetchContent_In`. The `PipeDoc` might initially contain `source_uri`.
-2.  **Step Execution (General Pattern for S1-S5):** Each step (`WorkspaceContent`, `ExtractText`, `ChunkText`, `GenerateEmbeddings`, `IndexDocument`) operates via its **Module Framework/Embedded Engine (Sx\_FW)** and associated **Module Processor (Mx)**:
-    * Sx\_FW consumes the `PipeStream` from its designated input Kafka topic (e.g., `Kafka: P2_Sx_Action_In`).
+1.  **Document Ingestion & Kick-off:** Similar to the data science use case, an **Initial Engine Logic** receives an `IngestDataRequest`. It creates a `PipeStream` for "SearchIndexingPipeline-P2", sets the initial `target_step_name` to "P2_S1_FetchContent", and publishes it to `Kafka: P2_S1_FetchContent_In`. The `PipeDoc` might initially contain `source_uri`.
+2.  **Step Execution (General Pattern for S1-S5):** Each step (`WorkspaceContent`, `ExtractText`, `ChunkText`, `GenerateEmbeddings`, `IndexDocument`) operates via its **Module Framework/Embedded Engine (Sx_FW)** and associated **Module Processor (Mx)**:
+    * Sx_FW consumes the `PipeStream` from its designated input Kafka topic (e.g., `Kafka: P2_Sx_Action_In`).
     * It fetches its `PipelineStepConfig` from Consul, which defines the `custom_json_config` (e.g., `chunk_config_id` for the Chunker, `embedding_config_id` for the Embedding Generator), `pipelineImplementationId`, `nextSteps`, and `errorSteps`.
     * The `custom_json_config` is validated using schemas from the Pipeline Schema Registry.
-    * Sx\_FW invokes its gRPC Module Processor (Mx) with the `PipeStream` data and derived `ProcessConfiguration`.
+    * Sx_FW invokes its gRPC Module Processor (Mx) with the `PipeStream` data and derived `ProcessConfiguration`.
     * **Data Transformation (`yappy_core_types.proto` in action):**
         * `WorkspaceContent (M1_Fetch)`: Populates `PipeDoc.blob` and `PipeDoc.source_mime_type`.
         * `ExtractText (M2_Extract)`: Populates `PipeDoc.body` from `PipeDoc.blob`.
         * `ChunkText (M3_Chunk)`: Populates `PipeDoc.semantic_results` with a `SemanticProcessingResult` containing `SemanticChunk`s based on `chunk_config_id`.
         * `GenerateEmbeddings (M4_Embed)`: Adds `Embedding` vectors to each `ChunkEmbedding` within the `SemanticChunk`s, using `embedding_config_id`. It also updates `SemanticProcessingResult.result_set_name`.
         * `IndexDocument (M5_Index)`: Sends the enriched `PipeDoc` to a search engine.
-    * Sx\_FW updates the `PipeStream`'s history and `target_step_name` according to its config and the processor's success/failure, then publishes to the next Kafka topic (e.g., `Kafka: P2_S(x+1)_Action_In`).
+    * Sx_FW updates the `PipeStream`'s history and `target_step_name` according to its config and the processor's success/failure, then publishes to the next Kafka topic (e.g., `Kafka: P2_S(x+1)_Action_In`).
 3.  **Decentralized Orchestration:** The pipeline progresses as each step's framework autonomously consumes from its input topic, processes, and routes to the next, all driven by the centrally managed `PipelineConfig` in Consul.
 4.  **UIs:**
     * **Pipeline Editor UI:** Configures "SearchIndexingPipeline-P2", defining for each step its module, custom JSON config (like `chunk_config_id`, `embedding_config_id`), schema references, and the sequence of Kafka topics that link the steps.

@@ -71,6 +71,10 @@ public class AsyncPipelineProcessor {
             currentStreamBuilder.addHistory(historyBuilder.build()); // Add the "DISPATCHING" record
             PipeStream streamToDispatch = currentStreamBuilder.build();
 
+            //TODO - this should be handled through a router service
+//            switch (stepConfig.transportType()) {
+//                case KAFKA ->
+//            }
             if (stepConfig.transportType() == TransportType.KAFKA) {
                 KafkaTransportConfig kafkaConfig = stepConfig.kafkaConfig();
                 if (kafkaConfig.publishTopicPattern() == null || kafkaConfig.publishTopicPattern().isEmpty()) {
@@ -83,7 +87,6 @@ public class AsyncPipelineProcessor {
                 LOG.info("Dispatched stream_id: {} to Kafka topic: {} for step: {}",
                     streamToDispatch.getStreamId(), kafkaConfig.publishTopicPattern(), streamToDispatch.getTargetStepName());
             } else {
-                // Asynchronous processing primarily targets Kafka. Other transports in async flow need specific handling.
                 handleProcessingError(currentStreamBuilder, historyBuilder, // Use streamToDispatch's builder
                     "Unsupported transport type for async dispatch: " + stepConfig.transportType() + " for step: " + request.getTargetStepName(),
                     "CONFIG_ERROR_UNSUPPORTED_TRANSPORT", request.getTargetStepName(), responseObserver);

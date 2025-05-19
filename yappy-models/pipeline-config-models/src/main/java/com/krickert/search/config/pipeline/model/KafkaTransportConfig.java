@@ -4,11 +4,13 @@ package com.krickert.search.config.pipeline.model;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Builder;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@Builder
 public record KafkaTransportConfig(
     // For an OutputTarget, 'topic' is the primary field.
     // The old model's KafkaTransportConfig was multi-purpose.

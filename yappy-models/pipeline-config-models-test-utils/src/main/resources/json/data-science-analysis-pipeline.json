@@ -1,0 +1,460 @@
+{
+  "clusterName": "data-science-cluster",
+  "pipelineGraphConfig": {
+    "pipelines": {
+      "data-science-pipeline": {
+        "name": "data-science-pipeline",
+        "pipelineSteps": {
+          "data-collector": {
+            "stepName": "data-collector",
+            "stepType": "INITIAL_PIPELINE",
+            "description": "Collects data from various sources for analysis",
+            "customConfigSchemaId": "data-collector-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "sources": [
+                  {
+                    "type": "database",
+                    "connectionString": "jdbc:postgresql://localhost:5432/analytics",
+                    "queryInterval": "1h"
+                  },
+                  {
+                    "type": "api",
+                    "endpoint": "https://api.example.com/data",
+                    "pollInterval": "15m"
+                  },
+                  {
+                    "type": "file",
+                    "path": "/data/incoming/csv",
+                    "pattern": "*.csv"
+                  }
+                ]
+              }
+            },
+            "processorInfo": {
+              "grpcServiceName": "data-collector-service"
+            },
+            "outputs": {
+              "default": {
+                "targetStepName": "data-cleaner",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "data.science.raw",
+                  "kafkaProducerProperties": {
+                    "compression.type": "zstd",
+                    "batch.size": "32768"
+                  }
+                }
+              }
+            }
+          },
+          "data-cleaner": {
+            "stepName": "data-cleaner",
+            "stepType": "PIPELINE",
+            "description": "Cleans and normalizes data for analysis",
+            "customConfigSchemaId": "data-cleaner-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "removeOutliers": true,
+                "imputeMissingValues": true,
+                "normalizationMethod": "z-score",
+                "deduplicate": true
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["data.science.raw"],
+                "consumerGroupId": "data-cleaner-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest",
+                  "fetch.max.bytes": "52428800"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "data-cleaner-service"
+            },
+            "outputs": {
+              "default": {
+                "targetStepName": "feature-engineering",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "data.science.cleaned",
+                  "kafkaProducerProperties": {
+                    "compression.type": "zstd"
+                  }
+                }
+              },
+              "onError": {
+                "targetStepName": "data-error-handler",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "data.science.errors",
+                  "kafkaProducerProperties": {
+                    "compression.type": "zstd"
+                  }
+                }
+              }
+            }
+          },
+          "feature-engineering": {
+            "stepName": "feature-engineering",
+            "stepType": "PIPELINE",
+            "description": "Creates features for machine learning models",
+            "customConfigSchemaId": "feature-engineering-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "featureSelectionMethod": "recursive-feature-elimination",
+                "dimensionalityReduction": "pca",
+                "createInteractionFeatures": true,
+                "polynomialFeatures": {
+                  "enabled": true,
+                  "degree": 2
+                }
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["data.science.cleaned"],
+                "consumerGroupId": "feature-engineering-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "feature-engineering-service"
+            },
+            "outputs": {
+              "default_training": {
+                "targetStepName": "model-training",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "data.science.features.training",
+                  "kafkaProducerProperties": {
+                    "compression.type": "zstd"
+                  }
+                }
+              },
+              "default_prediction": {
+                "targetStepName": "model-prediction",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "data.science.features.prediction",
+                  "kafkaProducerProperties": {
+                    "compression.type": "zstd"
+                  }
+                }
+              },
+              "onError": {
+                "targetStepName": "data-error-handler",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "data.science.errors",
+                  "kafkaProducerProperties": {
+                    "compression.type": "zstd"
+                  }
+                }
+              }
+            }
+          },
+          "model-training": {
+            "stepName": "model-training",
+            "stepType": "PIPELINE",
+            "description": "Trains machine learning models",
+            "customConfigSchemaId": "model-training-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "algorithms": ["random-forest", "gradient-boosting", "neural-network"],
+                "hyperparameterTuning": {
+                  "method": "grid-search",
+                  "crossValidationFolds": 5
+                },
+                "evaluationMetrics": ["accuracy", "f1", "roc_auc"],
+                "saveModelPath": "/models/trained"
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["data.science.features.training"],
+                "consumerGroupId": "model-training-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "model-training-service"
+            },
+            "outputs": {
+              "default": {
+                "targetStepName": "model-registry",
+                "transportType": "GRPC",
+                "grpcTransport": {
+                  "serviceName": "model-registry-service",
+                  "grpcClientProperties": {
+                    "deadline": "60s"
+                  }
+                }
+              },
+              "onError": {
+                "targetStepName": "data-error-handler",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "data.science.errors",
+                  "kafkaProducerProperties": {
+                    "compression.type": "zstd"
+                  }
+                }
+              }
+            }
+          },
+          "model-prediction": {
+            "stepName": "model-prediction",
+            "stepType": "PIPELINE",
+            "description": "Makes predictions using trained models",
+            "customConfigSchemaId": "model-prediction-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "modelId": "latest",
+                "batchSize": 1000,
+                "outputProbabilities": true,
+                "thresholdProbability": 0.5
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["data.science.features.prediction"],
+                "consumerGroupId": "model-prediction-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "model-prediction-service"
+            },
+            "outputs": {
+              "default": {
+                "targetStepName": "results-processor",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "data.science.predictions",
+                  "kafkaProducerProperties": {
+                    "compression.type": "zstd"
+                  }
+                }
+              },
+              "onError": {
+                "targetStepName": "data-error-handler",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "data.science.errors",
+                  "kafkaProducerProperties": {
+                    "compression.type": "zstd"
+                  }
+                }
+              }
+            }
+          },
+          "model-registry": {
+            "stepName": "model-registry",
+            "stepType": "PIPELINE",
+            "description": "Registers and versions trained models",
+            "customConfigSchemaId": "model-registry-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "registryPath": "/models/registry",
+                "enableVersioning": true,
+                "metadataSchema": "model-metadata-v1"
+              }
+            },
+            "processorInfo": {
+              "grpcServiceName": "model-registry-service"
+            },
+            "outputs": {
+              "default": {
+                "targetStepName": "model-deployment",
+                "transportType": "GRPC",
+                "grpcTransport": {
+                  "serviceName": "model-deployment-service",
+                  "grpcClientProperties": {
+                    "deadline": "30s"
+                  }
+                }
+              }
+            }
+          },
+          "model-deployment": {
+            "stepName": "model-deployment",
+            "stepType": "SINK",
+            "description": "Deploys models to production",
+            "customConfigSchemaId": "model-deployment-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "deploymentEnvironment": "production",
+                "deploymentStrategy": "blue-green",
+                "monitoringEnabled": true,
+                "autoRollbackThreshold": 0.1
+              }
+            },
+            "processorInfo": {
+              "grpcServiceName": "model-deployment-service"
+            },
+            "outputs": {}
+          },
+          "results-processor": {
+            "stepName": "results-processor",
+            "stepType": "SINK",
+            "description": "Processes and stores prediction results",
+            "customConfigSchemaId": "results-processor-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "outputFormat": "parquet",
+                "outputPath": "/data/results",
+                "partitionBy": ["date", "model_version"],
+                "compressionCodec": "snappy"
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["data.science.predictions"],
+                "consumerGroupId": "results-processor-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "results-processor-service"
+            },
+            "outputs": {}
+          },
+          "data-error-handler": {
+            "stepName": "data-error-handler",
+            "stepType": "SINK",
+            "description": "Handles errors in the data science pipeline",
+            "customConfigSchemaId": "data-error-handler-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "errorLogPath": "/var/log/data-science/errors",
+                "alertThreshold": 10,
+                "alertChannels": ["email", "slack"],
+                "retryEnabled": true
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["data.science.errors"],
+                "consumerGroupId": "data-error-handler-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "data-error-handler-service"
+            },
+            "outputs": {}
+          }
+        }
+      }
+    }
+  },
+  "pipelineModuleMap": {
+    "availableModules": {
+      "data-collector-service": {
+        "implementationName": "Data Collector Service",
+        "implementationId": "data-collector-service",
+        "customConfigSchemaReference": {
+          "subject": "data-collector-schema",
+          "version": 1
+        }
+      },
+      "data-cleaner-service": {
+        "implementationName": "Data Cleaner Service",
+        "implementationId": "data-cleaner-service",
+        "customConfigSchemaReference": {
+          "subject": "data-cleaner-schema",
+          "version": 1
+        }
+      },
+      "feature-engineering-service": {
+        "implementationName": "Feature Engineering Service",
+        "implementationId": "feature-engineering-service",
+        "customConfigSchemaReference": {
+          "subject": "feature-engineering-schema",
+          "version": 1
+        }
+      },
+      "model-training-service": {
+        "implementationName": "Model Training Service",
+        "implementationId": "model-training-service",
+        "customConfigSchemaReference": {
+          "subject": "model-training-schema",
+          "version": 1
+        }
+      },
+      "model-prediction-service": {
+        "implementationName": "Model Prediction Service",
+        "implementationId": "model-prediction-service",
+        "customConfigSchemaReference": {
+          "subject": "model-prediction-schema",
+          "version": 1
+        }
+      },
+      "model-registry-service": {
+        "implementationName": "Model Registry Service",
+        "implementationId": "model-registry-service",
+        "customConfigSchemaReference": {
+          "subject": "model-registry-schema",
+          "version": 1
+        }
+      },
+      "model-deployment-service": {
+        "implementationName": "Model Deployment Service",
+        "implementationId": "model-deployment-service",
+        "customConfigSchemaReference": {
+          "subject": "model-deployment-schema",
+          "version": 1
+        }
+      },
+      "results-processor-service": {
+        "implementationName": "Results Processor Service",
+        "implementationId": "results-processor-service",
+        "customConfigSchemaReference": {
+          "subject": "results-processor-schema",
+          "version": 1
+        }
+      },
+      "data-error-handler-service": {
+        "implementationName": "Data Error Handler Service",
+        "implementationId": "data-error-handler-service",
+        "customConfigSchemaReference": {
+          "subject": "data-error-handler-schema",
+          "version": 1
+        }
+      }
+    }
+  },
+  "defaultPipelineName": "data-science-pipeline",
+  "allowedKafkaTopics": [
+    "data.science.raw",
+    "data.science.cleaned",
+    "data.science.features.training",
+    "data.science.features.prediction",
+    "data.science.predictions",
+    "data.science.errors"
+  ],
+  "allowedGrpcServices": [
+    "data-collector-service",
+    "data-cleaner-service",
+    "feature-engineering-service",
+    "model-training-service",
+    "model-prediction-service",
+    "model-registry-service",
+    "model-deployment-service",
+    "results-processor-service",
+    "data-error-handler-service"
+  ]
+}

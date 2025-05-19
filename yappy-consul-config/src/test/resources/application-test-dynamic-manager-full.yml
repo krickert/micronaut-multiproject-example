@@ -1,0 +1,23 @@
+# Consul client configuration
+consul:
+  client:
+    enabled: true
+    config:
+      enabled: true
+      format: properties
+      path: config/pipeline
+
+# Disable Micronaut's config client to avoid conflicts
+micronaut:
+  config-client:
+    enabled: false
+
+# Application-specific Consul configuration
+app:
+  config:
+    cluster-name: comprehensive-cluster
+    consul:
+      key-prefixes:
+        pipeline-clusters: pipeline-configs/clusters
+        schema-versions: pipeline-configs/schemas/versions
+      watch-seconds: 5

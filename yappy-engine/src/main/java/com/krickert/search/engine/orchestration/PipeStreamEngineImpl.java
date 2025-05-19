@@ -6,7 +6,6 @@ import com.krickert.search.engine.IngestDataResponse;
 import com.krickert.search.engine.PipeStreamEngineGrpc;
 import com.krickert.search.engine.orchestration.AsyncPipelineProcessor;
 import com.krickert.search.engine.orchestration.IngestionService;
-import com.krickert.search.engine.orchestration.SyncStepExecutor;
 
 import com.google.protobuf.Empty;
 import com.krickert.search.model.PipeStream;
@@ -23,12 +22,12 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
 
     private final IngestionService ingestionService;
     private final AsyncPipelineProcessor asyncPipelineProcessor;
-    private final SyncStepExecutor syncStepExecutor;
+    private final GrpcPipelineStepExecutor syncStepExecutor;
 
     @Inject
     public PipeStreamEngineImpl(IngestionService ingestionService,
                                 AsyncPipelineProcessor asyncPipelineProcessor,
-                                SyncStepExecutor syncStepExecutor) {
+                                GrpcPipelineStepExecutor syncStepExecutor) {
         this.ingestionService = ingestionService;
         this.asyncPipelineProcessor = asyncPipelineProcessor;
         this.syncStepExecutor = syncStepExecutor;
@@ -42,13 +41,12 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
 
     @Override
     public void processAsync(PipeStream request, StreamObserver<Empty> responseObserver) {
-        LOG.debug("PipeStreamEngineImpl.processAsync called for stream_id: {}, target_step: {}", request.getStreamId(), request.getTargetStepName());
-        asyncPipelineProcessor.processAndDispatchAsync(request, responseObserver);
+
     }
 
     @Override
     public void process(PipeStream request, StreamObserver<PipeStream> responseObserver) {
         LOG.debug("PipeStreamEngineImpl.process called for stream_id: {}, target_step: {}", request.getStreamId(), request.getTargetStepName());
-        syncStepExecutor.executeStepSync(request, responseObserver);
+
     }
 }

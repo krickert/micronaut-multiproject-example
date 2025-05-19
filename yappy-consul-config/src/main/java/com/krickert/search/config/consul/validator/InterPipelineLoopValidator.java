@@ -3,26 +3,26 @@ package com.krickert.search.config.consul.validator;
 import com.krickert.search.config.pipeline.model.*;
 import jakarta.inject.Singleton;
 import org.jgrapht.Graph;
-import org.jgrapht.alg.cycle.JohnsonSimpleCycles; // Or TarjanSimpleCycles, etc.
+import org.jgrapht.alg.cycle.JohnsonSimpleCycles;
 import org.jgrapht.graph.DefaultDirectedGraph;
 import org.jgrapht.graph.DefaultEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.stream.Collectors; // For formatting cycle paths
-
+import java.util.stream.Collectors;
 
 @Singleton
 public class InterPipelineLoopValidator implements ClusterValidationRule {
     private static final Logger LOG = LoggerFactory.getLogger(InterPipelineLoopValidator.class);
-    private static final int MAX_CYCLES_TO_REPORT = 10; // Example limit
+    private static final int MAX_CYCLES_TO_REPORT = 10;
 
     @Override
     public List<String> validate(PipelineClusterConfig clusterConfig,
@@ -32,174 +32,179 @@ public class InterPipelineLoopValidator implements ClusterValidationRule {
             LOG.warn("PipelineClusterConfig is null, skipping inter-pipeline loop validation.");
             return errors;
         }
+        final String currentClusterName = clusterConfig.clusterName();
 
-        LOG.debug("Performing inter-pipeline loop validation for cluster: {}", clusterConfig.clusterName());
+        LOG.debug("Performing inter-pipeline loop validation for cluster: {}", currentClusterName);
 
         if (clusterConfig.pipelineGraphConfig() == null ||
                 clusterConfig.pipelineGraphConfig().pipelines() == null ||
                 clusterConfig.pipelineGraphConfig().pipelines().isEmpty()) {
-            LOG.debug("No pipeline graph or pipelines to validate for inter-pipeline loops in cluster: {}", clusterConfig.clusterName());
+            LOG.debug("No pipeline graph or pipelines to validate for inter-pipeline loops in cluster: {}", currentClusterName);
             return errors;
         }
 
         Map<String, PipelineConfig> pipelinesMap = clusterConfig.pipelineGraphConfig().pipelines();
         Graph<String, DefaultEdge> interPipelineGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
 
-        // Add all valid pipeline names as vertices
-        for (String pipelineName : pipelinesMap.keySet()) {
-            if (pipelineName != null && !pipelineName.isBlank()) {
-                interPipelineGraph.addVertex(pipelineName);
+        for (String pipelineMapKey : pipelinesMap.keySet()) {
+            PipelineConfig pipeline = pipelinesMap.get(pipelineMapKey);
+            if (pipeline != null && pipeline.name() != null && !pipeline.name().isBlank()) {
+                 if (!pipelineMapKey.equals(pipeline.name())) {
+                    errors.add(String.format("Cluster '%s': Pipeline map key '%s' does not match pipeline name '%s'.",
+                            currentClusterName, pipelineMapKey, pipeline.name()));
+                }
+                interPipelineGraph.addVertex(pipeline.name());
             } else {
-                LOG.warn("A pipeline in cluster '{}' has a null or blank map key. Skipping for inter-pipeline loop detection.", clusterConfig.clusterName());
+                errors.add(String.format("A pipeline in cluster '%s' has a null/blank map key, null pipeline object, or null/blank name. Map key: '%s'. Skipping for inter-pipeline loop detection graph.",
+                        currentClusterName, pipelineMapKey));
             }
         }
 
-        // Determine edges based on Kafka topic publishing and listening
+        // Map to track which topics are published by which pipeline
+        Map<String, Set<String>> topicsPublishedByPipeline = new HashMap<>();
+
+        // First pass: collect all topics published by each pipeline
         for (Map.Entry<String, PipelineConfig> sourcePipelineEntry : pipelinesMap.entrySet()) {
-            String sourcePipelineName = sourcePipelineEntry.getKey();
+            String sourcePipelineKey = sourcePipelineEntry.getKey();
             PipelineConfig sourcePipeline = sourcePipelineEntry.getValue();
 
-            if (sourcePipeline == null || sourcePipeline.pipelineSteps() == null || sourcePipelineName == null || sourcePipelineName.isBlank()) {
+            if (sourcePipeline == null || sourcePipeline.pipelineSteps() == null || sourcePipeline.name() == null || !sourcePipelineKey.equals(sourcePipeline.name())) {
                 continue;
             }
+            String sourcePipelineName = sourcePipeline.name();
 
             Set<String> topicsPublishedBySourcePipeline = new HashSet<>();
             for (PipelineStepConfig sourceStep : sourcePipeline.pipelineSteps().values()) {
-                if (sourceStep != null && sourceStep.transportType() == TransportType.KAFKA) {
-                    KafkaTransportConfig kafkaConfig = sourceStep.kafkaConfig();
-                    if (kafkaConfig != null && kafkaConfig.publishTopicPattern() != null && !kafkaConfig.publishTopicPattern().isBlank()) {
-                        // For loop detection, we need concrete topic names.
-                        // If publishTopicPattern is a direct name, add it.
-                        // If it's a pattern, we need to resolve it to concrete names or have a convention.
-                        // For simplicity here, we'll assume patterns that are direct names or can be resolved simply.
-                        String resolvedPublishTopic = resolvePattern(kafkaConfig.publishTopicPattern(),
-                                sourceStep, sourcePipelineName, clusterConfig.clusterName());
-                        if (resolvedPublishTopic != null && !resolvedPublishTopic.isBlank()) {
-                            topicsPublishedBySourcePipeline.add(resolvedPublishTopic);
-                        }
-                    }
-                }
-            }
-
-            if (topicsPublishedBySourcePipeline.isEmpty()) {
-                continue; // This source pipeline publishes to no relevant Kafka topics
-            }
-
-            // Check all other pipelines (including itself for self-loops if that's possible via Kafka)
-            for (Map.Entry<String, PipelineConfig> targetPipelineEntry : pipelinesMap.entrySet()) {
-                String targetPipelineName = targetPipelineEntry.getKey();
-                PipelineConfig targetPipeline = targetPipelineEntry.getValue();
-
-                if (targetPipeline == null || targetPipeline.pipelineSteps() == null || targetPipelineName == null || targetPipelineName.isBlank()) {
+                if (sourceStep == null || sourceStep.outputs() == null) {
                     continue;
                 }
-
-                // Don't add self-loops at the pipeline graph level if already handled by intra-pipeline check,
-                // unless a pipeline truly publishes to a topic it itself consumes as an entry point.
-                // For inter-pipeline, we are interested if SourcePipeline -> TargetPipeline.
-                // If sourcePipelineName.equals(targetPipelineName), this indicates a pipeline might publish to a topic
-                // that one of its own steps listens to as an entry. This could be valid or a loop.
-                // The graph will detect if adding an edge P1 -> P1 creates a cycle.
-
-                for (PipelineStepConfig targetStep : targetPipeline.pipelineSteps().values()) {
-                    if (targetStep != null && targetStep.transportType() == TransportType.KAFKA) {
-                        KafkaTransportConfig kafkaConfig = targetStep.kafkaConfig();
-                        if (kafkaConfig != null && kafkaConfig.listenTopics() != null) {
-                            for (String listenedTopic : kafkaConfig.listenTopics()) {
-                                if (listenedTopic != null && !listenedTopic.isBlank() && topicsPublishedBySourcePipeline.contains(listenedTopic)) {
-                                    // Check if vertices exist before adding edge, though addVertex loop should cover it.
-                                    if (!interPipelineGraph.containsVertex(sourcePipelineName) || !interPipelineGraph.containsVertex(targetPipelineName)) {
-                                        LOG.warn("Skipping edge from {} to {} as one or both vertices not in graph.", sourcePipelineName, targetPipelineName);
-                                        continue;
-                                    }
-                                    // Add edge if not already present (DefaultDirectedGraph handles multiple edges if allowed, but for cycles one is enough)
-                                    if (!interPipelineGraph.containsEdge(sourcePipelineName, targetPipelineName)) {
-                                        try {
-                                            interPipelineGraph.addEdge(sourcePipelineName, targetPipelineName);
-                                            LOG.trace("Added inter-pipeline edge from '{}' to '{}' via topic '{}'",
-                                                    sourcePipelineName, targetPipelineName, listenedTopic);
-                                        } catch (IllegalArgumentException e) { // e.g. if vertices are not in graph
-                                            errors.add(String.format(
-                                                    "Error building inter-pipeline graph for cluster '%s': Could not add edge between pipeline '%s' and '%s'. Error: %s",
-                                                    clusterConfig.clusterName(), sourcePipelineName, targetPipelineName, e.getMessage()));
-                                            LOG.warn("Error adding edge to inter-pipeline graph for cluster {}: {}", clusterConfig.clusterName(), e.getMessage());
-                                        }
-                                    }
-                                    // Found a link, no need to check other listen topics of this targetStep for the same sourcePipeline link
-                                    // or other publish topics of the sourcePipeline if multiple matched.
-                                    // Break here or collect all linking topics if needed for more detailed error.
-                                    // For cycle detection, one edge is sufficient.
-                                }
+                for (PipelineStepConfig.OutputTarget outputTarget : sourceStep.outputs().values()) {
+                    if (outputTarget != null && outputTarget.transportType() == TransportType.KAFKA && outputTarget.kafkaTransport() != null) {
+                        KafkaTransportConfig kafkaConfig = outputTarget.kafkaTransport();
+                        if (kafkaConfig.topic() != null && !kafkaConfig.topic().isBlank()) {
+                            String resolvedPublishTopic = resolvePattern(kafkaConfig.topic(),
+                                    sourceStep, sourcePipelineName, currentClusterName);
+                            if (resolvedPublishTopic != null && !resolvedPublishTopic.isBlank()) {
+                                topicsPublishedBySourcePipeline.add(resolvedPublishTopic);
                             }
                         }
                     }
                 }
             }
+
+            if (!topicsPublishedBySourcePipeline.isEmpty()) {
+                topicsPublishedByPipeline.put(sourcePipelineName, topicsPublishedBySourcePipeline);
+            }
         }
 
-        // Find and report cycles
-        if (interPipelineGraph.vertexSet().size() > 0) { // Ensure graph is not empty
+        // Second pass: build the graph based on topic connections
+        for (Map.Entry<String, Set<String>> sourceEntry : topicsPublishedByPipeline.entrySet()) {
+            String sourcePipelineName = sourceEntry.getKey();
+            Set<String> publishedTopics = sourceEntry.getValue();
+
+            for (Map.Entry<String, PipelineConfig> targetPipelineEntry : pipelinesMap.entrySet()) {
+                String targetPipelineKey = targetPipelineEntry.getKey();
+                PipelineConfig targetPipeline = targetPipelineEntry.getValue();
+
+                if (targetPipeline == null || targetPipeline.pipelineSteps() == null || targetPipeline.name() == null || !targetPipelineKey.equals(targetPipeline.name())) {
+                    continue;
+                }
+                String targetPipelineName = targetPipeline.name();
+
+                // Don't skip self-loops for the same pipeline - we want to detect when a pipeline
+                // publishes to and listens from the same topic
+                if (sourcePipelineName.equals(targetPipelineName)) {
+                    LOG.debug("Checking self-loop for pipeline '{}' in cluster '{}'", 
+                            sourcePipelineName, currentClusterName);
+                    // continue; - removed to allow self-loop detection
+                }
+
+                boolean linkFoundForTargetPipeline = false;
+                for (PipelineStepConfig targetStep : targetPipeline.pipelineSteps().values()) {
+                    if (targetStep == null || targetStep.kafkaInputs() == null) {
+                        continue;
+                    }
+                    for (KafkaInputDefinition inputDef : targetStep.kafkaInputs()) {
+                        if (inputDef.listenTopics() != null) {
+                            for (String listenTopicPattern : inputDef.listenTopics()) {
+                                String resolvedListenTopic = resolvePattern(
+                                    listenTopicPattern,
+                                    targetStep, // context of the listening step in the target pipeline
+                                    targetPipelineName,
+                                    currentClusterName
+                                );
+                                if (resolvedListenTopic != null && publishedTopics.contains(resolvedListenTopic)) {
+                                    if (interPipelineGraph.containsVertex(sourcePipelineName) && interPipelineGraph.containsVertex(targetPipelineName)) {
+                                         if (!interPipelineGraph.containsEdge(sourcePipelineName, targetPipelineName)) {
+                                            try {
+                                                interPipelineGraph.addEdge(sourcePipelineName, targetPipelineName);
+                                                LOG.trace("Added inter-pipeline edge from '{}' to '{}' via topic '{}'",
+                                                        sourcePipelineName, targetPipelineName, resolvedListenTopic);
+                                            } catch (IllegalArgumentException e) {
+                                                errors.add(String.format(
+                                                        "Error building inter-pipeline graph for cluster '%s': Could not add edge between pipeline '%s' and '%s'. Error: %s",
+                                                        currentClusterName, sourcePipelineName, targetPipelineName, e.getMessage()));
+                                            }
+                                        }
+                                        linkFoundForTargetPipeline = true; // Edge added or already exists
+                                        break; // Found a linking topic for this input definition
+                                    }
+                                }
+                            }
+                        }
+                        if (linkFoundForTargetPipeline) break; // Found a link for this target step
+                    }
+                    if (linkFoundForTargetPipeline) break; // Found a link for this target pipeline
+                }
+            }
+        }
+
+        if (interPipelineGraph.vertexSet().size() > 0 && !interPipelineGraph.edgeSet().isEmpty()) {
             JohnsonSimpleCycles<String, DefaultEdge> cycleFinder = new JohnsonSimpleCycles<>(interPipelineGraph);
             List<List<String>> cycles = cycleFinder.findSimpleCycles();
 
             if (!cycles.isEmpty()) {
                 LOG.warn("Found {} simple inter-pipeline cycle(s) in cluster '{}'. Reporting up to {}.",
-                        cycles.size(), clusterConfig.clusterName(), MAX_CYCLES_TO_REPORT);
-
+                        cycles.size(), currentClusterName, MAX_CYCLES_TO_REPORT);
                 for (int i = 0; i < Math.min(cycles.size(), MAX_CYCLES_TO_REPORT); i++) {
                     List<String> cyclePath = cycles.get(i);
-                    String pathString = cyclePath.stream().collect(Collectors.joining(" -> "));
-                    if (!cyclePath.isEmpty()) { // Add the loop back to the start
+                    String pathString = String.join(" -> ", cyclePath);
+                    if (!cyclePath.isEmpty()) {
                         pathString += " -> " + cyclePath.get(0);
                     }
-
-                    String errorMessage = String.format(
-                            "Inter-pipeline loop detected in Kafka data flow in cluster '%s'. Cycle path: [%s]",
-                            clusterConfig.clusterName(), pathString);
-                    errors.add(errorMessage);
-                    LOG.warn(errorMessage); // Log each detected cycle
+                    errors.add(String.format(
+                            "Inter-pipeline loop detected in Kafka data flow in cluster '%s'. Cycle path: [%s].",
+                            currentClusterName, pathString));
                 }
                 if (cycles.size() > MAX_CYCLES_TO_REPORT) {
-                    String tooManyCyclesMessage = String.format(
+                    errors.add(String.format(
                             "Cluster '%s' has more than %d inter-pipeline cycles (%d total). Only the first %d are reported.",
-                            clusterConfig.clusterName(), MAX_CYCLES_TO_REPORT, cycles.size(), MAX_CYCLES_TO_REPORT);
-                    errors.add(tooManyCyclesMessage);
-                    LOG.warn(tooManyCyclesMessage);
+                            currentClusterName, MAX_CYCLES_TO_REPORT, cycles.size(), MAX_CYCLES_TO_REPORT));
                 }
             } else {
-                LOG.debug("No inter-pipeline loops detected in cluster: {}", clusterConfig.clusterName());
+                LOG.debug("No inter-pipeline loops detected in cluster: {}", currentClusterName);
             }
         } else {
-            LOG.debug("Inter-pipeline graph is empty for cluster: {}. No loop detection performed.", clusterConfig.clusterName());
+            LOG.debug("Inter-pipeline graph for cluster '{}' is empty or has no edges. No loop detection performed.", currentClusterName);
         }
         return errors;
     }
 
-    /**
-     * Resolves a publish topic pattern to a concrete topic name.
-     * This is a basic implementation. More sophisticated resolution might be needed
-     * if patterns are complex or rely on runtime data not available at validation.
-     */
-    private String resolvePattern(String pattern, PipelineStepConfig step, String pipelineName, String clusterName) {
-        if (pattern == null || pattern.isBlank()) {
+    private String resolvePattern(String topicStringInConfig, PipelineStepConfig step, String pipelineName, String clusterName) {
+        if (topicStringInConfig == null || topicStringInConfig.isBlank()) {
             return null;
         }
-        // Simple replacement for known placeholders. Add more as needed.
-        String resolved = pattern
-                .replace("${pipelineId}", pipelineName)
-                .replace("${stepId}", step.pipelineStepId());
-        // Add more replacements if you use other variables like ${clusterId}, ${implementationId}, etc.
+        String stepNameForResolve = (step != null && step.stepName() != null) ? step.stepName() : "unknown-step";
 
-        if (resolved.contains("${")) { // If it still contains unresolved placeholders
-            LOG.trace("Pattern '{}' for step '{}' still contains unresolved placeholders after basic resolution: '{}'. Treating as unresolved.",
-                    pattern, step.pipelineStepId(), resolved);
-            // Depending on policy, an unresolved pattern might be an error itself, or it might mean it cannot be validated
-            // against an explicit list of allowed topic *names*.
-            // For loop detection based on specific topic names, an unresolved pattern cannot form a concrete edge
-            // unless the loop detector also understands patterns.
-            return pattern; // Return original pattern if it can't be fully resolved to a concrete name.
-            // Or return null if only concrete names are expected for this validation.
-            // Let's return the original pattern for now, and it won't match concrete listen topics unless identical.
+        String resolved = topicStringInConfig
+                .replace("${pipelineName}", pipelineName)
+                .replace("${stepName}", stepNameForResolve)
+                .replace("${clusterName}", clusterName);
+
+        if (resolved.contains("${")) {
+            LOG.trace("Topic string '{}' for step '{}' in pipeline '{}', cluster '{}' could not be fully resolved: '{}'.",
+                    topicStringInConfig, stepNameForResolve, pipelineName, clusterName, resolved);
+            return resolved;
         }
         return resolved;
     }

@@ -1,0 +1,43 @@
+{
+  "clusterName": "initial-seeded-cluster",
+  "pipelineGraphConfig": {
+    "pipelines": {
+      "initial-seeded-pipeline": {
+        "name": "initial-seeded-pipeline",
+        "pipelineSteps": {
+          "initial-service": {
+            "stepName": "initial-service",
+            "stepType": "INITIAL_PIPELINE",
+            "description": "Initial seeded service with no connections",
+            "customConfigSchemaId": "initial-service-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "initialParameter": "initial-value",
+                "autoStart": true
+              }
+            },
+            "processorInfo": {
+              "grpcServiceName": "initial-service"
+            },
+            "outputs": {}
+          }
+        }
+      }
+    }
+  },
+  "pipelineModuleMap": {
+    "availableModules": {
+      "initial-service": {
+        "implementationName": "Initial Service",
+        "implementationId": "initial-service",
+        "customConfigSchemaReference": {
+          "subject": "initial-service-schema",
+          "version": 1
+        }
+      }
+    }
+  },
+  "defaultPipelineName": "initial-seeded-pipeline",
+  "allowedKafkaTopics": [],
+  "allowedGrpcServices": ["initial-service"]
+}

@@ -4,7 +4,7 @@ package com.krickert.search.config.consul;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
-import com.krickert.search.config.schema.registry.model.SchemaVersionData;
+import com.krickert.search.config.schema.model.SchemaVersionData;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value;
 import jakarta.annotation.PreDestroy;

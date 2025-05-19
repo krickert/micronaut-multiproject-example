@@ -1,0 +1,95 @@
+{
+  "clusterName": "orphan-steps-cluster",
+  "pipelineGraphConfig": {
+    "pipelines": {
+      "orphan-steps-pipeline": {
+        "name": "orphan-steps-pipeline",
+        "pipelineSteps": {
+          "orphan-step-1": {
+            "stepName": "orphan-step-1",
+            "stepType": "PIPELINE",
+            "description": "An orphaned step with no connections",
+            "customConfigSchemaId": "orphan-step-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "parameter1": "value1",
+                "parameter2": 42
+              }
+            },
+            "processorInfo": {
+              "grpcServiceName": "orphan-service-1"
+            },
+            "outputs": {}
+          },
+          "orphan-step-2": {
+            "stepName": "orphan-step-2",
+            "stepType": "PIPELINE",
+            "description": "Another orphaned step with no connections",
+            "customConfigSchemaId": "orphan-step-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "parameter1": "value2",
+                "parameter2": 84
+              }
+            },
+            "processorInfo": {
+              "grpcServiceName": "orphan-service-2"
+            },
+            "outputs": {}
+          },
+          "orphan-step-3": {
+            "stepName": "orphan-step-3",
+            "stepType": "SINK",
+            "description": "An orphaned sink step with no connections",
+            "customConfigSchemaId": "orphan-sink-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "sinkParameter": "sink-value",
+                "enabled": true
+              }
+            },
+            "processorInfo": {
+              "grpcServiceName": "orphan-sink-service"
+            },
+            "outputs": {}
+          }
+        }
+      }
+    }
+  },
+  "pipelineModuleMap": {
+    "availableModules": {
+      "orphan-service-1": {
+        "implementationName": "Orphan Service 1",
+        "implementationId": "orphan-service-1",
+        "customConfigSchemaReference": {
+          "subject": "orphan-step-schema",
+          "version": 1
+        }
+      },
+      "orphan-service-2": {
+        "implementationName": "Orphan Service 2",
+        "implementationId": "orphan-service-2",
+        "customConfigSchemaReference": {
+          "subject": "orphan-step-schema",
+          "version": 1
+        }
+      },
+      "orphan-sink-service": {
+        "implementationName": "Orphan Sink Service",
+        "implementationId": "orphan-sink-service",
+        "customConfigSchemaReference": {
+          "subject": "orphan-sink-schema",
+          "version": 1
+        }
+      }
+    }
+  },
+  "defaultPipelineName": "orphan-steps-pipeline",
+  "allowedKafkaTopics": [],
+  "allowedGrpcServices": [
+    "orphan-service-1",
+    "orphan-service-2",
+    "orphan-sink-service"
+  ]
+}

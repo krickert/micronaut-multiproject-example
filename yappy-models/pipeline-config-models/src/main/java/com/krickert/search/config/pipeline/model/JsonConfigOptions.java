@@ -3,6 +3,7 @@ package com.krickert.search.config.pipeline.model;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Builder;
 
 /**
  * Represents custom JSON configuration options for a pipeline step.
@@ -13,6 +14,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * Cannot be null. Must be at least an empty JSON object string "{}".
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@Builder
 public record JsonConfigOptions(
     @JsonProperty("jsonConfig") String jsonConfig
 ) {

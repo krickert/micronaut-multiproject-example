@@ -3,11 +3,14 @@
     import com.fasterxml.jackson.core.JsonProcessingException;
     import com.fasterxml.jackson.databind.ObjectMapper;
     import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
-    // ... other necessary imports from DynamicConfigurationManagerImplMicronautTest ...
+    import com.krickert.search.config.consul.factory.DynamicConfigurationManagerFactory;
+    import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
     import com.krickert.search.config.pipeline.model.*;
-    import com.krickert.search.config.schema.registry.model.SchemaCompatibility;
-    import com.krickert.search.config.schema.registry.model.SchemaType;
-    import com.krickert.search.config.schema.registry.model.SchemaVersionData;
+    import com.krickert.search.config.pipeline.model.test.PipelineConfigTestUtils;
+    import com.krickert.search.config.pipeline.model.test.SamplePipelineConfigObjects;
+    import com.krickert.search.config.schema.model.SchemaCompatibility;
+    import com.krickert.search.config.schema.model.SchemaType;
+    import com.krickert.search.config.schema.model.SchemaVersionData;
     import io.micronaut.context.annotation.Property;
     import io.micronaut.context.event.ApplicationEventPublisher;
     import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
@@ -47,11 +50,14 @@
         private static final Logger LOG = LoggerFactory.getLogger(DynamicConfigurationManagerFullIntegrationTest.class);
         static final String DEFAULT_PROPERTY_CLUSTER = "propertyClusterFullDefault";
         static final String TEST_EXECUTION_CLUSTER = "dynamicManagerFullTestCluster";
-
-        @Inject
-        Consul directConsulClientForTestSetup;
+    //TODO: this should be in the service layer.  DO NOT use this directly
+    //        @Inject
+    //        Consul directConsulClientForTestSetup;
         @Inject
         ObjectMapper objectMapper;
+
+        @Inject
+        ConsulBusinessOperationsService consulBusinessOperationsService;
         @Inject
         ApplicationEventPublisher<ClusterConfigUpdateEvent> eventPublisher;
         @Inject
@@ -65,12 +71,16 @@
         @Inject
         TestApplicationEventListener testApplicationEventListener; // Reusing from the other test for convenience
 
-        private KeyValueClient testKvClient;
+        @Inject
+        DynamicConfigurationManagerFactory dynamicConfigurationManagerFactory;
+
+        //TODO: THIS NEEDS TO BE IN THE SERVICE LAYER
+        //private KeyValueClient testKvClient;
         private String clusterConfigKeyPrefix;
         private String schemaVersionsKeyPrefix;
         private int appWatchSeconds;
 
-        private DynamicConfigurationManagerImpl dynamicConfigurationManager;
+        private DynamicConfigurationManager dynamicConfigurationManager;
 
         // Re-use TestApplicationEventListener and SimpleMapCachedConfigHolder
         // (They are already suitable as real, simple implementations for testing)
@@ -99,7 +109,6 @@
 
         @BeforeEach
         void setUp() {
-            testKvClient = directConsulClientForTestSetup.keyValueClient();
             clusterConfigKeyPrefix = realConsulConfigFetcher.clusterConfigKeyPrefix;
             schemaVersionsKeyPrefix = realConsulConfigFetcher.schemaVersionsKeyPrefix;
             appWatchSeconds = realConsulConfigFetcher.appWatchSeconds;
@@ -107,14 +116,8 @@
             deleteConsulKeysForCluster(TEST_EXECUTION_CLUSTER);
             testApplicationEventListener.clear();
 
-            // Construct SUT with REAL dependencies
-            dynamicConfigurationManager = new DynamicConfigurationManagerImpl(
-                    TEST_EXECUTION_CLUSTER,
-                    realConsulConfigFetcher,
-                    realConfigurationValidator, // Use the injected DefaultConfigurationValidator
-                    testCachedConfigHolder,
-                    eventPublisher
-            );
+            // Construct SUT using the factory
+            dynamicConfigurationManager = dynamicConfigurationManagerFactory.createDynamicConfigurationManager(TEST_EXECUTION_CLUSTER);
             LOG.info("DynamicConfigurationManagerImpl (Full Integ) constructed for cluster: {} with DefaultConfigurationValidator", TEST_EXECUTION_CLUSTER);
         }
 
@@ -129,21 +132,30 @@
 
         // --- Helper methods (copy from DynamicConfigurationManagerImplMicronautTest) ---
         private void deleteConsulKeysForCluster(String clusterName) {
-            String fullClusterKey = getFullClusterKey(clusterName);
-            LOG.debug("Attempting to clean Consul key: {}", fullClusterKey);
-            testKvClient.deleteKey(fullClusterKey);
+            LOG.debug("Attempting to clean Consul key for cluster: {}", clusterName);
+            consulBusinessOperationsService.deleteClusterConfiguration(clusterName).block();
         }
         private String getFullClusterKey(String clusterName) { return clusterConfigKeyPrefix + clusterName; }
         private String getFullSchemaKey(String subject, int version) { return String.format("%s%s/%d", schemaVersionsKeyPrefix, subject, version); }
         private PipelineClusterConfig createDummyClusterConfig(String name, String... topics) {
-            return new PipelineClusterConfig(name, null, new PipelineModuleMap(Collections.emptyMap()),
-                    topics != null ? Set.of(topics) : Collections.emptySet(), Collections.emptySet());
+            return PipelineClusterConfig.builder()
+                    .clusterName(name)
+                    .pipelineModuleMap(new PipelineModuleMap(Collections.emptyMap()))
+                    .defaultPipelineName(name + "-default")
+                    .allowedKafkaTopics(topics != null ? Set.of(topics) : Collections.emptySet())
+                    .allowedGrpcServices(Collections.emptySet())
+                    .build();
         }
         private PipelineClusterConfig createClusterConfigWithSchema(String name, SchemaReference schemaRef, String... topics) {
             PipelineModuleConfiguration moduleWithSchema = new PipelineModuleConfiguration("ModuleWithSchema", "module_schema_impl_id", schemaRef);
             PipelineModuleMap moduleMap = new PipelineModuleMap(Map.of(moduleWithSchema.implementationId(), moduleWithSchema));
-            return new PipelineClusterConfig(name, null, moduleMap,
-                    topics != null ? Set.of(topics) : Collections.emptySet(), Collections.emptySet());
+            return PipelineClusterConfig.builder()
+                    .clusterName(name)
+                    .pipelineModuleMap(moduleMap)
+                    .defaultPipelineName(name + "-default")
+                    .allowedKafkaTopics(topics != null ? Set.of(topics) : Collections.emptySet())
+                    .allowedGrpcServices(Collections.emptySet())
+                    .build();
         }
         private SchemaVersionData createDummySchemaData(String subject, int version, String content) {
             Instant createdAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
@@ -151,9 +163,40 @@
                     SchemaType.JSON_SCHEMA, SchemaCompatibility.NONE, createdAt, "Integration test schema " + subject + " v" + version);
         }
         private void seedConsulKv(String key, Object object) throws JsonProcessingException {
-            String jsonValue = objectMapper.writeValueAsString(object);
-            LOG.info("Seeding Consul KV (Full Integ): {} = {}", key, jsonValue.length() > 150 ? jsonValue.substring(0, 150) + "..." : jsonValue);
-            assertTrue(testKvClient.putValue(key, jsonValue), "Failed to seed Consul KV for key: " + key);
+            LOG.info("Seeding Consul KV (Full Integ): {} = {}", key, 
+                    object.toString().length() > 150 ? object.toString().substring(0, 150) + "..." : object.toString());
+
+            // Determine if this is a cluster config or schema version based on the key
+            if (key.startsWith(clusterConfigKeyPrefix)) {
+                // Extract cluster name from key
+                String clusterName = key.substring(clusterConfigKeyPrefix.length());
+
+                // Store cluster configuration
+                Boolean result = consulBusinessOperationsService.storeClusterConfiguration(clusterName, object).block();
+                assertTrue(result != null && result, "Failed to seed cluster configuration for key: " + key);
+            } else if (key.startsWith(schemaVersionsKeyPrefix)) {
+                // Extract subject and version from key
+                String path = key.substring(schemaVersionsKeyPrefix.length());
+
+                String[] parts = path.split("/");
+                if (parts.length == 2) {
+                    String subject = parts[0];
+                    int version = Integer.parseInt(parts[1]);
+
+                    // Store schema version
+                    Boolean result = consulBusinessOperationsService.storeSchemaVersion(subject, version, object).block();
+                    assertTrue(result != null && result, "Failed to seed schema version for key: " + key);
+                } else {
+                    // Fallback to generic putValue for other keys
+                    Boolean result = consulBusinessOperationsService.putValue(key, object).block();
+                    assertTrue(result != null && result, "Failed to seed Consul KV for key: " + key);
+                }
+            } else {
+                // Fallback to generic putValue for other keys
+                Boolean result = consulBusinessOperationsService.putValue(key, object).block();
+                assertTrue(result != null && result, "Failed to seed Consul KV for key: " + key);
+            }
+
             try { TimeUnit.MILLISECONDS.sleep(300); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         }
 
@@ -173,7 +216,8 @@
             String fullSchemaKey1 = getFullSchemaKey(schemaRef1.subject(), schemaRef1.version());
             String fullClusterKey = getFullClusterKey(TEST_EXECUTION_CLUSTER);
 
-            testKvClient.deleteKey(fullSchemaKey1);
+            // Delete schema version
+            consulBusinessOperationsService.deleteSchemaVersion(schemaRef1.subject(), schemaRef1.version()).block();
             seedConsulKv(fullSchemaKey1, schemaData1);
             seedConsulKv(fullClusterKey, initialConfig);
 
@@ -212,7 +256,7 @@
 
             // --- 3. Deletion ---
             LOG.info("FullInteg-HappyPath: Deleting config from Consul...");
-            testKvClient.deleteKey(fullClusterKey);
+            consulBusinessOperationsService.deleteClusterConfiguration(TEST_EXECUTION_CLUSTER).block();
             TimeUnit.MILLISECONDS.sleep(appWatchSeconds * 1000L / 2 + 500);
             LOG.info("FullInteg-HappyPath: Config deleted from Consul.");
 
@@ -231,7 +275,8 @@
             assertFalse(testCachedConfigHolder.getCurrentConfig().isPresent(), "Cache should be empty after deletion");
             LOG.info("FullInteg-HappyPath: Deletion verified.");
 
-            testKvClient.deleteKey(fullSchemaKey1);
+            // Clean up schema
+            consulBusinessOperationsService.deleteSchemaVersion(schemaRef1.subject(), schemaRef1.version()).block();
         }
 
 
@@ -252,21 +297,17 @@
             PipelineModuleMap moduleMap = new PipelineModuleMap(Map.of(moduleImplementationId, moduleWithMissingSchema));
 
             // Create a step that uses this module and has a customConfig
-            PipelineStepConfig stepUsingMissingSchema = new PipelineStepConfig(
-                    "step1_uses_missing_schema", // pipelineStepId
-                    moduleImplementationId,      // pipelineImplementationId (links to moduleWithMissingSchema)
-                    new JsonConfigOptions("{\"someKey\":\"someValue\"}"), // customConfig
-                    null, // nextSteps
-                    null, // errorSteps
-                    TransportType.INTERNAL, // transportType
-                    null, // kafkaConfig
-                    null  // grpcConfig
-            );
+            PipelineStepConfig stepUsingMissingSchema = PipelineStepConfig.builder()
+                    .stepName("step1_uses_missing_schema")
+                    .stepType(StepType.PIPELINE)
+                    .processorInfo(new PipelineStepConfig.ProcessorInfo(moduleImplementationId, null))
+                    .customConfig(PipelineConfigTestUtils.createJsonConfigOptions("{\"someKey\":\"someValue\"}"))
+                    .build();
 
             // Create a pipeline containing this step
             PipelineConfig pipelineConfig = new PipelineConfig(
                     "pipeline_with_bad_step", // name
-                    Map.of(stepUsingMissingSchema.pipelineStepId(), stepUsingMissingSchema) // pipelineSteps
+                    Map.of(stepUsingMissingSchema.stepName(), stepUsingMissingSchema) // pipelineSteps
             );
 
             // Create a pipeline graph containing this pipeline
@@ -275,18 +316,20 @@
             );
 
             // Create the final cluster config
-            PipelineClusterConfig configViolatingRule = new PipelineClusterConfig(
-                    TEST_EXECUTION_CLUSTER,
-                    graphConfig, // Add the graph
-                    moduleMap,
-                    Set.of("topicViolatesRule"),
-                    Collections.emptySet()
-            );
+            PipelineClusterConfig configViolatingRule = PipelineClusterConfig.builder()
+                    .clusterName(TEST_EXECUTION_CLUSTER)
+                    .pipelineGraphConfig(graphConfig)
+                    .pipelineModuleMap(moduleMap)
+                    .defaultPipelineName(TEST_EXECUTION_CLUSTER + "-default")
+                    .allowedKafkaTopics(Set.of("topicViolatesRule"))
+                    .allowedGrpcServices(Collections.emptySet())
+                    .build();
 
             String fullClusterKey = getFullClusterKey(TEST_EXECUTION_CLUSTER);
             String fullMissingSchemaKey = getFullSchemaKey(missingSchemaRef.subject(), missingSchemaRef.version());
 
-            testKvClient.deleteKey(fullMissingSchemaKey); // Ensure schema is NOT there
+            // Ensure schema is NOT there
+            consulBusinessOperationsService.deleteSchemaVersion(missingSchemaRef.subject(), missingSchemaRef.version()).block();
             seedConsulKv(fullClusterKey, configViolatingRule);
 
             LOG.info("FullInteg-RuleFail: Initializing DynamicConfigurationManager with config violating CustomConfigSchemaValidator...");

@@ -1,0 +1,10 @@
+{
+  "globalId": 666,
+  "subject": "full-compatibility-schema",
+  "version": 1,
+  "schemaContent": "{\"type\":\"record\",\"name\":\"FullCompatible\",\"fields\":[{\"name\":\"id\",\"type\":\"long\"},{\"name\":\"name\",\"type\":\"string\"}]}",
+  "schemaType": "AVRO",
+  "compatibility": "FULL",
+  "createdAt": "2023-03-10T00:00:00Z",
+  "versionDescription": "Schema with FULL compatibility"
+}

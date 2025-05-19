@@ -5,9 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineGraphConfig;
 import com.krickert.search.config.pipeline.model.PipelineModuleMap;
-import com.krickert.search.config.schema.registry.model.SchemaCompatibility;
-import com.krickert.search.config.schema.registry.model.SchemaType;
-import com.krickert.search.config.schema.registry.model.SchemaVersionData;
+import com.krickert.search.config.schema.model.SchemaCompatibility;
+import com.krickert.search.config.schema.model.SchemaType;
+import com.krickert.search.config.schema.model.SchemaVersionData;
+import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
@@ -51,8 +52,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
     @Inject
     ObjectMapper objectMapper;
 
-    @Inject
-    Consul directConsulClientForTestSetup;
+    // Removed direct Consul client injection as per issue requirements
+    // All Consul operations should go through ConsulBusinessOperationsService
 
     @Property(name = "app.config.consul.key-prefixes.pipeline-clusters")
     String clusterConfigKeyPrefixWithSlash;
@@ -66,7 +67,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
     @Property(name = "app.config.consul.watch-seconds")
     int appWatchSeconds;
 
-    private KeyValueClient testKvClient;
+    @Inject
+    ConsulBusinessOperationsService consulBusinessOperations;
     private final String testClusterForWatch = "watchTestClusterDelta"; // Unique name
     private final String testSchemaSubject1 = "integTestSchemaSubjectDelta1";
     private final int testSchemaVersion1 = 1;
@@ -77,9 +79,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
     @BeforeEach
     void setUp() {
-        assertNotNull(directConsulClientForTestSetup, "Test Consul client should be injected by TestResources");
-        testKvClient = directConsulClientForTestSetup.keyValueClient();
-        assertNotNull(testKvClient, "KeyValueClient for test setup should not be null");
+        // Removed direct Consul client assertion as per issue requirements
+        assertNotNull(consulBusinessOperations, "ConsulBusinessOperationsService should be injected");
 
         String clusterPrefix = clusterConfigKeyPrefixWithSlash.endsWith("/") ? clusterConfigKeyPrefixWithSlash : clusterConfigKeyPrefixWithSlash + "/";
         fullDefaultClusterKey = clusterPrefix + defaultTestClusterNameFromProperties;
@@ -91,32 +92,63 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         configFetcher.connect();
 
         LOG.info("Deleting KV key for default cluster setup: {}", fullDefaultClusterKey);
-        testKvClient.deleteKey(fullDefaultClusterKey);
+        consulBusinessOperations.deleteClusterConfiguration(defaultTestClusterNameFromProperties).block();
         LOG.info("Deleting KV key for watch cluster setup: {}", fullWatchClusterKey);
-        testKvClient.deleteKey(fullWatchClusterKey);
+        consulBusinessOperations.deleteClusterConfiguration(testClusterForWatch).block();
         LOG.info("Deleting KV key for schema setup: {}", fullTestSchemaKey1);
-        testKvClient.deleteKey(fullTestSchemaKey1);
+        consulBusinessOperations.deleteSchemaVersion(testSchemaSubject1, testSchemaVersion1).block();
         LOG.info("Cleaned up Consul keys for test setup.");
     }
 
     @AfterEach
     void tearDown() {
-        if (testKvClient != null) {
-            if (fullDefaultClusterKey != null) testKvClient.deleteKey(fullDefaultClusterKey);
-            if (fullWatchClusterKey != null) testKvClient.deleteKey(fullWatchClusterKey);
-            if (fullTestSchemaKey1 != null) testKvClient.deleteKey(fullTestSchemaKey1);
+        if (consulBusinessOperations != null) {
+            if (defaultTestClusterNameFromProperties != null) {
+                consulBusinessOperations.deleteClusterConfiguration(defaultTestClusterNameFromProperties).block();
+            }
+            if (testClusterForWatch != null) {
+                consulBusinessOperations.deleteClusterConfiguration(testClusterForWatch).block();
+            }
+            if (testSchemaSubject1 != null) {
+                consulBusinessOperations.deleteSchemaVersion(testSchemaSubject1, testSchemaVersion1).block();
+            }
+            LOG.info("Test finished, keys cleaned using ConsulBusinessOperationsService.");
+        } else {
+            LOG.warn("ConsulBusinessOperationsService was null in tearDown, keys may not be cleaned.");
         }
-        LOG.info("Test finished, keys potentially cleaned.");
     }
 
     private PipelineClusterConfig createDummyClusterConfig(String name) {
-        return new PipelineClusterConfig(
-                name,
-                new PipelineGraphConfig(Collections.emptyMap()),
-                new PipelineModuleMap(Collections.emptyMap()),
-                Collections.emptySet(),
-                Collections.emptySet()
-        );
+        return PipelineClusterConfig.builder()
+                .clusterName(name)
+                .pipelineGraphConfig(new PipelineGraphConfig(Collections.emptyMap()))
+                .pipelineModuleMap(new PipelineModuleMap(Collections.emptyMap()))
+                .defaultPipelineName(name + "-default")
+                .allowedKafkaTopics(Collections.emptySet())
+                .allowedGrpcServices(Collections.emptySet())
+                .build();
+    }
+
+    private PipelineClusterConfig updateTopics(PipelineClusterConfig config, Set<String> topics) {
+        return PipelineClusterConfig.builder()
+                .clusterName(config.clusterName())
+                .pipelineGraphConfig(config.pipelineGraphConfig())
+                .pipelineModuleMap(config.pipelineModuleMap())
+                .defaultPipelineName(config.defaultPipelineName())
+                .allowedKafkaTopics(topics)
+                .allowedGrpcServices(config.allowedGrpcServices())
+                .build();
+    }
+
+    private PipelineClusterConfig updateTopicsAndServices(PipelineClusterConfig config, Set<String> topics, Set<String> services) {
+        return PipelineClusterConfig.builder()
+                .clusterName(config.clusterName())
+                .pipelineGraphConfig(config.pipelineGraphConfig())
+                .pipelineModuleMap(config.pipelineModuleMap())
+                .defaultPipelineName(config.defaultPipelineName())
+                .allowedKafkaTopics(topics)
+                .allowedGrpcServices(services)
+                .build();
     }
 
     @SuppressWarnings("SameParameterValue")
@@ -129,9 +161,45 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
     }
 
     private void seedConsulKv(String key, Object object) throws JsonProcessingException {
-        String jsonValue = objectMapper.writeValueAsString(object);
-        LOG.info("Seeding Consul KV: {} = {}", key, jsonValue.length() > 200 ? jsonValue.substring(0, 200) + "..." : jsonValue);
-        assertTrue(testKvClient.putValue(key, jsonValue), "Failed to seed Consul KV for key: " + key);
+        LOG.info("Seeding Consul KV: {} = {}", key, 
+                object.toString().length() > 200 ? object.toString().substring(0, 200) + "..." : object.toString());
+
+        // Determine if this is a cluster config or schema version based on the key
+        if (key.startsWith(clusterConfigKeyPrefixWithSlash)) {
+            // Extract cluster name from key
+            String clusterName = key.substring(clusterConfigKeyPrefixWithSlash.length());
+            if (clusterName.startsWith("/")) {
+                clusterName = clusterName.substring(1);
+            }
+
+            // Store cluster configuration
+            Boolean result = consulBusinessOperations.storeClusterConfiguration(clusterName, object).block();
+            assertTrue(result != null && result, "Failed to seed cluster configuration for key: " + key);
+        } else if (key.startsWith(schemaVersionsKeyPrefixWithSlash)) {
+            // Extract subject and version from key
+            String path = key.substring(schemaVersionsKeyPrefixWithSlash.length());
+            if (path.startsWith("/")) {
+                path = path.substring(1);
+            }
+
+            String[] parts = path.split("/");
+            if (parts.length == 2) {
+                String subject = parts[0];
+                int version = Integer.parseInt(parts[1]);
+
+                // Store schema version
+                Boolean result = consulBusinessOperations.storeSchemaVersion(subject, version, object).block();
+                assertTrue(result != null && result, "Failed to seed schema version for key: " + key);
+            } else {
+                // Fallback to generic putValue for other keys
+                Boolean result = consulBusinessOperations.putValue(key, object).block();
+                assertTrue(result != null && result, "Failed to seed Consul KV for key: " + key);
+            }
+        } else {
+            // Fallback to generic putValue for other keys
+            Boolean result = consulBusinessOperations.putValue(key, object).block();
+            assertTrue(result != null && result, "Failed to seed Consul KV for key: " + key);
+        }
     }
 
     @Test
@@ -146,13 +214,14 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
     @Test
     @DisplayName("fetchPipelineClusterConfig - should retrieve and deserialize existing config")
     void fetchPipelineClusterConfig_whenKeyExists_returnsConfig() throws Exception {
-        PipelineClusterConfig expectedConfig = new PipelineClusterConfig(
-                defaultTestClusterNameFromProperties,
-                new PipelineGraphConfig(Collections.emptyMap()),
-                new PipelineModuleMap(Collections.emptyMap()),
-                Set.of("topicA", "topicB"),
-                Set.of("serviceX")
-        );
+        PipelineClusterConfig expectedConfig = PipelineClusterConfig.builder()
+                .clusterName(defaultTestClusterNameFromProperties)
+                .pipelineGraphConfig(new PipelineGraphConfig(Collections.emptyMap()))
+                .pipelineModuleMap(new PipelineModuleMap(Collections.emptyMap()))
+                .defaultPipelineName(defaultTestClusterNameFromProperties + "-default")
+                .allowedKafkaTopics(Set.of("topicA", "topicB"))
+                .allowedGrpcServices(Set.of("serviceX"))
+                .build();
         seedConsulKv(fullDefaultClusterKey, expectedConfig);
         Optional<PipelineClusterConfig> fetchedOpt = configFetcher.fetchPipelineClusterConfig(defaultTestClusterNameFromProperties);
         assertTrue(fetchedOpt.isPresent(), "Expected config to be present");
@@ -170,7 +239,9 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
     @DisplayName("fetchPipelineClusterConfig - should return empty for malformed JSON and log error")
     void fetchPipelineClusterConfig_whenJsonMalformed_returnsEmpty() throws Exception {
         LOG.info("Seeding Consul with malformed JSON for test: {}", fullDefaultClusterKey);
-        assertTrue(testKvClient.putValue(fullDefaultClusterKey, "{\"clusterName\":\"bad\", this_is_not_json}"), "Failed to seed malformed JSON");
+        // Using putValue directly since we're intentionally putting malformed JSON
+        Boolean result = consulBusinessOperations.putValue(fullDefaultClusterKey, "{\"clusterName\":\"bad\", this_is_not_json}").block();
+        assertTrue(result != null && result, "Failed to seed malformed JSON");
         Optional<PipelineClusterConfig> fetchedOpt = configFetcher.fetchPipelineClusterConfig(defaultTestClusterNameFromProperties);
         assertTrue(fetchedOpt.isEmpty(), "Expected empty Optional for malformed JSON");
     }
@@ -196,7 +267,9 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
     @DisplayName("fetchSchemaVersionData - should return empty for malformed JSON and log error")
     void fetchSchemaVersionData_whenJsonMalformed_returnsEmpty() throws Exception {
         LOG.info("Seeding Consul with malformed JSON for schema test: {}", fullTestSchemaKey1);
-        assertTrue(testKvClient.putValue(fullTestSchemaKey1, "{\"subject\":\"bad\", this_is_not_json_for_schema}"), "Failed to seed malformed JSON for schema");
+        // Using putValue directly since we're intentionally putting malformed JSON
+        Boolean result = consulBusinessOperations.putValue(fullTestSchemaKey1, "{\"subject\":\"bad\", this_is_not_json_for_schema}").block();
+        assertTrue(result != null && result, "Failed to seed malformed JSON for schema");
         Optional<SchemaVersionData> fetchedOpt = configFetcher.fetchSchemaVersionData(testSchemaSubject1, testSchemaVersion1);
         assertTrue(fetchedOpt.isEmpty(), "Expected empty Optional for malformed schema JSON");
     }
@@ -227,7 +300,14 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         // 2. Test Initial config PUT after watch starts
         LOG.info("Watch Test: Putting initial config for key {}...", fullWatchClusterKey);
         PipelineClusterConfig initialConfig = createDummyClusterConfig(testClusterForWatch);
-        initialConfig = new PipelineClusterConfig(initialConfig.clusterName(), initialConfig.pipelineGraphConfig(), initialConfig.pipelineModuleMap(), Set.of("initialTopic"), initialConfig.allowedGrpcServices());
+        initialConfig = PipelineClusterConfig.builder()
+                .clusterName(initialConfig.clusterName())
+                .pipelineGraphConfig(initialConfig.pipelineGraphConfig())
+                .pipelineModuleMap(initialConfig.pipelineModuleMap())
+                .defaultPipelineName(initialConfig.defaultPipelineName())
+                .allowedKafkaTopics(Set.of("initialTopic"))
+                .allowedGrpcServices(initialConfig.allowedGrpcServices())
+                .build();
         seedConsulKv(fullWatchClusterKey, initialConfig);
 
         WatchCallbackResult receivedInitialResult = updates.poll(appWatchSeconds + 10, TimeUnit.SECONDS);
@@ -240,8 +320,12 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
         // 3. Update the config
         LOG.info("Watch Test: Updating config for key {}...", fullWatchClusterKey);
-        PipelineClusterConfig updatedConfig = new PipelineClusterConfig(testClusterForWatch,
-                null, null, Set.of("updatedTopic"), Collections.singleton("updatedService"));
+        PipelineClusterConfig updatedConfig = PipelineClusterConfig.builder()
+                .clusterName(testClusterForWatch)
+                .defaultPipelineName(testClusterForWatch + "-default")
+                .allowedKafkaTopics(Set.of("updatedTopic"))
+                .allowedGrpcServices(Collections.singleton("updatedService"))
+                .build();
         seedConsulKv(fullWatchClusterKey, updatedConfig);
 
         WatchCallbackResult receivedUpdateResult = updates.poll(appWatchSeconds + 10, TimeUnit.SECONDS);
@@ -251,7 +335,9 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
         // 4. Update with Malformed JSON
         LOG.info("Watch Test: Putting malformed JSON to Consul for watch: {}", fullWatchClusterKey);
-        assertTrue(testKvClient.putValue(fullWatchClusterKey, "this is definitely not json {{{{"), "Failed to seed malformed JSON");
+        // Using putValue directly since we're intentionally putting malformed JSON
+        Boolean putResult = consulBusinessOperations.putValue(fullWatchClusterKey, "this is definitely not json {{{{").block();
+        assertTrue(putResult != null && putResult, "Failed to seed malformed JSON");
 
         WatchCallbackResult receivedMalformedResult = updates.poll(appWatchSeconds + 10, TimeUnit.SECONDS);
         assertNotNull(receivedMalformedResult, "Handler should have received a result after malformed JSON update.");
@@ -261,7 +347,7 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
         // 5. Delete the config
         LOG.info("Watch Test: Deleting config for key {}...", fullWatchClusterKey);
-        testKvClient.deleteKey(fullWatchClusterKey);
+        consulBusinessOperations.deleteClusterConfiguration(testClusterForWatch).block();
 
         WatchCallbackResult receivedDeleteResult = updates.poll(appWatchSeconds + 10, TimeUnit.SECONDS);
         assertNotNull(receivedDeleteResult, "Handler should have received notification for delete");
@@ -292,13 +378,13 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         Consumer<WatchCallbackResult> handlerB = updatesB::offer;
 
         PipelineClusterConfig config1 = createDummyClusterConfig(testClusterForWatch);
-        config1 = new PipelineClusterConfig(config1.clusterName(), config1.pipelineGraphConfig(), config1.pipelineModuleMap(), Set.of("topic1"), config1.allowedGrpcServices());
+        config1 = updateTopics(config1, Set.of("topic1"));
 
         PipelineClusterConfig config2 = createDummyClusterConfig(testClusterForWatch);
-        config2 = new PipelineClusterConfig(config2.clusterName(), config2.pipelineGraphConfig(), config2.pipelineModuleMap(), Set.of("topic2"), config2.allowedGrpcServices());
+        config2 = updateTopics(config2, Set.of("topic2"));
 
         PipelineClusterConfig config3 = createDummyClusterConfig(testClusterForWatch);
-        config3 = new PipelineClusterConfig(config3.clusterName(), config3.pipelineGraphConfig(), config3.pipelineModuleMap(), Set.of("topic3"), config3.allowedGrpcServices());
+        config3 = updateTopics(config3, Set.of("topic3"));
 
 
         // Initial watch with Handler A
@@ -353,8 +439,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         String fullClusterKeyB = (clusterConfigKeyPrefixWithSlash.endsWith("/") ? clusterConfigKeyPrefixWithSlash : clusterConfigKeyPrefixWithSlash + "/") + clusterNameB;
 
         // Clean up these specific keys before the test
-        testKvClient.deleteKey(fullClusterKeyA);
-        testKvClient.deleteKey(fullClusterKeyB);
+        consulBusinessOperations.deleteClusterConfiguration(clusterNameA).block();
+        consulBusinessOperations.deleteClusterConfiguration(clusterNameB).block();
         LOG.info("Cleaned up keys for watchDifferentKey test: {}, {}", fullClusterKeyA, fullClusterKeyB);
 
 
@@ -365,13 +451,13 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         Consumer<WatchCallbackResult> handlerB = updatesB::offer;
 
         PipelineClusterConfig configA1 = createDummyClusterConfig(clusterNameA);
-        configA1 = new PipelineClusterConfig(configA1.clusterName(), configA1.pipelineGraphConfig(), configA1.pipelineModuleMap(), Set.of("topicA1"), configA1.allowedGrpcServices());
+        configA1 = updateTopics(configA1, Set.of("topicA1"));
         PipelineClusterConfig configA2 = createDummyClusterConfig(clusterNameA); // A second config for cluster A
-        configA2 = new PipelineClusterConfig(configA2.clusterName(), configA2.pipelineGraphConfig(), configA2.pipelineModuleMap(), Set.of("topicA2"), configA2.allowedGrpcServices());
+        configA2 = updateTopics(configA2, Set.of("topicA2"));
 
 
         PipelineClusterConfig configB1 = createDummyClusterConfig(clusterNameB);
-        configB1 = new PipelineClusterConfig(configB1.clusterName(), configB1.pipelineGraphConfig(), configB1.pipelineModuleMap(), Set.of("topicB1"), configB1.allowedGrpcServices());
+        configB1 = updateTopics(configB1, Set.of("topicB1"));
 
         // 1. Watch Cluster A
         configFetcher.watchClusterConfig(clusterNameA, handlerA);
@@ -418,8 +504,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         assertTrue(updatesB.isEmpty(), "Handler B's queue should be empty before next update to B");
 
         // Cleanup specific keys at the end of this test as well
-        testKvClient.deleteKey(fullClusterKeyA);
-        testKvClient.deleteKey(fullClusterKeyB);
+        consulBusinessOperations.deleteClusterConfiguration(clusterNameA).block();
+        consulBusinessOperations.deleteClusterConfiguration(clusterNameB).block();
     }
 
     @Test
@@ -430,9 +516,9 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         Consumer<WatchCallbackResult> handler = updates::offer;
 
         PipelineClusterConfig config1 = createDummyClusterConfig(testClusterForWatch);
-        config1 = new PipelineClusterConfig(config1.clusterName(), config1.pipelineGraphConfig(), config1.pipelineModuleMap(), Set.of("topicClose1"), config1.allowedGrpcServices());
+        config1 = updateTopics(config1, Set.of("topicClose1"));
         PipelineClusterConfig config2 = createDummyClusterConfig(testClusterForWatch);
-        config2 = new PipelineClusterConfig(config2.clusterName(), config2.pipelineGraphConfig(), config2.pipelineModuleMap(), Set.of("topicClose2"), config2.allowedGrpcServices());
+        config2 = updateTopics(config2, Set.of("topicClose2"));
 
         // 1. Establish a watch and get an initial update
         configFetcher.watchClusterConfig(testClusterForWatch, handler);
@@ -490,9 +576,7 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         Consumer<WatchCallbackResult> handler = updates::offer;
 
         PipelineClusterConfig initialValidConfig = createDummyClusterConfig(testClusterForWatch);
-        initialValidConfig = new PipelineClusterConfig(initialValidConfig.clusterName(),
-                initialValidConfig.pipelineGraphConfig(), initialValidConfig.pipelineModuleMap(),
-                Set.of("topicInitial"), initialValidConfig.allowedGrpcServices());
+        initialValidConfig = updateTopics(initialValidConfig, Set.of("topicInitial"));
 
         // Start the watch
         configFetcher.watchClusterConfig(testClusterForWatch, handler);
@@ -513,7 +597,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
         // 2. Update with an empty JSON object "{}"
         LOG.info("handlesEmptyOrBlankJsonValues: Seeding with empty JSON object {{}}");
-        assertTrue(testKvClient.putValue(fullWatchClusterKey, "{}"), "Failed to seed empty JSON object");
+        Boolean emptyJsonResult = consulBusinessOperations.putValue(fullWatchClusterKey, "{}").block();
+        assertTrue(emptyJsonResult != null && emptyJsonResult, "Failed to seed empty JSON object");
         WatchCallbackResult emptyObjectEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
         assertNotNull(emptyObjectEvent, "Should receive event for empty JSON object");
 
@@ -538,7 +623,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         LOG.info("handlesEmptyOrBlankJsonValues: Seeding with empty string \"\"");
         // Note: Consul might treat putting an empty string as deleting the value or the key itself.
         // The KVCache behavior might then report it as a delete.
-        assertTrue(testKvClient.putValue(fullWatchClusterKey, ""), "Failed to seed empty string");
+        Boolean emptyStringResult = consulBusinessOperations.putValue(fullWatchClusterKey, "").block();
+        assertTrue(emptyStringResult != null && emptyStringResult, "Failed to seed empty string");
         WatchCallbackResult emptyStringEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
         assertNotNull(emptyStringEvent, "Should receive event for empty string");
         assertTrue(emptyStringEvent.deleted(), "Empty string should be treated as deleted. Event: " + emptyStringEvent);
@@ -550,7 +636,8 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
         // 4. Update with a string of only whitespace "   "
         LOG.info("handlesEmptyOrBlankJsonValues: Seeding with whitespace string \"   \"");
-        assertTrue(testKvClient.putValue(fullWatchClusterKey, "   "), "Failed to seed whitespace string");
+        Boolean whitespaceResult = consulBusinessOperations.putValue(fullWatchClusterKey, "   ").block();
+        assertTrue(whitespaceResult != null && whitespaceResult, "Failed to seed whitespace string");
         WatchCallbackResult whitespaceEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
         assertNotNull(whitespaceEvent, "Should receive event for whitespace string");
         assertTrue(whitespaceEvent.deleted(), "Whitespace string should be treated as deleted. Event: " + whitespaceEvent);
@@ -558,7 +645,7 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
 
         // 5. Delete the key (simulates value becoming null/absent)
         LOG.info("handlesEmptyOrBlankJsonValues: Deleting the key explicitly");
-        testKvClient.deleteKey(fullWatchClusterKey);
+        consulBusinessOperations.deleteClusterConfiguration(testClusterForWatch).block();
         WatchCallbackResult deletedKeyEvent = updates.poll(appWatchSeconds + 5, TimeUnit.SECONDS);
         assertNotNull(deletedKeyEvent, "Should receive event for explicit key deletion");
         assertTrue(deletedKeyEvent.deleted(), "Explicit key deletion should be treated as deleted. Event: " + deletedKeyEvent);
@@ -616,7 +703,7 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
                 clusterConfigKeyPrefixWithSlash,
                 schemaVersionsKeyPrefixWithSlash,
                 appWatchSeconds,
-                directConsulClientForTestSetup // Use the real one to avoid null issues if it tried to connect
+                null // We don't need a real Consul client as we won't connect
         );
         // Don't call freshFetcher.connect()
         LOG.info("idempotency_test: Testing close() on a fetcher where connect() was not explicitly called by test logic (beyond its own @BeforeEach if applicable)");
@@ -635,8 +722,7 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         Consumer<WatchCallbackResult> handler = updates::offer;
 
         PipelineClusterConfig config1 = createDummyClusterConfig(testClusterForWatch);
-        config1 = new PipelineClusterConfig(config1.clusterName(), config1.pipelineGraphConfig(),
-                config1.pipelineModuleMap(), Set.of("topicKvNullTest"), config1.allowedGrpcServices());
+        config1 = updateTopics(config1, Set.of("topicKvNullTest"));
 
         // Initial state: connected via @BeforeEach
         assertTrue(configFetcher.connected.get(), "Should be connected initially from @BeforeEach");
@@ -735,12 +821,10 @@ class KiwiprojectConsulConfigFetcherMicronautTest {
         Consumer<WatchCallbackResult> handler2 = updates2::offer;
 
         PipelineClusterConfig config1 = createDummyClusterConfig(testClusterForWatch);
-        config1 = new PipelineClusterConfig(config1.clusterName(), config1.pipelineGraphConfig(),
-                config1.pipelineModuleMap(), Set.of("topicWatch1"), config1.allowedGrpcServices());
+        config1 = updateTopics(config1, Set.of("topicWatch1"));
 
         PipelineClusterConfig config2 = createDummyClusterConfig(testClusterForWatch); // Same key, different content
-        config2 = new PipelineClusterConfig(config2.clusterName(), config2.pipelineGraphConfig(),
-                config2.pipelineModuleMap(), Set.of("topicWatch2"), config2.allowedGrpcServices());
+        config2 = updateTopics(config2, Set.of("topicWatch2"));
 
         // 1. Establish first watch and verify it works
         configFetcher.watchClusterConfig(testClusterForWatch, handler1);

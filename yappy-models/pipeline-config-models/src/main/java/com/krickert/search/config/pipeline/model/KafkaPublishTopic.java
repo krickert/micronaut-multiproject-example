@@ -2,7 +2,7 @@ package com.krickert.search.config.pipeline.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-// No Lombok needed
+import lombok.Builder;
 
 /**
  * Specifies the name of a Kafka topic a pipeline step will publish to.
@@ -11,6 +11,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * @param topic The name of the Kafka topic. Must not be null or blank.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@Builder
 public record KafkaPublishTopic(
     @JsonProperty("topic") String topic
 ) {

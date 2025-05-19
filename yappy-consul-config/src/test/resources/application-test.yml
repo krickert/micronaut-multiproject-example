@@ -1,16 +1,3 @@
-# Enable testcontainers
-testcontainers:
-  enabled: true
-  consul:
-    enabled: true
-  # Disable other containers that aren't needed for this test
-  kafka:
-    enabled: false
-  moto:
-    enabled: false
-  apicurio:
-    enabled: false
-
 # Consul client configuration
 consul:
   client:

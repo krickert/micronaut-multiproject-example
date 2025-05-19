@@ -31,7 +31,7 @@ include(
     "yappy-consul-config",
     "yappy-models",
     "yappy-models:pipeline-config-models",
-    "yappy-models:schema-registry-models",
+    "yappy-models:pipeline-config-models-test-utils",
     "yappy-models:protobuf-models",
     "yappy-schema-registry",
     "yappy-modules:echo",

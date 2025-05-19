@@ -75,6 +75,7 @@ dependencies {
     implementation(mn.micronaut.kafka)
     implementation(mn.protobuf.java.util)
     implementation(mn.grpc.protobuf)
+    implementation(mn.micronaut.grpc.runtime)
 
 }
 

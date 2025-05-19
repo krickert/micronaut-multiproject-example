@@ -1,0 +1,26 @@
+{
+  "clusterName": "empty-pipeline-cluster",
+  "pipelineGraphConfig": {
+    "pipelines": {
+      "empty-pipeline": {
+        "name": "empty-pipeline",
+        "pipelineSteps": {}
+      }
+    }
+  },
+  "pipelineModuleMap": {
+    "availableModules": {
+      "placeholder-service": {
+        "implementationName": "Placeholder Service",
+        "implementationId": "placeholder-service",
+        "customConfigSchemaReference": {
+          "subject": "placeholder-schema",
+          "version": 1
+        }
+      }
+    }
+  },
+  "defaultPipelineName": "empty-pipeline",
+  "allowedKafkaTopics": [],
+  "allowedGrpcServices": ["placeholder-service"]
+}
