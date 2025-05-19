@@ -30,9 +30,9 @@ public class TestSchemaLoader {
      * @throws RuntimeException if the resource cannot be loaded
      */
     public static String loadSchemaContent(String resourceName) {
-        try (InputStream is = TestSchemaLoader.class.getClassLoader().getResourceAsStream("json/" + resourceName)) {
+        try (InputStream is = TestSchemaLoader.class.getClassLoader().getResourceAsStream("schemas/" + resourceName)) {
             if (is == null) {
-                throw new IOException("Resource not found: json/" + resourceName);
+                throw new IOException("Resource not found: schemas/" + resourceName);
             }
             return new String(is.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {

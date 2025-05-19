@@ -3,7 +3,7 @@ package com.krickert.search.engine.orchestration.grpc;
 
 import com.google.protobuf.Empty;
 import com.krickert.search.engine.PipeStreamEngineGrpc; // Assuming this is your generated gRPC service
-import com.krickert.search.engine.PipeStreamProtos; // Assuming PipeStream is a protobuf message
+//import com.krickert.search.engine.PipeStreamProtos; // Assuming PipeStream is a protobuf message
 // ^^^ Or your actual PipeStream protobuf generated class if it's different
 import com.krickert.search.engine.exception.StepExecutionException;
 // import com.krickert.search.model.PipeStream; // This seems to be a domain model, you'll need to convert it to the protobuf type

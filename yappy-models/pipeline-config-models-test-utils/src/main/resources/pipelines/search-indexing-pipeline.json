@@ -1,0 +1,258 @@
+{
+  "clusterName": "search-indexing-cluster",
+  "pipelineGraphConfig": {
+    "pipelines": {
+      "search-indexing-pipeline": {
+        "name": "search-indexing-pipeline",
+        "pipelineSteps": {
+          "file-connector": {
+            "stepName": "file-connector",
+            "stepType": "INITIAL_PIPELINE",
+            "description": "Monitors a directory for new files to index",
+            "customConfigSchemaId": "file-connector-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "directory": "/data/incoming",
+                "pollingIntervalMs": 5000,
+                "filePatterns": ["*.pdf", "*.docx", "*.txt", "*.html", "*.xml"]
+              }
+            },
+            "processorInfo": {
+              "grpcServiceName": "file-connector-service"
+            },
+            "outputs": {
+              "default": {
+                "targetStepName": "document-parser",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "search.files.incoming",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              }
+            }
+          },
+          "document-parser": {
+            "stepName": "document-parser",
+            "stepType": "PIPELINE",
+            "description": "Parses documents into text and metadata",
+            "customConfigSchemaId": "document-parser-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "extractMetadata": true,
+                "extractText": true,
+                "maxDocumentSizeMb": 50
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["search.files.incoming"],
+                "consumerGroupId": "document-parser-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest",
+                  "max.poll.records": "100"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "document-parser-service"
+            },
+            "outputs": {
+              "default": {
+                "targetStepName": "text-analyzer",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "search.documents.parsed",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              },
+              "onError": {
+                "targetStepName": "error-handler",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "search.errors",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              }
+            }
+          },
+          "text-analyzer": {
+            "stepName": "text-analyzer",
+            "stepType": "PIPELINE",
+            "description": "Analyzes text for language, entities, and keywords",
+            "customConfigSchemaId": "text-analyzer-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "languageDetection": true,
+                "entityExtraction": true,
+                "keywordExtraction": true,
+                "summarization": true
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["search.documents.parsed"],
+                "consumerGroupId": "text-analyzer-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "text-analyzer-service"
+            },
+            "outputs": {
+              "default": {
+                "targetStepName": "search-indexer",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "search.documents.analyzed",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              },
+              "onError": {
+                "targetStepName": "error-handler",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "search.errors",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              }
+            }
+          },
+          "search-indexer": {
+            "stepName": "search-indexer",
+            "stepType": "SINK",
+            "description": "Indexes documents in the search engine",
+            "customConfigSchemaId": "search-indexer-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "indexName": "documents",
+                "batchSize": 100,
+                "commitWithinMs": 1000,
+                "optimizeAfterCommits": 10
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["search.documents.analyzed"],
+                "consumerGroupId": "search-indexer-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "search-indexer-service"
+            },
+            "outputs": {
+              "onError": {
+                "targetStepName": "error-handler",
+                "transportType": "KAFKA",
+                "kafkaTransport": {
+                  "topic": "search.errors",
+                  "kafkaProducerProperties": {
+                    "compression.type": "lz4"
+                  }
+                }
+              }
+            }
+          },
+          "error-handler": {
+            "stepName": "error-handler",
+            "stepType": "SINK",
+            "description": "Handles errors from the pipeline",
+            "customConfigSchemaId": "error-handler-schema",
+            "customConfig": {
+              "jsonConfig": {
+                "errorLogPath": "/var/log/search-pipeline/errors",
+                "notifyAdmin": true,
+                "retryStrategy": "exponential-backoff"
+              }
+            },
+            "kafkaInputs": [
+              {
+                "listenTopics": ["search.errors"],
+                "consumerGroupId": "error-handler-group",
+                "kafkaConsumerProperties": {
+                  "auto.offset.reset": "earliest"
+                }
+              }
+            ],
+            "processorInfo": {
+              "grpcServiceName": "error-handler-service"
+            },
+            "outputs": {}
+          }
+        }
+      }
+    }
+  },
+  "pipelineModuleMap": {
+    "availableModules": {
+      "file-connector-service": {
+        "implementationName": "File Connector Service",
+        "implementationId": "file-connector-service",
+        "customConfigSchemaReference": {
+          "subject": "file-connector-schema",
+          "version": 1
+        }
+      },
+      "document-parser-service": {
+        "implementationName": "Document Parser Service",
+        "implementationId": "document-parser-service",
+        "customConfigSchemaReference": {
+          "subject": "document-parser-schema",
+          "version": 1
+        }
+      },
+      "text-analyzer-service": {
+        "implementationName": "Text Analyzer Service",
+        "implementationId": "text-analyzer-service",
+        "customConfigSchemaReference": {
+          "subject": "text-analyzer-schema",
+          "version": 1
+        }
+      },
+      "search-indexer-service": {
+        "implementationName": "Search Indexer Service",
+        "implementationId": "search-indexer-service",
+        "customConfigSchemaReference": {
+          "subject": "search-indexer-schema",
+          "version": 1
+        }
+      },
+      "error-handler-service": {
+        "implementationName": "Error Handler Service",
+        "implementationId": "error-handler-service",
+        "customConfigSchemaReference": {
+          "subject": "error-handler-schema",
+          "version": 1
+        }
+      }
+    }
+  },
+  "defaultPipelineName": "search-indexing-pipeline",
+  "allowedKafkaTopics": [
+    "search.files.incoming",
+    "search.documents.parsed",
+    "search.documents.analyzed",
+    "search.errors"
+  ],
+  "allowedGrpcServices": [
+    "file-connector-service",
+    "document-parser-service",
+    "text-analyzer-service",
+    "search-indexer-service",
+    "error-handler-service"
+  ]
+}

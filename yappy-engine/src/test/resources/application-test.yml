@@ -1,0 +1,7 @@
+micronaut:
+  application:
+    name: test-application
+
+app:
+  config:
+    cluster-name: test-cluster
