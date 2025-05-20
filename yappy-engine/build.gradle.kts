@@ -68,6 +68,8 @@ dependencies {
     testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     testImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
+    testImplementation(project(":yappy-test-resources:moto-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:moto-test-resource"))
     testImplementation(mn.reactor.test)
     testImplementation(mn.assertj.core)
 
@@ -82,6 +84,17 @@ dependencies {
     implementation(mn.micronaut.grpc.runtime)
     runtimeOnly(mn.logback.classic)
     runtimeOnly(mn.snakeyaml)
+
+    //AWS Dependencies
+    //AWS SDK dependencies
+    api(mn.micronaut.aws.sdk.v2)
+    // AWS Glue Schema Registry dependencies
+    api(libs.amazon.glue) {
+        // Exclude transitive Wire dependencies to avoid conflicts
+        exclude(group = "com.squareup.wire")
+    }
+    api(libs.amazon.msk.iam)
+    api(libs.amazon.connection.client)
 
 }
 

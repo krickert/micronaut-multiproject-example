@@ -18,7 +18,7 @@ import java.time.Duration;
  */
 public class ApicurioContainer extends GenericContainer<ApicurioContainer> {
 
-    private static final DockerImageName DEFAULT_IMAGE_NAME = DockerImageName.parse("apicurio/apicurio-registry:latest");
+    private static final DockerImageName DEFAULT_IMAGE_NAME = DockerImageName.parse("apicurio/apicurio-registry:3.0.7");
     private static final int APICURIO_HTTP_PORT = 8080;
     // Apicurio can sometimes be slow to start, especially the first time an image is pulled.
     // Providing a longer default wait time for the strategy.
@@ -55,12 +55,11 @@ public class ApicurioContainer extends GenericContainer<ApicurioContainer> {
         // Apicurio Registry (built with Quarkus) exposes a health check endpoint.
         // We wait for the /q/health/ready endpoint to be available and return HTTP 200.
         setWaitStrategy(
-                Wait.forHttp("/q/health/ready")
+                Wait.forHttp("/health/ready")
                         .forPort(APICURIO_HTTP_PORT)
                         .forStatusCode(200)
                         .withStartupTimeout(DEFAULT_WAIT_TIMEOUT)
         );
-
         // As seen in your ApicurioTestResourceProvider, setting QUARKUS_PROFILE to "prod"
         // is a common configuration for the Apicurio Docker image.
         withEnv("QUARKUS_PROFILE", "prod");

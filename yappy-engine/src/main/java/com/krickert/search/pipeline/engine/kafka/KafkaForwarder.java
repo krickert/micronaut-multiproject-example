@@ -6,12 +6,17 @@ import com.krickert.search.model.ProtobufUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 @Singleton
 @io.micronaut.context.annotation.Requires(property = "kafka.enabled", value = "true")
 public class KafkaForwarder {
 
-    @Inject
-    KafkaForwarderClient kafkaForwarderClient;
+    private final KafkaForwarderClient kafkaForwarderClient;
+
+    public KafkaForwarder(KafkaForwarderClient kafkaForwarderClient) {
+        this.kafkaForwarderClient = checkNotNull(kafkaForwarderClient);
+    }
 
     public void forwardToKafka(PipeStream pipe, String topic) {
         // The 'destination' field contains the Kafka topic name.

@@ -13,10 +13,6 @@ import java.util.*;
  * It provides properties for Kafka bootstrap servers and client configuration.
  */
 public class KafkaTestResourceProvider extends AbstractTestContainersProvider<KafkaContainer> {
-    // TestContainers Properties
-    public static final String TESTCONTAINERS_PREFIX = "testcontainers";
-    public static final String PROPERTY_TESTCONTAINERS_ENABLED = TESTCONTAINERS_PREFIX + ".enabled";
-    public static final String PROPERTY_TESTCONTAINERS_KAFKA_ENABLED = TESTCONTAINERS_PREFIX + ".kafka";
     // Kafka Properties
     public static final String KAFKA_PREFIX = "kafka";
     public static final String PROPERTY_KAFKA_BOOTSTRAP_SERVERS = KAFKA_PREFIX + ".bootstrap.servers";
@@ -24,13 +20,9 @@ public class KafkaTestResourceProvider extends AbstractTestContainersProvider<Ka
     // Producer Properties
     public static final String PRODUCER_PREFIX = KAFKA_PREFIX + ".producers.default";
     public static final String PROPERTY_PRODUCER_BOOTSTRAP_SERVERS = PRODUCER_PREFIX + ".bootstrap.servers";
-    public static final String PROPERTY_PRODUCER_KEY_SERIALIZER = PRODUCER_PREFIX + ".key.serializer";
-    public static final String PROPERTY_PRODUCER_VALUE_SERIALIZER = PRODUCER_PREFIX + ".value.serializer";
     // Consumer Properties
     public static final String CONSUMER_PREFIX = KAFKA_PREFIX + ".consumers.default";
     public static final String PROPERTY_CONSUMER_BOOTSTRAP_SERVERS = CONSUMER_PREFIX + ".bootstrap.servers";
-    public static final String PROPERTY_CONSUMER_KEY_DESERIALIZER = CONSUMER_PREFIX + ".key.deserializer";
-    public static final String PROPERTY_CONSUMER_VALUE_DESERIALIZER = CONSUMER_PREFIX + ".value.deserializer";
     // Admin Properties
     public static final String PROPERTY_ADMIN_BOOTSTRAP_SERVERS = KAFKA_PREFIX + ".bootstrap.servers.config";
     public static final String PROPERTY_ADMIN_REQUEST_TIMEOUT = KAFKA_PREFIX + ".request.timeout.ms";

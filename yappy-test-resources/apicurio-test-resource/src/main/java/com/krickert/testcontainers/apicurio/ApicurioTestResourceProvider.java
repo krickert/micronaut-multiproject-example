@@ -16,10 +16,6 @@ import java.util.*;
  * serializers/deserializers for Apicurio Protobuf usage.
  */
 public class ApicurioTestResourceProvider extends AbstractTestContainersProvider<ApicurioContainer> { // Changed to ApicurioContainer
-    // TestContainers Properties
-    public static final String TESTCONTAINERS_PREFIX = "testcontainers";
-    public static final String PROPERTY_TESTCONTAINERS_ENABLED = TESTCONTAINERS_PREFIX + ".enabled";
-    public static final String PROPERTY_TESTCONTAINERS_APICURIO_ENABLED = TESTCONTAINERS_PREFIX + ".apicurio";
     // Apicurio Properties (direct, not Kafka-prefixed)
     public static final String PROPERTY_APICURIO_REGISTRY_URL = SerdeConfig.REGISTRY_URL; // e.g., apicurio.registry.url
     // Kafka Common Prefixes
@@ -74,7 +70,7 @@ public class ApicurioTestResourceProvider extends AbstractTestContainersProvider
     // but we can keep them here for the provider's getDefaultImageName() or if needed elsewhere.
     // Alternatively, access them via ApicurioContainer.DEFAULT_IMAGE_NAME.asCanonicalNameString()
     // and ApicurioContainer.APICURIO_HTTP_PORT if you prefer.
-    public static final String DEFAULT_IMAGE = "apicurio/apicurio-registry:latest"; // Or ApicurioContainer.DEFAULT_IMAGE_NAME.asCanonicalNameString()
+    public static final String DEFAULT_IMAGE = "apicurio/apicurio-registry:3.0.7"; // Or ApicurioContainer.DEFAULT_IMAGE_NAME.asCanonicalNameString()
     public static final int APICURIO_PORT = 8080; // Or ApicurioContainer.APICURIO_HTTP_PORT
     public static final String SIMPLE_NAME = "apicurio-registry";
     public static final String DISPLAY_NAME = "Apicurio Registry";

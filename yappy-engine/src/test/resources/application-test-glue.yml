@@ -31,9 +31,11 @@ kafka:
   enabled: true
   schema:
     registry:
-      type: apicurio
+      type: glue
   producers:
     default:
       apicurio:
         registry:
           url: ${apicurio.registry.url}
+
+glue.enabled: true

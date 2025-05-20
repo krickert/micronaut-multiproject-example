@@ -1,5 +1,7 @@
 We are trying to implement PipeSteamEngineImpl.java
 
+DO NOT LOOK AT ANYTHING IN tmp from the root - IT IS THERE FOR MY OWN REFERENCE
+
 pay special attention to details along the way.  Do not change any outside service code and limit changes to yappy-engine.
 
 Let's first setup all interfaces that would work on this - no actual implementation yet except for the main logic in the PipeStreamEngineImpl and the execution client factory / execution of the PipeStepExecutor.  It should demonstrate the flow of what we're going to do.
@@ -10,7 +12,7 @@ What we CAN implement is the PipeStreamGrpcForwarder and the PipelineStepGrpcPro
 
 As part of this skeleton,
 1) When a request comes in to any of the services, it begins by starting to create the response object.
-2) For readibility, we will make a builder structure meant to build up the full response but also carry metadata for easier readibility.  This is because we are controlling 3 states:
+2) For readability, we will make a builder structure meant to build up the full response but also carry metadata for easier readability.  This is because we are controlling 3 states:
     a) Request state
     b) present state
     c) response state.
