@@ -31,26 +31,26 @@ public class RealEchoChunkerIntegrationTest {
 
     @Inject
     private ApplicationContext applicationContext;
-    
+
     @Inject
     private EmbeddedServer echoServer;
-    
+
     @Inject
     private EmbeddedServer chunkerServer;
-    
+
     @Inject
     private KafkaProducer<String, PipeStream> kafkaProducer;
-    
+
     @Inject
     private KafkaConsumer<String, PipeStream> kafkaConsumer;
-    
+
     @BeforeEach
     void setup() {
         // Start the Echo and Chunker services
         // Register them with Consul
         // Create necessary Kafka topics
     }
-    
+
     @Test
     void testEndToEndFlow() {
         // Create a test document
@@ -59,7 +59,7 @@ public class RealEchoChunkerIntegrationTest {
         // Send the result to the Chunker service
         // Verify the Chunker service processes it correctly
     }
-    
+
     @Test
     void testKafkaSerialization() {
         // Create a PipeStream object
@@ -82,13 +82,13 @@ void setup() {
     echoProps.put("micronaut.application.name", "echo-service");
     echoProps.put("grpc.server.port", findAvailablePort());
     ApplicationContext echoContext = ApplicationContext.run(echoProps);
-    
+
     // Create Chunker service context
     Map<String, Object> chunkerProps = new HashMap<>();
     chunkerProps.put("micronaut.application.name", "chunker-service");
     chunkerProps.put("grpc.server.port", findAvailablePort());
     ApplicationContext chunkerContext = ApplicationContext.run(chunkerProps);
-    
+
     // Configure both to use the same Consul, Kafka, and schema registry
 }
 ```
@@ -107,16 +107,16 @@ void testKafkaSerialization() {
         .setTargetStepName("echo-step")
         .setDocument(createTestDocument())
         .build();
-    
+
     // Produce to Kafka
     ProducerRecord<String, PipeStream> record = 
         new ProducerRecord<>("test-pipeline-input", pipeStream.getStreamId(), pipeStream);
     kafkaProducer.send(record).get();
-    
+
     // Consume from Kafka
     kafkaConsumer.subscribe(Collections.singletonList("test-pipeline-input"));
     ConsumerRecords<String, PipeStream> records = kafkaConsumer.poll(Duration.ofSeconds(10));
-    
+
     // Verify
     assertFalse(records.isEmpty(), "Should have received records");
     PipeStream receivedPipeStream = records.iterator().next().value();
@@ -141,7 +141,7 @@ void testEndToEndGrpcFlow() {
         .build();
     PipeStepProcessorGrpc.PipeStepProcessorBlockingStub echoClient = 
         PipeStepProcessorGrpc.newBlockingStub(echoChannel);
-    
+
     // Create a client for the Chunker service
     ManagedChannel chunkerChannel = ManagedChannelBuilder
         .forAddress("localhost", chunkerServer.getPort())
@@ -149,22 +149,22 @@ void testEndToEndGrpcFlow() {
         .build();
     PipeStepProcessorGrpc.PipeStepProcessorBlockingStub chunkerClient = 
         PipeStepProcessorGrpc.newBlockingStub(chunkerChannel);
-    
+
     // Create a test document
     PipeDoc testDoc = createTestDocument();
-    
+
     // Create a request for the Echo service
     ProcessRequest echoRequest = createProcessRequest("echo-step", testDoc);
-    
+
     // Call the Echo service
     ProcessResponse echoResponse = echoClient.processData(echoRequest);
     assertTrue(echoResponse.getSuccess());
-    
+
     // Call the Chunker service with the Echo response
     ProcessRequest chunkerRequest = createProcessRequest("chunker-step", echoResponse.getOutputDoc());
     ProcessResponse chunkerResponse = chunkerClient.processData(chunkerRequest);
     assertTrue(chunkerResponse.getSuccess());
-    
+
     // Verify the Chunker response contains semantic results
     assertTrue(chunkerResponse.getOutputDoc().getSemanticResultsCount() > 0);
 }
@@ -179,19 +179,19 @@ Create a test that demonstrates both Kafka and gRPC working together:
 void testKafkaAndGrpcFlow() {
     // Create a PipeStream object
     PipeStream pipeStream = createTestPipeStream();
-    
+
     // Send to Kafka
     kafkaProducer.send(new ProducerRecord<>("test-pipeline-input", pipeStream.getStreamId(), pipeStream)).get();
-    
+
     // Set up a consumer for the output topic
     kafkaConsumer.subscribe(Collections.singletonList("test-pipeline-output"));
-    
+
     // Process should happen asynchronously through the pipeline
-    
+
     // Verify the result in the output topic
     ConsumerRecords<String, PipeStream> records = kafkaConsumer.poll(Duration.ofSeconds(30));
     assertFalse(records.isEmpty(), "Should have received records");
-    
+
     // Verify the final document has been processed by both Echo and Chunker
     PipeStream result = records.iterator().next().value();
     assertTrue(result.getDocument().getSemanticResultsCount() > 0, "Document should have semantic results from Chunker");
@@ -237,6 +237,29 @@ I'm in ask mode because this is a more complicated task, and might involve looki
 To fully understand what is being built and how, read through this full document `current_instructions.md`, this details where we are with coding - we are specifically on starting to 
 integrate kafka and apicurio or glue (we will test both Apicurio and Glue for protobuf validation via kafka)
 
+### Project Architecture Overview
+The YAPPY project follows a distributed microservice architecture where:
+
+1. Each service instance runs exactly one module (e.g., Echo or Chunker)
+2. Each service contains both the module implementation and an embedded PipeStreamEngine
+3. Services communicate with each other through gRPC and/or Kafka
+4. Configuration is managed centrally through Consul
+5. Schema validation is handled by either Apicurio or AWS Glue Schema Registry
+
+### Key Components and Their Relationships
+- **PipeStreamEngine**: Embedded in each service, handles routing and processing
+- **PipeStepProcessor**: Interface implemented by modules (Echo, Chunker, etc.)
+- **Consul**: Stores configuration and enables service discovery
+- **Kafka**: Provides asynchronous communication between services
+- **Schema Registry**: Validates and stores protobuf schemas (Apicurio or AWS Glue)
+
+### Integration Testing Strategy
+Our current focus is on creating end-to-end integration tests that:
+1. Run multiple services (Echo and Chunker) in the same test
+2. Connect them to the same Consul, Kafka, and schema registry instances
+3. Test both synchronous (gRPC) and asynchronous (Kafka) communication
+4. Verify that PipeStream objects can be properly serialized and deserialized
+
 ### Locations of models for this project
 The protobufs will be developed in the code and pushed to either Glue or Apicurio.
 
@@ -250,6 +273,16 @@ Then, look at the pipeline-config-models `com.krickert.search.config.pipeline.mo
 
 #### JSON Schema models
 The last files, `yappy-models/pipeline-config-models/src/main/java/com/krickert/search/config/schema/model/*.java` for package `com.krickert.search.config.schema.model` - this provides an insight into the JSON Schema model design.
+
+#### Module Implementations
+The actual module implementations can be found in:
+- Echo module: `yappy-modules/echo/src/main/java/com/krickert/yappy/modules/echo/EchoService.java`
+- Chunker module: `yappy-modules/chunker/src/main/java/com/krickert/yappy/modules/chunker/ChunkerServiceGrpc.java`
+
+#### Integration Tests
+Current integration tests are located in:
+- `yappy-engine/src/test/java/com/krickert/search/pipeline/integration/`
+- These tests demonstrate how to set up and test various components of the system
 
 
 ## Component Details and Implementation Plan
