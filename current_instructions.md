@@ -1,7 +1,225 @@
 
+
+# Next Steps for YAPPY Project Integration Testing
+
+After examining the codebase, I can see that the project has two main modules (Echo and Chunker) with their implementations in the `yappy-modules` directory. The current integration tests in the `yappy-engine` project are using mock implementations of these services rather than the actual implementations.
+
+## Current State
+
+1. **Module Implementations**:
+   - **Echo Module**: A simple service that echoes back the input document (`EchoService.java`)
+   - **Chunker Module**: A service that chunks text into smaller pieces (`ChunkerServiceGrpc.java`)
+
+2. **Current Integration Tests**:
+   - `ChunkerEchoIntegrationTest.java` and `RealChunkerEchoIntegrationTest.java`: Both use mock implementations
+   - `KafkaApicurioTestIT.java`: Tests Kafka with Apicurio schema registry
+   - `KafkaMotoTestIT.java`: Tests Kafka with AWS Glue schema registry
+   - `EchoFullConsulGrpcKafkaIntegrationTest.java`: Tests basic connectivity with Consul, gRPC, and Kafka
+
+## Recommended Next Steps
+
+### 1. Create a Real Integration Test with Actual Service Implementations
+
+Create a new integration test that uses the actual Echo and Chunker services from the `yappy-modules` directory instead of mocks:
+
+```java
+@MicronautTest(environments = {"test"}, transactional = false)
+@Property(name = "micronaut.server.port", value = "-1") // Random port
+@Property(name = "kafka.enabled", value = "true")
+@Property(name = "consul.client.enabled", value = "true")
+public class RealEchoChunkerIntegrationTest {
+
+    @Inject
+    private ApplicationContext applicationContext;
+    
+    @Inject
+    private EmbeddedServer echoServer;
+    
+    @Inject
+    private EmbeddedServer chunkerServer;
+    
+    @Inject
+    private KafkaProducer<String, PipeStream> kafkaProducer;
+    
+    @Inject
+    private KafkaConsumer<String, PipeStream> kafkaConsumer;
+    
+    @BeforeEach
+    void setup() {
+        // Start the Echo and Chunker services
+        // Register them with Consul
+        // Create necessary Kafka topics
+    }
+    
+    @Test
+    void testEndToEndFlow() {
+        // Create a test document
+        // Send it to the Echo service
+        // Verify the Echo service processes it correctly
+        // Send the result to the Chunker service
+        // Verify the Chunker service processes it correctly
+    }
+    
+    @Test
+    void testKafkaSerialization() {
+        // Create a PipeStream object
+        // Serialize it to Kafka
+        // Consume it from Kafka
+        // Verify it matches the original
+    }
+}
+```
+
+### 2. Configure Multiple Application Contexts
+
+Set up the test to run multiple application contexts, each with its own service:
+
+```java
+@BeforeEach
+void setup() {
+    // Create Echo service context
+    Map<String, Object> echoProps = new HashMap<>();
+    echoProps.put("micronaut.application.name", "echo-service");
+    echoProps.put("grpc.server.port", findAvailablePort());
+    ApplicationContext echoContext = ApplicationContext.run(echoProps);
+    
+    // Create Chunker service context
+    Map<String, Object> chunkerProps = new HashMap<>();
+    chunkerProps.put("micronaut.application.name", "chunker-service");
+    chunkerProps.put("grpc.server.port", findAvailablePort());
+    ApplicationContext chunkerContext = ApplicationContext.run(chunkerProps);
+    
+    // Configure both to use the same Consul, Kafka, and schema registry
+}
+```
+
+### 3. Test Kafka Serialization of PipeStream Objects
+
+Create a test that demonstrates serializing and deserializing PipeStream objects through Kafka:
+
+```java
+@Test
+void testKafkaSerialization() {
+    // Create a PipeStream object with test data
+    PipeStream pipeStream = PipeStream.newBuilder()
+        .setStreamId("test-stream-" + System.currentTimeMillis())
+        .setCurrentPipelineName("test-pipeline")
+        .setTargetStepName("echo-step")
+        .setDocument(createTestDocument())
+        .build();
+    
+    // Produce to Kafka
+    ProducerRecord<String, PipeStream> record = 
+        new ProducerRecord<>("test-pipeline-input", pipeStream.getStreamId(), pipeStream);
+    kafkaProducer.send(record).get();
+    
+    // Consume from Kafka
+    kafkaConsumer.subscribe(Collections.singletonList("test-pipeline-input"));
+    ConsumerRecords<String, PipeStream> records = kafkaConsumer.poll(Duration.ofSeconds(10));
+    
+    // Verify
+    assertFalse(records.isEmpty(), "Should have received records");
+    PipeStream receivedPipeStream = records.iterator().next().value();
+    assertEquals(pipeStream.getStreamId(), receivedPipeStream.getStreamId());
+    assertEquals(pipeStream.getCurrentPipelineName(), receivedPipeStream.getCurrentPipelineName());
+    assertEquals(pipeStream.getTargetStepName(), receivedPipeStream.getTargetStepName());
+    assertEquals(pipeStream.getDocument().getId(), receivedPipeStream.getDocument().getId());
+}
+```
+
+### 4. Test End-to-End gRPC Flow
+
+Create a test that demonstrates the full pipeline flow using gRPC:
+
+```java
+@Test
+void testEndToEndGrpcFlow() {
+    // Create a client for the Echo service
+    ManagedChannel echoChannel = ManagedChannelBuilder
+        .forAddress("localhost", echoServer.getPort())
+        .usePlaintext()
+        .build();
+    PipeStepProcessorGrpc.PipeStepProcessorBlockingStub echoClient = 
+        PipeStepProcessorGrpc.newBlockingStub(echoChannel);
+    
+    // Create a client for the Chunker service
+    ManagedChannel chunkerChannel = ManagedChannelBuilder
+        .forAddress("localhost", chunkerServer.getPort())
+        .usePlaintext()
+        .build();
+    PipeStepProcessorGrpc.PipeStepProcessorBlockingStub chunkerClient = 
+        PipeStepProcessorGrpc.newBlockingStub(chunkerChannel);
+    
+    // Create a test document
+    PipeDoc testDoc = createTestDocument();
+    
+    // Create a request for the Echo service
+    ProcessRequest echoRequest = createProcessRequest("echo-step", testDoc);
+    
+    // Call the Echo service
+    ProcessResponse echoResponse = echoClient.processData(echoRequest);
+    assertTrue(echoResponse.getSuccess());
+    
+    // Call the Chunker service with the Echo response
+    ProcessRequest chunkerRequest = createProcessRequest("chunker-step", echoResponse.getOutputDoc());
+    ProcessResponse chunkerResponse = chunkerClient.processData(chunkerRequest);
+    assertTrue(chunkerResponse.getSuccess());
+    
+    // Verify the Chunker response contains semantic results
+    assertTrue(chunkerResponse.getOutputDoc().getSemanticResultsCount() > 0);
+}
+```
+
+### 5. Test Combined Kafka and gRPC Flow
+
+Create a test that demonstrates both Kafka and gRPC working together:
+
+```java
+@Test
+void testKafkaAndGrpcFlow() {
+    // Create a PipeStream object
+    PipeStream pipeStream = createTestPipeStream();
+    
+    // Send to Kafka
+    kafkaProducer.send(new ProducerRecord<>("test-pipeline-input", pipeStream.getStreamId(), pipeStream)).get();
+    
+    // Set up a consumer for the output topic
+    kafkaConsumer.subscribe(Collections.singletonList("test-pipeline-output"));
+    
+    // Process should happen asynchronously through the pipeline
+    
+    // Verify the result in the output topic
+    ConsumerRecords<String, PipeStream> records = kafkaConsumer.poll(Duration.ofSeconds(30));
+    assertFalse(records.isEmpty(), "Should have received records");
+    
+    // Verify the final document has been processed by both Echo and Chunker
+    PipeStream result = records.iterator().next().value();
+    assertTrue(result.getDocument().getSemanticResultsCount() > 0, "Document should have semantic results from Chunker");
+}
+```
+
+## Implementation Approach
+
+1. **Start Simple**: Begin with a basic test that verifies each service works individually
+2. **Add Kafka**: Test Kafka serialization of PipeStream objects
+3. **Combine Services**: Test the services working together via gRPC
+4. **Full Pipeline**: Test the full pipeline with both Kafka and gRPC
+
+This approach will allow you to incrementally build up the functionality while ensuring each component works correctly before moving on to the next step.
+
+## Additional Considerations
+
+1. **Schema Registration**: Ensure that protobuf schemas are properly registered in both Apicurio and AWS Glue
+2. **Service Discovery**: Configure Consul for service discovery between the Echo and Chunker services
+3. **Error Handling**: Test error scenarios to ensure the pipeline handles them gracefully
+4. **Metrics**: Add metrics collection to monitor the performance of the pipeline
+
+By following these steps, you'll be able to create a comprehensive integration test suite that verifies the entire pipeline works correctly with both Kafka and gRPC communication.
+
+
 # Detailed Implementation Plan for PipeStreamEngineImpl and Related Components
 
-Based on the project exploration, I'll outline a comprehensive plan for implementing the PipeStreamEngineImpl.java and related components. This plan focuses on creating proper Java interfaces with their implementations and utilizing the consul-config structure for routing.
+Based on the project exploration, this is an outline a comprehensive plan for implementing the YAPPY and related components. This plan focuses on creating proper Java interfaces with their implementations and utilizing the consul-config structure for routing.
 
 ## Overview of Components to Implement
 
@@ -10,6 +228,29 @@ Based on the project exploration, I'll outline a comprehensive plan for implemen
 3. **PipelineStepGrpcProcessor** - New component for processing pipeline steps via gRPC
 4. **PipeStepExecutor** - Interface and factory for executing pipeline steps
 5. **PipeStreamStateBuilder** - Builder for managing pipeline stream state
+
+## Overview of project setup
+
+### Read this document in full
+I'm in ask mode because this is a more complicated task, and might involve looking through multiple projects to ensure we can test them all at one time.
+
+To fully understand what is being built and how, read through this full document `current_instructions.md`, this details where we are with coding - we are specifically on starting to 
+integrate kafka and apicurio or glue (we will test both Apicurio and Glue for protobuf validation via kafka)
+
+### Locations of models for this project
+The protobufs will be developed in the code and pushed to either Glue or Apicurio.
+
+The java models serialize in JSON and are used for API calls and in the case of schemas, stored in consul as well.
+
+#### Protobufs
+After this, read through the grpc protobuffers `yappy-models/protobuf-models/src/main/proto/*.proto`, this gives a clear understanding of the contracts we are building.
+
+#### Pipeline-config-models
+Then, look at the pipeline-config-models `com.krickert.search.config.pipeline.model` package in `yappy-models/pipeline-config-models/src/main/java/com/krickert/search/config/pipeline/model/*.java`, this provides an insight as to the control plane of the engine and gives the full structure on the models to create/update pipeline configurations.
+
+#### JSON Schema models
+The last files, `yappy-models/pipeline-config-models/src/main/java/com/krickert/search/config/schema/model/*.java` for package `com.krickert.search.config.schema.model` - this provides an insight into the JSON Schema model design.
+
 
 ## Component Details and Implementation Plan
 
@@ -773,9 +1014,9 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
 }
 ```
 
-## Implementation Tasks and Next Steps
+## Implementation Tasks and Next Steps / Progress Report
 
-### Task 1: Create Interface Definitions
+### Task 1: Create Interface Definitions (100% completed)
 
 1. Create the `PipeStepExecutor` interface in `com.krickert.search.pipeline.step`
 2. Create the `PipeStepExecutorFactory` interface in `com.krickert.search.pipeline.step`
@@ -786,14 +1027,14 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
    - `PipeStepExecutorNotFoundException`
    - `PipeStepProcessingException`
 
-### Task 2: Implement Interface Implementations
+### Task 2: Implement Interface Implementations (100% completed)
 
 1. Create the `GrpcPipeStepExecutor` implementation in `com.krickert.search.pipeline.step.impl`
 2. Create the `PipeStepExecutorFactoryImpl` implementation in `com.krickert.search.pipeline.step.impl`
 3. Create the `PipelineStepGrpcProcessorImpl` implementation in `com.krickert.search.pipeline.step.grpc`
 4. Create the `PipeStreamStateBuilderImpl` implementation in `com.krickert.search.pipeline.engine.state`
 
-### Task 3: Implement PipeStreamEngineImpl
+### Task 3: Implement PipeStreamEngineImpl (Three mothods completed (enhancements in progress))
 
 1. Create the `PipeStreamEngineImpl` class in `com.krickert.search.pipeline.engine.grpc`
 2. Implement the three methods:
@@ -801,13 +1042,84 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
    - `processPipe`
    - `processConnectorDoc`
 
-### Task 4: Create Unit Tests
+### Task 4: Create Unit Tests (20% complete - IN PROGRESS)
 
 1. Create unit tests for each interface implementation
 2. Create integration tests that use the chunker and echo implementations
 3. Test the routing logic with different pipeline configurations
 
-### Task 5: Future Enhancements
+## This is where we are now - and below is a project plan 
+
+The following sections below go over the remaining work for the full project.  
+
+### Project Plan
+The unit tests must me methodical: a full integration test is the goal.
+
+1. Create mock test to ensure the structure is sound (completed)
+2. Create tests that prove Apicurio, Kafka, and Consul all start up without error (completed)
+3. Create tests that run the Echo and Chunker service at the same time (not started)
+4. Once Echo and Chunker are started, configure the engine step-by-step simulating a full end-to-end
+
+### Next steps to complete
+1. Run the Echo service in a separate application-test-echo.yml file 
+2. Run the Chunker service in a separate application-text-chunker-yml file
+3. Run both the echo and the chunker at the same time in a single test, connecting to the same consul/apicurio/kafka instance
+
+#### Plan to run echo, chunker, and connector all in the same test
+   1. Write tests that prove chunker and echo are both working from the same consul app by running the Admin front end API to put together the full pipeline
+      1. Launch kafka/apicurio
+         1. Create new topics
+         2. Register all protobufs into apicurio
+         3. Create same test but different configuration to register all protobufs in moto
+         4. Create sample end-to-end that ensure kafka can send/receive simulated PipeStream objects
+         5. Bonus: try any other request/response object so we can also run connectors or async pipe arch events
+      6. Create new cluster
+         1. Simulate admin doing this - so far this is done via seeding in the consul-config
+            1. Create an API call for registering a new cluster
+            9. Write an API front end to register a new cluster
+         10. Add this to uber-test that launches all 3 services
+      6. Create new pipeline
+         1. Create an API for registering a new pipeline and API front end
+         8. Add this to uber-test that launches all 3 services
+      7. Create kaka topics
+         1. Create an API that creates new topics 
+         9. Add this to uber-test that launches all 3 services
+      7. Register the echo service
+         1. Create an API for registering a new module
+         9. Test that module launches and registers itself with consul
+         10. Create an API that returns the status of the echo service
+            1. make sure that this uses the work from the section "Using Consul Configuration for Routing"
+         9. Add this to uber-test that launches all 3 services
+      9. Register the chunker service
+         1.  See same steps for echo service
+      11. Create dummy service loader that loads in 20 pipe stream objects
+      13. Create an API for registering a new connector
+      13. Create an API for ensuring the connector was properly registered
+#### Future connectors and pipelines
+##### Create sample data loading service
+1. Create python connector example
+13. Create python pipeline step example
+14. Create python pipeline sink step example
+14. Register new python connectors with services
+12. Create wikipedia connector
+13. Create common crawl connector
+14. Create Open search sink
+15. Create Docstore sink
+16. Create Dockstore pipeline to save in new Open Search collection
+
+##### More simluated front end tasks
+1. Start making connections in the pipeline configuration
+   1. Wikipedia Connector --> Echo --> Chunker --> Embedder --> Open Search
+   17. Add Common Crawl Connector
+   18. Add Docstore (Mongo) sink
+19. New pipeline
+   1. Dockstore --> Echo --> Chunker --> Embedder --> Open Search
+21. Create search API
+22. Add front end for search
+23. Add Open Source analytics to search
+24. Create data training via analytics to improve chunks
+
+### Task 5: Future Enhancements (10% complete - to be done as above is going on)
 
 1. Implement Kafka routing in the `PipeStreamStateBuilder`
 2. Add support for internal processors in the `PipeStepExecutorFactory`
@@ -815,7 +1127,7 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
 4. Add metrics and monitoring
 5. Implement configuration-driven setup for pipeline steps
 
-## Using Consul Configuration for Routing
+## Using Consul Configuration for Routing (90% complete)
 
 The implementation uses the DynamicConfigurationManager to access pipeline configurations from Consul. This manager provides access to:
 
@@ -959,12 +1271,13 @@ To validate and register new modules, the following features need to be implemen
      - Listing all registered modules
    - Implement authentication and authorization for these endpoints
 
-3. **Schema Registry Integration**:
+3. **Schema Registry Integration**: (100% complete? Not needed for custom json?)
+   - Decide if we need this for JSON schemas.  If it's little effort to add to both glue and apicurio, we will do it.
    - Integrate with the schema registry to store and retrieve module configuration schemas
    - Implement versioning for schemas to support backward compatibility
    - Add validation of custom configurations against schemas
 
-### 2. Creating Containers that Package Modules with the Engine
+### 2. Creating Containers that Package Modules with the Engine (not started)
 
 To create containers that package modules with the engine, the following features need to be implemented:
 
