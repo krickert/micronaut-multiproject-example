@@ -12,7 +12,7 @@ public class Clients {
 
     @Bean
     PipeStepProcessorGrpc.PipeStepProcessorBlockingStub pipeStepProcessorBlockingStub(
-            @GrpcChannel(GrpcServerChannel.NAME)
+            @GrpcChannel("echo")
             ManagedChannel channel) {
         return PipeStepProcessorGrpc.newBlockingStub(
                 channel
@@ -21,7 +21,7 @@ public class Clients {
 
     @Bean
     PipeStepProcessorGrpc.PipeStepProcessorStub serviceStub(
-            @GrpcChannel(GrpcServerChannel.NAME)
+            @GrpcChannel("echo")
             ManagedChannel channel) {
         return PipeStepProcessorGrpc.newStub(
                 channel

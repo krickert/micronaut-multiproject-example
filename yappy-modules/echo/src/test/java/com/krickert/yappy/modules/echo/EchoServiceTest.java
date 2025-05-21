@@ -6,6 +6,7 @@ import com.google.protobuf.Value;
 import com.krickert.search.model.Blob;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.sdk.*;
+import com.krickert.testcontainers.consul.ConsulTestResourceProvider;
 import io.grpc.stub.StreamObserver;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.grpc.annotation.GrpcChannel;
@@ -24,18 +25,14 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 @MicronautTest
-@Property(name = "grpc.client.plaintext", value = "true")
-@Property(name = "micronaut.test.resources.enabled", value = "false")
 class EchoServiceTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(EchoServiceTest.class);
 
     @Inject
-    @GrpcChannel(GrpcServerChannel.NAME)
     PipeStepProcessorGrpc.PipeStepProcessorBlockingStub blockingClient;
 
     @Inject
-    @GrpcChannel(GrpcServerChannel.NAME)
     PipeStepProcessorGrpc.PipeStepProcessorStub asyncClient;
 
     private ProcessRequest createTestProcessRequest(

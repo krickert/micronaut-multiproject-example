@@ -11,6 +11,7 @@ import com.krickert.search.model.SemanticProcessingResult;
 import com.krickert.search.model.mapper.MappingException;
 import com.krickert.search.sdk.*;
 import io.grpc.stub.StreamObserver;
+import io.micronaut.grpc.annotation.GrpcService;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
@@ -19,26 +20,24 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-// import java.util.concurrent.ExecutorService; // Keep if used for other async tasks
 
 @Singleton
+@GrpcService
 public class ChunkerServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessorImplBase {
 
     private static final Logger log = LoggerFactory.getLogger(ChunkerServiceGrpc.class);
     private final ObjectMapper objectMapper;
     private final OverlapChunker overlapChunker;
-    private final ChunkMetadataExtractor metadataExtractor; // Inject the new service
-    // private final ExecutorService executorService; // Keep if used, gRPC has its own threading
+    private final ChunkMetadataExtractor metadataExtractor;
 
     @Inject
-    public ChunkerServiceGrpc( // Removed @Named(TaskExecutors.IO) ExecutorService executorService for now
-                               ObjectMapper objectMapper,
-                               OverlapChunker overlapChunker,
-                               ChunkMetadataExtractor metadataExtractor) { // Add to constructor
-        // this.executorService = executorService;
+    public ChunkerServiceGrpc(
+            ObjectMapper objectMapper,
+            OverlapChunker overlapChunker,
+            ChunkMetadataExtractor metadataExtractor) {
         this.objectMapper = objectMapper;
         this.overlapChunker = overlapChunker;
-        this.metadataExtractor = metadataExtractor; // Initialize
+        this.metadataExtractor = metadataExtractor;
     }
 
 
@@ -51,7 +50,7 @@ public class ChunkerServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessorI
         String pipeStepName = metadata.getPipeStepName();
 
         ProcessResponse.Builder responseBuilder = ProcessResponse.newBuilder();
-        PipeDoc.Builder outputDocBuilder = inputDoc.toBuilder(); // Start with a copy of input
+        PipeDoc.Builder outputDocBuilder = inputDoc.toBuilder();
 
         try {
             log.info("Processing document ID: {} for step: {} in stream: {}", inputDoc.getId(), pipeStepName, streamId);
@@ -65,52 +64,46 @@ public class ChunkerServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessorI
                 );
             } else {
                 log.warn("No custom JSON config provided for ChunkerService. Using defaults. streamId: {}, pipeStepName: {}", streamId, pipeStepName);
-                chunkerOptions = new ChunkerOptions(); // Use default constructor
+                chunkerOptions = new ChunkerOptions();
             }
 
             if (chunkerOptions.sourceField() == null || chunkerOptions.sourceField().isEmpty()) {
-                setErrorResponseAndComplete(responseBuilder, "Missing 'sourceField' in ChunkerOptions", null, responseObserver);
+                setErrorResponseAndComplete(responseBuilder, "Missing 'source_field' in ChunkerOptions", null, responseObserver);
                 return;
             }
-            // The ChunkerOptions record now has defaults, so this check might be less critical unless an empty string is explicitly passed
-            if (chunkerOptions.chunkIdTemplate() == null || chunkerOptions.chunkIdTemplate().isEmpty()) {
-                log.warn("chunkIdTemplate not specified in ChunkerOptions, ChunkerOptions should provide a default. streamId: {}, pipeStepName: {}", streamId, pipeStepName);
-                // ChunkerOptions constructor now handles defaults.
-            }
 
-
-            List<Chunk> chunkRecords = overlapChunker.createChunks(inputDoc, chunkerOptions, streamId, pipeStepName);
+            ChunkingResult chunkingResult = overlapChunker.createChunks(inputDoc, chunkerOptions, streamId, pipeStepName);
+            List<Chunk> chunkRecords = chunkingResult.chunks();
+            Map<String, String> placeholderToUrlMap = chunkingResult.placeholderToUrlMap();
 
             if (!chunkRecords.isEmpty()) {
-                SemanticProcessingResult.Builder semanticProcessingResultBuilder = SemanticProcessingResult.newBuilder()
-                        .setResultId(UUID.randomUUID().toString()) // Generate a unique ID for this processing result
+                SemanticProcessingResult.Builder newSemanticResultBuilder = SemanticProcessingResult.newBuilder()
+                        .setResultId(UUID.randomUUID().toString())
                         .setSourceFieldName(chunkerOptions.sourceField())
-                        .setChunkConfigId(chunkerOptions.chunkConfigId()) // Get from options
-                        .setEmbeddingConfigId("none"); // Embedding is not done in this step
+                        .setChunkConfigId(chunkerOptions.chunkConfigId());
+                // REMOVED: .setEmbeddingConfigId("none");
+                // If not set, it defaults to an empty string, which is appropriate here.
 
-                // Generate result_set_name using the template from ChunkerOptions
-                // The template might use placeholders like %s for pipeStepName or sourceFieldName
-                // For simplicity, let's assume it can use pipeStepName. Adjust if template is more complex.
                 String resultSetName = String.format(
-                        chunkerOptions.resultSetNameTemplate() != null ? chunkerOptions.resultSetNameTemplate() : "%s_chunks_%s", // Default fallback
-                        pipeStepName, // Could also be chunkerOptions.sourceField() or other context
+                        chunkerOptions.resultSetNameTemplate(),
+                        pipeStepName,
                         chunkerOptions.chunkConfigId()
-                ).replaceAll("[^a-zA-Z0-9_\\-]", "_"); // Sanitize
-                semanticProcessingResultBuilder.setResultSetName(resultSetName);
-
+                ).replaceAll("[^a-zA-Z0-9_\\-]", "_");
+                newSemanticResultBuilder.setResultSetName(resultSetName);
 
                 int currentChunkNumber = 0;
                 for (Chunk chunkRecord : chunkRecords) {
                     ChunkEmbedding.Builder chunkEmbeddingBuilder = ChunkEmbedding.newBuilder()
                             .setTextContent(chunkRecord.text())
-                            .setChunkId(chunkRecord.id()) // This ID comes from OverlapChunker
+                            .setChunkId(chunkRecord.id())
                             .setOriginalCharStartOffset(chunkRecord.originalIndexStart())
                             .setOriginalCharEndOffset(chunkRecord.originalIndexEnd())
                             .setChunkConfigId(chunkerOptions.chunkConfigId());
-                    // Vector not populated here
 
-                    // --- Metadata Extraction ---
-                    boolean containsUrlPlaceholder = chunkRecord.text().contains("urlplaceholder"); // Simple check
+                    boolean containsUrlPlaceholder = (chunkerOptions.preserveUrls() != null && chunkerOptions.preserveUrls()) &&
+                            !placeholderToUrlMap.isEmpty() && // Check if map is not empty
+                            placeholderToUrlMap.keySet().stream().anyMatch(ph -> chunkRecord.text().contains(ph));
+
                     Map<String, Value> extractedMetadata = metadataExtractor.extractAllMetadata(
                             chunkRecord.text(),
                             currentChunkNumber,
@@ -119,20 +112,21 @@ public class ChunkerServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessorI
                     );
 
                     SemanticChunk.Builder semanticChunkBuilder = SemanticChunk.newBuilder()
-                            .setChunkId(chunkRecord.id()) // Using the ID from OverlapChunker
+                            .setChunkId(chunkRecord.id())
                             .setChunkNumber(currentChunkNumber)
                             .setEmbeddingInfo(chunkEmbeddingBuilder.build())
                             .putAllMetadata(extractedMetadata);
 
-                    semanticProcessingResultBuilder.addChunks(semanticChunkBuilder.build());
+                    newSemanticResultBuilder.addChunks(semanticChunkBuilder.build());
                     currentChunkNumber++;
                 }
-                outputDocBuilder.addSemanticResults(semanticProcessingResultBuilder.build());
+                outputDocBuilder.addSemanticResults(newSemanticResultBuilder.build());
                 responseBuilder.addProcessorLogs(String.format("%sSuccessfully created and added metadata to %d chunks from source field '%s' into result set '%s'.",
                         chunkerOptions.logPrefix(), chunkRecords.size(), chunkerOptions.sourceField(), resultSetName));
 
             } else {
-                responseBuilder.addProcessorLogs(String.format("%sNo content in '%s' to chunk for document ID: %s", chunkerOptions.logPrefix(), chunkerOptions.sourceField(), inputDoc.getId()));
+                responseBuilder.addProcessorLogs(String.format("%sNo content in '%s' to chunk for document ID: %s",
+                        chunkerOptions.logPrefix(), chunkerOptions.sourceField(), inputDoc.getId()));
             }
 
             responseBuilder.setSuccess(true);
@@ -140,7 +134,7 @@ public class ChunkerServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessorI
             responseObserver.onNext(responseBuilder.build());
             responseObserver.onCompleted();
 
-        } catch (MappingException e) { // Catch MappingException from OverlapChunker
+        } catch (MappingException e) {
             String errorMessage = String.format("Mapping error in ChunkerService for step %s, stream %s, field '%s': %s", pipeStepName, streamId, e.getFailedRule(), e.getMessage());
             log.error(errorMessage, e);
             setErrorResponseAndComplete(responseBuilder, errorMessage, e, responseObserver);
@@ -154,7 +148,7 @@ public class ChunkerServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessorI
     private void setErrorResponseAndComplete(
             ProcessResponse.Builder responseBuilder,
             String errorMessage,
-            Exception e, // Can be null
+            Exception e,
             StreamObserver<ProcessResponse> responseObserver) {
 
         responseBuilder.setSuccess(false);

@@ -1,4 +1,16 @@
+micronaut:
+  application:
+    name: chunker
 grpc:
-  port: ${random.port}
   server:
-    enabled: true
+    port: ${random.port}
+  client:
+    plaintext: true
+    discovery:
+      enabled: true
+consul:
+  client:
+    registration:
+      enabled: true
+      check:
+        enabled: true

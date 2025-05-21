@@ -200,7 +200,7 @@ class PipeDocAssertionTest {
         }
     }
 
-    private void assertSemanticChunkEquals(SemanticChunk expected, SemanticChunk actual) {
+    void assertSemanticChunkEquals(SemanticChunk expected, SemanticChunk actual) {
         assertNotNull(expected, "Expected SemanticChunk should not be null");
         assertNotNull(actual, "Actual SemanticChunk should not be null");
 

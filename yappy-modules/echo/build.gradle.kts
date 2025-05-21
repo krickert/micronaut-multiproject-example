@@ -1,5 +1,6 @@
 plugins {
     id("io.micronaut.minimal.application") version "4.5.3"
+    id("io.micronaut.test-resources") version "4.5.3"
     id("com.gradleup.shadow") version "8.3.6"
 }
 
@@ -18,7 +19,18 @@ dependencies {
     implementation(mn.javax.annotation.api)
     runtimeOnly(mn.logback.classic)
     runtimeOnly(mn.snakeyaml)
+    runtimeOnly("io.micronaut.discovery:micronaut-discovery-client")
+    implementation("io.micronaut.reactor:micronaut-reactor")
+    implementation("io.micronaut.reactor:micronaut-reactor-http-client")
+
     implementation(project(":yappy-models:protobuf-models"))
+    testImplementation(project(":yappy-test-resources:consul-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
+    implementation(mn.grpc.services)
+    implementation(mn.grpc.stub)
+    implementation(mn.micronaut.http.client.core)
+    implementation("io.micronaut.grpc:micronaut-protobuff-support")
+
 }
 
 
