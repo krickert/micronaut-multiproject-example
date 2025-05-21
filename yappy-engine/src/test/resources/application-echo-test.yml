@@ -1,0 +1,31 @@
+# Configuration for the Echo Service application context
+micronaut:
+  application:
+    name: echo-service # Unique application name
+  server:
+    port: -1 # No HTTP server needed for this test context
+
+# Configure the gRPC server for the Echo service
+grpc:
+  server:
+    enabled: true
+    port: ${random.port} # Use a random port for the gRPC server
+
+# Configure Consul registration for the Echo service
+consul:
+  client:
+    enabled: true
+    registration:
+      enabled: true
+      service-id: echo # Register with Consul ID 'echo'
+      name: echo       # Register with Consul name 'echo'
+      port: ${grpc.server.port} # Use the gRPC server's random port
+      check:
+        enabled: true # Enable basic health checks
+        interval: 5s
+        timeout: 3s
+    discovery:
+      enabled: false # This context doesn't need to discover other services
+
+# Other configurations specific to the Echo service (if any)
+# ...

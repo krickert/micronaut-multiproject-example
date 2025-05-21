@@ -5,6 +5,7 @@ import com.google.protobuf.Value;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.sdk.*;
 import io.grpc.stub.StreamObserver;
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.grpc.annotation.GrpcService;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
@@ -12,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 @Singleton
 @GrpcService
+@Requires(property = "grpc.services.echo.enabled", value = "true", defaultValue = "true")
 public class EchoService extends PipeStepProcessorGrpc.PipeStepProcessorImplBase {
 
     private static final Logger LOG = LoggerFactory.getLogger(EchoService.class);

@@ -11,6 +11,7 @@ import com.krickert.search.model.SemanticProcessingResult;
 import com.krickert.search.model.mapper.MappingException;
 import com.krickert.search.sdk.*;
 import io.grpc.stub.StreamObserver;
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.grpc.annotation.GrpcService;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -23,6 +24,7 @@ import java.util.UUID;
 
 @Singleton
 @GrpcService
+@Requires(property = "grpc.services.chunker.enabled", value = "true", defaultValue = "true")
 public class ChunkerServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessorImplBase {
 
     private static final Logger log = LoggerFactory.getLogger(ChunkerServiceGrpc.class);

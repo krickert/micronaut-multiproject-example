@@ -1,10 +1,12 @@
+# src/test/resources/application-test.yml
 micronaut:
-  test.resources.debug-server: true
   application:
-    name: test-application
-
-
-
+    name: two-grpc-services-test-app # Keep the name for context, but disable its default registration
+  server:
+    port: -1
+  test:
+    resources:
+      enabled: true
 
 app:
   config:
@@ -15,18 +17,17 @@ app:
         schema-versions: pipeline-configs/schemas/versions
       watch-seconds: 5
 
-grpc.server:
-  enabled: true
-  port: ${random.port}
-
-# Consul client configuration
 consul:
-  client:
-    enabled: true
-    config:
+  consul:
+    client:
       enabled: true
-      format: properties
-      path: config/pipeline
+      registration:
+        enabled: false # The test runner doesn't register itself as a service
+      discovery:
+        enabled: true # The test runner might need to discover services for verification
+        shared-instance: true
+
+
 kafka:
   enabled: true
   schema:

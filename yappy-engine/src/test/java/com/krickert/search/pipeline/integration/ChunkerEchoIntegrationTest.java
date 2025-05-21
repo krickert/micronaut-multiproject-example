@@ -3,200 +3,92 @@ package com.krickert.search.pipeline.integration;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
-import com.krickert.search.model.*;
+import com.krickert.search.model.Blob;
+import com.krickert.search.model.PipeDoc;
+import com.krickert.search.model.SemanticChunk;
+import com.krickert.search.model.SemanticProcessingResult;
+import com.krickert.search.pipeline.integration.config.TestGrpcClientFactory; // Import your client factory
+import com.krickert.search.pipeline.integration.util.TestDocumentGenerator;
 import com.krickert.search.sdk.*;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
-import io.micronaut.context.annotation.Bean;
-import io.micronaut.context.annotation.Factory;
+import com.krickert.yappy.modules.chunker.ChunkerOptions; // If you need to reference defaults
 import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
-import jakarta.inject.Singleton;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
-import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
-/**
- * Integration test that demonstrates using the chunker and echo modules together.
- * This test will:
- * 1. Test the chunker module individually
- * 2. Test the echo module individually
- * 3. Test chaining the chunker and echo modules together
- */
-@MicronautTest(startApplication = false) // Don't start the application, just run the tests
-@Property(name = "grpc.client.plaintext", value = "true")
-@Property(name = "micronaut.test.resources.enabled", value = "true")
-// Disable schema registry and other unnecessary components
-@Property(name = "consul.client.enabled", value = "true")
-@Property(name = "schema.registry.enabled", value = "false")
-// Provide necessary properties for ConsulConfigFetcher
-@Property(name = "app.config.consul.key-prefixes.pipeline-clusters", value = "test-prefix")
-@Property(name = "app.config.consul.key-prefixes.schema-versions", value = "test-schema-prefix")
-@Property(name = "app.config.consul.host", value = "localhost")
-@Property(name = "app.config.consul.port", value = "8500")
-@Property(name = "app.config.consul.watch-seconds", value = "30")
-@Property(name = "app.config.cluster-name", value = "test-cluster")
+import static org.junit.jupiter.api.Assertions.*;
+
+@MicronautTest(
+        environments = {"combined-test"}, // This environment should load application-combined-test.yml
+        startApplication = true,
+        transactional = false // Typically false for gRPC/integration tests not directly using DB transactions
+)
 public class ChunkerEchoIntegrationTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(ChunkerEchoIntegrationTest.class);
 
-    // gRPC clients for chunker and echo services
     @Inject
-    @Named("chunkerClient")
+    @Named("chunkerClientStub")
     PipeStepProcessorGrpc.PipeStepProcessorBlockingStub chunkerClient;
 
     @Inject
-    @Named("echoClient")
+    @Named("echoClientStub")
     PipeStepProcessorGrpc.PipeStepProcessorBlockingStub echoClient;
 
-    /**
-     * Factory for creating mock gRPC clients for the chunker and echo services.
-     * Since we're not actually running the services, we'll use mock implementations.
-     */
-    @Factory
-    static class MockGrpcClientFactory {
-
-        @Bean
-        @Singleton
-        @Named("chunkerClient")
-        PipeStepProcessorGrpc.PipeStepProcessorBlockingStub chunkerClient() {
-            // Create a mock implementation of the chunker service using Mockito
-            PipeStepProcessorGrpc.PipeStepProcessorBlockingStub mockChunkerClient = Mockito.mock(PipeStepProcessorGrpc.PipeStepProcessorBlockingStub.class);
-
-            // Set up the mock behavior
-            Mockito.when(mockChunkerClient.processData(Mockito.any(ProcessRequest.class))).thenAnswer(invocation -> {
-                ProcessRequest request = invocation.getArgument(0);
-                // Simulate chunker behavior
-                LOG.info("[DEBUG_LOG] Mock chunker processing request for document: {}", request.getDocument().getId());
-
-                // Create a semantic chunk
-                SemanticChunk chunk = SemanticChunk.newBuilder()
-                        .setChunkNumber(0)
-                        .setChunkId(request.getMetadata().getStreamId() + "_" + request.getDocument().getId() + "_chunk_0")
-                        .setEmbeddingInfo(
-                                ChunkEmbedding.newBuilder()
-                                        .setTextContent(request.getDocument().getBody())
-                                        .build())
-                        .build();
-
-                // Create a semantic processing result
-                SemanticProcessingResult semanticResult = SemanticProcessingResult.newBuilder()
-                        .setResultId("mock_result_id")
-                        .setSourceFieldName("body")
-                        .setChunkConfigId("default_overlap_500_50")
-                        .setResultSetName(request.getMetadata().getPipeStepName() + "_chunks_default_overlap_500_50")
-                        .addChunks(chunk)
-                        .build();
-
-                // Create the output document with the semantic result
-                PipeDoc outputDoc = request.getDocument().toBuilder()
-                        .addSemanticResults(semanticResult)
-                        .build();
-
-                // Create and return the response
-                return ProcessResponse.newBuilder()
-                        .setSuccess(true)
-                        .setOutputDoc(outputDoc)
-                        .addProcessorLogs("Successfully created and added metadata to 1 chunks from source field 'body'")
-                        .build();
-            });
-
-            return mockChunkerClient;
-        }
-
-        @Bean
-        @Singleton
-        @Named("echoClient")
-        PipeStepProcessorGrpc.PipeStepProcessorBlockingStub echoClient() {
-            // Create a mock implementation of the echo service using Mockito
-            PipeStepProcessorGrpc.PipeStepProcessorBlockingStub mockEchoClient = Mockito.mock(PipeStepProcessorGrpc.PipeStepProcessorBlockingStub.class);
-
-            // Set up the mock behavior
-            Mockito.when(mockEchoClient.processData(Mockito.any(ProcessRequest.class))).thenAnswer(invocation -> {
-                ProcessRequest request = invocation.getArgument(0);
-                // Simulate echo behavior
-                LOG.info("[DEBUG_LOG] Mock echo processing request for document: {}", request.getDocument().getId());
-
-                // Create log message
-                String logMessage = String.format("EchoService (Unary) successfully processed step '%s' for pipeline '%s'. Stream ID: %s, Doc ID: %s",
-                        request.getMetadata().getPipeStepName(),
-                        request.getMetadata().getPipelineName(),
-                        request.getMetadata().getStreamId(),
-                        request.getDocument().getId());
-
-                // Create and return the response with the same document
-                return ProcessResponse.newBuilder()
-                        .setSuccess(true)
-                        .setOutputDoc(request.getDocument())
-                        .addProcessorLogs(logMessage)
-                        .build();
-            });
-
-            return mockEchoClient;
-        }
-    }
-
-    // Test data
     private String pipelineName;
     private String chunkerStepName;
     private String echoStepName;
-    private String streamId;
-    private String docId;
-    private PipeDoc testDocument;
-    private Blob testBlob;
+    private String streamIdBase;
+
+    // Sample documents for testing
+    private static List<PipeDoc> sampleDocuments;
+
+    @BeforeAll
+    static void loadDocuments() {
+        // Load documents once for all tests in this class
+        LOG.info("Loading sample documents for ChunkerEchoIntegrationTest...");
+        sampleDocuments = TestDocumentGenerator.createSampleDocuments();
+        assertTrue(sampleDocuments.size() > 0, "Should load at least one sample document.");
+        LOG.info("Loaded {} sample documents.", sampleDocuments.size());
+
+        // Add a delay here to give services time to start up and register with Consul
+        // This is often necessary when using additional-applications.
+        // Adjust the duration as needed based on your environment.
+        try {
+            LOG.info("Pausing for 10 seconds to allow services to start and register...");
+            TimeUnit.SECONDS.sleep(10);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOG.error("Sleep interrupted", e);
+        }
+    }
 
     @BeforeEach
     void setUp() {
-        // Initialize test data
-        pipelineName = "test-pipeline";
-        chunkerStepName = "chunker-step";
-        echoStepName = "echo-step";
-        streamId = "test-stream-" + System.currentTimeMillis();
-        docId = "test-doc-" + System.currentTimeMillis();
-
-        // Create test blob
-        String blobId = "blob-" + System.currentTimeMillis();
-        String blobFilename = "test.txt";
-        ByteString blobData = ByteString.copyFromUtf8("Hello, Integration Test!");
-        testBlob = Blob.newBuilder()
-                .setBlobId(blobId)
-                .setFilename(blobFilename)
-                .setData(blobData)
-                .setMimeType("text/plain")
-                .build();
-
-        // Create test document
-        testDocument = PipeDoc.newBuilder()
-                .setId(docId)
-                .setTitle("Integration Test Document")
-                .setBody("This is a test document for integration testing. It will be processed by the chunker and echo services.")
-                .setCustomData(Struct.newBuilder()
-                        .putFields("testKey", Value.newBuilder().setStringValue("testValue").build())
-                        .build())
-                .setBlob(testBlob)
-                .build();
+        pipelineName = "test-pipeline-combined";
+        chunkerStepName = "chunker-service-step";
+        echoStepName = "echo-service-step";
+        streamIdBase = "stream-" + UUID.randomUUID().toString();
+        LOG.info("Test setup complete. Clients are injected. StreamId base: {}", streamIdBase);
     }
 
-    /**
-     * Helper method to create a ProcessRequest for testing.
-     */
-    private ProcessRequest createProcessRequest(String stepName, PipeDoc document, Struct customConfig) {
+    private ProcessRequest createProcessRequest(PipeDoc document, String stepName, Struct customConfig, String uniqueStreamIdSuffix, long hop) {
+        String currentStreamId = streamIdBase + "_" + uniqueStreamIdSuffix;
         ServiceMetadata metadata = ServiceMetadata.newBuilder()
                 .setPipelineName(pipelineName)
                 .setPipeStepName(stepName)
-                .setStreamId(streamId)
-                .setCurrentHopNumber(1)
+                .setStreamId(currentStreamId)
+                .setCurrentHopNumber(hop)
                 .build();
 
         ProcessConfiguration.Builder configBuilder = ProcessConfiguration.newBuilder();
@@ -212,125 +104,97 @@ public class ChunkerEchoIntegrationTest {
     }
 
     @Test
-    @DisplayName("Test chunker service individually")
-    void testChunkerService() {
-        LOG.info("[DEBUG_LOG] Testing chunker service individually");
+    @DisplayName("Test Chunker and Echo services sequentially")
+    void testChunkerThenEcho() {
+        PipeDoc testDoc = sampleDocuments.get(0); // Get a sample document
+        assertNotNull(testDoc, "Sample document should not be null");
+        LOG.info("Testing with document ID: {}", testDoc.getId());
 
-        // Create a request for the chunker service
-        ProcessRequest chunkerRequest = createProcessRequest(chunkerStepName, testDocument, null);
+        // 1. Call Chunker Service
+        LOG.info("Sending request to Chunker service...");
+        // Using default chunker options by passing null for customConfig
+        Struct chunkerCustomConfig = Struct.newBuilder()
+                .putFields("source_field", Value.newBuilder().setStringValue("body").build())
+                .putFields("chunk_size", Value.newBuilder().setNumberValue(100).build()) // Small chunk size for testing
+                .putFields("chunk_overlap", Value.newBuilder().setNumberValue(10).build())
+                .putFields("chunk_config_id", Value.newBuilder().setStringValue("test_config_100_10").build())
+                .putFields("result_set_name_template", Value.newBuilder().setStringValue(chunkerStepName + "_chunks_%s").build())
+                .build();
 
-        // Call the chunker service
-        LOG.info("[DEBUG_LOG] Sending request to chunker service");
-        ProcessResponse chunkerResponse = chunkerClient.processData(chunkerRequest);
-        LOG.info("[DEBUG_LOG] Received response from chunker service: {}", chunkerResponse.getSuccess());
+        ProcessRequest chunkerRequest = createProcessRequest(testDoc, chunkerStepName, chunkerCustomConfig, testDoc.getId() + "_chunker", 1);
+        ProcessResponse chunkerResponse = null;
+        try {
+            chunkerResponse = chunkerClient.processData(chunkerRequest);
+        } catch (Exception e) {
+            fail("Call to Chunker service failed: " + e.getMessage(), e);
+        }
 
-        // Verify the response
+        LOG.info("Received response from Chunker service. Success: {}", chunkerResponse.getSuccess());
         assertNotNull(chunkerResponse, "Chunker response should not be null");
         assertTrue(chunkerResponse.getSuccess(), "Chunker processing should be successful");
         assertTrue(chunkerResponse.hasOutputDoc(), "Chunker response should have an output document");
 
-        // The chunker should add semantic results to the document
-        PipeDoc outputDoc = chunkerResponse.getOutputDoc();
-        assertTrue(outputDoc.getSemanticResultsCount() > 0, "Chunker should add semantic results to the document");
-
-        // Verify that the semantic results contain the expected data
-        SemanticProcessingResult result = outputDoc.getSemanticResults(0);
-        assertEquals("body", result.getSourceFieldName(), "Source field name should be 'body'");
-        assertTrue(result.getChunksCount() > 0, "Semantic result should have chunks");
-
-        // Verify that the blob is preserved
-        assertTrue(outputDoc.hasBlob(), "Output document should still have the blob");
-        assertEquals(testBlob, outputDoc.getBlob(), "Blob should be preserved");
-
-        // Log the chunks for debugging
-        LOG.info("[DEBUG_LOG] Chunker created {} chunks", result.getChunksCount());
-        for (int i = 0; i < result.getChunksCount(); i++) {
-            SemanticChunk chunk = result.getChunks(i);
-            LOG.info("[DEBUG_LOG] Chunk {}: {}", i, chunk.getEmbeddingInfo().getTextContent());
+        PipeDoc chunkedDoc = chunkerResponse.getOutputDoc();
+        if (testDoc.getBody() != null && !testDoc.getBody().isEmpty()) {
+            assertTrue(chunkedDoc.getSemanticResultsCount() > 0, "Chunked document should have semantic results");
+            SemanticProcessingResult chunkResult = chunkedDoc.getSemanticResults(0);
+            assertTrue(chunkResult.getChunksCount() > 0, "Chunker should produce at least one chunk");
+            LOG.info("Chunker produced {} chunks for doc ID: {}", chunkResult.getChunksCount(), testDoc.getId());
+        } else {
+            LOG.info("Input document body was empty, expecting no semantic results from chunker.");
+            assertEquals(0, chunkedDoc.getSemanticResultsCount(), "Chunked document should have no semantic results for empty body");
         }
-    }
 
-    @Test
-    @DisplayName("Test echo service individually")
-    void testEchoService() {
-        LOG.info("[DEBUG_LOG] Testing echo service individually");
+        // 2. Call Echo Service with the (potentially modified) document from Chunker
+        LOG.info("Sending request to Echo service with document from Chunker...");
+        ProcessRequest echoRequest = createProcessRequest(chunkedDoc, echoStepName, null, testDoc.getId() + "_echo", 2);
+        ProcessResponse echoResponse = null;
+        try {
+            echoResponse = echoClient.processData(echoRequest);
+        } catch (Exception e) {
+            fail("Call to Echo service failed: " + e.getMessage(), e);
+        }
 
-        // Create a request for the echo service
-        ProcessRequest echoRequest = createProcessRequest(echoStepName, testDocument, null);
-
-        // Call the echo service
-        LOG.info("[DEBUG_LOG] Sending request to echo service");
-        ProcessResponse echoResponse = echoClient.processData(echoRequest);
-        LOG.info("[DEBUG_LOG] Received response from echo service: {}", echoResponse.getSuccess());
-
-        // Verify the response
+        LOG.info("Received response from Echo service. Success: {}", echoResponse.getSuccess());
         assertNotNull(echoResponse, "Echo response should not be null");
         assertTrue(echoResponse.getSuccess(), "Echo processing should be successful");
         assertTrue(echoResponse.hasOutputDoc(), "Echo response should have an output document");
 
-        // The echo service should return the document unchanged
-        assertEquals(testDocument, echoResponse.getOutputDoc(), "Echo service should return the document unchanged");
-
-        // Verify that the blob is preserved
-        assertTrue(echoResponse.getOutputDoc().hasBlob(), "Output document should still have the blob");
-        assertEquals(testBlob, echoResponse.getOutputDoc().getBlob(), "Blob should be preserved");
-
-        // Verify that the logs contain the expected message
-        assertTrue(echoResponse.getProcessorLogsCount() > 0, "Echo response should have processor logs");
-        String logMessage = echoResponse.getProcessorLogs(0);
-        LOG.info("[DEBUG_LOG] Echo service log: {}", logMessage);
-        assertTrue(logMessage.contains("EchoService"), "Log message should mention EchoService");
-        assertTrue(logMessage.contains(echoStepName), "Log message should mention the step name");
-        assertTrue(logMessage.contains(streamId), "Log message should mention the stream ID");
-        assertTrue(logMessage.contains(docId), "Log message should mention the document ID");
+        PipeDoc echoedDoc = echoResponse.getOutputDoc();
+        // Echo service should return the document as is (including semantic results from chunker)
+        assertEquals(chunkedDoc.getId(), echoedDoc.getId(), "Echoed document ID should match");
+        assertEquals(chunkedDoc.getTitle(), echoedDoc.getTitle(), "Echoed document title should match");
+        assertEquals(chunkedDoc.getBody(), echoedDoc.getBody(), "Echoed document body should match");
+        assertEquals(chunkedDoc.getSemanticResultsList(), echoedDoc.getSemanticResultsList(), "Echoed document should retain semantic results from chunker");
+        if (chunkedDoc.hasBlob()) {
+            assertTrue(echoedDoc.hasBlob(), "Echoed document should retain blob if present");
+            assertEquals(chunkedDoc.getBlob(), echoedDoc.getBlob());
+        }
     }
 
     @Test
-    @DisplayName("Test chunker and echo services chained together")
-    void testChunkerAndEchoChained() {
-        LOG.info("[DEBUG_LOG] Testing chunker and echo services chained together");
+    @DisplayName("Test Echo service independently")
+    void testEchoServiceIndependently() {
+        PipeDoc testDoc = TestDocumentGenerator.createSampleDocuments().get(1); // Use a different sample document
+        assertNotNull(testDoc, "Sample document for echo test should not be null");
+        LOG.info("Testing Echo service independently with document ID: {}", testDoc.getId());
 
-        // Step 1: Call the chunker service
-        ProcessRequest chunkerRequest = createProcessRequest(chunkerStepName, testDocument, null);
-        LOG.info("[DEBUG_LOG] Sending request to chunker service");
-        ProcessResponse chunkerResponse = chunkerClient.processData(chunkerRequest);
-        LOG.info("[DEBUG_LOG] Received response from chunker service: {}", chunkerResponse.getSuccess());
+        ProcessRequest echoRequest = createProcessRequest(testDoc, echoStepName, null, testDoc.getId() + "_echo_ind", 1);
+        ProcessResponse echoResponse = null;
+        try {
+            echoResponse = echoClient.processData(echoRequest);
+        } catch (Exception e) {
+            fail("Call to Echo service (independent) failed: " + e.getMessage(), e);
+        }
 
-        // Verify chunker response
-        assertTrue(chunkerResponse.getSuccess(), "Chunker processing should be successful");
-        assertTrue(chunkerResponse.hasOutputDoc(), "Chunker response should have an output document");
-        PipeDoc chunkedDoc = chunkerResponse.getOutputDoc();
-        assertTrue(chunkedDoc.getSemanticResultsCount() > 0, "Chunker should add semantic results to the document");
-
-        // Step 2: Call the echo service with the chunked document
-        ProcessRequest echoRequest = createProcessRequest(echoStepName, chunkedDoc, null);
-        LOG.info("[DEBUG_LOG] Sending chunked document to echo service");
-        ProcessResponse echoResponse = echoClient.processData(echoRequest);
-        LOG.info("[DEBUG_LOG] Received response from echo service: {}", echoResponse.getSuccess());
-
-        // Verify echo response
+        LOG.info("Received response from Echo service (independent). Success: {}", echoResponse.getSuccess());
+        assertNotNull(echoResponse, "Echo response should not be null");
         assertTrue(echoResponse.getSuccess(), "Echo processing should be successful");
         assertTrue(echoResponse.hasOutputDoc(), "Echo response should have an output document");
 
-        // The echo service should return the chunked document unchanged
-        assertEquals(chunkedDoc, echoResponse.getOutputDoc(), "Echo service should return the chunked document unchanged");
-
-        // Verify that the semantic results are preserved
-        PipeDoc finalDoc = echoResponse.getOutputDoc();
-        assertTrue(finalDoc.getSemanticResultsCount() > 0, "Final document should still have semantic results");
-        assertEquals(chunkedDoc.getSemanticResultsCount(), finalDoc.getSemanticResultsCount(), 
-                "Final document should have the same number of semantic results as the chunked document");
-
-        // Verify that the blob is preserved
-        assertTrue(finalDoc.hasBlob(), "Final document should still have the blob");
-        assertEquals(testBlob, finalDoc.getBlob(), "Blob should be preserved");
-
-        // Log the final document for debugging
-        LOG.info("[DEBUG_LOG] Final document has {} semantic results", finalDoc.getSemanticResultsCount());
-        for (int i = 0; i < finalDoc.getSemanticResultsCount(); i++) {
-            SemanticProcessingResult result = finalDoc.getSemanticResults(i);
-            LOG.info("[DEBUG_LOG] Semantic result {}: source={}, chunks={}", 
-                    i, result.getSourceFieldName(), result.getChunksCount());
-        }
+        PipeDoc echoedDoc = echoResponse.getOutputDoc();
+        assertEquals(testDoc.getId(), echoedDoc.getId());
+        assertEquals(testDoc.getTitle(), echoedDoc.getTitle());
+        // Add more assertions as needed for the echo service's behavior
     }
 }

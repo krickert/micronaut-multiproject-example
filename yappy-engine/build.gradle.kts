@@ -30,7 +30,7 @@ micronaut {
         inferClasspath.set(true)
         additionalModules.add(KnownModules.KAFKA)
         clientTimeout.set(60)
-        sharedServer.set(false)
+        sharedServer.set(true)
     }
 }
 
@@ -60,9 +60,7 @@ dependencies {
 
     implementation(project(":yappy-models:protobuf-models"))
 
-    testImplementation(mn.mockito.junit.jupiter)
     testImplementation(project(":yappy-test-resources:consul-test-resource"))
-    testResourcesImplementation(mn.testcontainers.consul)
     testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
     testImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
@@ -70,9 +68,16 @@ dependencies {
     testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     testImplementation(project(":yappy-test-resources:moto-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:moto-test-resource"))
+    testImplementation(project(":yappy-modules:echo"))
+    testImplementation(project(":yappy-modules:chunker"))
+    runtimeOnly("io.micronaut.discovery:micronaut-discovery-client")
+
+
     testImplementation(mn.reactor.test)
     testImplementation(mn.assertj.core)
-
+    runtimeOnly("io.micronaut.discovery:micronaut-discovery-client")
+    testImplementation(mn.micronaut.http.client.core)
+    testImplementation(mn.micronaut.grpc.client.runtime)
     // https://mvnrepository.com/artifact/com.networknt/json-schema-validator
     implementation("com.networknt:json-schema-validator:1.5.6")
     // https://mvnrepository.com/artifact/org.jgrapht/jgrapht-core
@@ -95,20 +100,23 @@ dependencies {
     }
     api(libs.amazon.msk.iam)
     api(libs.amazon.connection.client)
-
+    testImplementation(mn.junit.jupiter.api)
+    testImplementation(mn.junit.jupiter.engine)
+// https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-params
+    testImplementation("org.junit.jupiter:junit-jupiter-params:5.12.2")
 }
 
-// Add this block to explicitly configure the Mockito agent
-tasks.withType<Test>().configureEach {
-    val mockitoCoreJar = configurations.testRuntimeClasspath.get()
-        .files.find { it.name.startsWith("mockito-core") }
-    if (mockitoCoreJar != null) {
-        jvmArgs("-javaagent:${mockitoCoreJar.absolutePath}")
-        logger.lifecycle("Configured Mockito agent: ${mockitoCoreJar.absolutePath}")
-    } else {
-        logger.warn("WARNING: mockito-core.jar not found in testRuntimeClasspath for agent configuration. Mockito inline mocking may not work as expected or show warnings.")
-    }
-}
+//// Add this block to explicitly configure the Mockito agent
+//tasks.withType<Test>().configureEach {
+//    val mockitoCoreJar = configurations.testRuntimeClasspath.get()
+//        .files.find { it.name.startsWith("mockito-core") }
+//    if (mockitoCoreJar != null) {
+//        jvmArgs("-javaagent:${mockitoCoreJar.absolutePath}")
+//        logger.lifecycle("Configured Mockito agent: ${mockitoCoreJar.absolutePath}")
+//    } else {
+//        logger.warn("WARNING: mockito-core.jar not found in testRuntimeClasspath for agent configuration. Mockito inline mocking may not work as expected or show warnings.")
+//    }
+//}
 
 // Publishing configuration
 publishing {

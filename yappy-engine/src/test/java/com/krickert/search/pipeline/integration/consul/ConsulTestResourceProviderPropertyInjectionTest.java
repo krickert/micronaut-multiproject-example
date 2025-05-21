@@ -1,8 +1,7 @@
-package com.krickert.search.config.consul;
+package com.krickert.search.pipeline.integration.consul;
 
 import com.krickert.testcontainers.consul.ConsulTestResourceProvider;
 import io.micronaut.context.annotation.Property;
-import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.env.Environment;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;

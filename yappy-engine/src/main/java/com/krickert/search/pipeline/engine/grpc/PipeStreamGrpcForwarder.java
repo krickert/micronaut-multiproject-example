@@ -90,20 +90,51 @@ public class PipeStreamGrpcForwarder {
         log.info("All gRPC channels processed for shutdown.");
     }
 
-    private ManagedChannel getManagedChannel(String consulAppName) throws GrpcEngineException {
+    public ManagedChannel getManagedChannel(String consulAppName) throws GrpcEngineException {
         return managedChannelCache.computeIfAbsent(consulAppName, appName -> {
             log.info("Cache miss. Attempting discovery and channel creation for service: '{}'", appName);
             try {
-                Publisher<List<ServiceInstance>> instancesPublisher = discoveryClient.getInstances(appName);
-                List<ServiceInstance> instances = Mono.from(instancesPublisher)
-                        .block(this.discoveryClientTimeout);
+                List<ServiceInstance> instances = null;
+                int maxRetries = 3; // Number of retry attempts
+                Duration retryAttemptTimeout = Duration.ofSeconds(5); // Timeout for each individual discovery attempt
+                long retryDelayMs = 1000; // Delay between retries
 
-                if (instances == null || instances.isEmpty()) {
-                    log.error("No instances found via discovery for service: '{}' within {} timeout.", appName, this.discoveryClientTimeout);
-                    throw new GrpcEngineException("Service not found via discovery: " + appName);
+                for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                    log.info("Attempting discovery for service: '{}', attempt {}/{}", appName, attempt, maxRetries);
+                    Publisher<List<ServiceInstance>> instancesPublisher = discoveryClient.getInstances(appName);
+                    try {
+                        instances = Mono.from(instancesPublisher)
+                                .block(retryAttemptTimeout); // Use a shorter timeout for each attempt
+                    } catch (IllegalStateException e) {
+                        // This can happen if the publisher is empty or times out
+                        log.warn("Discovery attempt {} for service '{}' failed with IllegalStateException (possibly timeout or empty publisher): {}", attempt, appName, e.getMessage());
+                    }
+
+                    if (instances != null && !instances.isEmpty()) {
+                        log.info("Successfully discovered service '{}' on attempt {}/{}. Instances found: {}", appName, attempt, maxRetries, instances.size());
+                        break; // Success
+                    }
+
+                    log.warn("Discovery attempt {}/{} for service '{}' failed or returned no instances.", attempt, maxRetries, appName);
+                    if (attempt < maxRetries) {
+                        try {
+                            log.info("Waiting {}ms before next discovery attempt for service '{}'.", retryDelayMs, appName);
+                            TimeUnit.MILLISECONDS.sleep(retryDelayMs);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            log.warn("Interrupted during discovery retry delay for service '{}'.", appName);
+                            throw new GrpcEngineException("Interrupted during discovery retry for " + appName, e);
+                        }
+                    }
                 }
 
-                ServiceInstance instance = instances.get(0); // Basic: Use first instance
+                if (instances == null || instances.isEmpty()) {
+                    log.error("No instances found via discovery for service: '{}' after {} retries and within overall timeout of {}.",
+                            appName, maxRetries, this.discoveryClientTimeout); // this.discoveryClientTimeout is still the overall conceptual limit
+                    throw new GrpcEngineException("Service not found via discovery after " + maxRetries + " retries: " + appName);
+                }
+
+                ServiceInstance instance = instances.getFirst(); // Basic: Use first instance
                 String host = instance.getHost();
                 int port = instance.getPort();
                 String instanceId = instance.getInstanceId().orElse(appName + ":N/A");
@@ -115,26 +146,23 @@ public class PipeStreamGrpcForwarder {
                     log.debug("Using plaintext connection for service '{}'", appName);
                 } else {
                     log.debug("Using secure connection (TLS/SSL) for service '{}'", appName);
-                    // Example: builder.useTransportSecurity();
                 }
-                // Consider adding other channel options like keepAliveTime, interceptors etc.
-                // builder.keepAliveTime(1, java.util.concurrent.TimeUnit.MINUTES);
-
                 log.info("Successfully created new ManagedChannel for service: '{}'", appName);
                 return builder.build();
 
             } catch (IllegalStateException e) {
-                log.error("Discovery for service '{}' failed (possibly timed out or empty publisher): {}", appName, e.getMessage());
-                managedChannelCache.remove(appName); // Evict on this type of error
+                log.error("Discovery for service '{}' failed (possibly timed out or empty publisher during retries): {}", appName, e.getMessage());
+                // managedChannelCache.remove(appName); // Consider eviction strategy
                 if (e.getMessage() != null && (e.getMessage().contains("Timeout on blocking read") || e.getMessage().contains("Did not observe any item or terminal signal"))) {
                     throw new GrpcEngineException("Timeout waiting for service discovery for " + appName, e);
                 }
-                throw new GrpcEngineException("Service discovery for " + appName + " yielded no instances or failed.", e);
+                throw new GrpcEngineException("Service discovery for " + appName + " yielded no instances or failed after retries.", e);
             } catch (GrpcEngineException e) {
+                // managedChannelCache.remove(appName); // Consider eviction strategy
                 throw e;
             } catch (RuntimeException e) {
                 log.error("Failed to discover instances or create ManagedChannel for service '{}': {}", appName, e.getMessage(), e);
-                managedChannelCache.remove(appName); // Evict on this type of error
+                // managedChannelCache.remove(appName); // Consider eviction strategy
                 throw new GrpcEngineException("Failed to establish channel for service " + appName + ": " + e.getMessage(), e);
             }
         });
