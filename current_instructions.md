@@ -7,14 +7,14 @@ After examining the codebase, I can see that the project has two main modules (E
 ## Current State
 
 1. **Module Implementations**:
-   - **Echo Module**: A simple service that echoes back the input document (`EchoService.java`)
-   - **Chunker Module**: A service that chunks text into smaller pieces (`ChunkerServiceGrpc.java`)
+   - **Echo Module**: A simple service that echoes back the input document (`EchoService.java`) - Complete
+   - **Chunker Module**: A service that chunks text into smaller pieces (`ChunkerServiceGrpc.java`) - Complete
 
 2. **Current Integration Tests**:
-   - `ChunkerEchoIntegrationTest.java` and `RealChunkerEchoIntegrationTest.java`: Both use mock implementations
-   - `KafkaApicurioTestIT.java`: Tests Kafka with Apicurio schema registry
-   - `KafkaMotoTestIT.java`: Tests Kafka with AWS Glue schema registry
-   - `EchoFullConsulGrpcKafkaIntegrationTest.java`: Tests basic connectivity with Consul, gRPC, and Kafka
+   - `ChunkerEchoIntegrationTest.java` and `RealChunkerEchoIntegrationTest.java`: ChunkerEchoIntegrationTest works, but may want to make more tests.  RealChunkerEchoINtegrationTest was redundant.
+   - `KafkaApicurioTestIT.java`: Tests Kafka with Apicurio schema registry - done
+   - `KafkaMotoTestIT.java`: Tests Kafka with AWS Glue schema registry  - done
+   - `EchoFullConsulGrpcKafkaIntegrationTest.java`: Tests basic connectivity with Consul, gRPC, and Kafka - not started
 
 ## Recommended Next Steps
 
