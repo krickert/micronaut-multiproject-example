@@ -1,10 +1,181 @@
 ## 1. Summary
 
 YAPPY (Yet Another Pipeline Processor) is a highly flexible and scalable platform for building, managing, and executing dynamic data
-processing pipelines. It leverages a microservices architecture where **each pipeline step, supported by an underlying framework or embedded
-engine logic, dynamically fetches its configuration and determines onward routing.** Communication primarily utilizes gRPC for synchronous
-processing within a step and Kafka for asynchronous handoff between steps, ensuring decoupling and resilience. Consul serves as the dynamic
-configuration store and service discovery mechanism, with a Schema Registry guaranteeing data and configuration integrity. YAPPY empowers
+processing pipelines.  Think of this system as a dynamic node pipeline system that is managed through an engine that is dedicated to a module business logic.
+This way the module is just a processor and the engine handles all the routing and configuration of the ecosystem.  That that ecosystem is fast!
+
+Each node is a fan-in / fan-out methodology where the connections between nodes are supported by gRPC or Kafka.  The document structure is type safe and supports binary blob processing.
+
+It leverages a microservices architecture where each pipeline step's processing logic resides in a **Module Processor** (typically a gRPC service) that is managed and orchestrated by an associated embedded **Engine**.
+
+This is supported by the underlying framework within the embedded engine logic.  This is done in two steps: internal processing and engine-to-engine processing.  
+
+Let's first discuss about the internal processing.
+
+### Internal Processing
+#### Flow diagram
+Here's a flow of the data for module discovery and processing:
+
+```mermaid
+graph TD
+    subgraph "Engine Interactions" // Overall container for all related components
+        direction LR
+
+        subgraph "YAPPY Engine" 
+            Engine(Engine)
+        end
+
+        subgraph "Consul Service"
+            Consul[(Consul)]
+        end
+
+        ModuleP(Module Processor)
+        Outputs[Outputs to Kafka/gRPC]
+
+        subgraph "Consul Interaction Phases"
+            direction TB
+
+            subgraph "Phase 1: Configuration Fetch"
+                direction TB
+                Engine ---- step1(["1. Request Config"]);
+                step1 ---> Consul;
+                Consul --- step2(["2. Provide Config Data"]);
+                step2 --> Engine;
+            end
+
+            subgraph "Phase 2: Module Discovery"
+                direction TB
+                Engine --- step3(["3. Request Module Discovery <br/> (tries localhost first)"]);
+                step3 ---> Consul;
+                Consul --- step4(["4. Provide Module Info"]);
+                step4 --> Engine;
+            end
+
+            subgraph "Phase 3: Module Registration"
+                direction TB
+                Engine --- step5(["5. Register Module <br/> (if managing local or for health)"]);
+                step5 ---> Consul;
+                Consul --- step6(["6. Acknowledge Registration"]);
+                step6 --> Engine;
+            end
+        end
+
+        subgraph "Module Processing & Routing"
+            direction BT
+            Engine -------- step7(["7. gRPC Call"]);
+            step7 --> ModuleP;
+
+            ModuleP --- step8(["8. gRPC Response"]);
+            step8 --> Engine;
+
+            Engine --- step9(["9. Determine & Execute <br/> Onward Routing"]);
+            step9 --> Outputs;
+        end
+    end
+
+   classDef service fill:#cccccc,stroke:#666666,stroke-width:2px,color:#000000;
+   classDef ext_service fill:#bbbbbb,stroke:#555555,stroke-width:2px,color:#000000;
+   classDef data_out fill:#dddddd,stroke:#777777,stroke-width:1px,color:#000000;
+   classDef step_box fill:#eeeeee,stroke:#999999,stroke-width:1px,color:#000000;
+
+   class Engine,ModuleP service; 
+   class Consul ext_service;  
+   class Outputs data_out;
+   class step1,step2,step3,step4,step5,step6,step7,step8,step9 step_box;
+```
+#### Flow description
+1. **Phase 1**: Dynamically fetches its configuration
+2. **Phase 2**: Discovers its associated module processor
+   1. It will be a localhost-first approach
+   2. This will fallback to service discovery
+3. **Phase 3**: Registers this module with the service discovery system
+4. **Module Processing and routing**: Determines onward routing
+
+This communcation is all internal and hidden away from the processor component.  The processing component is just a document processor; all other logic - including service calling - is handled by the engine.
+
+### Engine to Engine routing
+
+**The engine can input from multiple connections and output to multiple connections**.  So for each engine instance it acts as one of three types of connections: `Connectors`, `Processors`, and `Sinks`.
+
+The developer would explicitly define these steps, but the engine implementation is the same pipeline step except the sink and connector limitations:
+
+1. **`Connector`** - Fan-out only - Like a pipeline, but only outputs as grpc or kafka
+2. **`Processor`** - Fan-in / Fan-out - Take many inputs or many outputs
+3. **`Sink`** - Fan-in only - implied that it saves to a host system with specific login in the processor
+
+To the engine, this is still just a `Processor`, but just has logical restrictions on the routing object.
+
+It's important to highlight the flexibility of the inputs and outputs, as they are all dynamic and can change without the need to push code:
+
+Here's how to view the fan-in fan-out strategy:
+```mermaid
+graph TD
+   subgraph "Pipeline Step Execution Flow" // Overall container
+      direction TB
+
+      subgraph "Fan-in Sources"
+         direction TB
+         KafkaIn1[Kafka Input Topic 1]
+         KafkaIn2[Kafka Input Topic 2]
+         GrpcIn1(gRPC Source 1)
+         GrpcIn2(gRPC Source 2)
+      end
+
+      subgraph "YAPPY Engine"
+         Engine(Engine)
+      end
+
+      subgraph "Module Processor"
+         Module(Module Processor)
+      end
+
+      subgraph "Fan-out Destinations"
+         direction TB
+         KafkaOut1[Kafka Output Topic A]
+         KafkaOut2[Kafka Output Topic B]
+         GrpcOut1(gRPC Destination A)
+         GrpcOut2(gRPC Destination B)
+      end
+
+   %% Connections between subgraphs/nodes
+      KafkaIn1 -- "1. Kafka Listener" --> Engine;
+      KafkaIn2 -- "1. Kafka Listener" --> Engine;
+      GrpcIn1 -- "1. gRPC endpoint" --> Engine;
+      GrpcIn2 -- "1. gRPC endpoint" --> Engine;
+
+      Engine -- "2. gRPC Call" --> Module;
+      Module -- "3. gRPC Response" --> Engine;
+
+      Engine -- "4. Kafka Forward" --> KafkaOut1;
+      Engine -- "4. Kafka Forward" --> KafkaOut2;
+      Engine -- "4. gRPC Call" --> GrpcOut1;
+      Engine -- "4. gRPC Call" --> GrpcOut2;
+
+   end
+
+%% Styling with grey shades and black text
+   classDef kafka fill:#dddddd,stroke:#666666,stroke-width:2px,color:#000000;
+   class KafkaIn1,KafkaIn2,KafkaOut1,KafkaOut2 kafka;
+
+   classDef service fill:#cccccc,stroke:#666666,stroke-width:2px,color:#000000;
+   class Engine,Module,GrpcIn1,GrpcIn2,GrpcOut1,GrpcOut2 service;
+
+```
+It leverages a microservices architecture where **each pipeline step, supported by an underlying framework or embedded
+engine logic, dynamically fetches its configuration and determines onward routing.** 
+
+Communication primarily utilizes `gRPC` for **synchronous**
+processing within a step and `Kafka` for **asynchronous** handoff between steps, ensuring decoupling and resilience.
+
+With Kafka steps, the administrator is empowered to pause, rewind, or drain a topic or dynamically change the inputs and output destinations.  All updates happen within seconds.
+
+**Consul** serves as the dynamic
+configuration store and service discovery mechanism, with a Schema Registry guaranteeing data and configuration integrity.  Engine-to-engine communication schemas are manged from either **Apicurio**, **Amazon Glue**, or **Confluent Registry**. 
+
+Each step is capable of defining a JSON schema for configuration which is made to automate configuration input on the administration of the module and engine.
+
+
+YAPPY empowers
 users to define complex workflows for diverse applications like data science and search indexing by allowing custom processing modules to be
 easily integrated. The system's design for live configuration updates facilitates agile pipeline evolution and A/B testing without requiring
 full service redeployments.
@@ -16,58 +187,98 @@ Each Pipeline Module operates with an awareness of its role and the next steps, 
 embedded engine logic or supporting framework.
 
 ```mermaid
-graph TD
-    A["Admin UI"] -->|"Manages/Edits"| B("Pipeline Config via Admin API")
-    C["Pipeline Editor UI"] -->|"Creates/Edits"| B
-    B -->|"Stored In"| D{Consul}
+graph TD 
+    %% Define Original Component Nodes
+    A["Admin UI"]
+    B("Pipeline Config via Admin API")
+    C["Pipeline Editor UI"]
+    D{Consul}
+    G["Pipeline Schema Registry"]
+    Ingest["IngestDataRequest <br/> (source_identifier)"]
+    ENG_INIT["Initial Engine Logic <br/> (e.g., Ingest Service)"]
+    Kafka_Topic_1{{"Kafka Topic for Step 1"}}
+    Step1_FW["Step 1: Module Framework/Embedded Engine"]
+    M1(("Module 1 <br/> gRPC Processor"))
+    Kafka_Topic_2{{"Kafka Topic for Step 2"}}
+    Step2_FW["Step 2: Module Framework/Embedded Engine"]
+    M2(("Module 2 <br/> gRPC Processor"))
+    Kafka_Topic_N{{"...to Next Step or End"}}
+    H["Pipeline Status UI"]
+    LogStore[("Log/Metrics Store")]
 
-    G["Pipeline Schema Registry"] -->|"Provides Schemas For Validation To"| B
-    B -->|"References Schemas In"| G
+    %% Define New Action Nodes (oval/stadium shape using step_box style)
+    s_A_B([Manages/Edits]):::step_box
+    s_C_B([Creates/Edits]):::step_box
+    s_B_D([Stored In]):::step_box
+    s_G_B(["Provides Schemas For <br/> Validation To"]):::step_box
+    s_B_G(["References Schemas In"]):::step_box
+    s_H_LS(["Queries Status From <br/> (e.g., Distributed Logs/Metrics Store)"]):::step_box
 
+    s_ENG_K1(["Creates PipeStream, <br/> Sets Initial Target"]):::step_box
+    s1_consume([1. Consumes PipeStream]):::step_box
+    s1_fetch(["2. Fetches Own Config <br/> from Consul"]):::step_box
+    s1_validate(["3. Validates Custom Config <br/> (uses Schema Registry)"]):::step_box
+    s1_invoke([4. Invokes Processor]):::step_box
+    s_M1_S1FW([Result]):::step_box
+    s1_determine(["5. Determines Next Step(s) <br/> (Updates PipeStream.target_step_name)"]):::step_box
+    s_S1FW_LS([Logs Execution to]):::step_box
+
+    s2_repeat(["_ Repeats similar logic _"]):::step_box
+    s_M2_S2FW([Result]):::step_box
+    s_S2FW_LS([Logs Execution to]):::step_box
+
+    %% Connections (General UI, Config, Status - will follow TD)
+    A --- s_A_B;          s_A_B --> B;
+    C --- s_C_B;          s_C_B --> B;
+    B --- s_B_D;          s_B_D --> D;
+    G --- s_G_B;          s_G_B --> B;
+    B --- s_B_G;          s_B_G --> G;
+    H --- s_H_LS;         s_H_LS --> LogStore;
+
+    %% Main Pipeline Execution Flow Subgraph
     subgraph "Pipeline Execution Flow (Illustrative)"
         direction LR
-        Ingest["IngestDataRequest <br/> (source_identifier)"] --> ENG_INIT["Initial Engine Logic <br/> (e.g., Ingest Service)"]
-        ENG_INIT -->|"Creates PipeStream, Sets Initial Target"| Kafka_Topic_1{{"Kafka Topic for Step 1"}}
 
-        Kafka_Topic_1 --> Step1_FW["Step 1: Module Framework/Embedded Engine"]
-        Step1_FW -->|"1. Consumes PipeStream"| Step1_FW
-        Step1_FW -->|"2. Fetches Own Config from Consul"| D
-        Step1_FW -->|"3. Validates Custom Config (uses Schema Registry)"| G
-        Step1_FW -->|"4. Invokes Processor"| M1(("Module 1 <br/> gRPC Processor"))
-        M1 -->|"Result"| Step1_FW
-        Step1_FW -->|"5. Determines Next Step(s) <br/> (Updates PipeStream.target_step_name)"| Kafka_Topic_2{{"Kafka Topic for Step 2"}}
+        Ingest --> ENG_INIT 
+        ENG_INIT --- s_ENG_K1;      
+        s_ENG_K1 --> Kafka_Topic_1;
+        Kafka_Topic_1 --> Step1_FW 
 
-        Kafka_Topic_2 --> Step2_FW["Step 2: Module Framework/Embedded Engine"]
-        Step2_FW -->|"_ Repeats similar logic _"| M2(("Module 2 <br/> gRPC Processor"))
-        M2 -->|"Result"| Step2_FW
-        Step2_FW --> Kafka_Topic_N{{"...to Next Step or End"}}
+        Step1_FW --- s1_consume;    s1_consume --> Step1_FW; 
+        Step1_FW --- s1_fetch;      s1_fetch --> D;
+        Step1_FW --- s1_validate;   s1_validate --> G;
+        Step1_FW --- s1_invoke;     s1_invoke --> M1;
+        M1 --- s_M1_S1FW;           s_M1_S1FW --> Step1_FW;
+        Step1_FW --- s1_determine;  s1_determine --> Kafka_Topic_2;
+        Step1_FW --- s_S1FW_LS;     s_S1FW_LS --> LogStore;
+
+        Kafka_Topic_2 --> Step2_FW 
+
+        Step2_FW --- s2_repeat;     s2_repeat --> M2;
+        M2 --- s_M2_S2FW;           s_M2_S2FW --> Step2_FW;
+        Step2_FW --> Kafka_Topic_N 
+        Step2_FW --- s_S2FW_LS;     s_S2FW_LS --> LogStore;
     end
 
-    H["Pipeline Status UI"] -->|"Queries Status From (e.g., Distributed Logs/Metrics Store)"| LogStore[("Log/Metrics Store")]
-    Step1_FW -->|"Logs Execution to"| LogStore
-    Step2_FW -->|"Logs Execution to"| LogStore
-
+    %% Categorical Subgraphs for Visual Grouping
     subgraph "User Interfaces"
-        A
-        C
-        H
+        A; C; H;
     end
 
-    subgraph "Core Infrastructure"
-        D
-        G
-        Kafka_Topic_1
-        Kafka_Topic_2
-        Kafka_Topic_N
-        LogStore
+    subgraph "Configuration & Registry Services"
+        B; D; G;
     end
 
-    subgraph "Step Execution Units"
-        Step1_FW
-        M1
-        Step2_FW
-        M2
+    subgraph "Data Flow Infrastructure"
+        Kafka_Topic_1; Kafka_Topic_2; Kafka_Topic_N; LogStore;
     end
+
+    subgraph "Processing Units & Engines"
+        Ingest; ENG_INIT; Step1_FW; M1; Step2_FW; M2;
+    end
+
+    %% Styling Definitions
+    classDef step_box fill:#eeeeee,stroke:#999999,stroke-width:1px,color:#000000;
 
     style B fill:#f9f,stroke:#333,stroke-width:2px
     style G fill:#f9f,stroke:#333,stroke-width:2px
@@ -78,19 +289,18 @@ graph TD
     style M2 fill:lightgreen,stroke:#333,stroke-width:2px
     style ENG_INIT fill:orange,stroke:#333,stroke-width:2px
 ```
-
-| Component                                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Key Interactions                                                                                                                                                                                                                                                                        |
-|:------------------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Pipeline Config**                       | Defines the structure and behavior of all pipelines (`PipelineClusterConfig`, `PipelineConfig`, `PipelineStepConfig`). Stored as JSON/YAML in Consul. Source of truth for all steps.                                                                                                                                                                                                                                                                                            | Read by each Pipeline Module's Framework/Embedded Engine; Managed via Admin API (by Admin/Editor UIs); References schemas in Pipeline Schema Registry.                                                                                                                                  |
-| **Pipeline Schema Registry**              | Stores and versions JSON Schemas (e.g., using Apicurio Registry or the provided `SchemaRegistryService.proto`). These schemas validate the `custom_json_config` for each `PipelineStepConfig`.                                                                                                                                                                                                                                                                                  | Provides schemas to Admin API/UI for pre-validation and to each Pipeline Module's Framework/Embedded Engine for runtime validation; Schemas are registered/managed. Referenced by Pipeline Config.                                                                                      |
-| **Pipeline Module (Processor)**           | The core business logic for a specific task in a pipeline (e.g., text extraction, data transformation). Implemented as a gRPC service (conforming to `PipeStepProcessor.proto`) or as logic within a Kafka consumer.                                                                                                                                                                                                                                                            | Invoked by its associated Module Framework/Embedded Engine with `PipeStream` data (specifically `PipeDoc`, `Blob`) and validated `ProcessConfiguration` (custom config + params). Returns processing result.                                                                            |
-| **Module Framework/Embedded Engine**      | Logic co-located or associated with each Pipeline Module instance/deployment. Responsible for consuming a `PipeStream` (e.g., from Kafka), fetching its `PipelineStepConfig` from Consul, validating its custom config, invoking the actual Module Processor, and then routing the `PipeStream` to the next step(s) (e.g., by publishing to the next Kafka topic) based on the current step's configuration (`nextSteps`, `errorSteps`). This is the "engine-per-step" concept. | Consumes `PipeStream` from Kafka/previous step; Fetches its `PipelineStepConfig` from Consul (via `DynamicConfigurationManager`); Uses Schema Registry for `custom_json_config` validation; Calls its Pipeline Module Processor; Publishes updated `PipeStream` to Kafka for next step. |
-| **Admin UI**                              | A web interface for administrators to manage `PipelineClusterConfig` (pipeline definitions) and JSON schemas, interacting via an Admin API.                                                                                                                                                                                                                                                                                                                                     | Interacts with Admin API to CRUD pipeline configurations in Consul and schemas in the Pipeline Schema Registry.                                                                                                                                                                         |
-| **Pipeline Editor UI**                    | A (potentially graph-based) web interface for users to design, create, and modify pipeline configurations.                                                                                                                                                                                                                                                                                                                                                                      | Interacts with Admin API to save/update pipeline configurations in Consul. May visualize pipeline graphs.                                                                                                                                                                               |
-| **Pipeline Status UI**                    | A web interface to monitor the status, progress, history (`StepExecutionRecord`), and errors (`ErrorData`) of pipeline executions by querying a centralized log/metrics store.                                                                                                                                                                                                                                                                                                  | Queries pipeline execution status and history from a Log/Metrics Store where each Module Framework/Embedded Engine reports its activity.                                                                                                                                                |
-| **Initial Engine Logic / Ingest Service** | A service (e.g., implementing `PipeStreamEngine.IngestDataAsync` from `engine_service.proto`) that accepts initial data, creates the `PipeStream`, assigns a `stream_id`, sets the `source_identifier`, `initial_context_params`, and `target_step_name` for the first step in the designated pipeline, and publishes it to the appropriate Kafka topic to kick off the flow.                                                                                                   | Receives external data; Creates initial `PipeStream`; Publishes to the first step's Kafka topic.                                                                                                                                                                                        |
-| **Consul**                                | Service discovery and distributed Key-Value store for `PipelineClusterConfig` and runtime parameters.                                                                                                                                                                                                                                                                                                                                                                           | Stores `PipelineClusterConfig`; Provides service addresses for gRPC modules; Read by all Module Frameworks/Embedded Engines for configuration.                                                                                                                                          |
-| **Kafka**                                 | Acts as the primary message bus for `PipeStream` objects, decoupling pipeline steps and providing resilience.                                                                                                                                                                                                                                                                                                                                                                   | `PipeStream` messages are published to topics corresponding to target steps; Consumed by the Module Framework/Embedded Engine of the respective step.                                                                                                                                   |
+| Component                                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Key Interactions                                                                                                                                                                                                                                                                                          |
+|:------------------------------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Pipeline Config**                       | Defines the structure and behavior of all pipelines (`PipelineClusterConfig`, `PipelineConfig`, `PipelineStepConfig`). Stored as JSON/YAML in Consul. Source of truth for all steps.                                                                                                                                                                                                                                                                                                          | Read by each Pipeline Module's Framework/Embedded Engine; Managed via Admin API (by Admin/Editor UIs); References schemas in Pipeline Schema Registry.                                                                                                                                                    |
+| **Pipeline Schema Registry**              | Stores and versions JSON Schemas (e.g., using Apicurio Registry or the provided `SchemaRegistryService.proto`). These schemas validate the `custom_json_config` for each `PipelineStepConfig`.                                                                                                                                                                                                                                                                                               | Provides schemas to Admin API/UI for pre-validation and to each Pipeline Module's Framework/Embedded Engine for runtime validation; Schemas are registered/managed. Referenced by Pipeline Config.                                                                                                        |
+| **Pipeline Module (Processor)**           | The core business logic for a specific task in a pipeline (e.g., text extraction, data transformation). Implemented as a gRPC service (conforming to `PipeStepProcessor.proto`) or as logic within a Kafka consumer.                                                                                                                                                                                                                                                                          | Invoked by its associated Module Framework/Embedded Engine with `PipeStream` data (specifically `PipeDoc`, `Blob`) and validated `ProcessConfiguration` (custom config + params). Returns processing result.                                                                                              |
+| **Module Framework/Embedded Engine**      | Logic co-located or associated with each Pipeline Module instance/deployment. Responsible for consuming a `PipeStream` (e.g., from Kafka), fetching its `PipelineStepConfig` from Consul, validating its custom config, invoking the actual Module Processor, and then routing the `PipeStream` to the next step(s) (e.g., by publishing to a Kafka topic **or making a gRPC call to another engine/module**) based on the current step's configuration (**e.g., `outputs` defined in `PipelineStepConfig`**). This is the "engine-per-step" concept. | Consumes/Receives `PipeStream` (e.g., from Kafka, or via gRPC if called by a previous engine); Fetches its `PipelineStepConfig` from Consul (via `DynamicConfigurationManager`); Uses Schema Registry for `custom_json_config` validation; Calls its local Pipeline Module Processor (typically gRPC); Determines and routes the `PipeStream` to the next step(s) (e.g., by publishing to Kafka **or making a gRPC call to another engine/module**). |
+| **Admin UI**                              | A web interface for administrators to manage `PipelineClusterConfig` (pipeline definitions) and JSON schemas, interacting via an Admin API.                                                                                                                                                                                                                                                                                                                                                   | Interacts with Admin API to CRUD pipeline configurations in Consul and schemas in the Pipeline Schema Registry.                                                                                                                                                                                           |
+| **Pipeline Editor UI**                    | A (potentially graph-based) web interface for users to design, create, and modify pipeline configurations.                                                                                                                                                                                                                                                                                                                                                                                    | Interacts with Admin API to save/update pipeline configurations in Consul. May visualize pipeline graphs.                                                                                                                                                                                                 |
+| **Pipeline Status UI**                    | A web interface to monitor the status, progress, history (`StepExecutionRecord`), and errors (`ErrorData`) of pipeline executions by querying a centralized log/metrics store.                                                                                                                                                                                                                                                                                                                | Queries pipeline execution status and history from a Log/Metrics Store where each Module Framework/Embedded Engine reports its activity.                                                                                                                                                                  |
+| **Initial Engine Logic / Ingest Service** | A service (e.g., implementing `PipeStreamEngine.IngestDataAsync` from `engine_service.proto`) that accepts initial data, creates the `PipeStream`, assigns a `stream_id`, sets the `source_identifier`, `initial_context_params`, and `target_step_name` for the first step in the designated pipeline, and publishes it to the appropriate Kafka topic to kick off the flow.                                                                                                                 | Receives external data; Creates initial `PipeStream`; Publishes to the first step's Kafka topic.                                                                                                                                                                                                          |
+| **Consul**                                | Service discovery and distributed Key-Value store for `PipelineClusterConfig` and runtime parameters.                                                                                                                                                                                                                                                                                                                                                                                         | Stores `PipelineClusterConfig`; Provides service addresses for gRPC modules; Read by all Module Frameworks/Embedded Engines for configuration.                                                                                                                                                            |
+| **Kafka**                                 | Acts as the primary message bus for `PipeStream` objects, decoupling pipeline steps and providing resilience.                                                                                                                                                                                                                                                                                                                                                                                 | `PipeStream` messages are published to topics corresponding to target steps; Consumed by the Module Framework/Embedded Engine of the respective step.                                                                                                                                                         |
 
 ## 3. Example Usage of Pipeline
 

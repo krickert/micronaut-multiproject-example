@@ -73,7 +73,7 @@ public class ChunkerEchoIntegrationTest {
         LOG.info("Starting Chunker service context...");
         Map<String, Object> chunkerServiceProps = new HashMap<>();
         chunkerServiceProps.put("micronaut.application.name", "chunker-service-instance");
-        chunkerServiceProps.put("grpc.server.port", 0);
+        chunkerServiceProps.put("grpc.server.port", "${random.port}");
         chunkerServiceProps.put("grpc.services.chunker.enabled", true);
         chunkerServiceProps.put("grpc.services.echo.enabled", false);
         chunkerServiceProps.put("consul.client.host", consulHost);
@@ -100,7 +100,7 @@ public class ChunkerEchoIntegrationTest {
         LOG.info("Starting Echo service context...");
         Map<String, Object> echoServiceProps = new HashMap<>();
         echoServiceProps.put("micronaut.application.name", "echo-service-instance");
-        echoServiceProps.put("grpc.server.port", 0);
+        echoServiceProps.put("grpc.server.port", "${random.port}");
         echoServiceProps.put("grpc.services.chunker.enabled", false);
         echoServiceProps.put("grpc.services.echo.enabled", true);
         echoServiceProps.put("consul.client.host", consulHost);

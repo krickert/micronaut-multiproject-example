@@ -22,7 +22,7 @@ public class PipeStepExecutorFactoryImpl implements PipeStepExecutorFactory {
 
     @Inject
     public PipeStepExecutorFactoryImpl(DynamicConfigurationManager configManager,
-                                      PipelineStepGrpcProcessor grpcProcessor) {
+                                       PipelineStepGrpcProcessor grpcProcessor) {
         this.configManager = configManager;
         this.grpcProcessor = grpcProcessor;
     }
@@ -30,26 +30,33 @@ public class PipeStepExecutorFactoryImpl implements PipeStepExecutorFactory {
     @Override
     public PipeStepExecutor getExecutor(String pipelineName, String stepName) throws PipeStepExecutorNotFoundException {
         // Get the pipeline configuration
-        Optional<PipelineConfig> pipelineConfig = configManager.getPipelineConfig(pipelineName);
-        if (pipelineConfig.isEmpty()) {
-            throw new PipeStepExecutorNotFoundException("Pipeline not found: " + pipelineName);
-        }
+        PipelineConfig pipelineConfig = configManager.getPipelineConfig(pipelineName)
+                .orElseThrow(() -> new PipeStepExecutorNotFoundException("Pipeline not found: " + pipelineName));
 
         // Get the step configuration
-        PipelineStepConfig stepConfig = pipelineConfig.get().pipelineSteps().get(stepName);
-        if (stepConfig == null) {
-            throw new PipeStepExecutorNotFoundException("Step not found: " + stepName + " in pipeline: " + pipelineName);
+        PipelineStepConfig stepConfig = Optional.ofNullable(pipelineConfig.pipelineSteps().get(stepName))
+                .orElseThrow(() -> new PipeStepExecutorNotFoundException("Step not found: " + stepName + " in pipeline: " + pipelineName));
+
+        PipelineStepConfig.ProcessorInfo processorInfo = stepConfig.processorInfo();
+        if (processorInfo == null) {
+            throw new PipeStepExecutorNotFoundException("ProcessorInfo is missing for step: " + stepName + " in pipeline: " + pipelineName);
         }
 
-        // Create the appropriate executor based on step type
-        if (stepConfig.processorInfo().grpcServiceName() != null && !stepConfig.processorInfo().grpcServiceName().isBlank()) {
+        // Create the appropriate executor based on processor type
+        String grpcServiceName = processorInfo.grpcServiceName();
+        if (grpcServiceName != null && !grpcServiceName.isBlank()) {
             return new GrpcPipeStepExecutor(grpcProcessor, stepName, stepConfig.stepType());
-        } else if (stepConfig.processorInfo().internalProcessorBeanName() != null && !stepConfig.processorInfo().internalProcessorBeanName().isBlank()) {
+        }
+
+        String internalProcessorBeanName = processorInfo.internalProcessorBeanName();
+        if (internalProcessorBeanName != null && !internalProcessorBeanName.isBlank()) {
             // For internal processors, we would use a different executor implementation
             // This would be implemented in a future task
-            throw new PipeStepExecutorNotFoundException("Internal processors not yet implemented");
-        } else {
-            throw new PipeStepExecutorNotFoundException("No processor info found for step: " + stepName);
+            // Example: return applicationContext.getBean(internalProcessorBeanName, PipeStepExecutor.class);
+            // Or: return new InternalBeanPipeStepExecutor(applicationContext, internalProcessorBeanName, stepName, stepConfig.stepType());
+            throw new PipeStepExecutorNotFoundException("Internal processors not yet implemented for bean: " + internalProcessorBeanName + " in step: " + stepName);
         }
+
+        throw new PipeStepExecutorNotFoundException("No valid processor (gRPC service or internal bean) configured for step: " + stepName + " in pipeline: " + pipelineName);
     }
 }

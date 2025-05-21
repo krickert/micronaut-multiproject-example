@@ -20,6 +20,19 @@ After examining the codebase, I can see that the project has two main modules (E
 
 ### 1. Create a Real Integration Test with Actual Service Implementations
 
+#### Immediate steps
+1. **Master Multi-Context Service Startup (Focus of `ChunkerEchoIntegrationTest.java`)**:
+  * **Goal**: Reliably start the `Chunker` service (`Engine` + `ChunkerModule`) and `Echo` service (`Engine` + `EchoModule`) in separate _Micronaut ApplicationContexts_ within a single JUnit test.
+  * **Configuration**:
+    * Use `ApplicationContext.builder().environments(...).propertySources(...)`.
+    * Ensure each _service context_ gets its unique properties (like `micronaut.application.name`, `grpc.server.port=${random.port}`).
+    * Crucially, ensure both contexts are **configured to use the same, shared Consul instance** (provided by _Micronaut Test Resources_, leveraging with `mainTestEnvironment.getProperty("consul.client.host", ...))`.
+    * Similarly for _Kafka_ and _Schema Registry_ if they are involved in the specific flow being tested.
+  * **Service Registration**: Verify that after each _service context_ starts, its gRPC service (e.g., "`chunker`" or "`echo`" module processor) successfully registers with the shared `Consul`.
+  * **Service Discovery**: From the main test context (or from one service context trying to call another), verify that you can discover and obtain a _gRPC client stub_ for the services running in the other contexts. 
+    * The `TimeUnit.SECONDS.sleep(15);` is a temporary measure; aim to replace it with programmatic checks against `Consul` or retry mechanisms in client creation.
+
+#### In Progress
 Create a new integration test that uses the actual Echo and Chunker services from the `yappy-modules` directory instead of mocks:
 
 ```java
@@ -92,6 +105,7 @@ void setup() {
     // Configure both to use the same Consul, Kafka, and schema registry
 }
 ```
+## Future Steps
 
 ### 3. Test Kafka Serialization of PipeStream Objects
 
@@ -283,6 +297,39 @@ The actual module implementations can be found in:
 Current integration tests are located in:
 - `yappy-engine/src/test/java/com/krickert/search/pipeline/integration/`
 - These tests demonstrate how to set up and test various components of the system
+
+
+## Service Discovery
+### Module Discovery and Invocation
+
+The YAPPY Engine is designed to dynamically discover and interact with its associated Module Processor. 
+This process is crucial for the "engine-per-step" concept, where each engine instance is responsible for orchestrating a 
+specific piece of business logic encapsulated in a module.
+
+#### Discovery FLow
+1. **Configuration-Driven**
+   * When an Engine instance receives a PipeStream destined for a particular pipeline step (e.g., `stepName` = "`P1_S1_ValidateData`" within `pipelineName` = "`DataSciencePipeline-P1`"), it first consults its dynamic configuration.
+2. **Fetch Step Configuration**: Using the `DynamicConfigurationManager`, the `Engine` retrieves the `PipelineStepConfig` for the current `pipelineName` and `target_step_name` from `Consul`.
+3. **Identify Processor**
+   * This `PipelineStepConfig` contains `ProcessorInfo`, which specifies how to find the actual module processor. 
+   * Critically, this includes the `grpcServiceName` (e.g., "`validator-module-v1`"). 
+   * This `grpcServiceName` is the key used for service discovery.
+4. **Service Discovery (Consul)**
+   * The `Engine`'s internal `PipelineStepGrpcProcessorImpl` component uses the **Micronaut DiscoveryClient** (configured for `Consul`) to look up active instances of the required `grpcServiceName`.
+   * This allows modules to be deployed, scaled, and updated independently, with the `Engine` always finding a healthy, available instance.
+5. **Localhost-First** (Optimization/Fallback)
+   * As an optimization, especially if the `Engine` and its dedicated **Module Processor** are packaged within the same container or host, the `Engine` can be configured to attempt connection to a `localhost` address first for its specific, dedicated module.
+   * **If this local connection fails** or is not configured, _it falls back_ to the standard service discovery mechanism via `Consul`. 
+   * This ensures that **even in a tightly coupled deployment, the system can function**, but it still retains the flexibility of discovering modules running elsewhere.
+6. **gRPC Invocation**: Once a service instance is discovered (its host and port are resolved), the `Engine` establishes a **gRPC connection** and invokes the `processData` method on the `PipeStepProcessor` interface implemented by the target module.
+
+#### **Self-Registration (Implicit)** 
+   * While the `Engine` discovers _modules_, the _modules_ themselves (when packaged as _standalone gRPC services_) are responsible for registering with `Consul` upon startup. 
+   * This is a standard practice in microservice architectures:
+     * When a service instance (e.g., "`Validator` Module" or "`Chunker` Module") starts, its embedded **Micronaut framework**, if configured for `Consul` registration, announces its presence, service name (e.g., "`validator-module-v1`"), `host`, and `port` to `Consul`.
+     * `Consul` then makes this information available to other services, like the **YAPPY Engine**, that need to discover and communicate with it.
+   * This entire discovery and invocation process is abstracted away from the **Module Processor** itself, allowing the module to _focus solely on its business logic_. 
+   * The `Engine` handles the complexities of configuration, discovery, and communication.
 
 
 ## Component Details and Implementation Plan
@@ -1638,3 +1685,35 @@ The dashboard will provide a high-level overview of the pipeline system:
 - **Error Rates**: Monitor error rates across the system
 - **Resource Usage**: Track resource usage (CPU, memory, disk, etc.)
 - **Throughput**: Monitor message throughput across the system
+
+### Appendix: Additional Considerations for Integration Testing
+
+While the overall plan is comprehensive, here are a few additional points to keep in mind as you progress with integration testing:
+
+1.  **Test Configuration Management**:
+   *   For multi-context tests, you're currently using `Map<String, Object>` for properties. Consider if loading properties from dedicated test YAML files per service context (e.g., `application-test-echo.yml`, `application-test-chunker.yml`) and passing those to `ApplicationContext.builder()` would be cleaner for more complex configurations. Micronaut Test Resources should continue to provide shared infrastructure like Consul and Kafka ports.
+
+2.  **Schema Registry in Multi-Context Tests**:
+   *   When testing Kafka flows that require schema validation (Apicurio/Glue), ensure all relevant service contexts (producer engine, consumer engine) are configured to point to the *same* schema registry instance (again, likely provided by Test Resources).
+   *   Ensure schemas are pre-registered or registered by the test setup before messages are produced.
+
+3.  **Admin API for Test Setup**:
+   *   While seeding Consul directly is faster initially for testing core flows, eventually, using the Admin APIs (once developed) to set up `PipelineClusterConfig`, `PipelineConfig`, etc., in your tests will provide more realistic end-to-end validation of the control plane. This can be a later phase.
+
+4.  **Idempotency and Retries**:
+   *   While "Error Handling" is listed, specifically consider testing idempotency of module processors if they might be retried by the engine (e.g., after a temporary Kafka hiccup or a failed gRPC call).
+
+5.  **Security Considerations (Later Stage)**:
+   *   For now, `usePlainText=true` for gRPC is fine for local testing. Later, you'll want to consider mTLS between services and Kafka ACLs/authentication.
+
+6.  **Clarity of "Engine" Role in Tests**:
+   *   When writing tests, be clear about which "engine" you're interacting with:
+      *   Are you calling a module's `PipeStepProcessor` gRPC endpoint directly?
+      *   Are you calling an engine's `PipeStreamEngine` gRPC endpoint (e.g., `processPipe` or `processConnectorDoc`) which then orchestrates calls to modules?
+   *   This distinction will help in designing focused tests.
+
+7.  **`PipeStreamStateBuilderImpl` and Immutability**:
+   *   In `PipeStreamStateBuilderImpl`, the `presentState` is a `PipeStream.Builder`. While this allows modification, ensure that when `execute()` is called on a `PipeStepExecutor`, it receives an immutable `PipeStream` (e.g., `stateBuilder.getPresentState().build()`). The executor then returns a *new* immutable `PipeStream`. The subsequent line `stateBuilder = new PipeStreamStateBuilderImpl(processedStream, configManager);` correctly re-initializes the state builder with the new immutable state, which is good.
+
+8.  **`testPipeStream` Method in `PipeStreamEngineImpl`**:
+   *   You correctly note: "We do NOT forward to next steps in `testPipeStream`". Ensure tests for this method specifically check the `contextParams` for the *intended* routing information, rather than expecting actual forwarding.
