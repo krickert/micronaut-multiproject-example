@@ -1,36 +1,32 @@
 # /yappy-engine/src/test/resources/application-combined-test-manual-contexts.yml
 micronaut:
   application:
-    name: combined-services-test-runner-manual # Name for the main test application
+    name: combined-services-test-runner-manual
   server:
-    port: -1 # The test runner itself usually doesn't need a server
-  test:
-    resources:
-      enabled: true # This is important for Test Resources to manage Consul and inject its properties
+    port: 0 # Engine's gRPC server runs on a random available port
+  # ... other micronaut settings ...
 
-# Client configuration for THIS main test context (ChunkerEchoIntegrationTest)
 grpc:
   client:
+    # discovery.enabled can remain true if other clients in the engine need it,
+    # but for these specific test stubs, we'll use static addressing.
     discovery:
-      enabled: true # Enable gRPC client-side discovery using Consul
+      enabled: true
     channels:
-      chunker:
-        target: chunker # Client in main test discovers "chunker" via Consul
+      chunkerClientStub: # Matches @Named("chunkerClientStub")
+        # Target the engine's gRPC server directly using static addressing
+        # ${micronaut.server.port} will be the random port the engine started on.
+        target: "static://localhost:${micronaut.server.port}"
         use-plaintext: true
-      echo:
-        target: echo     # Client in main test discovers "echo" via Consul
+      echoClientStub:    # Matches @Named("echoClientStub")
+        target: "static://localhost:${micronaut.server.port}"
         use-plaintext: true
 
 consul:
   client:
-    # These properties are expected to be provided by the Micronaut Test Resources service
-    # when it starts the Consul container. Your main test application context will pick these up.
-    # host: ${CONSUL_HOST:localhost} # Test Resources should provide this
-    # port: ${CONSUL_PORT:8500}    # Test Resources should provide this
     registration:
-      enabled: false # The main test runner application does not register itself as a service
+      enabled: false # Engine itself does not register with Consul in this test setup
     discovery:
-      enabled: true # The main test runner application uses Consul for discovery
-        # shared-instance: true # This might be relevant depending on your Test Resources version
-        # and how it manages the Consul client bean.
-      # If you see issues with multiple ConsulClient beans, you might need this.
+      enabled: true  # Engine's DiscoveryClient (e.g., for GrpcChannelManager) can still use Consul
+      # for services *other* than the modules.
+    

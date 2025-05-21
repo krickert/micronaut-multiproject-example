@@ -59,6 +59,8 @@ dependencies {
     implementation(mn.micronaut.grpc.server.runtime)
     implementation(mn.micronaut.grpc.runtime)
     implementation(mn.netty.common)
+// https://mvnrepository.com/artifact/io.grpc/grpc-core
+    implementation("io.grpc:grpc-core:1.72.0")
 
     implementation(project(":yappy-models:protobuf-models"))
 

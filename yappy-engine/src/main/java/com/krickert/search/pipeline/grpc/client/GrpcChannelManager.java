@@ -1,6 +1,6 @@
-package com.krickert.search.pipeline.grpc.client; // Or a suitable common package
+package com.krickert.search.pipeline.grpc.client;
 
-import com.krickert.search.pipeline.engine.exception.GrpcEngineException; // Assuming this is a general gRPC exception
+import com.krickert.search.pipeline.engine.exception.GrpcEngineException;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.micronaut.context.annotation.Value;
@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -22,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 @Singleton
-public class GrpcChannelManager {
+public class GrpcChannelManager implements AutoCloseable { // Implement AutoCloseable for @PreDestroy
     private static final Logger log = LoggerFactory.getLogger(GrpcChannelManager.class);
 
     private final DiscoveryClient discoveryClient;
@@ -31,59 +32,86 @@ public class GrpcChannelManager {
     private final int discoveryMaxRetries;
     private final long discoveryRetryDelayMs;
     private final Map<String, ManagedChannel> channelCache = new ConcurrentHashMap<>();
-
-    // Configuration for "localhost first" (example)
-    private final Map<String, Integer> localServicesPorts; // e.g., {"echo-module-local": 50052}
+    private final Map<String, Integer> localServicesPorts;
 
     @Inject
     public GrpcChannelManager(
             DiscoveryClient discoveryClient,
+            LocalServicesConfig localServicesConfig,
             @Value("${grpc.client.plaintext:true}") boolean usePlaintext,
             @Value("${grpc.client.discovery.attempt-timeout:5s}") Duration discoveryAttemptTimeout,
             @Value("${grpc.client.discovery.max-retries:3}") int discoveryMaxRetries,
-            @Value("${grpc.client.discovery.retry-delay-ms:1000}") long discoveryRetryDelayMs,
-            // Inject local service port configurations if you have them in application.yml
-            // For a more dynamic approach, this could come from DynamicConfigurationManager
-            @Value("#{${local.services.ports:{}}}") Map<String, Integer> localServicesPorts 
+            @Value("${grpc.client.discovery.retry-delay-ms:1000}") long discoveryRetryDelayMs
     ) {
         this.discoveryClient = discoveryClient;
         this.usePlaintext = usePlaintext;
         this.discoveryAttemptTimeout = discoveryAttemptTimeout;
         this.discoveryMaxRetries = discoveryMaxRetries;
         this.discoveryRetryDelayMs = discoveryRetryDelayMs;
-        this.localServicesPorts = localServicesPorts != null ? localServicesPorts : Map.of();
-        log.info("GrpcChannelManager initialized. Localhost first ports: {}", this.localServicesPorts);
+
+        // Get the ports map from the injected config, defaulting to an empty map
+        // The LocalServicesConfig itself will handle the null case for its 'ports' field if initialized.
+        this.localServicesPorts = localServicesConfig.getPorts();
+
+        log.info("GrpcChannelManager initialized. Plaintext: {}, Localhost first ports: {}",
+                this.usePlaintext, this.localServicesPorts.keySet());
     }
 
     public ManagedChannel getChannel(String serviceName) throws GrpcEngineException {
-        return channelCache.computeIfAbsent(serviceName, this::createChannel);
+        // Using computeIfAbsent is generally good, but ensure that the createChannel
+        // method doesn't throw checked exceptions not declared by Function,
+        // or handle them appropriately. GrpcEngineException is a RuntimeException, so it's fine.
+        return channelCache.computeIfAbsent(serviceName, this::createChannelOrThrow);
     }
 
-    private ManagedChannel createChannel(String serviceName) {
+    // Renamed to clarify it can throw GrpcEngineException
+    private ManagedChannel createChannelOrThrow(String serviceName) {
         log.info("Cache miss. Attempting channel creation for service: '{}'", serviceName);
 
-        // 1. "Localhost first" attempt
         Optional<ManagedChannel> localChannel = tryLocalhostConnection(serviceName);
         if (localChannel.isPresent()) {
-            log.info("Successfully connected to local service '{}'", serviceName);
+            log.info("Successfully connected to local service '{}' via localhost configuration.", serviceName);
             return localChannel.get();
         }
-        log.info("Local service '{}' not found or connection failed. Proceeding with discovery.", serviceName);
+        log.info("Local service '{}' not found or connection failed via localhost configuration. Proceeding with discovery.", serviceName);
 
-        // 2. Discovery attempt (adapted from your robust PipeStreamGrpcForwarder logic)
-        List<ServiceInstance> instances = null;
+        List<ServiceInstance> instances = discoverServiceInstances(serviceName);
+
+        if (instances.isEmpty()) {
+            log.error("No instances found via discovery for service: '{}' after {} retries.", serviceName, discoveryMaxRetries);
+            throw new GrpcEngineException("Service not found via discovery after " + discoveryMaxRetries + " retries: " + serviceName);
+        }
+
+        // Basic strategy: Use the first discovered instance.
+        // More advanced strategies (e.g., round-robin, health checks) could be implemented here.
+        ServiceInstance instance = instances.getFirst();
+        String host = instance.getHost();
+        int port = instance.getPort();
+        log.info("Selected discovered instance for service '{}' at {}:{}", serviceName, host, port);
+
+        return buildManagedChannel(host, port, serviceName);
+    }
+
+    private List<ServiceInstance> discoverServiceInstances(String serviceName) {
+        List<ServiceInstance> instances = Collections.emptyList();
         for (int attempt = 1; attempt <= discoveryMaxRetries; attempt++) {
             log.info("Attempting discovery for service: '{}', attempt {}/{}", serviceName, attempt, discoveryMaxRetries);
             Publisher<List<ServiceInstance>> instancesPublisher = discoveryClient.getInstances(serviceName);
             try {
-                instances = Mono.from(instancesPublisher).block(discoveryAttemptTimeout);
-            } catch (IllegalStateException e) {
+                // It's generally safer to handle potential null from block() if the publisher can complete empty.
+                instances = Mono.from(instancesPublisher)
+                        .blockOptional(discoveryAttemptTimeout)
+                        .orElse(Collections.emptyList());
+            } catch (IllegalStateException e) { // Often indicates timeout or other reactive stream error
                 log.warn("Discovery attempt {} for service '{}' failed (possibly timeout or empty publisher): {}", attempt, serviceName, e.getMessage());
+            } catch (Exception e) { // Catch other potential runtime exceptions from blockOptional
+                log.warn("Unexpected error during discovery attempt {} for service '{}': {}", attempt, serviceName, e.getMessage(), e);
             }
 
-            if (instances != null && !instances.isEmpty()) {
+
+            if (!instances.isEmpty()) {
                 log.info("Successfully discovered service '{}' on attempt {}/{}. Instances found: {}", serviceName, attempt, discoveryMaxRetries, instances.size());
-                break; 
+                return instances; // Return as soon as instances are found
             }
 
             log.warn("Discovery attempt {}/{} for service '{}' failed or returned no instances.", attempt, discoveryMaxRetries, serviceName);
@@ -94,40 +122,33 @@ public class GrpcChannelManager {
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     log.warn("Interrupted during discovery retry delay for service '{}'.", serviceName);
+                    // Propagate as a GrpcEngineException or handle as appropriate for your application
                     throw new GrpcEngineException("Interrupted during discovery retry for " + serviceName, e);
                 }
             }
         }
-
-        if (instances == null || instances.isEmpty()) {
-            log.error("No instances found via discovery for service: '{}' after {} retries.", serviceName, discoveryMaxRetries);
-            throw new GrpcEngineException("Service not found via discovery after " + discoveryMaxRetries + " retries: " + serviceName);
-        }
-
-        ServiceInstance instance = instances.getFirst(); // Basic: Use first instance
-        String host = instance.getHost();
-        int port = instance.getPort();
-        log.info("Selected discovered instance for service '{}' at {}:{}", serviceName, host, port);
-
-        return buildManagedChannel(host, port, serviceName);
+        return instances; // Will be empty if all retries fail
     }
-    
+
     private Optional<ManagedChannel> tryLocalhostConnection(String serviceName) {
-        Integer localPort = localServicesPorts.get(serviceName);
+        String effectiveServiceNameKey = serviceName;
+        Integer localPort = localServicesPorts.get(effectiveServiceNameKey);
+
         if (localPort == null) {
-            // Check for a conventional name if not directly in map, e.g. if serviceName is "echo-module"
-            // and local config is "echo-module-local"
-            localPort = localServicesPorts.get(serviceName + "-local"); 
+            // Convention: try with "-local" suffix
+            effectiveServiceNameKey = serviceName + "-local";
+            localPort = localServicesPorts.get(effectiveServiceNameKey);
         }
 
         if (localPort != null) {
-            log.info("Attempting localhost connection for service '{}' on port {}", serviceName, localPort);
+            log.info("Found localhost configuration for service '{}' (using key '{}') on port {}. Attempting connection.",
+                    serviceName, effectiveServiceNameKey, localPort);
             try {
-                // Perform a quick check if the port is connectable, or just build the channel
-                // For simplicity, just building the channel. A more robust check might try a quick connect/ping.
                 return Optional.of(buildManagedChannel("localhost", localPort, serviceName + " (localhost)"));
             } catch (Exception e) {
-                log.warn("Localhost connection attempt for '{}' on port {} failed: {}", serviceName, localPort, e.getMessage());
+                // Log the exception details for better debugging
+                log.warn("Localhost connection attempt for service '{}' (key '{}', port {}) failed: {}",
+                        serviceName, effectiveServiceNameKey, localPort, e.getMessage(), e);
                 return Optional.empty();
             }
         }
@@ -138,28 +159,52 @@ public class GrpcChannelManager {
         ManagedChannelBuilder<?> builder = ManagedChannelBuilder.forAddress(host, port);
         if (usePlaintext) {
             builder.usePlaintext();
-            log.debug("Using plaintext connection for service '{}'", logContextServiceName);
+            log.debug("Using plaintext connection for service '{}' at {}:{}", logContextServiceName, host, port);
         } else {
-            log.debug("Using secure connection (TLS/SSL) for service '{}'", logContextServiceName);
+            // Add TLS/SSL configuration here if needed
+            log.debug("Using secure connection (TLS/SSL) for service '{}' at {}:{}", logContextServiceName, host, port);
         }
+        // Consider adding other default channel configurations:
+        // .loadBalancingPolicy("round_robin") // If multiple addresses resolved by discovery
+        // .intercept(...) // For common interceptors like logging, metrics, auth
+        // .keepAliveTime(1, TimeUnit.MINUTES)
+        // .keepAliveTimeout(20, TimeUnit.SECONDS)
+        // .enableRetry() // If you want gRPC built-in retries (requires service config)
+
         ManagedChannel channel = builder.build();
-        log.info("Successfully created ManagedChannel for service: '{}' at {}:{}", logContextServiceName, host, port);
+        log.info("Successfully created ManagedChannel for service: '{}' targeting {}:{}", logContextServiceName, host, port);
         return channel;
     }
 
-    @PreDestroy
-    public void shutdownAllChannels() {
+    @PreDestroy // This annotation ensures the method is called on context shutdown
+    @Override    // From AutoCloseable
+    public void close() { // Renamed for clarity and to match AutoCloseable
         log.info("Shutting down all cached gRPC channels. Number of channels: {}", channelCache.size());
-        channelCache.values().forEach(channel -> {
+        for (Map.Entry<String, ManagedChannel> entry : channelCache.entrySet()) {
+            ManagedChannel channel = entry.getValue();
+            String serviceKey = entry.getKey();
             try {
-                log.info("Shutting down channel: {}", channel);
-                channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
+                log.info("Shutting down channel for service key '{}': {}", serviceKey, channel);
+                if (!channel.isTerminated()) {
+                    channel.shutdown();
+                    if (!channel.awaitTermination(5, TimeUnit.SECONDS)) {
+                        log.warn("Channel for service key '{}' did not terminate in 5 seconds. Forcing shutdown.", serviceKey);
+                        channel.shutdownNow();
+                        if (!channel.awaitTermination(5, TimeUnit.SECONDS)) {
+                            log.error("Channel for service key '{}' failed to terminate even after force shutdown.", serviceKey);
+                        }
+                    }
+                }
             } catch (InterruptedException e) {
-                log.warn("Interrupted while shutting down channel {}. Forcing shutdown.", channel);
-                channel.shutdownNow();
+                log.warn("Interrupted while shutting down channel for service key '{}'. Forcing shutdown.", serviceKey);
+                if (!channel.isTerminated()) {
+                    channel.shutdownNow();
+                }
                 Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                log.error("Unexpected error shutting down channel for service key '{}': {}", serviceKey, e.getMessage(), e);
             }
-        });
+        }
         channelCache.clear();
         log.info("All cached gRPC channels processed for shutdown.");
     }

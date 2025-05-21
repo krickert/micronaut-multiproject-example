@@ -2,11 +2,8 @@ package com.krickert.search.pipeline.engine.grpc;
 
 import com.google.protobuf.Empty;
 import com.krickert.search.config.consul.DynamicConfigurationManager;
-// ConnectorEntryPoint will be defined as a private static record below
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineConfig;
-// PipelineStepConfig import was missing, adding it
-import com.krickert.search.config.pipeline.model.PipelineStepConfig;
 import com.krickert.search.config.pipeline.model.TransportType;
 import com.krickert.search.engine.ConnectorRequest;
 import com.krickert.search.engine.ConnectorResponse;

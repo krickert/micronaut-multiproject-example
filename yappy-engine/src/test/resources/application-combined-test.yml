@@ -1,7 +1,7 @@
 # In /yappy-engine/src/test/resources/application-combined-test.yml
 micronaut:
   application:
-    name: combined-services-test-runner
+    name: combined-services-test-runner-${random.uuid}
   server:
     port: -1 # The test runner itself usually doesn't need a server
 

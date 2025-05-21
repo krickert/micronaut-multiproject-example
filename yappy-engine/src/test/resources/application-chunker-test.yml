@@ -1,7 +1,7 @@
 # Configuration for the Chunker Service application context
 micronaut:
   application:
-    name: chunker-service # Unique application name
+    name: chunker-service-${random.uuid} # Unique application name
   server:
     port: -1 # No HTTP server needed for this test context
 

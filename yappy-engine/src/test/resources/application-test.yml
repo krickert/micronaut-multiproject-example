@@ -1,7 +1,7 @@
 # src/test/resources/application-test.yml
 micronaut:
   application:
-    name: two-grpc-services-test-app # Keep the name for context, but disable its default registration
+    name: two-grpc-services-test-app-${random.uuid} # Keep the name for context, but disable its default registration
   server:
     port: -1
   test:
@@ -27,6 +27,14 @@ consul:
         enabled: true # The test runner might need to discover services for verification
         shared-instance: true
 
+local:
+  services:
+    ports:
+      # These keys are the logical service names your engine uses
+      # e.g., the 'serviceName' in your GrpcStepConfig
+      chunker: 50051
+      echo: 50052
+      # another-service-local: 50053 # If you use the "-local" suffix convention
 
 kafka:
   enabled: true

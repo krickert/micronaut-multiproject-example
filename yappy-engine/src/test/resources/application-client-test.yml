@@ -1,7 +1,7 @@
 # Configuration for the Client application context
 micronaut:
   application:
-    name: client-test-app # Name for the client context
+    name: client-test-app-${random.uuid} # Name for the client context
 
 # Configure Consul discovery for clients
 consul:
