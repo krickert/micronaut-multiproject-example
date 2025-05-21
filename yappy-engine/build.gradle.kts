@@ -55,8 +55,10 @@ dependencies {
 
     implementation(mn.micronaut.grpc.annotation)
     implementation(mn.grpc.services)
+    implementation(mn.micronaut.protobuff.support)
     implementation(mn.micronaut.grpc.server.runtime)
     implementation(mn.micronaut.grpc.runtime)
+    implementation(mn.netty.common)
 
     implementation(project(":yappy-models:protobuf-models"))
 

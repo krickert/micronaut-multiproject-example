@@ -1,0 +1,36 @@
+# /yappy-engine/src/test/resources/application-combined-test-manual-contexts.yml
+micronaut:
+  application:
+    name: combined-services-test-runner-manual # Name for the main test application
+  server:
+    port: -1 # The test runner itself usually doesn't need a server
+  test:
+    resources:
+      enabled: true # This is important for Test Resources to manage Consul and inject its properties
+
+# Client configuration for THIS main test context (ChunkerEchoIntegrationTest)
+grpc:
+  client:
+    discovery:
+      enabled: true # Enable gRPC client-side discovery using Consul
+    channels:
+      chunker:
+        target: chunker # Client in main test discovers "chunker" via Consul
+        use-plaintext: true
+      echo:
+        target: echo     # Client in main test discovers "echo" via Consul
+        use-plaintext: true
+
+consul:
+  client:
+    # These properties are expected to be provided by the Micronaut Test Resources service
+    # when it starts the Consul container. Your main test application context will pick these up.
+    # host: ${CONSUL_HOST:localhost} # Test Resources should provide this
+    # port: ${CONSUL_PORT:8500}    # Test Resources should provide this
+    registration:
+      enabled: false # The main test runner application does not register itself as a service
+    discovery:
+      enabled: true # The main test runner application uses Consul for discovery
+        # shared-instance: true # This might be relevant depending on your Test Resources version
+        # and how it manages the Consul client bean.
+      # If you see issues with multiple ConsulClient beans, you might need this.

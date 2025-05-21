@@ -8,7 +8,7 @@ micronaut:
   test:
     resources:
       enabled: true
-      additional-applications:
+      additional-applications-this-is-fake:
         chunker-service-app: # A logical name for this service instance
           path: ../yappy-modules/chunker # Relative path to the chunker module
           # Assuming application-test-chunker-grpc-working-standalone.yml is correctly

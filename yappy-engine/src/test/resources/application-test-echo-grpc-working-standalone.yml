@@ -1,0 +1,48 @@
+micronaut:
+  application:
+    name: echo
+  server:
+    port: ${random.port}
+grpc:
+  server:
+    port: ${random.port}
+  services:
+    chunker:
+      enabled: false
+    echo:
+      enabled: true  # <<< This is the key: disable EchoService for this test environment
+  client:
+    plaintext: true
+    discovery:
+      enabled: true
+
+
+# Consul client configuration
+consul:
+  client:
+    watch:
+      enabled: true
+    registration:
+      enabled: true
+      port: ${grpc.server.port} # Micronaut resolves this to the gRPC server's port
+      check:
+        enabled: true
+        interval: 5s
+        timeout: 3s
+    discovery:
+      enabled: true
+    config:
+      enabled: true
+      format: properties
+      path: config/pipeline
+
+kafka:
+  enabled: true
+  schema:
+    registry:
+      type: apicurio
+  producers:
+    default:
+      apicurio:
+        registry:
+          url: ${apicurio.registry.url}
