@@ -24,6 +24,9 @@ dependencies {
     runtimeOnly("ch.qos.logback:logback-classic")
     runtimeOnly("org.yaml:snakeyaml")
 
+    // Add dependency on protobuf-models project
+    implementation(project(":yappy-models:protobuf-models"))
+
     // Add test dependencies for gRPC testing
     testImplementation("io.micronaut.test:micronaut-test-junit5")
     testImplementation("io.grpc:grpc-testing:1.69.1")
@@ -47,6 +50,12 @@ sourceSets {
             srcDirs("build/generated/source/proto/main/grpc")
             srcDirs("build/generated/source/proto/main/java")
         }
+        resources {
+            // Include Python stubs from protobuf-models project
+            srcDirs(project(":yappy-models:protobuf-models").buildDir.resolve("generated/sources/proto/main/python"))
+            // Include locally generated Python stubs
+            srcDirs("build/generated/source/proto/main/python")
+        }
     }
 }
 
@@ -58,12 +67,16 @@ protobuf {
         id("grpc") {
             artifact = "io.grpc:protoc-gen-grpc-java:1.69.1"
         }
+        // Add Python plugin
+        id("python")
     }
     generateProtoTasks {
         ofSourceSet("main").forEach {
             it.plugins {
                 // Apply the "grpc" plugin whose spec is defined above, without options.
                 id("grpc")
+                // Generate Python stubs
+                id("python")
             }
         }
     }
