@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ServiceAggregatedStatus",
+  "description": "Holds the comprehensive aggregated status information for a logical service.",
+  "type": "object",
+  "properties": {
+    "serviceName": {
+      "description": "The unique logical name of the service (e.g., \"echo-service\", \"chunker-service\").",
+      "type": "string",
+      "minLength": 1
+    },
+    "operationalStatus": {
+      "description": "The overall operational status of the service.",
+      "type": "string",
+      "enum": [
+        "UNKNOWN",
+        "DEFINED",
+        "INITIALIZING",
+        "AWAITING_HEALTHY_REGISTRATION",
+        "ACTIVE_HEALTHY",
+        "ACTIVE_PROXYING",
+        "DEGRADED_OPERATIONAL",
+        "CONFIGURATION_ERROR",
+        "UNAVAILABLE",
+        "UPGRADING",
+        "STOPPED"
+      ]
+    },
+    "statusDetail": {
+      "description": "A human-readable summary or reason for the current operationalStatus.",
+      "type": ["string", "null"]
+    },
+    "lastCheckedByEngineMillis": {
+      "description": "Timestamp (epoch milliseconds) when the engine last aggregated/updated this status.",
+      "type": "integer",
+      "format": "int64"
+    },
+    "totalInstancesConsul": {
+      "description": "Total number of instances registered in Consul for this logical service.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "healthyInstancesConsul": {
+      "description": "Number of instances reported as healthy by Consul for this logical service.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "isLocalInstanceActive": {
+      "description": "True if there is an active (healthy or initializing) instance of this service managed by the current engine node.",
+      "type": "boolean"
+    },
+    "activeLocalInstanceId": {
+      "description": "The instance ID of the locally active module, if isLocalInstanceActive is true.",
+      "type": ["string", "null"]
+    },
+    "isProxying": {
+      "description": "True if this engine node is currently proxying requests for this service to a remote instance.",
+      "type": "boolean"
+    },
+    "proxyTargetInstanceId": {
+      "description": "The instance ID of the remote service instance being proxied to, if isProxying is true.",
+      "type": ["string", "null"]
+    },
+    "isUsingStaleClusterConfig": {
+      "description": "True if the module or engine is operating with an outdated PipelineClusterConfig version.",
+      "type": "boolean"
+    },
+    "activeClusterConfigVersion": {
+      "description": "The version identifier (e.g., MD5 hash or timestamp) of the PipelineClusterConfig currently active.",
+      "type": ["string", "null"]
+    },
+    "reportedModuleConfigDigest": {
+      "description": "The configuration digest reported by the module instance via Consul tags, if available.",
+      "type": ["string", "null"]
+    },
+    "errorMessages": {
+      "description": "A list of recent or significant error messages related to this service's status.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "additionalAttributes": {
+      "description": "A map for any other service-specific status attributes or metrics.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    }
+  },
+  "required": [
+    "serviceName",
+    "operationalStatus",
+    "lastCheckedByEngineMillis",
+    "totalInstancesConsul",
+    "healthyInstancesConsul",
+    "isLocalInstanceActive",
+    "isProxying",
+    "isUsingStaleClusterConfig"
+  ]
+}

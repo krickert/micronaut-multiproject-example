@@ -6,105 +6,119 @@ After examining the codebase, I can see that the project has two main modules (E
 
 ## Current State
 
-1. **Module Implementations**:
-   - **Echo Module**: A simple service that echoes back the input document (`EchoService.java`) - Complete
-   - **Chunker Module**: A service that chunks text into smaller pieces (`ChunkerServiceGrpc.java`) - Complete
-
-2. **Current Integration Tests**:
-   - `ChunkerEchoIntegrationTest.java` and `RealChunkerEchoIntegrationTest.java`: ChunkerEchoIntegrationTest works, but may want to make more tests.  RealChunkerEchoINtegrationTest was redundant.
-   - `KafkaApicurioTestIT.java`: Tests Kafka with Apicurio schema registry - done
-   - `KafkaMotoTestIT.java`: Tests Kafka with AWS Glue schema registry  - done
+1. **Current Integration Tests**:
    - `EchoFullConsulGrpcKafkaIntegrationTest.java`: Tests basic connectivity with Consul, gRPC, and Kafka - not started
+2. Service lifecycle, status, registration
+
 
 ## Recommended Next Steps
 
-### 1. Create a Real Integration Test with Actual Service Implementations
+### Next Steps: Service Lifecycle, Status, and Registration
 
-#### Immediate steps
-1. **Master Multi-Context Service Startup (Focus of `ChunkerEchoIntegrationTest.java`)**:
-  * **Goal**: Reliably start the `Chunker` service (`Engine` + `ChunkerModule`) and `Echo` service (`Engine` + `EchoModule`) in separate _Micronaut ApplicationContexts_ within a single JUnit test.
-  * **Configuration**:
-    * Use `ApplicationContext.builder().environments(...).propertySources(...)`.
-    * Ensure each _service context_ gets its unique properties (like `micronaut.application.name`, `grpc.server.port=${random.port}`).
-    * Crucially, ensure both contexts are **configured to use the same, shared Consul instance** (provided by _Micronaut Test Resources_, leveraging with `mainTestEnvironment.getProperty("consul.client.host", ...))`.
-    * Similarly for _Kafka_ and _Schema Registry_ if they are involved in the specific flow being tested.
-  * **Service Registration**: Verify that after each _service context_ starts, its gRPC service (e.g., "`chunker`" or "`echo`" module processor) successfully registers with the shared `Consul`.
-  * **Service Discovery**: From the main test context (or from one service context trying to call another), verify that you can discover and obtain a _gRPC client stub_ for the services running in the other contexts. 
-    * The `TimeUnit.SECONDS.sleep(15);` is a temporary measure; aim to replace it with programmatic checks against `Consul` or retry mechanisms in client creation.
+#### 1. Define Core Status Models
 
-#### In Progress
-Create a new integration test that uses the actual Echo and Chunker services from the `yappy-modules` directory instead of mocks:
+* **`ServiceOperationalStatus.java` (Enum):**
+  * Create an enum with the primary operational states:
+     * `UNKNOWN`
+     * `DEFINED`
+     * `INITIALIZING`
+     * `AWAITING_HEALTHY_REGISTRATION`
+     * `ACTIVE_HEALTHY`
+     * `ACTIVE_PROXYING`
+     * `DEGRADED_OPERATIONAL`
+     * `CONFIGURATION_ERROR` (to cover `BAD_SCHEMA` and `BAD_CONFIG`)
+     * `UNAVAILABLE`
+     * `UPGRADING`
+     * `STOPPED`
+* **`ServiceAggregatedStatus.java` (Java Record):**
+  * Define this record to hold the comprehensive status information for a logical service.
+    * Fields should include:
+      * `serviceName: String`
+      * `operationalStatus: ServiceOperationalStatus`
+      * `statusDetail: String` (human-readable summary/reason)
+      * `lastCheckedByEngineMillis: long`
+      * `totalInstancesConsul: int`
+      * `healthyInstancesConsul: int`
+      * `isLocalInstanceActive: boolean`
+      * `activeLocalInstanceId: String` (nullable)
+      * `isProxying: boolean`
+      * `proxyTargetInstanceId: String` (nullable)
+      * `isUsingStaleClusterConfig: boolean`
+      * `activeClusterConfigVersion: String` (identifier for the `PipelineClusterConfig`)
+      * `reportedModuleConfigDigest: String` (from module's Consul tags)
+      * `errorMessages: List<String>`
+      * `additionalAttributes: Map<String, String>`
+    * This record will be serialized to JSON and stored in Consul KV.
 
-```java
-@MicronautTest(environments = {"test"}, transactional = false)
-@Property(name = "micronaut.server.port", value = "-1") // Random port
-@Property(name = "kafka.enabled", value = "true")
-@Property(name = "consul.client.enabled", value = "true")
-public class RealEchoChunkerIntegrationTest {
+#### 2. Engine Logic for Status Management
 
-    @Inject
-    private ApplicationContext applicationContext;
+* **Develop Engine Component for Status Aggregation:**
+  * This component will be responsible for:
+      * Monitoring Consul service health and registrations (using `ConsulBusinessOperationsService`).
+      * Observing the state of locally managed modules.
+      * Tracking the currently active `PipelineClusterConfig` (from `DynamicConfigurationManager`).
+      * Detecting `BAD_SCHEMA` (if schema registry reports an issue or schema is unparsable) and `BAD_CONFIG` (if a module's config fails validation against its schema).
+      * Calculating the `ServiceOperationalStatus` and populating the `ServiceAggregatedStatus` record for each logical service defined in the `PipelineClusterConfig.pipelineModuleMap`.
+* **Consul KV Updates for Status:**
+   * The engine will periodically (or event-driven on changes) update the `ServiceAggregatedStatus` JSON object in Consul KV at a path like `yappy/status/services/{logicalServiceName}` using `ConsulBusinessOperationsService.putValue()`.
 
-    @Inject
-    private EmbeddedServer echoServer;
+#### 3. Engine Logic for Service Registration & Lifecycle
 
-    @Inject
-    private EmbeddedServer chunkerServer;
+* **Implement "Bootstrap Cluster" Scenario:**
+   * On startup, if `ConsulBusinessOperationsService.getPipelineClusterConfig()` returns empty for the engine's configured cluster:
+      * Create a default/minimal `PipelineClusterConfig` in memory.
+      * Store it in Consul KV using `ConsulBusinessOperationsService.storeClusterConfiguration()`.
+* **Implement Engine-Managed Module Registration:**
+   * If the engine is responsible for starting and registering certain modules (e.g., "localhost" modules):
+      * **Pre-registration Health Check:** Before registering, the engine should directly ping the module's health endpoint.
+      * **Construct `Registration` Object:** Populate ID, name, address, port, tags (including `yappy-service-name`, `yappy-version`, `yappy-config-digest`), and health check details.
+      * **Register:** Call `ConsulBusinessOperationsService.registerService()`.
+      * **Verify:** After a short delay, use `ConsulBusinessOperationsService.getHealthyServiceInstances()` to confirm successful registration and health.
+      * **Deregister on Shutdown:** Call `ConsulBusinessOperationsService.deregisterService()` when the engine stops a managed module.
+* **Implement Proxying Logic (Basic):**
+   * If a required local module is `UNAVAILABLE` or `CONFIGURATION_ERROR`:
+      * Query Consul for healthy remote instances of the same logical service name using `ConsulBusinessOperationsService.getHealthyServiceInstances()`.
+      * If found, route traffic to a healthy remote instance.
+      * Update the service's `ServiceAggregatedStatus` in KV to `ACTIVE_PROXYING`.
 
-    @Inject
-    private KafkaProducer<String, PipeStream> kafkaProducer;
+#### 4. Health Check Integration
 
-    @Inject
-    private KafkaConsumer<String, PipeStream> kafkaConsumer;
+* **Engine Health Indicator:**
+   * Create a Micronaut `HealthIndicator` for the YAPPY Engine.
+   * Checks:
+      * Consul availability.
+      * `DynamicConfigurationManager` status (current `PipelineClusterConfig` is loaded and valid).
+      * Aggregated health of services required by *active* pipelines (reads from `yappy/status/services/*` KV).
+* **Module Health Endpoints:**
+   * Mandate that all YAPPY modules (gRPC services) expose a standard health check endpoint (HTTP or gRPC Health Checking Protocol).
+   * This health check *must* include the status of its own configuration (valid against schema). If config is bad, module reports unhealthy.
 
-    @BeforeEach
-    void setup() {
-        // Start the Echo and Chunker services
-        // Register them with Consul
-        // Create necessary Kafka topics
-    }
+#### 5. API Exposure (Initial Focus on JSON/HTTP for UI)
 
-    @Test
-    void testEndToEndFlow() {
-        // Create a test document
-        // Send it to the Echo service
-        // Verify the Echo service processes it correctly
-        // Send the result to the Chunker service
-        // Verify the Chunker service processes it correctly
-    }
+* **Create REST Controllers in the Engine:**
+   * `GET /api/status/services`: Returns `List<ServiceAggregatedStatus>`.
+   * `GET /api/status/services/{serviceName}`: Returns `ServiceAggregatedStatus`.
+   * `GET /api/status/cluster`: Returns engine's overall health and config status.
+   * `GET /api/config/cluster`: Returns the current `PipelineClusterConfig`.
+   * (Optional) Proxied Consul Endpoints:
+      * `GET /api/consul/services`
+      * `GET /api/consul/services/{serviceName}/instances`
+      * `GET /api/consul/services/{serviceName}/health`
+* These controllers will primarily read data prepared by the engine (from KV for aggregated status) or call `ConsulBusinessOperationsService` for direct Consul info.
 
-    @Test
-    void testKafkaSerialization() {
-        // Create a PipeStream object
-        // Serialize it to Kafka
-        // Consume it from Kafka
-        // Verify it matches the original
-    }
-}
-```
+#### 6. Schema for Status Object
 
-### 2. Configure Multiple Application Contexts
+* Once the `ServiceAggregatedStatus` Java record is defined, generate/document its JSON schema. This will be useful for API consumers (like the front-end).
 
-Set up the test to run multiple application contexts, each with its own service:
+#### 7. Testing
 
-```java
-@BeforeEach
-void setup() {
-    // Create Echo service context
-    Map<String, Object> echoProps = new HashMap<>();
-    echoProps.put("micronaut.application.name", "echo-service");
-    echoProps.put("grpc.server.port", findAvailablePort());
-    ApplicationContext echoContext = ApplicationContext.run(echoProps);
+* **Unit Tests for Engine Logic:** Mock `ConsulBusinessOperationsService` and `DynamicConfigurationManager` to test the engine's status calculation and registration decision logic under various scenarios.
+* **Integration Tests (MicronautTest with Testcontainers):**
+   * Test the engine's bootstrap scenario.
+   * Test the engine's module registration flow (if it has an API for it or manages local modules).
+   * Test the engine's ability to read module health from Consul and update the KV status objects.
+   * Test the new status APIs.
 
-    // Create Chunker service context
-    Map<String, Object> chunkerProps = new HashMap<>();
-    chunkerProps.put("micronaut.application.name", "chunker-service");
-    chunkerProps.put("grpc.server.port", findAvailablePort());
-    ApplicationContext chunkerContext = ApplicationContext.run(chunkerProps);
-
-    // Configure both to use the same Consul, Kafka, and schema registry
-}
-```
 ## Future Steps
 
 ### 3. Test Kafka Serialization of PipeStream Objects
@@ -237,11 +251,11 @@ Based on the project exploration, this is an outline a comprehensive plan for im
 
 ## Overview of Components to Implement
 
-1. **PipeStreamEngineImpl** - Main implementation of the PipeStreamEngine gRPC service
-2. **PipeStreamGrpcForwarder** - Already exists, handles forwarding to gRPC services
-3. **PipelineStepGrpcProcessor** - New component for processing pipeline steps via gRPC
-4. **PipeStepExecutor** - Interface and factory for executing pipeline steps
-5. **PipeStreamStateBuilder** - Builder for managing pipeline stream state
+1. **PipeStreamEngineImpl** - Main implementation of the PipeStreamEngine gRPC service (done)
+2. **PipeStreamGrpcForwarder** - Already exists, handles forwarding to gRPC services (done)
+3. **PipelineStepGrpcProcessor** - New component for processing pipeline steps via gRPC (done)
+4. **PipeStepExecutor** - Interface and factory for executing pipeline steps (done)
+5. **PipeStreamStateBuilder** - Builder for managing pipeline stream state (in progress)
 
 ## Overview of project setup
 
@@ -1691,29 +1705,29 @@ The dashboard will provide a high-level overview of the pipeline system:
 While the overall plan is comprehensive, here are a few additional points to keep in mind as you progress with integration testing:
 
 1.  **Test Configuration Management**:
-   *   For multi-context tests, you're currently using `Map<String, Object>` for properties. Consider if loading properties from dedicated test YAML files per service context (e.g., `application-test-echo.yml`, `application-test-chunker.yml`) and passing those to `ApplicationContext.builder()` would be cleaner for more complex configurations. Micronaut Test Resources should continue to provide shared infrastructure like Consul and Kafka ports.
+   * For multi-context tests, you're currently using `Map<String, Object>` for properties. Consider if loading properties from dedicated test YAML files per service context (e.g., `application-test-echo.yml`, `application-test-chunker.yml`) and passing those to `ApplicationContext.builder()` would be cleaner for more complex configurations. Micronaut Test Resources should continue to provide shared infrastructure like Consul and Kafka ports.
 
 2.  **Schema Registry in Multi-Context Tests**:
-   *   When testing Kafka flows that require schema validation (Apicurio/Glue), ensure all relevant service contexts (producer engine, consumer engine) are configured to point to the *same* schema registry instance (again, likely provided by Test Resources).
-   *   Ensure schemas are pre-registered or registered by the test setup before messages are produced.
+   * When testing Kafka flows that require schema validation (Apicurio/Glue), ensure all relevant service contexts (producer engine, consumer engine) are configured to point to the *same* schema registry instance (again, likely provided by Test Resources).
+   * Ensure schemas are pre-registered or registered by the test setup before messages are produced.
 
 3.  **Admin API for Test Setup**:
-   *   While seeding Consul directly is faster initially for testing core flows, eventually, using the Admin APIs (once developed) to set up `PipelineClusterConfig`, `PipelineConfig`, etc., in your tests will provide more realistic end-to-end validation of the control plane. This can be a later phase.
+   * While seeding Consul directly is faster initially for testing core flows, eventually, using the Admin APIs (once developed) to set up `PipelineClusterConfig`, `PipelineConfig`, etc., in your tests will provide more realistic end-to-end validation of the control plane. This can be a later phase.
 
 4.  **Idempotency and Retries**:
-   *   While "Error Handling" is listed, specifically consider testing idempotency of module processors if they might be retried by the engine (e.g., after a temporary Kafka hiccup or a failed gRPC call).
+   * While "Error Handling" is listed, specifically consider testing idempotency of module processors if they might be retried by the engine (e.g., after a temporary Kafka hiccup or a failed gRPC call).
 
 5.  **Security Considerations (Later Stage)**:
-   *   For now, `usePlainText=true` for gRPC is fine for local testing. Later, you'll want to consider mTLS between services and Kafka ACLs/authentication.
+   * For now, `usePlainText=true` for gRPC is fine for local testing. Later, you'll want to consider mTLS between services and Kafka ACLs/authentication.
 
 6.  **Clarity of "Engine" Role in Tests**:
-   *   When writing tests, be clear about which "engine" you're interacting with:
-      *   Are you calling a module's `PipeStepProcessor` gRPC endpoint directly?
-      *   Are you calling an engine's `PipeStreamEngine` gRPC endpoint (e.g., `processPipe` or `processConnectorDoc`) which then orchestrates calls to modules?
-   *   This distinction will help in designing focused tests.
+   * When writing tests, be clear about which "engine" you're interacting with:
+      * Are you calling a module's `PipeStepProcessor` gRPC endpoint directly?
+      * Are you calling an engine's `PipeStreamEngine` gRPC endpoint (e.g., `processPipe` or `processConnectorDoc`) which then orchestrates calls to modules?
+   * This distinction will help in designing focused tests.
 
 7.  **`PipeStreamStateBuilderImpl` and Immutability**:
-   *   In `PipeStreamStateBuilderImpl`, the `presentState` is a `PipeStream.Builder`. While this allows modification, ensure that when `execute()` is called on a `PipeStepExecutor`, it receives an immutable `PipeStream` (e.g., `stateBuilder.getPresentState().build()`). The executor then returns a *new* immutable `PipeStream`. The subsequent line `stateBuilder = new PipeStreamStateBuilderImpl(processedStream, configManager);` correctly re-initializes the state builder with the new immutable state, which is good.
+   * In `PipeStreamStateBuilderImpl`, the `presentState` is a `PipeStream.Builder`. While this allows modification, ensure that when `execute()` is called on a `PipeStepExecutor`, it receives an immutable `PipeStream` (e.g., `stateBuilder.getPresentState().build()`). The executor then returns a *new* immutable `PipeStream`. The subsequent line `stateBuilder = new PipeStreamStateBuilderImpl(processedStream, configManager);` correctly re-initializes the state builder with the new immutable state, which is good.
 
 8.  **`testPipeStream` Method in `PipeStreamEngineImpl`**:
-   *   You correctly note: "We do NOT forward to next steps in `testPipeStream`". Ensure tests for this method specifically check the `contextParams` for the *intended* routing information, rather than expecting actual forwarding.
+   * You correctly note: "We do NOT forward to next steps in `testPipeStream`". Ensure tests for this method specifically check the `contextParams` for the *intended* routing information, rather than expecting actual forwarding.

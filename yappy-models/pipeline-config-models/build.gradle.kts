@@ -37,6 +37,9 @@ dependencies {
     implementation(mn.jackson.databind)
 // https://mvnrepository.com/artifact/jakarta.validation/jakarta.validation-api
     implementation("jakarta.validation:jakarta.validation-api:3.1.1")
+    // https://mvnrepository.com/artifact/com.networknt/json-schema-validator
+    testImplementation("com.networknt:json-schema-validator:1.5.6")
+    runtimeOnly(mn.logback.classic)
 }
 
 // Create test source directories
