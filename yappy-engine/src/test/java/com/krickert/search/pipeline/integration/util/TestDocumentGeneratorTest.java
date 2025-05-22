@@ -8,9 +8,9 @@ import com.krickert.search.model.PipeStream;
 import com.krickert.search.sdk.ProcessRequest;
 import org.junit.jupiter.api.Test;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -25,7 +25,7 @@ public class TestDocumentGeneratorTest {
         String id = "test-doc-id";
         String title = "Test Document";
         String body = "This is a test document body";
-        Map<String, String> customData = new HashMap<>();
+        Map<String, String> customData = new TreeMap<>();
         customData.put("author", "Test Author");
         customData.put("category", "Test");
         boolean includeBlob = true;
@@ -38,13 +38,13 @@ public class TestDocumentGeneratorTest {
         assertEquals(id, document.getId());
         assertEquals(title, document.getTitle());
         assertEquals(body, document.getBody());
-        
+
         // Verify custom data
         assertTrue(document.hasCustomData());
         Struct customDataStruct = document.getCustomData();
         assertEquals("Test Author", customDataStruct.getFieldsOrThrow("author").getStringValue());
         assertEquals("Test", customDataStruct.getFieldsOrThrow("category").getStringValue());
-        
+
         // Verify blob
         assertTrue(document.hasBlob());
         Blob blob = document.getBlob();
@@ -60,7 +60,7 @@ public class TestDocumentGeneratorTest {
         String id = "test-doc-id";
         String title = "Test Document";
         String body = "This is a test document body";
-        Map<String, String> customData = new HashMap<>();
+        Map<String, String> customData = new TreeMap<>();
         customData.put("author", "Test Author");
         boolean includeBlob = false;
 
@@ -72,12 +72,12 @@ public class TestDocumentGeneratorTest {
         assertEquals(id, document.getId());
         assertEquals(title, document.getTitle());
         assertEquals(body, document.getBody());
-        
+
         // Verify custom data
         assertTrue(document.hasCustomData());
         Struct customDataStruct = document.getCustomData();
         assertEquals("Test Author", customDataStruct.getFieldsOrThrow("author").getStringValue());
-        
+
         // Verify no blob
         assertFalse(document.hasBlob());
     }
@@ -89,7 +89,7 @@ public class TestDocumentGeneratorTest {
                 "test-doc-id", "Test Document", "Test body", null, false);
         String pipelineName = "test-pipeline";
         String targetStepName = "test-step";
-        Map<String, String> contextParams = new HashMap<>();
+        Map<String, String> contextParams = new TreeMap<>();
         contextParams.put("param1", "value1");
 
         // Act
@@ -115,12 +115,12 @@ public class TestDocumentGeneratorTest {
         String stepName = "test-step";
         String streamId = "test-stream-id";
         long hopNumber = 5;
-        
+
         Struct.Builder customConfigBuilder = Struct.newBuilder();
         customConfigBuilder.putFields("configKey", Value.newBuilder().setStringValue("configValue").build());
         Struct customConfig = customConfigBuilder.build();
-        
-        Map<String, String> configParams = new HashMap<>();
+
+        Map<String, String> configParams = new TreeMap<>();
         configParams.put("param1", "value1");
 
         // Act
@@ -130,13 +130,13 @@ public class TestDocumentGeneratorTest {
         // Assert
         assertNotNull(request);
         assertEquals(document, request.getDocument());
-        
+
         // Verify metadata
         assertEquals(pipelineName, request.getMetadata().getPipelineName());
         assertEquals(stepName, request.getMetadata().getPipeStepName());
         assertEquals(streamId, request.getMetadata().getStreamId());
         assertEquals(hopNumber, request.getMetadata().getCurrentHopNumber());
-        
+
         // Verify config
         assertEquals("configValue", request.getConfig().getCustomJsonConfig().getFieldsOrThrow("configKey").getStringValue());
         assertEquals("value1", request.getConfig().getConfigParamsOrThrow("param1"));
@@ -150,12 +150,12 @@ public class TestDocumentGeneratorTest {
         // Assert
         assertNotNull(documents);
         assertFalse(documents.isEmpty());
-        
+
         // Verify some expected documents
         boolean foundIntegrationDoc = false;
         boolean foundMicroservicesDoc = false;
         boolean foundShortStoryDoc = false;
-        
+
         for (PipeDoc doc : documents) {
             if ("doc-integration".equals(doc.getId())) {
                 foundIntegrationDoc = true;
@@ -174,11 +174,11 @@ public class TestDocumentGeneratorTest {
                 assertTrue(doc.hasBlob());
             }
         }
-        
+
         assertTrue(foundIntegrationDoc, "Should contain the integration document");
         assertTrue(foundMicroservicesDoc, "Should contain the microservices document");
         assertTrue(foundShortStoryDoc, "Should contain the short story document");
-        
+
         // Verify documents from CSV are loaded
         assertTrue(documents.size() > 5, "Should contain documents loaded from CSV");
     }

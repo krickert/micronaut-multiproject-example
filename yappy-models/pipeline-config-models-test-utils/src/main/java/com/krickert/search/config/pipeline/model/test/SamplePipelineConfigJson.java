@@ -2,8 +2,8 @@ package com.krickert.search.config.pipeline.model.test;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Provides sample JSON for pipeline configuration models.
@@ -11,7 +11,7 @@ import java.util.Map;
  */
 public class SamplePipelineConfigJson {
 
-    private static final Map<String, String> JSON_CACHE = new HashMap<>();
+    private static final Map<String, String> JSON_CACHE = new TreeMap<>();
 
     /**
      * Returns a minimal valid PipelineClusterConfig JSON.

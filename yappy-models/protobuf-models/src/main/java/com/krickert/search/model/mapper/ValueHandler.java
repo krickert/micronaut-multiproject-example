@@ -632,7 +632,7 @@ public class ValueHandler {
             if (mapFieldValue != null && mapFieldValue.equals(Collections.emptyList())) return Collections.emptyMap();
             throw new MappingException("Map Field '" + mapField.getName() + "' did not return a List object for reconstruction (got " + (mapFieldValue != null ? mapFieldValue.getClass().getName() : "null") + ").");
         }
-        Map<Object, Object> resultMap = new HashMap<>();
+        Map<Object, Object> resultMap = new TreeMap<>();
         Descriptor entryDesc = mapField.getMessageType();
         FieldDescriptor keyDesc = entryDesc.findFieldByName("key"), valueDesc = entryDesc.findFieldByName("value");
         if (keyDesc == null || valueDesc == null)
@@ -648,11 +648,11 @@ public class ValueHandler {
     }
 
     private Map<Object, Object> reconstructMapForSet(Object currentMapObj, FieldDescriptor mapField) throws MappingException {
-        return new HashMap<>(convertMapFieldListToJavaMap(currentMapObj, mapField));
+        return new TreeMap<>(convertMapFieldListToJavaMap(currentMapObj, mapField));
     }
 
     private Map<Object, Object> convertAndTypeCheckJavaMap(Map<?, ?> sourceMapRaw, FieldDescriptor mapField, String ruleForError) throws MappingException {
-        Map<Object, Object> finalMap = new HashMap<>();
+        Map<Object, Object> finalMap = new TreeMap<>();
         Descriptor mapEntryDesc = mapField.getMessageType();
         FieldDescriptor keyDesc = mapEntryDesc.findFieldByName("key"), valueDesc = mapEntryDesc.findFieldByName("value");
         if (keyDesc == null || valueDesc == null)

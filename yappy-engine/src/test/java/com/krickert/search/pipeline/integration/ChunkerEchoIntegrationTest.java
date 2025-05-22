@@ -20,9 +20,9 @@ import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -40,7 +40,7 @@ public class ChunkerEchoIntegrationTest implements TestPropertyProvider {
 
     private ApplicationContext chunkerServiceContext;
     private ApplicationContext echoServiceContext;
-    private final Map<String, String> resolvedModulePorts = new HashMap<>();
+    private final Map<String, String> resolvedModulePorts = new TreeMap<>();
 
     @Inject
     GrpcChannelManager grpcChannelManager;
@@ -59,12 +59,12 @@ public class ChunkerEchoIntegrationTest implements TestPropertyProvider {
         LOG.info("================ TestPropertyProvider.getProperties() called - START ================");
         stopModuleContexts();
 
-        Map<String, String> providedProperties = Maps.newHashMap();
+        Map<String, String> providedProperties = new TreeMap<>();
 
         // --- Start Chunker Service ---
         String chunkerAppName = "chunker-module-" + UUID.randomUUID().toString().substring(0, 8);
         LOG.info("TestPropertyProvider: Starting Chunker service context (App Name: {})...", chunkerAppName);
-        Map<String, Object> chunkerServiceProps = new HashMap<>();
+        Map<String, Object> chunkerServiceProps = new TreeMap<>();
         chunkerServiceProps.put("micronaut.application.name", chunkerAppName);
         chunkerServiceProps.put("grpc.server.port", "${random.port}");
         chunkerServiceProps.put("grpc.services.chunker.enabled", true);
@@ -113,7 +113,7 @@ public class ChunkerEchoIntegrationTest implements TestPropertyProvider {
         // --- Start Echo Service ---
         String echoAppName = "echo-module-" + UUID.randomUUID().toString().substring(0, 8);
         LOG.info("TestPropertyProvider: Starting Echo service context (App Name: {})...", echoAppName);
-        Map<String, Object> echoServiceProps = new HashMap<>();
+        Map<String, Object> echoServiceProps = new TreeMap<>();
         echoServiceProps.put("micronaut.application.name", echoAppName);
         echoServiceProps.put("grpc.server.port", "${random.port}");
         echoServiceProps.put("grpc.services.chunker.enabled", false);

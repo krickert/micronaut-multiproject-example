@@ -19,9 +19,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -83,7 +83,7 @@ public class TestDocumentGenerator {
                 try {
                     String documentContent = readFileFromClasspath(SAMPLE_DOCUMENTS_BASE_PATH + filePath);
 
-                    Map<String, String> customData = new HashMap<>();
+                    Map<String, String> customData = new TreeMap<>();
                     customData.put("author", author);
                     customData.put("date", date);
                     customData.put("source", "csv");
@@ -225,7 +225,7 @@ public class TestDocumentGenerator {
         List<PipeDoc> documents = new ArrayList<>();
 
         // Document 1: About the team and integration tests
-        Map<String, String> customData1 = new HashMap<>();
+        Map<String, String> customData1 = new TreeMap<>();
         customData1.put("author", "Test Team");
         customData1.put("category", "Humor");
         documents.add(createSampleDocument(
@@ -242,7 +242,7 @@ public class TestDocumentGenerator {
         ));
 
         // Document 2: About VIM and the old days of fun memory management
-        Map<String, String> customData2 = new HashMap<>();
+        Map<String, String> customData2 = new TreeMap<>();
         customData2.put("author", "Developer");
         customData2.put("category", "VIM 4 life");
         documents.add(createSampleDocument(
@@ -260,7 +260,7 @@ public class TestDocumentGenerator {
         ));
 
         // Document 3: Technical article
-        Map<String, String> customData3 = new HashMap<>();
+        Map<String, String> customData3 = new TreeMap<>();
         customData3.put("author", "Tech Writer");
         customData3.put("category", "Technical");
         documents.add(createSampleDocument(
@@ -278,7 +278,7 @@ public class TestDocumentGenerator {
         ));
 
         // Document 4: Short story
-        Map<String, String> customData4 = new HashMap<>();
+        Map<String, String> customData4 = new TreeMap<>();
         customData4.put("author", "Creative Writer");
         customData4.put("category", "Fiction");
         documents.add(createSampleDocument(
@@ -296,7 +296,7 @@ public class TestDocumentGenerator {
         ));
 
         // Document 5: Product documentation
-        Map<String, String> customData5 = new HashMap<>();
+        Map<String, String> customData5 = new TreeMap<>();
         customData5.put("author", "Documentation Team");
         customData5.put("category", "Documentation");
         documents.add(createSampleDocument(

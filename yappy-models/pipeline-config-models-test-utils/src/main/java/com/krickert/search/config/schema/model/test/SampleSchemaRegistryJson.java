@@ -2,8 +2,8 @@ package com.krickert.search.config.schema.model.test;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Provides sample JSON for schema registry model classes.
@@ -11,7 +11,7 @@ import java.util.Map;
  */
 public class SampleSchemaRegistryJson {
 
-    private static final Map<String, String> JSON_CACHE = new HashMap<>();
+    private static final Map<String, String> JSON_CACHE = new TreeMap<>();
 
     /**
      * Returns a minimal valid SchemaRegistryArtifact JSON.

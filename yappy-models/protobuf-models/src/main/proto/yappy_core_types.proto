@@ -128,7 +128,8 @@ message StepExecutionRecord {
   string status = 6;                           // REQUIRED. Outcome of the step.
   repeated string processor_logs = 7;           // Logs specifically from the processor for this step's execution.
   optional ErrorData error_info = 8;            // Specific error from *this step* if status is "FAILURE".
-  // This is distinct from PipeStream.stream_error_data.
+  optional string attempted_target_step_name = 9; // Optional. If status is "DISPATCH_FAILURE", this is the
+
 }
 
 // --- Pipeline Execution State ---

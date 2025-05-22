@@ -8,7 +8,9 @@ import com.krickert.search.config.pipeline.model.TransportType;
 import com.krickert.search.engine.ConnectorRequest;
 import com.krickert.search.engine.ConnectorResponse;
 import com.krickert.search.engine.PipeStreamEngineGrpc;
+import com.krickert.search.model.ErrorData;
 import com.krickert.search.model.PipeStream;
+import com.krickert.search.model.StepExecutionRecord;
 import com.krickert.search.pipeline.engine.common.RouteData;
 import com.krickert.search.pipeline.engine.exception.PipelineConfigurationException;
 import com.krickert.search.pipeline.engine.kafka.KafkaForwarder;
@@ -20,13 +22,12 @@ import io.grpc.stub.StreamObserver;
 import io.micronaut.grpc.annotation.GrpcService;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Implementation of the PipeStreamEngine gRPC service.
@@ -194,59 +195,176 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
         }
     }
 
+
     private void executeStepAndForward(PipeStream incomingPipeStream) {
         String streamId = incomingPipeStream.getStreamId();
-        String targetStepName = incomingPipeStream.getTargetStepName();
-        try {
-            log.debug("Executing step and forwarding for streamId: {}, targetStep: {}", streamId, targetStepName);
-            PipeStreamStateBuilder stateBuilder = new PipeStreamStateBuilderImpl(incomingPipeStream, configManager);
+        String originalTargetStepName = incomingPipeStream.getTargetStepName();
+        PipeStream streamAfterExecution = null; // To hold the result of the current step's execution
 
+        try {
+            log.debug("Executing step: {} for streamId: {}", originalTargetStepName, streamId);
+            PipeStreamStateBuilder stateBuilder = new PipeStreamStateBuilderImpl(incomingPipeStream, configManager);
             stateBuilder.withHopNumber((int) incomingPipeStream.getCurrentHopNumber() + 1);
 
             PipeStepExecutor executor = executorFactory.getExecutor(
                     incomingPipeStream.getCurrentPipelineName(),
-                    targetStepName);
+                    originalTargetStepName);
 
-            PipeStream processedStream = executor.execute(stateBuilder.getPresentState().build());
+            streamAfterExecution = executor.execute(stateBuilder.getPresentState().build());
 
-            PipeStreamStateBuilder finalStateBuilder = new PipeStreamStateBuilderImpl(processedStream, configManager);
+            PipeStreamStateBuilder finalStateBuilder = new PipeStreamStateBuilderImpl(streamAfterExecution, configManager);
             List<RouteData> routes = finalStateBuilder.calculateNextRoutes();
-            PipeStream streamToForward = finalStateBuilder.build();
+            PipeStream streamStateForForwarding = finalStateBuilder.build(); // Final state after current step execution
 
             if (routes.isEmpty()) {
                 log.info("No further routes to forward for streamId: {} from executed step {}. Pipeline processing for this branch may be complete.",
-                        streamId, targetStepName);
+                        streamId, originalTargetStepName);
+                return;
             }
+
+            List<CompletableFuture<?>> dispatchFutures = new ArrayList<>();
 
             for (RouteData route : routes) {
-                log.debug("Routing streamId: {} from executed step {} to destination: {}, nextActualStep: {}, transport: {}",
-                        streamId, targetStepName, route.destination(), route.nextTargetStep(), route.transportType());
+                log.debug("Preparing to route streamId: {} from executed step {} to destination: {}, nextActualStep: {}, transport: {}",
+                        streamId, originalTargetStepName, route.destination(), route.nextTargetStep(), route.transportType());
 
-                PipeStream.Builder destinationPipeBuilder = streamToForward.toBuilder()
-                        .setTargetStepName(route.nextTargetStep());
+                PipeStream.Builder destinationPipeBuilder = streamStateForForwarding.toBuilder()
+                        .setTargetStepName(route.nextTargetStep()) // Target for the *next* step
+                        .setCurrentPipelineName(route.targetPipeline()); // Ensure correct pipeline for next step
+
+                PipeStream pipeToDispatch = destinationPipeBuilder.build();
 
                 if (route.transportType() == TransportType.KAFKA) {
-                    kafkaForwarder.forwardToKafka(destinationPipeBuilder.build(), route.destination());
+                    CompletableFuture<RecordMetadata> kafkaFuture = kafkaForwarder.forwardToKafka(pipeToDispatch, route.destination());
+                    dispatchFutures.add(kafkaFuture.whenComplete((metadata, ex) -> {
+                        if (ex != null) {
+                            log.error("ASYNC FAILURE: Failed to forward streamId {} to Kafka topic {} for next step {}: {}",
+                                    streamId, route.destination(), route.nextTargetStep(), ex.getMessage());
+                            handleFailedDispatch(pipeToDispatch, route, ex, "KAFKA_FORWARD_FAILURE");
+                        } else {
+                            log.info("ASYNC SUCCESS: Forwarded streamId {} to Kafka topic {} (Partition: {}, Offset: {}) for next step {}",
+                                    streamId, route.destination(), metadata.partition(), metadata.offset(), route.nextTargetStep());
+                        }
+                    }));
                 } else if (route.transportType() == TransportType.GRPC) {
-                    PipeStreamGrpcForwarder.RouteData grpcRoute = PipeStreamGrpcForwarder.RouteData.builder()
+                    PipeStreamGrpcForwarder.RouteData grpcRouteData = PipeStreamGrpcForwarder.RouteData.builder()
                             .targetPipeline(route.targetPipeline())
                             .nextTargetStep(route.nextTargetStep())
-                            .destination(route.destination())
-                            .streamId(streamToForward.getStreamId())
+                            .destination(route.destination()) // gRPC service name
+                            .streamId(streamId)
                             .build();
-                    grpcForwarder.forwardToGrpc(destinationPipeBuilder, grpcRoute);
+                    // Pass the already built pipeToDispatch to the gRPC forwarder
+                    CompletableFuture<Void> grpcFuture = grpcForwarder.forwardToGrpc(pipeToDispatch.toBuilder(), grpcRouteData); // Pass builder if forwarder modifies it, or built PipeStream
+                    dispatchFutures.add(grpcFuture.whenComplete((v, ex) -> {
+                        if (ex != null) {
+                            log.error("ASYNC FAILURE: Failed to forward streamId {} via gRPC to service {} for next step {}: {}",
+                                    streamId, route.destination(), route.nextTargetStep(), ex.getMessage());
+                            handleFailedDispatch(pipeToDispatch, route, ex, "GRPC_FORWARD_FAILURE");
+                        } else {
+                            log.info("ASYNC SUCCESS: Forwarded streamId {} via gRPC to service {} for next step {}",
+                                    streamId, route.destination(), route.nextTargetStep());
+                        }
+                    }));
                 } else {
                     log.warn("Unsupported transport type {} for route from step {} in streamId: {}. Skipping.",
-                            route.transportType(), targetStepName, streamId);
+                            route.transportType(), originalTargetStepName, streamId);
                 }
             }
-            log.info("Successfully processed step {} and forwarded (if routes existed) for streamId: {}",
-                    targetStepName, streamId);
-        } catch (Exception e) {
-            log.error("Critical error during asynchronous execution of step {} or forwarding for streamId {}: {}. This occurred after initial gRPC response.",
-                    targetStepName, streamId, e.getMessage(), e);
-            // TODO: Implement dead-lettering or more robust error signaling for asynchronous failures.
+
+            CompletableFuture.allOf(dispatchFutures.toArray(new CompletableFuture[0]))
+                    .whenComplete((v, ex) -> {
+                        if (ex != null) {
+                            log.warn("At least one asynchronous dispatch operation failed for streamId {} from step {}. Individual errors logged above.", streamId, originalTargetStepName);
+                        } else {
+                            log.info("All asynchronous dispatch operations initiated for streamId {} from step {} (individual success/failure logged per route).", streamId, originalTargetStepName);
+                        }
+                    });
+            log.info("Successfully processed step {} and initiated forwarding for {} route(s) for streamId: {}",
+                    originalTargetStepName, routes.size(), streamId);
+
+        } catch (Exception e) { // Catches synchronous errors from executor.execute() or route calculation
+            log.error("SYNC FAILURE: Critical error during execution of step {} or route calculation for streamId {}: {}. This occurred after initial gRPC response.",
+                    originalTargetStepName, streamId, e.getMessage(), e);
+            PipeStream streamForErrorHandling = (streamAfterExecution != null) ? streamAfterExecution : incomingPipeStream;
+            handleFailedStepExecutionOrRouting(streamForErrorHandling, originalTargetStepName, e, "STEP_EXECUTION_OR_ROUTING_FAILURE");
         }
+    }
+
+    // New private helper method in PipeStreamEngineImpl
+    private void handleFailedDispatch(PipeStream dispatchedStream, RouteData failedRoute, Throwable dispatchException, String errorCode) {
+        String streamId = dispatchedStream.getStreamId();
+        log.error("Handling failed dispatch for streamId: {}. Route Destination: {}, Next Step: {}, ErrorCode: {}, Exception: {}",
+                streamId, failedRoute.destination(), failedRoute.nextTargetStep(), errorCode, dispatchException.getMessage());
+
+        PipeStream.Builder errorPipeBuilder = dispatchedStream.toBuilder();
+
+        com.google.protobuf.Timestamp errorTimestamp = com.google.protobuf.util.Timestamps.fromMillis(System.currentTimeMillis());
+
+        ErrorData.Builder errorDataBuilder = ErrorData.newBuilder()
+                .setErrorMessage("Failed to dispatch to " + failedRoute.destination() + " for step " + failedRoute.nextTargetStep() + ": " + dispatchException.getMessage())
+                .setErrorCode(errorCode)
+                .setOriginatingStepName(dispatchedStream.getTargetStepName()) // The step that *produced* the routes
+                .setAttemptedTargetStepName(failedRoute.nextTargetStep())    // The step we *tried* to dispatch to
+                .setTechnicalDetails(dispatchException.toString())
+                .setTimestamp(errorTimestamp);
+
+        // Add a specific history record for this dispatch failure
+        StepExecutionRecord.Builder historyBuilder = StepExecutionRecord.newBuilder()
+                .setHopNumber(dispatchedStream.getCurrentHopNumber()) // Hop of the step that produced this route
+                .setStepName(dispatchedStream.getTargetStepName())    // Step that produced this route
+                .setAttemptedTargetStepName(failedRoute.nextTargetStep()) // The step we tried to dispatch to
+                .setStatus("DISPATCH_FAILURE")
+                .setStartTime(errorTimestamp) // Approximate time of failure detection
+                .setEndTime(errorTimestamp)
+                .setErrorInfo(errorDataBuilder.build());
+
+        errorPipeBuilder.addHistory(historyBuilder.build());
+        // Consider if the main stream_error_data should be set.
+        // If any dispatch fails, perhaps the stream for that *branch* is considered failed.
+        // errorPipeBuilder.setStreamErrorData(errorDataBuilder.build()); // This might be too global.
+
+        PipeStream streamForDlq = errorPipeBuilder.build();
+        String errorRoutingTopic = "pipeline.errors." + dispatchedStream.getCurrentPipelineName(); // Example error topic
+        log.warn("Routing streamId {} (after dispatch failure to {}) to error topic {}", streamId, failedRoute.destination(), errorRoutingTopic);
+        kafkaForwarder.forwardToErrorTopic(streamForDlq, errorRoutingTopic); // Assuming originalTopic is for context
+    }
+
+    // New private helper method in PipeStreamEngineImpl
+    private void handleFailedStepExecutionOrRouting(PipeStream streamStateAtFailure, String failedStepName, Throwable executionException, String errorCode) {
+        String streamId = streamStateAtFailure.getStreamId();
+        log.error("Handling failed step execution or routing calculation for streamId: {}. Failed Step: {}, ErrorCode: {}, Exception: {}",
+                streamId, failedStepName, errorCode, executionException.getMessage());
+
+        PipeStream.Builder errorPipeBuilder = streamStateAtFailure.toBuilder();
+        com.google.protobuf.Timestamp errorTimestamp = com.google.protobuf.util.Timestamps.fromMillis(System.currentTimeMillis());
+
+        ErrorData.Builder errorDataBuilder = ErrorData.newBuilder()
+                .setErrorMessage("Step execution or routing calculation failed for " + failedStepName + ": " + executionException.getMessage())
+                .setErrorCode(errorCode)
+                .setOriginatingStepName(failedStepName)
+                .setTechnicalDetails(executionException.toString())
+                .setTimestamp(errorTimestamp);
+
+        // Mark the entire stream as failed
+        errorPipeBuilder.setStreamErrorData(errorDataBuilder.build());
+        errorPipeBuilder.clearTargetStepName(); // Stop further processing for this path
+
+        // Update the last history record or add a new one.
+        // If executor.execute() added its own failure record, this might be supplemental.
+        // For simplicity, we add a new orchestrator-level failure record.
+        StepExecutionRecord.Builder historyBuilder = StepExecutionRecord.newBuilder()
+                .setHopNumber(streamStateAtFailure.getCurrentHopNumber())
+                .setStepName(failedStepName)
+                .setStatus("ORCHESTRATION_ERROR_HALT")
+                .setStartTime(errorTimestamp) // Approximate time
+                .setEndTime(errorTimestamp)
+                .setErrorInfo(errorDataBuilder.build());
+        errorPipeBuilder.addHistory(historyBuilder.build());
+
+        PipeStream streamForDlq = errorPipeBuilder.build();
+        String errorRoutingTopic = "pipeline.errors." + streamStateAtFailure.getCurrentPipelineName();
+        log.warn("Routing streamId {} to error topic {} due to synchronous step/routing failure.", streamId, errorRoutingTopic);
+        kafkaForwarder.forwardToErrorTopic(streamForDlq, errorRoutingTopic);
     }
 
     /**
