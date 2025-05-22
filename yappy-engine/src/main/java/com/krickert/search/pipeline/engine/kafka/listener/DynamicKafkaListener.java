@@ -20,6 +20,19 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * A dynamic Kafka consumer that can be created, paused, resumed, and shut down at runtime.
+ * <br/>
+ * This class is responsible for:
+ * 1. Creating and managing a Kafka consumer
+ * 2. Polling for messages from a Kafka topic
+ * 3. Processing messages by forwarding them to the PipeStreamEngine
+ * 4. Supporting pause and resume operations
+ * 5. Providing clean shutdown
+ * <br/>
+ * The DynamicKafkaListener runs in its own thread and can be paused and resumed
+ * without stopping the thread.
+ */
 @SuppressWarnings("LombokGetterMayBeUsed")
 public class DynamicKafkaListener {
     private static final Logger log = LoggerFactory.getLogger(DynamicKafkaListener.class);
@@ -35,6 +48,8 @@ public class DynamicKafkaListener {
     private KafkaConsumer<UUID, PipeStream> consumer;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicBoolean paused = new AtomicBoolean(false);
+    private final AtomicBoolean pauseRequested = new AtomicBoolean(false);
+    private final AtomicBoolean resumeRequested = new AtomicBoolean(false);
     private ExecutorService executorService;
 
     public DynamicKafkaListener(
@@ -112,10 +127,51 @@ public class DynamicKafkaListener {
     private void pollLoop() {
         try {
             while (running.get()) {
+                // Check if pause was requested
+                if (pauseRequested.compareAndSet(true, false)) {
+                    try {
+                        Set<TopicPartition> partitions = consumer.assignment();
+                        if (!partitions.isEmpty()) {
+                            consumer.pause(partitions);
+                            // Set the paused flag to true after actually pausing the consumer
+                            paused.set(true);
+                            log.info("Paused Kafka listener: {}", listenerId);
+                        } else {
+                            log.warn("Kafka listener {} has no assigned partitions to pause.", listenerId);
+                        }
+                    } catch (IllegalStateException e) {
+                        log.warn("Kafka listener {} could not be paused, possibly not subscribed or consumer closed: {}", listenerId, e.getMessage());
+                    }
+                }
+
+                // Check if resume was requested
+                if (resumeRequested.compareAndSet(true, false)) {
+                    try {
+                        Set<TopicPartition> partitions = consumer.assignment();
+                        if (!partitions.isEmpty()) {
+                            consumer.resume(partitions);
+                            // Set the paused flag to false after actually resuming the consumer
+                            paused.set(false);
+                            log.info("Resumed Kafka listener: {}", listenerId);
+                        } else {
+                            log.warn("Kafka listener {} has no assigned partitions to resume.", listenerId);
+                        }
+                    } catch (IllegalStateException e) {
+                        log.warn("Kafka listener {} could not be resumed, possibly not subscribed or consumer closed: {}", listenerId, e.getMessage());
+                    }
+                }
+
                 if (!paused.get()) {
+                    log.debug("Listener {} is not paused, polling for records", listenerId);
                     ConsumerRecords<UUID, PipeStream> records = consumer.poll(Duration.ofMillis(100));
+                    int recordCount = records.count();
+                    if (recordCount > 0) {
+                        log.debug("Listener {} received {} records", listenerId, recordCount);
+                    }
                     for (ConsumerRecord<UUID, PipeStream> record : records) {
                         try {
+                            log.debug("Listener {} processing record with streamId: {}", listenerId, 
+                                    record.value() != null ? record.value().getStreamId() : "null");
                             processRecord(record);
                         } catch (Exception e) {
                             log.error("Error processing record from topic {}, partition {}, offset {}: {}",
@@ -124,6 +180,7 @@ public class DynamicKafkaListener {
                         }
                     }
                 } else {
+                    log.debug("Listener {} is paused, not polling for records", listenerId);
                     Thread.sleep(100);
                 }
             }
@@ -145,6 +202,15 @@ public class DynamicKafkaListener {
         }
     }
 
+    /**
+     * Processes a single Kafka record by forwarding it to the PipeStreamEngine.
+     * <br/>
+     * This method acknowledges the message right after deserialization,
+     * and then processes it asynchronously to ensure exactly-once processing
+     * in a fan-in/fan-out system.
+     *
+     * @param record The Kafka record to process
+     */
     private void processRecord(ConsumerRecord<UUID, PipeStream> record) {
         PipeStream pipeStream = record.value();
         if (pipeStream == null) {
@@ -166,42 +232,36 @@ public class DynamicKafkaListener {
         log.debug("Listener {}: Forwarded record to PipeStreamEngine. StreamId: {}", listenerId, updatedPipeStream.getStreamId());
     }
 
+    /**
+     * Pauses the consumer.
+     * This method pauses the consumer without stopping the polling thread.
+     */
     public void pause() {
-        if (paused.compareAndSet(false, true)) {
-            if (consumer != null) {
-                try {
-                    Set<TopicPartition> partitions = consumer.assignment();
-                    if (!partitions.isEmpty()) {
-                        consumer.pause(partitions);
-                        log.info("Paused Kafka listener: {}", listenerId);
-                    } else {
-                        log.warn("Kafka listener {} has no assigned partitions to pause.", listenerId);
-                    }
-                } catch (IllegalStateException e) {
-                    log.warn("Kafka listener {} could not be paused, possibly not subscribed or consumer closed: {}", listenerId, e.getMessage());
-                }
-            }
+        // Only set the pauseRequested flag to true to signal the consumer thread
+        // The paused flag will be set by the consumer thread after actually pausing
+        if (!paused.get()) {
+            pauseRequested.set(true);
+            log.info("Pause requested for Kafka listener: {}", listenerId);
         }
     }
 
+    /**
+     * Resumes the consumer.
+     * This method resumes a paused consumer.
+     */
     public void resume() {
-        if (paused.compareAndSet(true, false)) {
-            if (consumer != null) {
-                try {
-                    Set<TopicPartition> partitions = consumer.assignment();
-                    if (!partitions.isEmpty()) {
-                        consumer.resume(partitions);
-                        log.info("Resumed Kafka listener: {}", listenerId);
-                    } else {
-                        log.warn("Kafka listener {} has no assigned partitions to resume.", listenerId);
-                    }
-                } catch (IllegalStateException e) {
-                    log.warn("Kafka listener {} could not be resumed, possibly not subscribed or consumer closed: {}", listenerId, e.getMessage());
-                }
-            }
+        // Only set the resumeRequested flag to true to signal the consumer thread
+        // The paused flag will be set by the consumer thread after actually resuming
+        if (paused.get()) {
+            resumeRequested.set(true);
+            log.info("Resume requested for Kafka listener: {}", listenerId);
         }
     }
 
+    /**
+     * Shuts down the consumer.
+     * This method stops the polling thread and closes the consumer.
+     */
     public void shutdown() {
         if (running.compareAndSet(true, false)) { // Ensure shutdown logic runs only once
             log.info("Shutting down Kafka listener: {}", listenerId);
@@ -222,26 +282,56 @@ public class DynamicKafkaListener {
         }
     }
 
+    /**
+     * Checks if the consumer is paused.
+     *
+     * @return true if the consumer is paused, false otherwise
+     */
     public boolean isPaused() {
         return paused.get();
     }
 
+    /**
+     * Gets the ID of the listener.
+     *
+     * @return The listener ID
+     */
     public String getListenerId() {
         return listenerId;
     }
 
+    /**
+     * Gets the topic the consumer is subscribed to.
+     *
+     * @return The topic
+     */
     public String getTopic() {
         return topic;
     }
 
+    /**
+     * Gets the consumer group ID.
+     *
+     * @return The group ID
+     */
     public String getGroupId() {
         return groupId;
     }
 
+    /**
+     * Gets the name of the pipeline.
+     *
+     * @return The pipeline name
+     */
     public String getPipelineName() {
         return pipelineName;
     }
 
+    /**
+     * Gets the name of the step.
+     *
+     * @return The step name
+     */
     public String getStepName() {
         return stepName;
     }

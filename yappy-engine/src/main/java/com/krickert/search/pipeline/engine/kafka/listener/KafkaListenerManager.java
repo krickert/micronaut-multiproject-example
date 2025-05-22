@@ -25,6 +25,19 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Manages Kafka listeners for pipeline steps.
+ *
+ * This class is responsible for:
+ * 1. Creating and managing Kafka listeners based on pipeline configuration
+ * 2. Pausing and resuming Kafka consumers
+ * 3. Resetting consumer offsets (including by date)
+ * 4. Providing status information about Kafka consumers
+ *
+ * The KafkaListenerManager works with the DynamicConfigurationManager to create
+ * listeners based on pipeline configuration, and with the KafkaAdminService to
+ * manage consumer offsets.
+ */
 @Singleton
 @Requires(property = "kafka.enabled", value = "true")
 public class KafkaListenerManager {
@@ -38,6 +51,10 @@ public class KafkaListenerManager {
     private final ApplicationContext applicationContext;
     private final String configuredSchemaRegistryType;
 
+    /**
+     * Map to track which listeners have been created for which pipeline steps.
+     * Key: pipelineName:stepName, Value: listenerId
+     */
     private final Map<String, String> pipelineStepToListenerMap = new ConcurrentHashMap<>();
 
     @Inject
@@ -59,6 +76,12 @@ public class KafkaListenerManager {
         log.info("KafkaListenerManager initialized with schema registry type: '{}'", this.configuredSchemaRegistryType);
     }
 
+    /**
+     * Creates Kafka listeners for a pipeline based on configuration.
+     *
+     * @param pipelineName The name of the pipeline
+     * @return A list of created listener IDs
+     */
     public List<String> createListenersForPipeline(String pipelineName) {
         // ... (no changes from your existing correct version)
         log.info("Creating Kafka listeners for pipeline: {}", pipelineName);
@@ -106,7 +129,16 @@ public class KafkaListenerManager {
         return createdListeners;
     }
 
-
+    /**
+     * Creates a single Kafka listener.
+     *
+     * @param pipelineName The name of the pipeline
+     * @param stepName The name of the step
+     * @param topic The Kafka topic to listen to
+     * @param groupId The consumer group ID
+     * @param consumerConfigFromStep Additional consumer configuration properties
+     * @return The created listener, or null if creation failed
+     */
     public DynamicKafkaListener createListener(
             String pipelineName,
             String stepName,
@@ -275,6 +307,13 @@ public class KafkaListenerManager {
         return result;
     }
 
+    /**
+     * Resumes a paused consumer for a specific pipeline step.
+     *
+     * @param pipelineName The name of the pipeline
+     * @param stepName The name of the step
+     * @return A CompletableFuture that completes when the consumer is resumed
+     */
     public CompletableFuture<Void> resumeConsumer(String pipelineName, String stepName) {
         String pipelineStepKey = generatePipelineStepKey(pipelineName, stepName);
         String listenerId = pipelineStepToListenerMap.get(pipelineStepKey);
@@ -308,6 +347,14 @@ public class KafkaListenerManager {
         return result;
     }
 
+    /**
+     * Resets consumer offset to a specific date.
+     *
+     * @param pipelineName The name of the pipeline
+     * @param stepName The name of the step
+     * @param date The date to reset to
+     * @return A CompletableFuture that completes when the offset is reset
+     */
     public CompletableFuture<Void> resetOffsetToDate(String pipelineName, String stepName, Instant date) {
         String pipelineStepKey = generatePipelineStepKey(pipelineName, stepName);
         String listenerId = pipelineStepToListenerMap.get(pipelineStepKey);
@@ -336,6 +383,13 @@ public class KafkaListenerManager {
         ).thenCompose(v -> resumeConsumer(pipelineName, stepName));
     }
 
+    /**
+     * Resets consumer offset to earliest.
+     *
+     * @param pipelineName The name of the pipeline
+     * @param stepName The name of the step
+     * @return A CompletableFuture that completes when the offset is reset
+     */
     public CompletableFuture<Void> resetOffsetToEarliest(String pipelineName, String stepName) {
         String pipelineStepKey = generatePipelineStepKey(pipelineName, stepName);
         String listenerId = pipelineStepToListenerMap.get(pipelineStepKey);
@@ -353,6 +407,13 @@ public class KafkaListenerManager {
                 .thenCompose(v -> resumeConsumer(pipelineName, stepName));
     }
 
+    /**
+     * Resets consumer offset to latest.
+     *
+     * @param pipelineName The name of the pipeline
+     * @param stepName The name of the step
+     * @return A CompletableFuture that completes when the offset is reset
+     */
     public CompletableFuture<Void> resetOffsetToLatest(String pipelineName, String stepName) {
         String pipelineStepKey = generatePipelineStepKey(pipelineName, stepName);
         String listenerId = pipelineStepToListenerMap.get(pipelineStepKey);
@@ -370,6 +431,11 @@ public class KafkaListenerManager {
                 .thenCompose(v -> resumeConsumer(pipelineName, stepName));
     }
 
+    /**
+     * Gets the status of all consumers.
+     *
+     * @return A map of listener IDs to consumer statuses
+     */
     public Map<String, ConsumerStatus> getConsumerStatuses() {
         Map<String, ConsumerStatus> statuses = new HashMap<>();
         for (DynamicKafkaListener listener : listenerPool.getAllListeners()) {
@@ -388,6 +454,13 @@ public class KafkaListenerManager {
         return statuses;
     }
 
+    /**
+     * Removes a listener for a specific pipeline step.
+     *
+     * @param pipelineName The name of the pipeline
+     * @param stepName The name of the step
+     * @return true if the listener was removed, false otherwise
+     */
     public boolean removeListener(String pipelineName, String stepName) {
         String pipelineStepKey = generatePipelineStepKey(pipelineName, stepName);
         String listenerId = pipelineStepToListenerMap.remove(pipelineStepKey);
@@ -402,10 +475,24 @@ public class KafkaListenerManager {
         return false;
     }
 
+    /**
+     * Generates a unique listener ID for a pipeline step.
+     *
+     * @param pipelineName The name of the pipeline
+     * @param stepName The name of the step
+     * @return The generated listener ID
+     */
     private String generateListenerId(String pipelineName, String stepName) {
         return "kafka-listener-" + pipelineName + "-" + stepName + "-" + UUID.randomUUID().toString().substring(0, 8);
     }
 
+    /**
+     * Generates a key for the pipeline step map.
+     *
+     * @param pipelineName The name of the pipeline
+     * @param stepName The name of the step
+     * @return The generated key
+     */
     private String generatePipelineStepKey(String pipelineName, String stepName) {
         return pipelineName + ":" + stepName;
     }

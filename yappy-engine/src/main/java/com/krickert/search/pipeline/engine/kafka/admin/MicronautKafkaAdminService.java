@@ -112,36 +112,46 @@ public class MicronautKafkaAdminService implements KafkaAdminService {
 
     @Override
     public CompletableFuture<Void> recreateTopicAsync(TopicOpts topicOpts, String topicName) {
-        CompletableFuture<Void> future = new CompletableFuture<>();
-
-        // Step 1: Delete the topic if it exists
-        deleteTopicIfExistsAsync(topicName).whenComplete((deleteResult, deleteError) -> {
-            if (deleteError != null) {
-                future.completeExceptionally(deleteError);
-                return;
-            }
-
-            // Step 2: Poll until the topic is deleted
-            pollUntilTopicDeleted(topicName, config.getRecreatePollTimeout(), config.getRecreatePollInterval())
-                .whenComplete((pollResult, pollError) -> {
-                    if (pollError != null) {
-                        // If polling fails (e.g., timeout), complete the future exceptionally with that error
-                        future.completeExceptionally(pollError);
-                        return;
+        // Simplified approach: First check if topic exists, then delete it if it does, then create a new one
+        return doesTopicExistAsync(topicName)
+            .thenCompose(exists -> {
+                if (exists) {
+                    // If topic exists, delete it first
+                    return deleteTopicAsync(topicName)
+                        .thenCompose(v -> {
+                            // Wait a bit to ensure the topic is fully deleted
+                            CompletableFuture<Void> delayFuture = new CompletableFuture<>();
+                            taskScheduler.schedule(Duration.ofSeconds(2), () -> delayFuture.complete(null));
+                            return delayFuture;
+                        })
+                        .thenCompose(v -> createTopicAsync(topicOpts, topicName))
+                        .exceptionally(ex -> {
+                            // If deletion fails with TopicNotFoundException, it's already gone, so just create
+                            if (ex instanceof TopicNotFoundException) {
+                                try {
+                                    return createTopicAsync(topicOpts, topicName).join();
+                                } catch (Exception e) {
+                                    throw new CompletionException(e);
+                                }
+                            }
+                            throw new CompletionException(ex);
+                        });
+                } else {
+                    // If topic doesn't exist, just create it
+                    return createTopicAsync(topicOpts, topicName);
+                }
+            })
+            .exceptionally(ex -> {
+                // If checking existence fails, try to create anyway
+                if (ex instanceof KafkaAdminServiceException) {
+                    try {
+                        return createTopicAsync(topicOpts, topicName).join();
+                    } catch (Exception e) {
+                        throw new CompletionException(e);
                     }
-
-                    // Step 3: Only if polling succeeds (topic is deleted), create the new topic
-                    createTopicAsync(topicOpts, topicName).whenComplete((createResult, createError) -> {
-                        if (createError != null) {
-                            future.completeExceptionally(createError);
-                        } else {
-                            future.complete(null);
-                        }
-                    });
-                });
-        });
-
-        return future;
+                }
+                throw new CompletionException(ex);
+            });
     }
 
     private CompletableFuture<Void> deleteTopicIfExistsAsync(String topicName) {
@@ -456,19 +466,25 @@ public class MicronautKafkaAdminService implements KafkaAdminService {
     @Override
     public CompletableFuture<ConsumerGroupDescription> describeConsumerGroupAsync(String groupId) {
         // To be implemented in Step 2
-        return CompletableFuture.failedFuture(new UnsupportedOperationException("describeConsumerGroupAsync not implemented yet."));
+        CompletableFuture<ConsumerGroupDescription> future = new CompletableFuture<>();
+        future.completeExceptionally(new CompletionException(new UnsupportedOperationException("describeConsumerGroupAsync not implemented yet.")));
+        return future;
     }
 
     @Override
     public CompletableFuture<Set<String>> listConsumerGroupsAsync() {
         // To be implemented in Step 2
-        return CompletableFuture.failedFuture(new UnsupportedOperationException("listConsumerGroupsAsync not implemented yet."));
+        CompletableFuture<Set<String>> future = new CompletableFuture<>();
+        future.completeExceptionally(new CompletionException(new UnsupportedOperationException("listConsumerGroupsAsync not implemented yet.")));
+        return future;
     }
 
     @Override
     public CompletableFuture<Void> deleteConsumerGroupAsync(String groupId) {
         // To be implemented in Step 2
-        return CompletableFuture.failedFuture(new UnsupportedOperationException("deleteConsumerGroupAsync not implemented yet."));
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        future.completeExceptionally(new CompletionException(new UnsupportedOperationException("deleteConsumerGroupAsync not implemented yet.")));
+        return future;
     }
 
     // --- Status & Lag Monitoring (Asynchronous - Stubs for now for Step 1 focus) ---
