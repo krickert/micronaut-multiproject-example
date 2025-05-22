@@ -4,6 +4,7 @@ import com.google.protobuf.Empty;
 import com.krickert.search.config.consul.DynamicConfigurationManager;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineConfig;
+import com.krickert.search.config.pipeline.model.PipelineStepConfig;
 import com.krickert.search.config.pipeline.model.TransportType;
 import com.krickert.search.engine.ConnectorRequest;
 import com.krickert.search.engine.ConnectorResponse;
@@ -18,6 +19,7 @@ import com.krickert.search.pipeline.engine.state.PipeStreamStateBuilder;
 import com.krickert.search.pipeline.engine.state.PipeStreamStateBuilderImpl;
 import com.krickert.search.pipeline.step.PipeStepExecutor;
 import com.krickert.search.pipeline.step.PipeStepExecutorFactory;
+import com.krickert.search.pipeline.step.exception.PipeStepExecutionException;
 import io.grpc.stub.StreamObserver;
 import io.micronaut.grpc.annotation.GrpcService;
 import jakarta.inject.Inject;
@@ -28,6 +30,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Implementation of the PipeStreamEngine gRPC service.
@@ -53,7 +56,8 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
      * Private static record to hold the pipeline name and step name for a connector's entry point.
      * This is used internally by PipeStreamEngineImpl and is not part of the serialized config.
      */
-    private record ConnectorEntryPoint(String pipelineName, String stepName) {}
+    private record ConnectorEntryPoint(String pipelineName, String stepName) {
+    }
 
 
     @Inject
@@ -71,8 +75,8 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
      * Tests the pipe stream execution by processing a given request, applying transformations,
      * and calculating routes, then returning the processed data to the response observer.
      *
-     * @param request the incoming PipeStream message containing information required to process
-     *                the current pipeline and target step
+     * @param request          the incoming PipeStream message containing information required to process
+     *                         the current pipeline and target step
      * @param responseObserver the observer to send processed PipeStream data or errors back
      */
     @Override
@@ -136,8 +140,8 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
      * constructing a structured PipeStream, and initiating a pipeline ingestion process.
      * Responds with either success or error details.
      *
-     * @param request the {@link ConnectorRequest} containing the document, source identifier,
-     *                suggested stream ID, and initial context parameters
+     * @param request          the {@link ConnectorRequest} containing the document, source identifier,
+     *                         suggested stream ID, and initial context parameters
      * @param responseObserver the {@link StreamObserver} for sending back a {@link ConnectorResponse}
      *                         indicating the processing outcome and stream details
      */
@@ -192,101 +196,6 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
             }
             responseObserver.onNext(errorResponseBuilder.build());
             responseObserver.onCompleted();
-        }
-    }
-
-
-    private void executeStepAndForward(PipeStream incomingPipeStream) {
-        String streamId = incomingPipeStream.getStreamId();
-        String originalTargetStepName = incomingPipeStream.getTargetStepName();
-        PipeStream streamAfterExecution = null; // To hold the result of the current step's execution
-
-        try {
-            log.debug("Executing step: {} for streamId: {}", originalTargetStepName, streamId);
-            PipeStreamStateBuilder stateBuilder = new PipeStreamStateBuilderImpl(incomingPipeStream, configManager);
-            stateBuilder.withHopNumber((int) incomingPipeStream.getCurrentHopNumber() + 1);
-
-            PipeStepExecutor executor = executorFactory.getExecutor(
-                    incomingPipeStream.getCurrentPipelineName(),
-                    originalTargetStepName);
-
-            streamAfterExecution = executor.execute(stateBuilder.getPresentState().build());
-
-            PipeStreamStateBuilder finalStateBuilder = new PipeStreamStateBuilderImpl(streamAfterExecution, configManager);
-            List<RouteData> routes = finalStateBuilder.calculateNextRoutes();
-            PipeStream streamStateForForwarding = finalStateBuilder.build(); // Final state after current step execution
-
-            if (routes.isEmpty()) {
-                log.info("No further routes to forward for streamId: {} from executed step {}. Pipeline processing for this branch may be complete.",
-                        streamId, originalTargetStepName);
-                return;
-            }
-
-            List<CompletableFuture<?>> dispatchFutures = new ArrayList<>();
-
-            for (RouteData route : routes) {
-                log.debug("Preparing to route streamId: {} from executed step {} to destination: {}, nextActualStep: {}, transport: {}",
-                        streamId, originalTargetStepName, route.destination(), route.nextTargetStep(), route.transportType());
-
-                PipeStream.Builder destinationPipeBuilder = streamStateForForwarding.toBuilder()
-                        .setTargetStepName(route.nextTargetStep()) // Target for the *next* step
-                        .setCurrentPipelineName(route.targetPipeline()); // Ensure correct pipeline for next step
-
-                PipeStream pipeToDispatch = destinationPipeBuilder.build();
-
-                if (route.transportType() == TransportType.KAFKA) {
-                    CompletableFuture<RecordMetadata> kafkaFuture = kafkaForwarder.forwardToKafka(pipeToDispatch, route.destination());
-                    dispatchFutures.add(kafkaFuture.whenComplete((metadata, ex) -> {
-                        if (ex != null) {
-                            log.error("ASYNC FAILURE: Failed to forward streamId {} to Kafka topic {} for next step {}: {}",
-                                    streamId, route.destination(), route.nextTargetStep(), ex.getMessage());
-                            handleFailedDispatch(pipeToDispatch, route, ex, "KAFKA_FORWARD_FAILURE");
-                        } else {
-                            log.info("ASYNC SUCCESS: Forwarded streamId {} to Kafka topic {} (Partition: {}, Offset: {}) for next step {}",
-                                    streamId, route.destination(), metadata.partition(), metadata.offset(), route.nextTargetStep());
-                        }
-                    }));
-                } else if (route.transportType() == TransportType.GRPC) {
-                    PipeStreamGrpcForwarder.RouteData grpcRouteData = PipeStreamGrpcForwarder.RouteData.builder()
-                            .targetPipeline(route.targetPipeline())
-                            .nextTargetStep(route.nextTargetStep())
-                            .destination(route.destination()) // gRPC service name
-                            .streamId(streamId)
-                            .build();
-                    // Pass the already built pipeToDispatch to the gRPC forwarder
-                    CompletableFuture<Void> grpcFuture = grpcForwarder.forwardToGrpc(pipeToDispatch.toBuilder(), grpcRouteData); // Pass builder if forwarder modifies it, or built PipeStream
-                    dispatchFutures.add(grpcFuture.whenComplete((v, ex) -> {
-                        if (ex != null) {
-                            log.error("ASYNC FAILURE: Failed to forward streamId {} via gRPC to service {} for next step {}: {}",
-                                    streamId, route.destination(), route.nextTargetStep(), ex.getMessage());
-                            handleFailedDispatch(pipeToDispatch, route, ex, "GRPC_FORWARD_FAILURE");
-                        } else {
-                            log.info("ASYNC SUCCESS: Forwarded streamId {} via gRPC to service {} for next step {}",
-                                    streamId, route.destination(), route.nextTargetStep());
-                        }
-                    }));
-                } else {
-                    log.warn("Unsupported transport type {} for route from step {} in streamId: {}. Skipping.",
-                            route.transportType(), originalTargetStepName, streamId);
-                }
-            }
-
-            CompletableFuture.allOf(dispatchFutures.toArray(new CompletableFuture[0]))
-                    .whenComplete((v, ex) -> {
-                        if (ex != null) {
-                            log.warn("At least one asynchronous dispatch operation failed for streamId {} from step {}. Individual errors logged above.", streamId, originalTargetStepName);
-                        } else {
-                            log.info("All asynchronous dispatch operations initiated for streamId {} from step {} (individual success/failure logged per route).", streamId, originalTargetStepName);
-                        }
-                    });
-            log.info("Successfully processed step {} and initiated forwarding for {} route(s) for streamId: {}",
-                    originalTargetStepName, routes.size(), streamId);
-
-        } catch (Exception e) { // Catches synchronous errors from executor.execute() or route calculation
-            log.error("SYNC FAILURE: Critical error during execution of step {} or route calculation for streamId {}: {}. This occurred after initial gRPC response.",
-                    originalTargetStepName, streamId, e.getMessage(), e);
-            PipeStream streamForErrorHandling = (streamAfterExecution != null) ? streamAfterExecution : incomingPipeStream;
-            handleFailedStepExecutionOrRouting(streamForErrorHandling, originalTargetStepName, e, "STEP_EXECUTION_OR_ROUTING_FAILURE");
         }
     }
 
@@ -399,5 +308,210 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
 
         throw new PipelineConfigurationException("No PipeStepConfig found with name matching source identifier: " + sourceIdentifier +
                 ". Ensure a PipeStepConfig named '" + sourceIdentifier + "' exists and is intended for use as a connector.");
+    }
+
+
+    private void executeStepAndForward(PipeStream incomingPipeStream) {
+        String streamId = incomingPipeStream.getStreamId();
+        String originalTargetStepName = incomingPipeStream.getTargetStepName();
+        PipeStream streamForNextProcessing = incomingPipeStream;
+        boolean stepExecutedSuccessfully = false;
+
+        PipelineStepConfig stepConfig;
+        try { // Main try block for the entire method's core logic
+            try {
+                Optional<PipelineConfig> pipelineConfigOpt = configManager.getPipelineConfig(incomingPipeStream.getCurrentPipelineName());
+                if (pipelineConfigOpt.isEmpty() || pipelineConfigOpt.get().pipelineSteps() == null) {
+                    throw new PipelineConfigurationException("Pipeline or steps not found for: " + incomingPipeStream.getCurrentPipelineName() + " while preparing step " + originalTargetStepName);
+                }
+                stepConfig = pipelineConfigOpt.get().pipelineSteps().get(originalTargetStepName);
+                if (stepConfig == null) {
+                    throw new PipelineConfigurationException("Step config not found: " + originalTargetStepName + " in pipeline " + incomingPipeStream.getCurrentPipelineName());
+                }
+            } catch (PipelineConfigurationException pce) {
+                log.error("SYNC FAILURE: Configuration error before step execution for target {}: {}", originalTargetStepName, pce.getMessage());
+                handleFailedStepExecutionOrRouting(incomingPipeStream, originalTargetStepName, pce, "CONFIG_ERROR_PRE_EXECUTION");
+                return;
+            }
+
+            int maxRetries = stepConfig.maxRetries() != null ? stepConfig.maxRetries() : 0;
+            long baseRetryBackoffMs = stepConfig.retryBackoffMs() != null ? stepConfig.retryBackoffMs() : 1000L;
+            long maxRetryBackoffMs = stepConfig.maxRetryBackoffMs() != null ? stepConfig.maxRetryBackoffMs() : 30000L;
+            double retryMultiplier = stepConfig.retryBackoffMultiplier() != null && stepConfig.retryBackoffMultiplier() > 0 ? stepConfig.retryBackoffMultiplier() : 2.0;
+
+            PipeStepExecutor executor;
+            try {
+                executor = executorFactory.getExecutor(
+                        incomingPipeStream.getCurrentPipelineName(),
+                        originalTargetStepName);
+            } catch (Exception e) {
+                log.error("SYNC FAILURE: Could not get executor for step {} (streamId: {}): {}", originalTargetStepName, streamId, e.getMessage());
+                handleFailedStepExecutionOrRouting(incomingPipeStream, originalTargetStepName, e, "EXECUTOR_FACTORY_FAILURE");
+                return;
+            }
+
+            for (int attempt = 0; attempt <= maxRetries; attempt++) {
+                PipeStream currentInputStreamForAttempt = streamForNextProcessing;
+                PipeStreamStateBuilder stateBuilderForAttempt = new PipeStreamStateBuilderImpl(currentInputStreamForAttempt, configManager);
+                if (attempt == 0) {
+                    stateBuilderForAttempt.withHopNumber((int) currentInputStreamForAttempt.getCurrentHopNumber() + 1);
+                }
+                PipeStream streamToExecuteThisAttempt = stateBuilderForAttempt.getPresentState().build();
+
+                try {
+                    log.info("Attempt {}/{} to execute step: {} for streamId: {}",
+                            attempt + 1, maxRetries + 1, originalTargetStepName, streamId);
+                    streamForNextProcessing = executor.execute(streamToExecuteThisAttempt);
+
+                    if (streamForNextProcessing.getHistoryCount() == 0) {
+                        log.error("CRITICAL: Executor for step {} (streamId: {}) did not add a history record!", originalTargetStepName, streamId);
+                        throw new PipeStepExecutionException("Executor failed to produce history record for step " + originalTargetStepName, false);
+                    }
+                    StepExecutionRecord lastAttemptRecord = streamForNextProcessing.getHistory(streamForNextProcessing.getHistoryCount() - 1);
+
+                    if ("SUCCESS".equals(lastAttemptRecord.getStatus())) {
+                        stepExecutedSuccessfully = true;
+                        log.info("Step {} executed successfully on attempt {} for streamId: {}",
+                                originalTargetStepName, attempt + 1, streamId);
+                        break;
+                    } else {
+                        log.warn("Step {} execution attempt {} indicated FAILURE (status: '{}') without throwing retryable exception. StreamId: {}. Error: {}",
+                                originalTargetStepName, attempt + 1, lastAttemptRecord.getStatus(), streamId,
+                                lastAttemptRecord.hasErrorInfo() ? lastAttemptRecord.getErrorInfo().getErrorMessage() : "N/A");
+                        if (attempt >= maxRetries) {
+                            log.error("Final attempt failed for step {} (streamId: {}). Status: {}", originalTargetStepName, streamId, lastAttemptRecord.getStatus());
+                            throw new PipeStepExecutionException(
+                                    "Step " + originalTargetStepName + " failed after " + (attempt + 1) + " attempts. Final status: " + lastAttemptRecord.getStatus(), false);
+                        }
+                        log.warn("Step {} attempt {} returned status {}. Not throwing retryable exception, so if not last attempt, will proceed to next attempt without explicit backoff here.",
+                                originalTargetStepName, attempt + 1, lastAttemptRecord.getStatus());
+                    }
+                } catch (PipeStepExecutionException pse) {
+                    PipeStream.Builder currentAttemptFailureBuilder = currentInputStreamForAttempt.toBuilder();
+                    com.google.protobuf.Timestamp errorTimestamp = com.google.protobuf.util.Timestamps.fromMillis(System.currentTimeMillis());
+                    StepExecutionRecord.Builder attemptFailureRecord = StepExecutionRecord.newBuilder()
+                            .setHopNumber(stateBuilderForAttempt.getPresentState().getCurrentHopNumber())
+                            .setStepName(originalTargetStepName)
+                            .setStatus("ATTEMPT_FAILURE")
+                            .setStartTime(errorTimestamp)
+                            .setEndTime(errorTimestamp)
+                            .setErrorInfo(ErrorData.newBuilder()
+                                    .setOriginatingStepName(originalTargetStepName)
+                                    .setErrorMessage("Attempt " + (attempt + 1) + " for step " + originalTargetStepName + " failed: " + pse.getMessage())
+                                    .setErrorCode(pse.isRetryable() ? "RETRYABLE_STEP_ERROR" : "NON_RETRYABLE_STEP_ERROR")
+                                    .setTechnicalDetails(pse.toString())
+                                    .setTimestamp(errorTimestamp));
+                    currentAttemptFailureBuilder.addHistory(attemptFailureRecord.build());
+                    streamForNextProcessing = currentAttemptFailureBuilder.build();
+
+                    log.warn("Attempt {}/{} for step {} (streamId: {}) failed with exception: {}. Retryable: {}",
+                            attempt + 1, maxRetries + 1, originalTargetStepName, streamId, pse.getMessage(), pse.isRetryable());
+
+                    if (pse.isRetryable() && attempt < maxRetries) {
+                        long backoff = (long) (baseRetryBackoffMs * Math.pow(retryMultiplier, attempt));
+                        backoff = Math.min(backoff, maxRetryBackoffMs);
+                        log.info("Retrying step {} (streamId: {}) in {} ms (attempt {}/{})",
+                                originalTargetStepName, streamId, backoff, attempt + 2, maxRetries + 1);
+                        try {
+                            TimeUnit.MILLISECONDS.sleep(backoff);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            log.warn("Retry backoff interrupted for step {} (streamId: {}). Failing.", originalTargetStepName, streamId);
+                            throw new PipeStepExecutionException("Retry backoff interrupted", ie, false);
+                        }
+                    } else {
+                        log.error("Final attempt failed for step {} (streamId: {}) or error not retryable. Max retries: {}, Attempt: {}. Retryable: {}",
+                                originalTargetStepName, streamId, maxRetries, attempt + 1, pse.isRetryable());
+                        throw pse;
+                    }
+                }
+            } // End of retry loop
+
+            if (!stepExecutedSuccessfully) {
+                log.error("Step {} failed after all {} retries or due to a non-retryable error for streamId: {}",
+                        originalTargetStepName, maxRetries, streamId);
+                Throwable finalError = (streamForNextProcessing.getHistoryCount() > 0 &&
+                        streamForNextProcessing.getHistory(streamForNextProcessing.getHistoryCount() - 1).hasErrorInfo()) ?
+                        new PipeStepExecutionException(streamForNextProcessing.getHistory(streamForNextProcessing.getHistoryCount() - 1).getErrorInfo().getErrorMessage(), false) :
+                        new PipeStepExecutionException("Step " + originalTargetStepName + " failed after all retries.", false);
+                handleFailedStepExecutionOrRouting(streamForNextProcessing, originalTargetStepName,
+                        finalError, "STEP_EXECUTION_RETRIES_EXHAUSTED");
+                return;
+            }
+
+            PipeStreamStateBuilder finalStateBuilder = new PipeStreamStateBuilderImpl(streamForNextProcessing, configManager);
+            List<RouteData> routes = finalStateBuilder.calculateNextRoutes();
+            PipeStream streamStateForForwarding = finalStateBuilder.build();
+
+            if (routes.isEmpty()) {
+                log.info("No further routes to forward for streamId: {} from successfully executed step {}. Pipeline processing for this branch may be complete.",
+                        streamId, originalTargetStepName);
+                return;
+            }
+
+            List<CompletableFuture<?>> dispatchFutures = new ArrayList<>();
+            for (RouteData route : routes) {
+                log.debug("Preparing to route streamId: {} from executed step {} to destination: {}, nextActualStep: {}, transport: {}",
+                        streamId, originalTargetStepName, route.destination(), route.nextTargetStep(), route.transportType());
+
+                PipeStream.Builder destinationPipeBuilder = streamStateForForwarding.toBuilder()
+                        .setTargetStepName(route.nextTargetStep())
+                        .setCurrentPipelineName(route.targetPipeline());
+                PipeStream pipeToDispatch = destinationPipeBuilder.build();
+
+                if (route.transportType() == TransportType.KAFKA) {
+                    CompletableFuture<RecordMetadata> kafkaFuture = kafkaForwarder.forwardToKafka(pipeToDispatch, route.destination());
+                    dispatchFutures.add(kafkaFuture.whenComplete((metadata, ex) -> {
+                        if (ex != null) {
+                            log.error("ASYNC FAILURE: Failed to forward streamId {} to Kafka topic {} for next step {}: {}",
+                                    streamId, route.destination(), route.nextTargetStep(), ex.getMessage());
+                            handleFailedDispatch(pipeToDispatch, route, ex, "KAFKA_FORWARD_FAILURE");
+                        } else {
+                            log.info("ASYNC SUCCESS: Forwarded streamId {} to Kafka topic {} (Partition: {}, Offset: {}) for next step {}",
+                                    streamId, route.destination(), metadata.partition(), metadata.offset(), route.nextTargetStep());
+                        }
+                    }));
+                } else if (route.transportType() == TransportType.GRPC) {
+                    PipeStreamGrpcForwarder.RouteData grpcRouteData = PipeStreamGrpcForwarder.RouteData.builder()
+                            .targetPipeline(route.targetPipeline())
+                            .nextTargetStep(route.nextTargetStep())
+                            .destination(route.destination())
+                            .streamId(streamId)
+                            .build();
+                    CompletableFuture<Void> grpcFuture = grpcForwarder.forwardToGrpc(pipeToDispatch.toBuilder(), grpcRouteData);
+                    dispatchFutures.add(grpcFuture.whenComplete((v, ex) -> {
+                        if (ex != null) {
+                            log.error("ASYNC FAILURE: Failed to forward streamId {} via gRPC to service {} for next step {}: {}",
+                                    streamId, route.destination(), route.nextTargetStep(), ex.getMessage());
+                            handleFailedDispatch(pipeToDispatch, route, ex, "GRPC_FORWARD_FAILURE");
+                        } else {
+                            log.info("ASYNC SUCCESS: Forwarded streamId {} via gRPC to service {} for next step {}",
+                                    streamId, route.destination(), route.nextTargetStep());
+                        }
+                    }));
+                } else {
+                    log.warn("Unsupported transport type {} for route from step {} in streamId: {}. Skipping.",
+                            route.transportType(), originalTargetStepName, streamId);
+                }
+            }
+
+            CompletableFuture.allOf(dispatchFutures.toArray(new CompletableFuture[0]))
+                    .whenComplete((v, ex) -> {
+                        if (ex != null) {
+                            log.warn("At least one asynchronous dispatch operation failed for streamId {} from step {}. Individual errors logged above.", streamId, originalTargetStepName);
+                        } else {
+                            log.info("All asynchronous dispatch operations initiated for streamId {} from step {} (individual success/failure logged per route).", streamId, originalTargetStepName);
+                        }
+                    });
+            log.info("Successfully processed step {} and initiated forwarding for {} route(s) for streamId: {}",
+                    originalTargetStepName, routes.size(), streamId);
+
+        } catch (Exception e) { // This is the main try block's catch
+            log.error("SYNC FAILURE: Critical error during execution of step {} or route calculation for streamId {}: {}",
+                    originalTargetStepName, streamId, e.getMessage(), e);
+            PipeStream streamForErrorHandling = (streamForNextProcessing != null && streamForNextProcessing.getHistoryCount() > incomingPipeStream.getHistoryCount()) ?
+                    streamForNextProcessing : incomingPipeStream;
+            handleFailedStepExecutionOrRouting(streamForErrorHandling, originalTargetStepName, e, "STEP_EXECUTION_OR_ROUTING_FAILURE");
+        }
     }
 }
