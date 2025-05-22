@@ -200,7 +200,7 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
     }
 
     // New private helper method in PipeStreamEngineImpl
-    private void handleFailedDispatch(PipeStream dispatchedStream, RouteData failedRoute, Throwable dispatchException, String errorCode) {
+    void handleFailedDispatch(PipeStream dispatchedStream, RouteData failedRoute, Throwable dispatchException, String errorCode) {
         String streamId = dispatchedStream.getStreamId();
         log.error("Handling failed dispatch for streamId: {}. Route Destination: {}, Next Step: {}, ErrorCode: {}, Exception: {}",
                 streamId, failedRoute.destination(), failedRoute.nextTargetStep(), errorCode, dispatchException.getMessage());
@@ -239,7 +239,7 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
     }
 
     // New private helper method in PipeStreamEngineImpl
-    private void handleFailedStepExecutionOrRouting(PipeStream streamStateAtFailure, String failedStepName, Throwable executionException, String errorCode) {
+    void handleFailedStepExecutionOrRouting(PipeStream streamStateAtFailure, String failedStepName, Throwable executionException, String errorCode) {
         String streamId = streamStateAtFailure.getStreamId();
         log.error("Handling failed step execution or routing calculation for streamId: {}. Failed Step: {}, ErrorCode: {}, Exception: {}",
                 streamId, failedStepName, errorCode, executionException.getMessage());
@@ -316,6 +316,7 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
         String originalTargetStepName = incomingPipeStream.getTargetStepName();
         PipeStream streamForNextProcessing = incomingPipeStream;
         boolean stepExecutedSuccessfully = false;
+        PipeStepExecutionException lastSeenExceptionFromExecutor = null;
 
         PipelineStepConfig stepConfig;
         try { // Main try block for the entire method's core logic
@@ -363,9 +364,15 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
                             attempt + 1, maxRetries + 1, originalTargetStepName, streamId);
                     streamForNextProcessing = executor.execute(streamToExecuteThisAttempt);
 
-                    if (streamForNextProcessing.getHistoryCount() == 0) {
-                        log.error("CRITICAL: Executor for step {} (streamId: {}) did not add a history record!", originalTargetStepName, streamId);
-                        throw new PipeStepExecutionException("Executor failed to produce history record for step " + originalTargetStepName, false);
+                    if (streamForNextProcessing.getHistoryCount() == 0 ||
+                            // Ensure the last history record is for the current step and hop
+                            streamForNextProcessing.getHistory(streamForNextProcessing.getHistoryCount() - 1).getHopNumber() != streamToExecuteThisAttempt.getCurrentHopNumber() ||
+                            !streamForNextProcessing.getHistory(streamForNextProcessing.getHistoryCount() - 1).getStepName().equals(originalTargetStepName)
+                    ) {
+                        log.error("CRITICAL: Executor for step {} (streamId: {}) did not add a valid history record for this attempt!", originalTargetStepName, streamId);
+                        lastSeenExceptionFromExecutor = new PipeStepExecutionException("Executor failed to produce a valid history record for step " + originalTargetStepName, false);
+                        stepExecutedSuccessfully = false; // Mark as not successful
+                        break; // Exit retry loop, will be handled by if(!stepExecutedSuccessfully)
                     }
                     StepExecutionRecord lastAttemptRecord = streamForNextProcessing.getHistory(streamForNextProcessing.getHistoryCount() - 1);
 
@@ -374,23 +381,26 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
                         log.info("Step {} executed successfully on attempt {} for streamId: {}",
                                 originalTargetStepName, attempt + 1, streamId);
                         break;
-                    } else {
-                        log.warn("Step {} execution attempt {} indicated FAILURE (status: '{}') without throwing retryable exception. StreamId: {}. Error: {}",
+                    } else { // Executor returned a PipeStream with non-SUCCESS status
+                        log.warn("Step {} execution attempt {} indicated FAILURE (status: '{}') without throwing exception. StreamId: {}. Error: {}",
                                 originalTargetStepName, attempt + 1, lastAttemptRecord.getStatus(), streamId,
                                 lastAttemptRecord.hasErrorInfo() ? lastAttemptRecord.getErrorInfo().getErrorMessage() : "N/A");
-                        if (attempt >= maxRetries) {
-                            log.error("Final attempt failed for step {} (streamId: {}). Status: {}", originalTargetStepName, streamId, lastAttemptRecord.getStatus());
-                            throw new PipeStepExecutionException(
-                                    "Step " + originalTargetStepName + " failed after " + (attempt + 1) + " attempts. Final status: " + lastAttemptRecord.getStatus(), false);
-                        }
-                        log.warn("Step {} attempt {} returned status {}. Not throwing retryable exception, so if not last attempt, will proceed to next attempt without explicit backoff here.",
-                                originalTargetStepName, attempt + 1, lastAttemptRecord.getStatus());
+                        lastSeenExceptionFromExecutor = new PipeStepExecutionException(
+                                "Step " + originalTargetStepName + " reported status " + lastAttemptRecord.getStatus() +
+                                        (lastAttemptRecord.hasErrorInfo() ? ": " + lastAttemptRecord.getErrorInfo().getErrorMessage() : ""),
+                                false // Treat as non-retryable by the engine's loop
+                        );
+                        stepExecutedSuccessfully = false; // Mark as not successful
+                        break; // <<<<< MODIFIED: Exit loop on clean FAILURE status from executor
                     }
                 } catch (PipeStepExecutionException pse) {
-                    PipeStream.Builder currentAttemptFailureBuilder = currentInputStreamForAttempt.toBuilder();
+                    lastSeenExceptionFromExecutor = pse;
+                    // Use streamToExecuteThisAttempt as the base for recording this attempt's failure,
+                    // as it has the correct hop number for this step's execution.
+                    PipeStream.Builder currentAttemptFailureBuilder = streamToExecuteThisAttempt.toBuilder();
                     com.google.protobuf.Timestamp errorTimestamp = com.google.protobuf.util.Timestamps.fromMillis(System.currentTimeMillis());
                     StepExecutionRecord.Builder attemptFailureRecord = StepExecutionRecord.newBuilder()
-                            .setHopNumber(stateBuilderForAttempt.getPresentState().getCurrentHopNumber())
+                            .setHopNumber(streamToExecuteThisAttempt.getCurrentHopNumber()) // Use hop from streamToExecuteThisAttempt
                             .setStepName(originalTargetStepName)
                             .setStatus("ATTEMPT_FAILURE")
                             .setStartTime(errorTimestamp)
@@ -417,12 +427,31 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
                         } catch (InterruptedException ie) {
                             Thread.currentThread().interrupt();
                             log.warn("Retry backoff interrupted for step {} (streamId: {}). Failing.", originalTargetStepName, streamId);
-                            throw new PipeStepExecutionException("Retry backoff interrupted", ie, false);
+                            PipeStream.Builder interruptedBuilder = streamForNextProcessing.toBuilder();
+                            StepExecutionRecord.Builder interruptionRecord = StepExecutionRecord.newBuilder()
+                                    .setHopNumber(streamToExecuteThisAttempt.getCurrentHopNumber())
+                                    .setStepName(originalTargetStepName)
+                                    .setStatus("ATTEMPT_INTERRUPTED")
+                                    .setStartTime(errorTimestamp)
+                                    .setEndTime(com.google.protobuf.util.Timestamps.fromMillis(System.currentTimeMillis()))
+                                    .setErrorInfo(ErrorData.newBuilder()
+                                            .setOriginatingStepName(originalTargetStepName)
+                                            .setErrorMessage("Retry backoff interrupted")
+                                            .setErrorCode("RETRY_INTERRUPTED")
+                                            .setTechnicalDetails(ie.toString())
+                                            .setTimestamp(com.google.protobuf.util.Timestamps.fromMillis(System.currentTimeMillis())));
+                            interruptedBuilder.addHistory(interruptionRecord.build());
+                            streamForNextProcessing = interruptedBuilder.build();
+                            lastSeenExceptionFromExecutor = new PipeStepExecutionException("Retry backoff interrupted", ie, false);
+                            stepExecutedSuccessfully = false; // Ensure this is false
+                            break; // Exit retry loop
                         }
+                        // Continue to next iteration of the loop
                     } else {
                         log.error("Final attempt failed for step {} (streamId: {}) or error not retryable. Max retries: {}, Attempt: {}. Retryable: {}",
                                 originalTargetStepName, streamId, maxRetries, attempt + 1, pse.isRetryable());
-                        throw pse;
+                        stepExecutedSuccessfully = false;
+                        break;
                     }
                 }
             } // End of retry loop
@@ -430,15 +459,21 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
             if (!stepExecutedSuccessfully) {
                 log.error("Step {} failed after all {} retries or due to a non-retryable error for streamId: {}",
                         originalTargetStepName, maxRetries, streamId);
-                Throwable finalError = (streamForNextProcessing.getHistoryCount() > 0 &&
-                        streamForNextProcessing.getHistory(streamForNextProcessing.getHistoryCount() - 1).hasErrorInfo()) ?
-                        new PipeStepExecutionException(streamForNextProcessing.getHistory(streamForNextProcessing.getHistoryCount() - 1).getErrorInfo().getErrorMessage(), false) :
-                        new PipeStepExecutionException("Step " + originalTargetStepName + " failed after all retries.", false);
+                Throwable finalError = lastSeenExceptionFromExecutor;
+                if (finalError == null) {
+                    String lastStatusMsg = "Step " + originalTargetStepName + " failed (last status was not SUCCESS).";
+                    if (streamForNextProcessing.getHistoryCount() > 0 &&
+                            streamForNextProcessing.getHistory(streamForNextProcessing.getHistoryCount() - 1).hasErrorInfo()) {
+                        lastStatusMsg = streamForNextProcessing.getHistory(streamForNextProcessing.getHistoryCount() - 1).getErrorInfo().getErrorMessage();
+                    }
+                    finalError = new PipeStepExecutionException(lastStatusMsg, false);
+                }
                 handleFailedStepExecutionOrRouting(streamForNextProcessing, originalTargetStepName,
-                        finalError, "STEP_EXECUTION_RETRIES_EXHAUSTED");
+                        finalError, "STEP_EXECUTION_RETRIES_EXHAUSTED_OR_NON_RETRYABLE");
                 return;
             }
 
+            // --- If step execution was successful (possibly after retries) ---
             PipeStreamStateBuilder finalStateBuilder = new PipeStreamStateBuilderImpl(streamForNextProcessing, configManager);
             List<RouteData> routes = finalStateBuilder.calculateNextRoutes();
             PipeStream streamStateForForwarding = finalStateBuilder.build();
@@ -513,5 +548,5 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
                     streamForNextProcessing : incomingPipeStream;
             handleFailedStepExecutionOrRouting(streamForErrorHandling, originalTargetStepName, e, "STEP_EXECUTION_OR_ROUTING_FAILURE");
         }
-    }
+    } // End of executeStepAndForward method
 }
