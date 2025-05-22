@@ -2,7 +2,7 @@
 
 [versions]
 micronautPlatform = "4.8.2"  # For the platform BOM
-micronautPlugins = "4.5.1"   # For the Micronaut Gradle plugins
+micronautPlugins = "4.5.3"   # For the Micronaut Gradle plugins
 kotlin = "1.9.25"
 gradleProtobufPlugin = "0.9.5"
 gradleReleasePlugin = "3.1.0"
