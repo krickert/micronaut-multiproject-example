@@ -140,24 +140,22 @@ class CustomConfigSchemaValidatorTest {
     @Test
     void validate_validCustomConfig_returnsNoErrors() {
         String moduleImplementationId = "user-module-impl";
-        SchemaReference userSchemaRef = new SchemaReference("user-module-schema-subject", 1); // Subject might differ from implId
+        SchemaReference userSchemaRef = new SchemaReference("user-module-schema-subject", 1);
 
-        // Module setup: implementationId is key, customConfigSchemaReference points to schema
         availableModules.put(moduleImplementationId, new PipelineModuleConfiguration(
-                "User Module Display Name", // implementationName
-                moduleImplementationId,     // implementationId (links to ProcessorInfo)
-                userSchemaRef               // customConfigSchemaReference
+                "User Module Display Name",
+                moduleImplementationId,
+                userSchemaRef
         ));
 
         PipelineStepConfig step = new PipelineStepConfig(
-                "step1", StepType.PIPELINE, // Using INITIAL_PIPELINE or PIPELINE as appropriate
-                internalBeanProcessor(moduleImplementationId), // ProcessorInfo links to module's implementationId
+                "step1", StepType.PIPELINE,
+                internalBeanProcessor(moduleImplementationId),
                 createJsonConfig("""
                         {
                           "username": "testuser",
                           "maxConnections": 10
                         }""")
-                // Using a simpler constructor that defaults customConfigSchemaId to null
         );
 
         PipelineConfig pipeline = new PipelineConfig("p1", Map.of("step1", step));
@@ -165,8 +163,8 @@ class CustomConfigSchemaValidatorTest {
         PipelineModuleMap moduleMap = new PipelineModuleMap(availableModules);
         PipelineClusterConfig clusterConfig = new PipelineClusterConfig("c1", graphConfig, moduleMap, null, Collections.emptySet(), Collections.emptySet());
 
-        // Use validateUsingRegistry instead of validate with schemaContentProvider
-        List<String> errors = validator.validateUsingRegistry(clusterConfig);
+        // CORRECTED LINE: Call the public 'validate' method
+        List<String> errors = validator.validate(clusterConfig, this::testSchemaContentProvider);
         assertTrue(errors.isEmpty(), "Valid custom config should not produce errors. Errors: " + errors);
     }
 
@@ -195,8 +193,8 @@ class CustomConfigSchemaValidatorTest {
         PipelineModuleMap moduleMap = new PipelineModuleMap(availableModules);
         PipelineClusterConfig clusterConfig = new PipelineClusterConfig("c1", graphConfig, moduleMap, null, Collections.emptySet(), Collections.emptySet());
 
-        // Use validateUsingRegistry instead of validate with schemaContentProvider
-        List<String> errors = validator.validateUsingRegistry(clusterConfig);
+        // CORRECTED LINE: Call the public 'validate' method
+        List<String> errors = validator.validate(clusterConfig, this::testSchemaContentProvider);
         assertFalse(errors.isEmpty(), "Invalid custom config should produce errors.");
         assertEquals(1, errors.size(), "Expected one error message grouping schema violations.");
         assertTrue(errors.get(0).contains("Step 'step-invalid-config' custom config failed schema validation"));
@@ -236,7 +234,9 @@ class CustomConfigSchemaValidatorTest {
         PipelineClusterConfig clusterConfig = new PipelineClusterConfig("c1", graphConfig, moduleMap, null, Collections.emptySet(), Collections.emptySet());
 
         // Use validateUsingRegistry instead of validate with schemaContentProvider
-        List<String> errors = validator.validateUsingRegistry(clusterConfig);
+        // CORRECTED LINE: Call the public 'validate' method
+        List<String> errors = validator.validate(clusterConfig, this::testSchemaContentProvider);
+
         assertFalse(errors.isEmpty(), "Should return error if schema content is not found in registry.");
         assertTrue(errors.get(0).contains("Schema content for SchemaReference[subject=module-with-missing-schema-subject, version=1] (step 'step-schema-not-found') not found in registry."), "Error message content mismatch. Got: " + errors.get(0));
     }
@@ -264,7 +264,8 @@ class CustomConfigSchemaValidatorTest {
         PipelineClusterConfig clusterConfig = new PipelineClusterConfig("c1", graphConfig, moduleMap, null, Collections.emptySet(), Collections.emptySet());
 
         // Use validateUsingRegistry instead of validate with schemaContentProvider
-        List<String> errors = validator.validateUsingRegistry(clusterConfig);
+        // CORRECTED LINE: Call the public 'validate' method
+        List<String> errors = validator.validate(clusterConfig, this::testSchemaContentProvider);
         assertTrue(errors.isEmpty(), "No error from CustomConfigSchemaValidator if module has no schema ref. Errors: " + errors);
     }
 
@@ -291,7 +292,8 @@ class CustomConfigSchemaValidatorTest {
         PipelineClusterConfig clusterConfig = new PipelineClusterConfig("c1", graphConfig, moduleMap, null, Collections.emptySet(), Collections.emptySet());
 
         // Use validateUsingRegistry instead of validate with schemaContentProvider
-        List<String> errors = validator.validateUsingRegistry(clusterConfig);
+        // CORRECTED LINE: Call the public 'validate' method
+        List<String> errors = validator.validate(clusterConfig, this::testSchemaContentProvider);
         assertTrue(errors.isEmpty(), "No errors if step has no custom config, even if module defines a schema. Errors: " + errors);
     }
 
@@ -328,7 +330,8 @@ class CustomConfigSchemaValidatorTest {
         PipelineClusterConfig clusterConfig = new PipelineClusterConfig("c1", graphConfig, moduleMap, null, Collections.emptySet(), Collections.emptySet());
 
         // Use validateUsingRegistry instead of validate with schemaContentProvider
-        List<String> errors = validator.validateUsingRegistry(clusterConfig);
+        // CORRECTED LINE: Call the public 'validate' method
+        List<String> errors = validator.validate(clusterConfig, this::testSchemaContentProvider);
         assertTrue(errors.isEmpty(), "Empty JSON config against a schema allowing empty object should be valid. Errors: " + errors);
     }
 
@@ -361,7 +364,8 @@ class CustomConfigSchemaValidatorTest {
         PipelineClusterConfig clusterConfig = new PipelineClusterConfig("c1", graphConfig, moduleMap, null, Collections.emptySet(), Collections.emptySet());
 
         // Use validateUsingRegistry instead of validate with schemaContentProvider
-        List<String> errors = validator.validateUsingRegistry(clusterConfig);
+        // CORRECTED LINE: Call the public 'validate' method
+        List<String> errors = validator.validate(clusterConfig, this::testSchemaContentProvider);
         assertFalse(errors.isEmpty(), "Should return error if schema content is malformed.");
 
         // Print the actual error message for debugging
@@ -406,7 +410,8 @@ class CustomConfigSchemaValidatorTest {
         PipelineClusterConfig clusterConfig = new PipelineClusterConfig("c1", graphConfig, moduleMap, null, Collections.emptySet(), Collections.emptySet());
 
         // Use validateUsingRegistry instead of validate with schemaContentProvider
-        List<String> errors = validator.validateUsingRegistry(clusterConfig);
+        // CORRECTED LINE: Call the public 'validate' method
+        List<String> errors = validator.validate(clusterConfig, this::testSchemaContentProvider);
         assertTrue(errors.isEmpty(), "Config with null JsonNode should validate as empty (via default empty ObjectNode) against a permissive schema. Errors: " + errors);
     }
 
@@ -445,7 +450,8 @@ class CustomConfigSchemaValidatorTest {
         PipelineClusterConfig clusterConfig = new PipelineClusterConfig("c1", graphConfig, moduleMap, null, Collections.emptySet(), Collections.emptySet());
 
         // Use validateUsingRegistry instead of validate with schemaContentProvider
-        List<String> errors = validator.validateUsingRegistry(clusterConfig);
+        // CORRECTED LINE: Call the public 'validate' method
+        List<String> errors = validator.validate(clusterConfig, this::testSchemaContentProvider);
         assertFalse(errors.isEmpty(), "Config with null JsonNode should fail (as empty object) against a strict schema. Errors: " + errors.get(0));
         // Print the actual error message for debugging
         System.out.println("[DEBUG_LOG] Actual error message: " + errors.get(0));
@@ -461,7 +467,8 @@ class CustomConfigSchemaValidatorTest {
         PipelineClusterConfig clusterConfig = new PipelineClusterConfig("c1", graphConfig, moduleMap, null, Collections.emptySet(), Collections.emptySet());
 
         // Use validateUsingRegistry instead of validate with schemaContentProvider
-        List<String> errors = validator.validateUsingRegistry(clusterConfig);
+        // CORRECTED LINE: Call the public 'validate' method
+        List<String> errors = validator.validate(clusterConfig, this::testSchemaContentProvider);
         assertTrue(errors.isEmpty(), "No pipelines should result in no errors. Errors: " + errors);
     }
 }

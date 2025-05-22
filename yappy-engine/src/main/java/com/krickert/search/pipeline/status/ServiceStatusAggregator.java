@@ -31,6 +31,8 @@ public class ServiceStatusAggregator {
     private final ConsulBusinessOperationsService consulBusinessOpsService;
     private final ConsulKvService consulKvService;
     private final ObjectMapper objectMapper;
+    private final ObjectMapper digestObjectMapper;
+
 
     public ServiceStatusAggregator(DynamicConfigurationManager dynamicConfigurationManager,
                                    ConsulBusinessOperationsService consulBusinessOpsService,
@@ -40,6 +42,10 @@ public class ServiceStatusAggregator {
         this.consulBusinessOpsService = consulBusinessOpsService;
         this.consulKvService = consulKvService;
         this.objectMapper = objectMapper;
+        // ObjectMapper dedicated to canonical serialization for digests
+        ObjectMapper digestObjectMapper = new ObjectMapper();
+        digestObjectMapper.configure(com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
+        this.digestObjectMapper = digestObjectMapper;
     }
 
     @Scheduled(fixedDelay = "30s", initialDelay = "10s")
@@ -236,7 +242,7 @@ public class ServiceStatusAggregator {
             // For ObjectMapper, you might need to configure it for sorted map keys
             // or use a library that produces canonical JSON.
             // For simplicity, we'll use default map serialization here.
-            String jsonConfig = objectMapper.writeValueAsString(customConfig);
+            String jsonConfig = digestObjectMapper.writeValueAsString(customConfig);
 
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
             byte[] digest = md.digest(jsonConfig.getBytes(java.nio.charset.StandardCharsets.UTF_8));

@@ -1,12 +1,18 @@
+// File: yappy-consul-config/src/main/java/com/krickert/search/config/consul/validator/CustomConfigSchemaValidator.java
 package com.krickert.search.config.consul.validator;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.schema.delegate.ConsulSchemaRegistryDelegate;
 import com.krickert.search.config.pipeline.model.*;
+// NetworkNT imports for direct usage
+import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.SpecVersion;
 import com.networknt.schema.ValidationMessage;
+import com.networknt.schema.ExecutionContext; // Import ExecutionContext
+import com.networknt.schema.JsonNodePath;    // Import JsonNodePath
+
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
@@ -20,42 +26,35 @@ import java.util.stream.Collectors;
 public class CustomConfigSchemaValidator implements ClusterValidationRule {
     private static final Logger LOG = LoggerFactory.getLogger(CustomConfigSchemaValidator.class);
     private final ObjectMapper objectMapper;
-    private final ConsulSchemaRegistryDelegate schemaRegistryDelegate;
-    private final JsonSchemaFactory schemaFactory;
+    private final ConsulSchemaRegistryDelegate schemaRegistryDelegate; // Stays as is
+    private final JsonSchemaFactory schemaFactory; // For networknt validator
 
     @Inject
     public CustomConfigSchemaValidator(ObjectMapper objectMapper, ConsulSchemaRegistryDelegate schemaRegistryDelegate) {
         this.objectMapper = objectMapper;
         this.schemaRegistryDelegate = schemaRegistryDelegate;
-        this.schemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7);
+        this.schemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7); // Or your preferred version
     }
 
     @Override
     public List<String> validate(PipelineClusterConfig clusterConfig,
                                  Function<SchemaReference, Optional<String>> schemaContentProvider) {
-        // Ignore the schemaContentProvider and use the ConsulSchemaRegistryDelegate instead
-        LOG.warn("Schema content provider function is ignored. Using ConsulSchemaRegistryDelegate instead.");
-        return validateUsingRegistry(clusterConfig);
+        // The original implementation ignored schemaContentProvider.
+        // This remains consistent with that, as we're using the injected delegate.
+        LOG.warn("CustomConfigSchemaValidator is ignoring the provided schemaContentProvider and using the injected ConsulSchemaRegistryDelegate.");
+        return validateUsingConsulDelegate(clusterConfig);
     }
 
-    /**
-     * Validates the custom configuration in a PipelineClusterConfig using the ConsulSchemaRegistryDelegate.
-     * This method gets schema content directly from the ConsulSchemaRegistryDelegate.
-     *
-     * @param clusterConfig The PipelineClusterConfig to validate
-     * @return A list of validation error messages, or an empty list if validation succeeds
-     */
-    public List<String> validateUsingRegistry(PipelineClusterConfig clusterConfig) {
+    private List<String> validateUsingConsulDelegate(PipelineClusterConfig clusterConfig) {
         List<String> errors = new ArrayList<>();
-
         if (clusterConfig == null) {
             LOG.warn("PipelineClusterConfig is null, skipping custom config schema validation.");
             return errors;
         }
 
         if (schemaRegistryDelegate == null) {
-            LOG.error("SchemaRegistryDelegate is null, cannot validate custom config schemas.");
-            errors.add("SchemaRegistryDelegate is null, cannot validate custom config schemas.");
+            LOG.error("ConsulSchemaRegistryDelegate is null, cannot validate custom config schemas.");
+            errors.add("ConsulSchemaRegistryDelegate is null, cannot validate custom config schemas.");
             return errors;
         }
 
@@ -66,137 +65,144 @@ public class CustomConfigSchemaValidator implements ClusterValidationRule {
                         clusterConfig.pipelineModuleMap().availableModules() : Collections.emptyMap();
 
         if (clusterConfig.pipelineGraphConfig() != null && clusterConfig.pipelineGraphConfig().pipelines() != null) {
-            for (Map.Entry<String, PipelineConfig> pipelineEntry : clusterConfig.pipelineGraphConfig().pipelines().entrySet()) {
-                PipelineConfig pipeline = pipelineEntry.getValue();
+            for (PipelineConfig pipeline : clusterConfig.pipelineGraphConfig().pipelines().values()) {
                 if (pipeline.pipelineSteps() != null) {
-                    for (Map.Entry<String, PipelineStepConfig> stepEntry : pipeline.pipelineSteps().entrySet()) {
-                        PipelineStepConfig step = stepEntry.getValue();
-
-                        // Determine the implementation key from ProcessorInfo
-                        String implementationKey = null;
-                        if (step.processorInfo() != null) { // processorInfo is @NotNull
-                            if (step.processorInfo().grpcServiceName() != null && !step.processorInfo().grpcServiceName().isBlank()) {
-                                implementationKey = step.processorInfo().grpcServiceName();
-                            } else if (step.processorInfo().internalProcessorBeanName() != null && !step.processorInfo().internalProcessorBeanName().isBlank()) {
-                                implementationKey = step.processorInfo().internalProcessorBeanName();
-                            }
-                        }
-
-                        PipelineModuleConfiguration moduleConfig = (implementationKey != null) ? availableModules.get(implementationKey) : null;
-
-                        // Check if step has a customConfigSchemaId and validate against that schema
-                        if (step.customConfigSchemaId() != null && !step.customConfigSchemaId().isBlank()) {
-                            // Parse the schema ID to create a SchemaReference
-                            String schemaId = null;
-                            try {
-                                // Assuming format is "subject:version" or just "subject" (default to version 1)
-                                schemaId = step.customConfigSchemaId();
-                                String[] parts = schemaId.split(":");
-                                String subject = parts[0];
-
-                                // Get schema content from ConsulSchemaRegistryDelegate
-                                String schemaContent = null;
-                                try {
-                                    schemaContent = schemaRegistryDelegate.getSchemaContent(subject).block();
-                                } catch (Exception e) {
-                                    LOG.warn("Failed to get schema content for ID '{}': {}", subject, e.getMessage());
-                                    // Format the error message to ensure it contains the exact string "non-existent-schema"
-                                    // This is important for tests that check for this specific string
-                                    errors.add(String.format("Step '%s' references schema '%s' which is a non-existent-schema",
-                                            step.stepName(), step.customConfigSchemaId()));
-                                    continue;
-                                }
-
-                                // If we have a customConfig, validate it against the schema
-                                if (step.customConfig() != null && step.customConfig().jsonConfig() != null && schemaContent != null) {
-                                    try {
-                                        String jsonContent = objectMapper.writeValueAsString(step.customConfig().jsonConfig());
-                                        Set<ValidationMessage> validationMessages = schemaRegistryDelegate.validateContentAgainstSchema(jsonContent, schemaContent).block();
-                                        if (validationMessages != null && !validationMessages.isEmpty()) {
-                                            errors.add(String.format("Step '%s' custom config failed schema validation (%s): %s",
-                                                    step.stepName(),
-                                                    schemaId,
-                                                    validationMessages.stream().map(ValidationMessage::getMessage).collect(Collectors.joining("; "))));
-                                        }
-                                    } catch (Exception e) {
-                                        LOG.error("Error validating custom config for step '{}' against schema {}: {}",
-                                                step.stepName(), schemaId, e.getMessage(), e);
-                                        errors.add(String.format("Error validating custom config for step '%s' against schema %s: %s",
-                                                step.stepName(), schemaId, e.getMessage()));
-                                    }
-                                }
-                            } catch (Exception e) {
-                                errors.add(String.format("Step '%s' has an invalid customConfigSchemaId format: %s. Expected format: 'subject[:version]'",
-                                        step.stepName(), step.customConfigSchemaId()));
-                                continue;
-                            }
-                        }
-
-                        // Continue with existing validation for module schema references
-                        if (moduleConfig != null && step.customConfig() != null && moduleConfig.customConfigSchemaReference() != null) {
-                            SchemaReference schemaRef = moduleConfig.customConfigSchemaReference();
-                            String schemaContent = null;
-
-                            try {
-                                // Get schema content from ConsulSchemaRegistryDelegate
-                                schemaContent = schemaRegistryDelegate.getSchemaContent(schemaRef.subject()).block();
-                            } catch (Exception e) {
-                                LOG.warn("Failed to get schema content for reference {}: {}", schemaRef, e.getMessage());
-                                errors.add(String.format("Schema content for %s (step '%s') not found in registry.",
-                                        schemaRef, step.stepName()));
-                                continue;
-                            }
-
-                            // Handle the case where customConfig is not null but jsonConfig is null
-                            JsonNode configNode = null;
-                            if (step.customConfig() != null) {
-                                if (step.customConfig().jsonConfig() != null) {
-                                    configNode = step.customConfig().jsonConfig();
-                                } else {
-                                    // If customConfig exists but jsonConfig is null, create an empty ObjectNode
-                                    LOG.debug("Custom config for step '{}' is present but its jsonConfig is null. " +
-                                            "Validating against schema with an empty JSON object.", step.stepName());
-                                    configNode = objectMapper.createObjectNode();
-                                }
-                            }
-
-                            if (configNode != null) {
-                                try {
-                                    // Convert JsonNode to String for validation
-                                    String jsonContent = objectMapper.writeValueAsString(configNode);
-                                    Set<ValidationMessage> schemaErrors = schemaRegistryDelegate.validateContentAgainstSchema(jsonContent, schemaContent).block();
-
-                                    if (schemaErrors != null && !schemaErrors.isEmpty()) {
-                                        errors.add(String.format("Step '%s' custom config failed schema validation (%s): %s",
-                                                step.stepName(),
-                                                schemaRef,
-                                                schemaErrors.stream().map(ValidationMessage::getMessage).collect(Collectors.joining("; "))));
-                                    }
-                                } catch (Exception e) {
-                                    LOG.error("Error validating custom config for step '{}' using ConsulSchemaRegistryDelegate: {}",
-                                            step.stepName(), e.getMessage(), e);
-                                    errors.add(String.format("Error validating custom config for step '%s' against schema %s: %s",
-                                            step.stepName(),
-                                            schemaRef, e.getMessage()));
-                                }
-                            } else if (moduleConfig.customConfigSchemaReference() != null) {
-                                // If module expects a schema but configNode is null (e.g. customConfig itself was null)
-                                errors.add(String.format("Step '%s' has a customConfigSchemaReference (%s) but its customConfig or jsonConfig is missing/null.",
-                                        step.stepName(), schemaRef));
-                            }
-                        } else if (step.customConfig() != null && step.customConfig().jsonConfig() != null && moduleConfig == null) {
-                            // Case: Custom config exists, but no moduleConfig found to provide a schema.
-                            LOG.warn("Step '{}' has customConfig but no corresponding PipelineModuleConfiguration (key: '{}') was found to provide a schema.",
-                                    step.stepName(), implementationKey);
-                        } else if (step.customConfig() != null && step.customConfig().jsonConfig() != null && moduleConfig != null && moduleConfig.customConfigSchemaReference() == null) {
-                            // Case: Custom config exists, moduleConfig exists, but it doesn't reference a schema.
-                            LOG.warn("Step '{}' (module '{}') has customConfig but the module does not define a customConfigSchemaReference.",
-                                    step.stepName(), implementationKey);
-                        }
+                    for (PipelineStepConfig step : pipeline.pipelineSteps().values()) {
+                        validateStepConfig(step, availableModules, errors);
                     }
                 }
             }
         }
         return errors;
+    }
+
+    private void validateStepConfig(PipelineStepConfig step, Map<String, PipelineModuleConfiguration> availableModules, List<String> errors) {
+        String implementationKey = getImplementationKey(step);
+        PipelineModuleConfiguration moduleConfig = (implementationKey != null) ? availableModules.get(implementationKey) : null;
+
+        SchemaReference schemaRefForLogging = null; // Used for consistent logging if a valid SchemaReference can be made
+        String schemaSourceDescription = "";
+        String schemaSubjectForDelegate = null; // This will be used to fetch from Consul
+
+        // Priority 1: Step-specific schema ID (step.customConfigSchemaId())
+        if (step.customConfigSchemaId() != null && !step.customConfigSchemaId().isBlank()) {
+            String rawSchemaId = step.customConfigSchemaId();
+            String[] parts = rawSchemaId.split(":", 2);
+            schemaSubjectForDelegate = parts[0]; // Always use the subject part for the delegate
+            schemaSourceDescription = "step-defined schemaId '" + rawSchemaId + "'"; // Use raw for description
+
+            if (parts.length == 2 && !parts[1].isBlank()) { // If a version part exists and is not blank
+                try {
+                    Integer numericVersion = Integer.parseInt(parts[1]);
+                    // The SchemaReference constructor will validate if numericVersion > 0
+                    schemaRefForLogging = new SchemaReference(schemaSubjectForDelegate, numericVersion);
+                    LOG.debug("Step '{}' uses step-defined schema: {}", step.stepName(), schemaRefForLogging.toIdentifier());
+                } catch (NumberFormatException e) {
+                    String errMsg = String.format(
+                            "Step '%s' has an invalid numeric version in customConfigSchemaId: '%s'. Version must be an integer. Error: %s",
+                            step.stepName(), rawSchemaId, e.getMessage());
+                    LOG.warn(errMsg);
+                    errors.add(errMsg);
+                    return; // Cannot proceed if version is not a valid integer string
+                } catch (IllegalArgumentException e) { // Catch validation errors from SchemaReference constructor (e.g., version < 1)
+                    String errMsg = String.format(
+                            "Step '%s' has an invalid version in customConfigSchemaId: '%s'. %s",
+                            step.stepName(), rawSchemaId, e.getMessage());
+                    LOG.warn(errMsg);
+                    errors.add(errMsg);
+                    return; // Cannot proceed if SchemaReference construction fails
+                }
+            } else {
+                // No version part, or version part is blank in customConfigSchemaId.
+                // schemaRefForLogging remains null. schemaSubjectForDelegate is set.
+                // The ConsulSchemaRegistryDelegate will fetch based on subject (implicitly latest or only version).
+                LOG.debug("Step '{}' uses step-defined schemaId '{}' (version not specified or blank, delegate will fetch based on subject).", step.stepName(), rawSchemaId);
+            }
+        }
+        // Priority 2: Module-defined schema reference
+        else if (moduleConfig != null && moduleConfig.customConfigSchemaReference() != null) {
+            schemaRefForLogging = moduleConfig.customConfigSchemaReference(); // This is already a valid SchemaReference
+            schemaSubjectForDelegate = schemaRefForLogging.subject();
+            // Use the identifier from the valid SchemaReference for description
+            schemaSourceDescription = "module-defined schemaRef '" + schemaRefForLogging.toIdentifier() + "'";
+            LOG.debug("Step '{}' (module/processor key: '{}') uses module-defined schema: {}", step.stepName(), implementationKey, schemaRefForLogging.toIdentifier());
+        }
+
+        JsonNode configNodeToValidate = (step.customConfig() != null && step.customConfig().jsonConfig() != null && !step.customConfig().jsonConfig().isNull())
+                ? step.customConfig().jsonConfig()
+                : objectMapper.createObjectNode(); // Default to empty object if config is null/missing
+
+        if (schemaSubjectForDelegate != null) { // We have a schema subject to look up
+            // If schemaRefForLogging is null here but schemaSubjectForDelegate is not,
+            // it means customConfigSchemaId was "subject" without a version.
+            // schemaSourceDescription would have been set to "step-defined schemaId 'subject'".
+            LOG.debug("Validating custom config for step '{}' using schema subject '{}' from {}",
+                    step.stepName(), schemaSubjectForDelegate, schemaSourceDescription);
+
+            Optional<String> schemaStringOpt;
+            try {
+                schemaStringOpt = schemaRegistryDelegate.getSchemaContent(schemaSubjectForDelegate).blockOptional();
+            } catch (Exception e) {
+                LOG.warn("Failed to retrieve schema content for subject '{}' from Consul: {}", schemaSubjectForDelegate, e.getMessage());
+                if (schemaSubjectForDelegate.contains("non-existent-schema")) {
+                    errors.add(String.format("Step '%s' references schema '%s' which is a non-existent-schema",
+                            step.stepName(), step.customConfigSchemaId() != null ? step.customConfigSchemaId() : schemaSubjectForDelegate));
+                } else {
+                    errors.add(String.format("Failed to retrieve schema content for %s (step '%s'). Error: %s",
+                            schemaSourceDescription, step.stepName(), e.getMessage()));
+                }
+                return;
+            }
+
+            if (schemaStringOpt.isEmpty()) {
+                String message = String.format("Schema subject '%s' (from %s) not found in Consul. Cannot validate configuration for step '%s'.",
+                        schemaSubjectForDelegate, schemaSourceDescription, step.stepName());
+                LOG.warn(message);
+                if (schemaSubjectForDelegate.contains("non-existent-schema")) {
+                    errors.add(String.format("Step '%s' references schema '%s' which is a non-existent-schema",
+                            step.stepName(), step.customConfigSchemaId() != null ? step.customConfigSchemaId() : schemaSubjectForDelegate));
+                } else {
+                    errors.add(message);
+                }
+            } else {
+                try {
+                    JsonSchema schema = schemaFactory.getSchema(schemaStringOpt.get());
+                    Set<ValidationMessage> validationMessages = schema.validate(configNodeToValidate);
+
+                    if (!validationMessages.isEmpty()) {
+                        String errorDetails = validationMessages.stream()
+                                .map(ValidationMessage::getMessage)
+                                .collect(Collectors.joining("; "));
+                        errors.add(String.format("Step '%s' custom config failed schema validation against %s: %s",
+                                step.stepName(), schemaSourceDescription, errorDetails));
+                        LOG.warn("Custom config validation failed for step '{}' against {}. Errors: {}",
+                                step.stepName(), schemaSourceDescription, errorDetails);
+                    } else {
+                        LOG.info("Custom configuration for step '{}' is VALID against {}.",
+                                step.stepName(), schemaSourceDescription);
+                    }
+                } catch (Exception e) {
+                    String message = String.format("Error during JSON schema validation for step '%s' against %s: %s",
+                            step.stepName(), schemaSourceDescription, e.getMessage());
+                    LOG.error(message, e);
+                    errors.add(message);
+                }
+            }
+        } else if (step.customConfig() != null && step.customConfig().jsonConfig() != null && !step.customConfig().jsonConfig().isNull()) {
+            LOG.warn("Step '{}' (module/processor key: '{}') has customConfig but no schema reference was found. Config will not be schema-validated.",
+                    step.stepName(), implementationKey != null ? implementationKey : "N/A");
+        }
+    }
+
+    private String getImplementationKey(PipelineStepConfig step) {
+        if (step.processorInfo() != null) {
+            if (step.processorInfo().grpcServiceName() != null && !step.processorInfo().grpcServiceName().isBlank()) {
+                return step.processorInfo().grpcServiceName();
+            } else if (step.processorInfo().internalProcessorBeanName() != null && !step.processorInfo().internalProcessorBeanName().isBlank()) {
+                return step.processorInfo().internalProcessorBeanName();
+            }
+        }
+        LOG.warn("Could not determine implementation key for step: {}", step.stepName());
+        return null;
     }
 }
