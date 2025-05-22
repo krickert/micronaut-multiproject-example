@@ -58,9 +58,9 @@ message RegisterModuleRequest {
   // - For TTL: Not applicable here, interval defined by registration service
   string health_check_endpoint = 6;
 
-  // The MD5 or SHA256 digest of this module instance's custom configuration JSON.
-  // This is used by the Yappy Engine to verify configuration consistency.
-  string config_digest = 7;
+  // The JSON string representation of this module instance's custom configuration.
+  // The Yappy Registration Service will canonicalize this JSON and calculate its digest.
+  string instance_custom_config_json = 7; // MODIFIED: Was config_digest
 
   // Optional: The software version of this module instance (e.g., "1.0.2").
   optional string module_software_version = 8;
@@ -88,6 +88,15 @@ message RegisterModuleResponse {
   // (as registered by the Yappy Registration Service).
   // This can be useful for the module if it needs to perform self-deregistration later.
   string registered_service_id = 3;
+
+  // The configuration digest calculated by the Yappy Registration Service based on
+  // the provided instance_custom_config_json. This is the digest that will be
+  // stored in Consul tags and used for consistency checks.
+  string calculated_config_digest = 4; // NEW
+
+  // Optional: The canonical JSON string (Base64 encoded) that the Yappy Registration
+  // Service used to calculate the digest. Useful for debugging and verification by the module.
+  optional string canonical_config_json_base64 = 5; // NEW (Optional)
 }
 
 // Future placeholder messages for DeregisterModule and UpdateModuleStatus

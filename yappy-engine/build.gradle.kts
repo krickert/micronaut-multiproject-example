@@ -46,6 +46,13 @@ dependencies {
     annotationProcessor(mn.lombok)
     compileOnly(mn.lombok)
 
+    // Micrometer dependencies for metrics
+    implementation("io.micronaut.micrometer:micronaut-micrometer-core:5.5.0")
+    implementation("io.micronaut.micrometer:micronaut-micrometer-registry-prometheus:5.5.0")
+
+    // Jackson JSR310 module for Java 8 date/time types
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.3")
+
     api(project(":yappy-consul-config"))
 
     runtimeOnly(mn.logback.classic) // This line was missing from your provided snippet, re-add if it was there

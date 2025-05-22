@@ -6,27 +6,11 @@
         </encoder>
     </appender>
 
-    <!-- Set the root logger level (e.g., INFO) -->
+    <logger name="io.micronaut" level="INFO"/>
+    <logger name="com.krickert" level="DEBUG"/> <!-- Keep your app's debug logs if needed -->
+
     <root level="INFO">
-        <appender-ref ref="STDOUT" />
+        <appender-ref ref="STDOUT"/>
     </root>
-
-    <!-- Increase logging for Micronaut core components -->
-    <logger name="io.micronaut" level="DEBUG" />
-    <!-- You might want to set io.micronaut.context.env to TRACE to see detailed property loading -->
-    <logger name="io.micronaut.context.env" level="TRACE" />
-
-    <!-- Increase logging for gRPC components -->
-    <logger name="io.grpc" level="DEBUG" />
-    <logger name="io.micronaut.grpc" level="DEBUG" />
-    <logger name="io.micronaut.context" level="DEBUG" />
-    <logger name="io.micronaut.discovery" level="TRACE"/>
-
-    <!-- Increase logging for Netty (often used by gRPC server) -->
-    <logger name="io.netty" level="INFO" /> <!-- Or DEBUG if needed, but can be very verbose -->
-
-    <!-- Set logging for your application's packages -->
-    <!-- Replace com.krickert with your application's base package -->
-    <logger name="com.krickert" level="DEBUG" />
 
 </configuration>
