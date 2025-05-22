@@ -65,7 +65,6 @@ public class DynamicConfigurationManagerFactory {
                 configurationValidator,
                 cachedConfigHolder,
                 eventPublisher,
-                consulKvService,
                 consulBusinessOperationsService,
                 objectMapper
         );

@@ -108,6 +108,7 @@ dependencies {
     testImplementation(mn.junit.jupiter.engine)
 // https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-params
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.12.2")
+    testImplementation(mn.mockito.junit.jupiter)
 }
 
 //// Add this block to explicitly configure the Mockito agent

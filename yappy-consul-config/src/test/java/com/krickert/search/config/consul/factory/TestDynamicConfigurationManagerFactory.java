@@ -44,7 +44,6 @@ public class TestDynamicConfigurationManagerFactory {
                 configurationValidator,
                 cachedConfigHolder,
                 eventPublisher,
-                consulKvService,
                 consulBusinessOperationsService,
                 objectMapper
         );

@@ -87,4 +87,25 @@ public interface DynamicConfigurationManager {
      * This might be triggered by an application shutdown event.
      */
     void shutdown();
+
+    // --- NEW METHODS ---
+
+    /**
+     * Checks if the currently active configuration in the cache is considered stale.
+     * Staleness can occur if the latest configuration from Consul failed validation
+     * and the manager is operating on a last-known-good configuration, or if no
+     * configuration is loaded.
+     *
+     * @return true if the current configuration is stale or not present, false otherwise.
+     */
+    boolean isCurrentConfigStale();
+
+    /**
+     * Retrieves an identifier for the currently active PipelineClusterConfig.
+     * This could be a version number, a hash of the content, or a timestamp.
+     *
+     * @return An Optional containing the version identifier string, or empty if no
+     * configuration is active or versioning is not determined.
+     */
+    Optional<String> getCurrentConfigVersionIdentifier();
 }

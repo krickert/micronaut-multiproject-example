@@ -1,10 +1,12 @@
 package com.krickert.search.config.consul;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
 import com.krickert.search.config.consul.exception.ConfigurationManagerInitializationException;
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
-import com.krickert.search.config.consul.service.ConsulKvService;
+// ConsulKvService import is removed as it's not directly used in the constructor or new methods.
+// It's used by ConsulBusinessOperationsService and ConsulConfigFetcher.
 import com.krickert.search.config.pipeline.model.*;
 import com.krickert.search.config.schema.model.SchemaVersionData;
 import io.micronaut.context.annotation.Value;
@@ -16,8 +18,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 @Singleton
@@ -31,10 +38,13 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
     private final CachedConfigHolder cachedConfigHolder;
     private final ApplicationEventPublisher<ClusterConfigUpdateEvent> eventPublisher;
     private final CopyOnWriteArrayList<Consumer<ClusterConfigUpdateEvent>> listeners = new CopyOnWriteArrayList<>();
-    private final ConsulKvService consulKvService;
     private final ConsulBusinessOperationsService consulBusinessOperationsService;
     private final ObjectMapper objectMapper;
     private String effectiveClusterName;
+
+    // --- NEW FIELDS for staleness and version ---
+    private final AtomicBoolean currentConfigIsStale = new AtomicBoolean(true); // Default to true until a valid config is loaded
+    private final AtomicReference<String> currentConfigVersionIdentifier = new AtomicReference<>(null);
 
     public DynamicConfigurationManagerImpl(
             @Value("${app.config.cluster-name}") String clusterName,
@@ -42,17 +52,15 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
             ConfigurationValidator configurationValidator,
             CachedConfigHolder cachedConfigHolder,
             ApplicationEventPublisher<ClusterConfigUpdateEvent> eventPublisher,
-            ConsulKvService consulKvService,
             ConsulBusinessOperationsService consulBusinessOperationsService,
             ObjectMapper objectMapper
     ) {
         this.defaultClusterName = clusterName;
-        this.effectiveClusterName = clusterName; // Initialize with default, will be updated in initialize()
+        this.effectiveClusterName = clusterName;
         this.consulConfigFetcher = consulConfigFetcher;
         this.configurationValidator = configurationValidator;
         this.cachedConfigHolder = cachedConfigHolder;
         this.eventPublisher = eventPublisher;
-        this.consulKvService = consulKvService;
         this.consulBusinessOperationsService = consulBusinessOperationsService;
         this.objectMapper = objectMapper;
         LOG.info("DynamicConfigurationManagerImpl created for cluster: {}", clusterName);
@@ -66,9 +74,7 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
 
     @Override
     public void initialize(String clusterNameFromParam) {
-        // Use the cluster name from the parameter instead of the injected property
         this.effectiveClusterName = clusterNameFromParam;
-
         if (!this.defaultClusterName.equals(clusterNameFromParam)) {
             LOG.info("Initialize called with cluster name '{}', which differs from default '{}'. Using provided name.",
                     clusterNameFromParam, this.defaultClusterName);
@@ -77,6 +83,8 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
         try {
             consulConfigFetcher.connect();
             LOG.info("Attempting initial configuration load for cluster: {}", effectiveClusterName);
+            currentConfigIsStale.set(true); // Assume stale until proven otherwise
+            currentConfigVersionIdentifier.set(null);
 
             try {
                 Optional<PipelineClusterConfig> initialClusterConfigOpt = consulConfigFetcher.fetchPipelineClusterConfig(effectiveClusterName);
@@ -86,38 +94,28 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                     processConsulUpdate(WatchCallbackResult.success(initialConfig), "Initial Load");
                 } else {
                     LOG.warn("No initial configuration found for cluster '{}'. Watch will pick up first appearance or deletion.", effectiveClusterName);
-                    // Ensure the cache is cleared when no initial configuration is found
                     cachedConfigHolder.clearConfiguration();
-                    LOG.info("Cache cleared due to no initial configuration found for cluster '{}'.", effectiveClusterName);
-                    // Current behavior: If no initial config, let the watch be the primary driver.
-                    // This is acceptable as the system might still become consistent once the watch provides data.
+                    currentConfigIsStale.set(true); // No config is a stale state
+                    currentConfigVersionIdentifier.set(null);
+                    LOG.info("Cache cleared, config marked stale due to no initial configuration for cluster '{}'.", effectiveClusterName);
                 }
             } catch (Exception fetchEx) {
-                // This catch block handles failures ONLY during the initial fetch.
-                // It's reasonable to log this and still attempt to start the watch,
-                // as the watch might succeed later.
                 LOG.error("Error during initial configuration fetch for cluster '{}': {}. Will still attempt to start watch.",
                         effectiveClusterName, fetchEx.getMessage(), fetchEx);
-                // Process this as a failure for the initial state, but don't stop initialization.
                 processConsulUpdate(WatchCallbackResult.failure(fetchEx), "Initial Load Fetch Error");
+                // State (stale=true, version=null) already set
             }
 
-            // If connect() succeeded and initial fetch (even if failed) didn't stop us,
-            // setting up the watch is critical.
             consulConfigFetcher.watchClusterConfig(effectiveClusterName, this::handleConsulWatchUpdate);
             LOG.info("Consul watch established for cluster configuration: {}", effectiveClusterName);
 
         } catch (Exception e) {
-            // This outer catch block handles failures from consulConfigFetcher.connect()
-            // or consulConfigFetcher.watchClusterConfig() setup.
-            // These are critical failures for the manager's core functionality.
             LOG.error("CRITICAL: Failed to initialize DynamicConfigurationManager (connect or watch setup) for cluster '{}': {}",
                     this.effectiveClusterName, e.getMessage(), e);
-            // Ensure the cache is cleared when a connection or watch setup failure occurs
             cachedConfigHolder.clearConfiguration();
-            LOG.info("Cache cleared due to connection or watch setup failure for cluster '{}'.", effectiveClusterName);
-            // Re-throw as a custom runtime exception to make the initialization failure explicit.
-            // This will typically cause the bean creation to fail if called from @PostConstruct.
+            currentConfigIsStale.set(true);
+            currentConfigVersionIdentifier.set(null);
+            LOG.info("Cache cleared, config marked stale due to connection or watch setup failure for cluster '{}'.", effectiveClusterName);
             throw new ConfigurationManagerInitializationException(
                     "Failed to initialize Consul connection or watch for cluster " + this.effectiveClusterName, e);
         }
@@ -128,27 +126,29 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
     }
 
     private void processConsulUpdate(WatchCallbackResult watchResult, String updateSource) {
-
         Optional<PipelineClusterConfig> oldConfigForEvent = cachedConfigHolder.getCurrentConfig();
 
         if (watchResult.hasError()) {
-            LOG.error("CRITICAL: Error received from Consul source '{}' for cluster '{}': {}. Keeping previous configuration.",
+            LOG.error("CRITICAL: Error received from Consul source '{}' for cluster '{}': {}. Keeping previous configuration. Marking as STALE.",
                     updateSource, this.effectiveClusterName, watchResult.error().map(Throwable::getMessage).orElse("Unknown error"));
             watchResult.error().ifPresent(e -> LOG.debug("Consul source error details:", e));
+            currentConfigIsStale.set(true); // Error means we can't trust the source, so current (if any) is effectively stale relative to desired.
+            // Version identifier remains that of the oldConfigForEvent, if present.
             return;
         }
 
-        if (watchResult.deleted()) { // Uses the boolean accessor from the record instance
-            LOG.warn("PipelineClusterConfig for cluster '{}' indicated as deleted by source '{}'. Clearing local cache and notifying listeners.",
+        if (watchResult.deleted()) {
+            LOG.warn("PipelineClusterConfig for cluster '{}' indicated as deleted by source '{}'. Clearing local cache, marking STALE, and notifying listeners.",
                     this.effectiveClusterName, updateSource);
             cachedConfigHolder.clearConfiguration();
+            currentConfigIsStale.set(true);
+            currentConfigVersionIdentifier.set(null);
             if (oldConfigForEvent.isPresent()) {
                 PipelineClusterConfig effectivelyEmptyConfig = new PipelineClusterConfig(this.effectiveClusterName, null, null, null, null, null);
                 ClusterConfigUpdateEvent event = new ClusterConfigUpdateEvent(oldConfigForEvent, effectivelyEmptyConfig);
                 publishEvent(event);
             } else {
-                LOG.info("Cache was already empty or no previous config to compare for deletion event from source '{}' for cluster '{}'.",
-                        updateSource, this.effectiveClusterName);
+                LOG.info("Cache was already empty for deletion event from source '{}' for cluster '{}'.", updateSource, this.effectiveClusterName);
             }
             return;
         }
@@ -175,19 +175,12 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                 }
                 LOG.debug("Fetched {} schema references for validation for source '{}'.", schemaCacheForNewConfig.size(), updateSource);
 
-                // If any schema is missing, skip validation and treat it as a validation failure
                 if (missingSchemaDetected) {
-                    LOG.error("CRITICAL: New configuration for cluster '{}' from source '{}' has missing schemas.",
+                    LOG.error("CRITICAL: New configuration for cluster '{}' from source '{}' has missing schemas. Marking as STALE.",
                             this.effectiveClusterName, updateSource);
-
-                    // For initial load, clear the cache and don't publish events. For watch updates, keep the old config.
-                    if (updateSource.equals("Initial Load")) {
-                        LOG.info("Clearing cache due to missing schemas during initial load for cluster '{}'.", this.effectiveClusterName);
-                        cachedConfigHolder.clearConfiguration();
-                        // Don't publish an event for initial load with missing schemas
-                    } else {
-                        LOG.info("Keeping previous configuration in cache due to missing schemas during watch update for cluster '{}'.", this.effectiveClusterName);
-                    }
+                    currentConfigIsStale.set(true); // Can't load new, so current (if any) or lack thereof is stale.
+                    // Version remains that of oldConfigForEvent.
+                    if (updateSource.equals("Initial Load")) cachedConfigHolder.clearConfiguration();
                     return;
                 }
 
@@ -200,39 +193,57 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                     LOG.info("Configuration for cluster '{}' from source '{}' validated successfully. Updating cache and notifying listeners.",
                             this.effectiveClusterName, updateSource);
                     cachedConfigHolder.updateConfiguration(newConfig, schemaCacheForNewConfig);
+                    currentConfigIsStale.set(false); // New valid config loaded
+                    currentConfigVersionIdentifier.set(generateConfigVersion(newConfig));
                     ClusterConfigUpdateEvent event = new ClusterConfigUpdateEvent(oldConfigForEvent, newConfig);
                     publishEvent(event);
                 } else {
-                    LOG.error("CRITICAL: New configuration for cluster '{}' from source '{}' failed validation. Errors: {}.",
+                    LOG.error("CRITICAL: New configuration for cluster '{}' from source '{}' failed validation. Marking as STALE. Errors: {}.",
                             this.effectiveClusterName, updateSource, validationResult.errors());
-
-                    // For initial load, clear the cache and don't publish events. For watch updates, keep the old config.
-                    if (updateSource.equals("Initial Load")) {
-                        LOG.info("Clearing cache due to validation failure during initial load for cluster '{}'.", this.effectiveClusterName);
-                        cachedConfigHolder.clearConfiguration();
-                        // Don't publish an event for initial load validation failure
-                    } else {
-                        LOG.info("Keeping previous configuration in cache due to validation failure during watch update for cluster '{}'.", this.effectiveClusterName);
-                    }
+                    currentConfigIsStale.set(true); // New config is invalid, so current state is stale.
+                    // Version remains that of oldConfigForEvent.
+                    if (updateSource.equals("Initial Load")) cachedConfigHolder.clearConfiguration();
                 }
             } catch (Exception e) {
-                LOG.error("CRITICAL: Exception during processing of new configuration from source '{}' for cluster '{}': {}.",
+                LOG.error("CRITICAL: Exception during processing of new configuration from source '{}' for cluster '{}': {}. Marking as STALE.",
                         updateSource, this.effectiveClusterName, e.getMessage(), e);
-
-                // For initial load, clear the cache and don't publish events. For watch updates, keep the old config.
-                if (updateSource.equals("Initial Load")) {
-                    LOG.info("Clearing cache due to exception during initial load for cluster '{}'.", this.effectiveClusterName);
-                    cachedConfigHolder.clearConfiguration();
-                    // Don't publish an event for initial load with exceptions
-                } else {
-                    LOG.info("Keeping previous configuration in cache due to exception during watch update for cluster '{}'.", this.effectiveClusterName);
-                }
+                currentConfigIsStale.set(true);
+                // Version remains that of oldConfigForEvent.
+                if (updateSource.equals("Initial Load")) cachedConfigHolder.clearConfiguration();
             }
         } else {
-            LOG.warn("Received ambiguous WatchCallbackResult (no config, no error, not deleted) from source '{}' for cluster '{}'. No action taken.",
+            LOG.warn("Received ambiguous WatchCallbackResult (no config, no error, not deleted) from source '{}' for cluster '{}'. Marking as STALE.",
                     updateSource, this.effectiveClusterName);
+            currentConfigIsStale.set(true);
+            // Version remains that of oldConfigForEvent.
         }
     }
+
+    private String generateConfigVersion(PipelineClusterConfig config) {
+        if (config == null) {
+            return "null-config";
+        }
+        try {
+            // A more robust approach: sort map keys if ObjectMapper doesn't guarantee order,
+            // then hash the JSON string.
+            String jsonConfig = objectMapper.writeValueAsString(config);
+            // Using MD5 for simplicity here. SHA-256 would be stronger.
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(jsonConfig.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (JsonProcessingException e) {
+            LOG.error("Failed to serialize PipelineClusterConfig to JSON for version generation: {}", e.getMessage());
+            return "serialization-error-" + System.currentTimeMillis(); // Fallback
+        } catch (NoSuchAlgorithmException e) {
+            LOG.error("MD5 algorithm not found for version generation: {}", e.getMessage());
+            return "hashing-algo-error-" + System.currentTimeMillis(); // Fallback
+        }
+    }
+
 
     private void publishEvent(ClusterConfigUpdateEvent event) {
         try {
@@ -258,7 +269,10 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
 
     @Override
     public Optional<PipelineConfig> getPipelineConfig(String pipelineId) {
-        return getCurrentPipelineClusterConfig().flatMap(clusterConfig -> Optional.ofNullable(clusterConfig.pipelineGraphConfig().getPipelineConfig(pipelineId)));
+        return getCurrentPipelineClusterConfig().flatMap(clusterConfig ->
+                Optional.ofNullable(clusterConfig.pipelineGraphConfig())
+                        .flatMap(graph -> Optional.ofNullable(graph.getPipelineConfig(pipelineId)))
+        );
     }
 
     @Override
@@ -290,9 +304,6 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
         listeners.clear();
     }
 
-    /**
-     * Creates a deep copy of a PipelineClusterConfig by serializing and deserializing it.
-     */
     private PipelineClusterConfig deepCopyConfig(PipelineClusterConfig config) {
         try {
             String json = objectMapper.writeValueAsString(config);
@@ -302,13 +313,8 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
         }
     }
 
-    /**
-     * Validates and saves the updated configuration to Consul.
-     * Only saves the configuration if it passes validation.
-     */
     private boolean saveConfigToConsul(PipelineClusterConfig updatedConfig) {
         try {
-            // Validate the configuration before saving
             Map<SchemaReference, String> schemaCacheForConfig = new HashMap<>();
             if (updatedConfig.pipelineModuleMap() != null && updatedConfig.pipelineModuleMap().availableModules() != null) {
                 for (PipelineModuleConfiguration moduleConfig : updatedConfig.pipelineModuleMap().availableModules().values()) {
@@ -318,8 +324,7 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                         if (schemaDataOpt.isPresent() && schemaDataOpt.get().schemaContent() != null) {
                             schemaCacheForConfig.put(ref, schemaDataOpt.get().schemaContent());
                         } else {
-                            LOG.warn("Schema content not found for reference {} during validation before saving. Validation may fail for steps using this module.",
-                                    ref);
+                            LOG.warn("Schema content not found for reference {} during validation before saving. Validation may fail for steps using this module.", ref);
                         }
                     }
                 }
@@ -336,13 +341,13 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                 return false;
             }
 
-            // Configuration passed validation, proceed with saving
             String clusterName = updatedConfig.clusterName();
-
-            // Use ConsulBusinessOperationsService instead of direct ConsulKvService
-            boolean success = consulBusinessOperationsService.storeClusterConfiguration(clusterName, updatedConfig).block();
+            boolean success = Boolean.TRUE.equals(consulBusinessOperationsService.storeClusterConfiguration(clusterName, updatedConfig).block());
             if (success) {
                 LOG.info("Successfully saved updated configuration to Consul for cluster: {}", updatedConfig.clusterName());
+                // After successful save, the watch should pick it up and update the cache,
+                // staleness, and version identifier through processConsulUpdate.
+                // We don't directly update currentConfigIsStale or currentConfigVersionIdentifier here.
                 return true;
             } else {
                 LOG.error("Failed to save updated configuration to Consul for cluster: {}", updatedConfig.clusterName());
@@ -358,33 +363,28 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
     @Override
     public boolean addKafkaTopic(String newTopic) {
         LOG.info("Adding Kafka topic '{}' to allowed topics for cluster: {}", newTopic, this.effectiveClusterName);
-
         Optional<PipelineClusterConfig> currentConfigOpt = getCurrentPipelineClusterConfig();
-        if (!currentConfigOpt.isPresent()) {
+        if (currentConfigOpt.isEmpty()) {
             LOG.error("Cannot add Kafka topic: No current configuration available for cluster: {}", this.effectiveClusterName);
             return false;
         }
 
         PipelineClusterConfig currentConfig = currentConfigOpt.get();
         Set<String> updatedTopics = new HashSet<>(currentConfig.allowedKafkaTopics());
-
-        // Check if topic already exists
         if (updatedTopics.contains(newTopic)) {
             LOG.info("Kafka topic '{}' already exists in allowed topics for cluster: {}", newTopic, this.effectiveClusterName);
             return true;
         }
-
         updatedTopics.add(newTopic);
 
-        PipelineClusterConfig updatedConfig = PipelineClusterConfig.builder()
-                .clusterName(currentConfig.clusterName())
-                .pipelineGraphConfig(currentConfig.pipelineGraphConfig())
-                .pipelineModuleMap(currentConfig.pipelineModuleMap())
-                .defaultPipelineName(currentConfig.defaultPipelineName())
-                .allowedKafkaTopics(updatedTopics)
-                .allowedGrpcServices(currentConfig.allowedGrpcServices())
-                .build();
-
+        PipelineClusterConfig updatedConfig = new PipelineClusterConfig(
+                currentConfig.clusterName(),
+                currentConfig.pipelineGraphConfig(),
+                currentConfig.pipelineModuleMap(),
+                currentConfig.defaultPipelineName(),
+                updatedTopics, // updated
+                currentConfig.allowedGrpcServices()
+        );
         return saveConfigToConsul(updatedConfig);
     }
 
@@ -393,243 +393,167 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
                                                      String outputKey, String newTopic, String targetStepName) {
         LOG.info("Updating pipeline step '{}' in pipeline '{}' to use Kafka topic '{}' for output '{}' targeting '{}'",
                 stepName, pipelineName, newTopic, outputKey, targetStepName);
-
         Optional<PipelineClusterConfig> currentConfigOpt = getCurrentPipelineClusterConfig();
-        if (!currentConfigOpt.isPresent()) {
+        if (currentConfigOpt.isEmpty()) {
             LOG.error("Cannot update pipeline step: No current configuration available for cluster: {}", this.effectiveClusterName);
             return false;
         }
 
-        // Create a deep copy of the config
-        PipelineClusterConfig updatedConfig = deepCopyConfig(currentConfigOpt.get());
+        PipelineClusterConfig currentConfig = deepCopyConfig(currentConfigOpt.get()); // Work on a copy
+        PipelineGraphConfig graph = currentConfig.pipelineGraphConfig();
+        if (graph == null || graph.pipelines() == null || !graph.pipelines().containsKey(pipelineName)) {
+            LOG.error("Pipeline '{}' not found.", pipelineName);
+            return false;
+        }
 
-        // Get the pipeline and step
-        PipelineConfig pipeline = updatedConfig.pipelineGraphConfig().pipelines().get(pipelineName);
-        if (pipeline == null) {
-            LOG.error("Pipeline '{}' not found in cluster: {}", pipelineName, this.effectiveClusterName);
+        PipelineConfig pipeline = graph.pipelines().get(pipelineName);
+        if (pipeline.pipelineSteps() == null || !pipeline.pipelineSteps().containsKey(stepName)) {
+            LOG.error("Step '{}' not found in pipeline '{}'.", stepName, pipelineName);
             return false;
         }
 
         PipelineStepConfig step = pipeline.pipelineSteps().get(stepName);
-        if (step == null) {
-            LOG.error("Step '{}' not found in pipeline '{}' in cluster: {}", stepName, pipelineName, this.effectiveClusterName);
-            return false;
-        }
+        Map<String, PipelineStepConfig.OutputTarget> newOutputs = new HashMap<>(step.outputs());
+        KafkaTransportConfig kafkaTransport = new KafkaTransportConfig(newTopic, Map.of("compression.type", "snappy"));
+        PipelineStepConfig.OutputTarget newOutputTarget = new PipelineStepConfig.OutputTarget(targetStepName, TransportType.KAFKA, null, kafkaTransport);
+        newOutputs.put(outputKey, newOutputTarget);
 
-        // Create a new output for the step
-        KafkaTransportConfig kafkaTransport = new KafkaTransportConfig(
-                newTopic,
-                Map.of("compression.type", "snappy")
+        PipelineStepConfig updatedStep = new PipelineStepConfig(
+                step.stepName(), step.stepType(), step.description(), step.customConfigSchemaId(),
+                step.customConfig(), step.kafkaInputs(), newOutputs, step.maxRetries(),
+                step.retryBackoffMs(), step.maxRetryBackoffMs(), step.retryBackoffMultiplier(),
+                step.stepTimeoutMs(), step.processorInfo()
         );
 
-        PipelineStepConfig.OutputTarget newOutput = new PipelineStepConfig.OutputTarget(
-                targetStepName,
-                TransportType.KAFKA,
-                null,
-                kafkaTransport
+        Map<String, PipelineStepConfig> newSteps = new HashMap<>(pipeline.pipelineSteps());
+        newSteps.put(stepName, updatedStep);
+        PipelineConfig updatedPipeline = new PipelineConfig(pipeline.name(), newSteps);
+
+        Map<String, PipelineConfig> newPipelinesMap = new HashMap<>(graph.pipelines());
+        newPipelinesMap.put(pipelineName, updatedPipeline);
+        PipelineGraphConfig newGraph = new PipelineGraphConfig(newPipelinesMap);
+
+        PipelineClusterConfig finalConfig = new PipelineClusterConfig(
+                currentConfig.clusterName(), newGraph, currentConfig.pipelineModuleMap(),
+                currentConfig.defaultPipelineName(), currentConfig.allowedKafkaTopics(),
+                currentConfig.allowedGrpcServices()
         );
-
-        // Add the new output to the step
-        Map<String, PipelineStepConfig.OutputTarget> updatedOutputs = new HashMap<>(step.outputs());
-        updatedOutputs.put(outputKey, newOutput);
-
-        // Create an updated step with the new output
-        PipelineStepConfig updatedStep = PipelineStepConfig.builder()
-                .stepName(step.stepName())
-                .stepType(step.stepType())
-                .description(step.description())
-                .customConfigSchemaId(step.customConfigSchemaId())
-                .customConfig(step.customConfig())
-                .kafkaInputs(step.kafkaInputs())
-                .processorInfo(step.processorInfo())
-                .outputs(updatedOutputs)
-                .build();
-
-        // Update the step in the pipeline
-        Map<String, PipelineStepConfig> updatedSteps = new HashMap<>(pipeline.pipelineSteps());
-        updatedSteps.put(updatedStep.stepName(), updatedStep);
-
-        // Create an updated pipeline with the updated step
-        PipelineConfig updatedPipeline = new PipelineConfig(
-                pipeline.name(),
-                updatedSteps
-        );
-
-        // Update the pipeline in the graph config
-        Map<String, PipelineConfig> updatedPipelines = new HashMap<>(updatedConfig.pipelineGraphConfig().pipelines());
-        updatedPipelines.put(updatedPipeline.name(), updatedPipeline);
-
-        // Create an updated graph config with the updated pipeline
-        PipelineGraphConfig updatedGraphConfig = new PipelineGraphConfig(updatedPipelines);
-
-        // Create an updated cluster config with the updated graph config
-        PipelineClusterConfig finalConfig = PipelineClusterConfig.builder()
-                .clusterName(updatedConfig.clusterName())
-                .pipelineGraphConfig(updatedGraphConfig)
-                .pipelineModuleMap(updatedConfig.pipelineModuleMap())
-                .defaultPipelineName(updatedConfig.defaultPipelineName())
-                .allowedKafkaTopics(updatedConfig.allowedKafkaTopics())
-                .allowedGrpcServices(updatedConfig.allowedGrpcServices())
-                .build();
-
         return saveConfigToConsul(finalConfig);
     }
 
     @Override
     public boolean deleteServiceAndUpdateConnections(String serviceName) {
         LOG.info("Deleting service '{}' and updating all connections to/from it for cluster: {}", serviceName, this.effectiveClusterName);
-
         Optional<PipelineClusterConfig> currentConfigOpt = getCurrentPipelineClusterConfig();
-        if (!currentConfigOpt.isPresent()) {
+        if (currentConfigOpt.isEmpty()) {
             LOG.error("Cannot delete service: No current configuration available for cluster: {}", this.effectiveClusterName);
             return false;
         }
 
-        // Create a deep copy of the config
-        PipelineClusterConfig updatedConfig = deepCopyConfig(currentConfigOpt.get());
+        PipelineClusterConfig currentConfig = deepCopyConfig(currentConfigOpt.get()); // Work on a copy
 
-        // Remove the service from allowed gRPC services
-        Set<String> updatedServices = new HashSet<>(updatedConfig.allowedGrpcServices());
-        if (!updatedServices.contains(serviceName)) {
-            LOG.warn("Service '{}' not found in allowed gRPC services for cluster: {}", serviceName, this.effectiveClusterName);
+        Set<String> updatedAllowedServices = new HashSet<>(currentConfig.allowedGrpcServices());
+        boolean serviceWasAllowed = updatedAllowedServices.remove(serviceName);
+        if (!serviceWasAllowed) {
+            LOG.warn("Service '{}' was not in the allowedGrpcServices list.", serviceName);
         }
-        updatedServices.remove(serviceName);
 
-        // Remove the service from the module map
-        Map<String, PipelineModuleConfiguration> updatedModules =
-                new HashMap<>(updatedConfig.pipelineModuleMap().availableModules());
-        updatedModules.remove(serviceName);
-        PipelineModuleMap updatedModuleMap = new PipelineModuleMap(updatedModules);
+        Map<String, PipelineModuleConfiguration> updatedModules = new HashMap<>(currentConfig.pipelineModuleMap().availableModules());
+        PipelineModuleConfiguration removedModule = updatedModules.remove(serviceName);
+        if (removedModule == null) {
+            LOG.warn("Service '{}' was not found in the pipelineModuleMap.", serviceName);
+        }
+        PipelineModuleMap newModuleMap = new PipelineModuleMap(updatedModules);
 
-        // Update all pipelines to remove connections to/from the service
-        Map<String, PipelineConfig> updatedPipelines = new HashMap<>();
+        Map<String, PipelineConfig> newPipelinesMap = new HashMap<>();
+        for (Map.Entry<String, PipelineConfig> pipelineEntry : currentConfig.pipelineGraphConfig().pipelines().entrySet()) {
+            String pName = pipelineEntry.getKey();
+            PipelineConfig pConfig = pipelineEntry.getValue();
+            Map<String, PipelineStepConfig> newSteps = new HashMap<>();
+            boolean pipelineChanged = false;
 
-        for (Map.Entry<String, PipelineConfig> pipelineEntry : updatedConfig.pipelineGraphConfig().pipelines().entrySet()) {
-            String pipelineName = pipelineEntry.getKey();
-            PipelineConfig pipeline = pipelineEntry.getValue();
-
-            // Check if any steps in this pipeline need to be updated or removed
-            Map<String, PipelineStepConfig> updatedSteps = new HashMap<>();
-            boolean pipelineModified = false;
-
-            for (Map.Entry<String, PipelineStepConfig> stepEntry : pipeline.pipelineSteps().entrySet()) {
-                String stepName = stepEntry.getKey();
+            for (Map.Entry<String, PipelineStepConfig> stepEntry : pConfig.pipelineSteps().entrySet()) {
+                String sName = stepEntry.getKey();
                 PipelineStepConfig step = stepEntry.getValue();
 
-                // Check if this step uses the service to be deleted
-                boolean stepUsesService = false;
-                if (step.processorInfo() != null &&
-                        serviceName.equals(step.processorInfo().grpcServiceName())) {
-                    stepUsesService = true;
-                    pipelineModified = true;
-                    LOG.info("Step '{}' in pipeline '{}' uses service '{}' and will be removed",
-                            stepName, pipelineName, serviceName);
-                    continue; // Skip this step (remove it)
+                if (step.processorInfo() != null && serviceName.equals(step.processorInfo().grpcServiceName())) {
+                    LOG.info("Removing step '{}' from pipeline '{}' as it uses deleted service '{}'.", sName, pName, serviceName);
+                    pipelineChanged = true;
+                    continue; // Skip adding this step
                 }
 
-                // Check if this step has outputs to the service
-                Map<String, PipelineStepConfig.OutputTarget> updatedOutputs = new HashMap<>();
-                boolean outputsModified = false;
-
+                Map<String, PipelineStepConfig.OutputTarget> newOutputs = new HashMap<>();
+                boolean outputsChanged = false;
                 for (Map.Entry<String, PipelineStepConfig.OutputTarget> outputEntry : step.outputs().entrySet()) {
-                    String outputKey = outputEntry.getKey();
                     PipelineStepConfig.OutputTarget output = outputEntry.getValue();
-
-                    boolean outputUsesService = false;
-
-                    // Check if this output uses the service via gRPC
-                    if (output.transportType() == TransportType.GRPC &&
-                            output.grpcTransport() != null &&
+                    boolean removeOutput = false;
+                    if (output.transportType() == TransportType.GRPC && output.grpcTransport() != null &&
                             serviceName.equals(output.grpcTransport().serviceName())) {
-                        outputUsesService = true;
-                    }
-
-                    // Check if this output targets a step that uses the service
-                    if (output.targetStepName() != null) {
-                        String targetStepName = output.targetStepName();
-                        // Handle cross-pipeline references (contains a dot)
-                        if (targetStepName.contains(".")) {
-                            String[] parts = targetStepName.split("\\.", 2);
-                            String targetPipelineName = parts[0];
-                            String targetStepNameInPipeline = parts[1];
-
-                            PipelineConfig targetPipeline = updatedConfig.pipelineGraphConfig().pipelines().get(targetPipelineName);
-                            if (targetPipeline != null) {
-                                PipelineStepConfig targetStep = targetPipeline.pipelineSteps().get(targetStepNameInPipeline);
-                                if (targetStep != null &&
-                                        targetStep.processorInfo() != null &&
-                                        serviceName.equals(targetStep.processorInfo().grpcServiceName())) {
-                                    outputUsesService = true;
-                                }
+                        removeOutput = true;
+                    } else {
+                        // Check if targetStepName (if it exists) is a step that uses the deleted service
+                        String targetStepFullName = output.targetStepName();
+                        if (targetStepFullName != null) {
+                            String targetPipelineName = pName; // Assume same pipeline by default
+                            String targetStepNameOnly = targetStepFullName;
+                            if (targetStepFullName.contains(".")) {
+                                String[] parts = targetStepFullName.split("\\.", 2);
+                                targetPipelineName = parts[0];
+                                targetStepNameOnly = parts[1];
                             }
-                        } else {
-                            // Same pipeline
-                            PipelineStepConfig targetStep = pipeline.pipelineSteps().get(targetStepName);
-                            if (targetStep != null &&
-                                    targetStep.processorInfo() != null &&
-                                    serviceName.equals(targetStep.processorInfo().grpcServiceName())) {
-                                outputUsesService = true;
+
+                            PipelineConfig targetPipeline = currentConfig.pipelineGraphConfig().pipelines().get(targetPipelineName);
+                            if (targetPipeline != null) {
+                                PipelineStepConfig targetStep = targetPipeline.pipelineSteps().get(targetStepNameOnly);
+                                if (targetStep != null && targetStep.processorInfo() != null &&
+                                        serviceName.equals(targetStep.processorInfo().grpcServiceName())) {
+                                    removeOutput = true; // Target step is being removed
+                                }
                             }
                         }
                     }
 
-                    if (!outputUsesService) {
-                        updatedOutputs.put(outputKey, output);
+                    if (removeOutput) {
+                        LOG.info("Removing output '{}' from step '{}' in pipeline '{}' as it targets deleted service '{}' or a step using it.",
+                                outputEntry.getKey(), sName, pName, serviceName);
+                        outputsChanged = true;
+                        pipelineChanged = true;
                     } else {
-                        outputsModified = true;
-                        pipelineModified = true;
-                        LOG.info("Output '{}' from step '{}' in pipeline '{}' uses service '{}' and will be removed",
-                                outputKey, stepName, pipelineName, serviceName);
+                        newOutputs.put(outputEntry.getKey(), output);
                     }
                 }
-
-                if (outputsModified) {
-                    // Create an updated step with the modified outputs
-                    PipelineStepConfig updatedStep = PipelineStepConfig.builder()
-                            .stepName(step.stepName())
-                            .stepType(step.stepType())
-                            .description(step.description())
-                            .customConfigSchemaId(step.customConfigSchemaId())
-                            .customConfig(step.customConfig())
-                            .kafkaInputs(step.kafkaInputs())
-                            .processorInfo(step.processorInfo())
-                            .outputs(updatedOutputs)
-                            .build();
-                    updatedSteps.put(stepName, updatedStep);
-                } else if (!stepUsesService) {
-                    // Keep the step unchanged
-                    updatedSteps.put(stepName, step);
+                if (outputsChanged) {
+                    step = new PipelineStepConfig(
+                            step.stepName(), step.stepType(), step.description(), step.customConfigSchemaId(),
+                            step.customConfig(), step.kafkaInputs(), newOutputs, step.maxRetries(),
+                            step.retryBackoffMs(), step.maxRetryBackoffMs(), step.retryBackoffMultiplier(),
+                            step.stepTimeoutMs(), step.processorInfo()
+                    );
                 }
+                newSteps.put(sName, step);
             }
-
-            if (pipelineModified) {
-                // Create an updated pipeline with the modified steps
-                PipelineConfig updatedPipeline = new PipelineConfig(
-                        pipeline.name(),
-                        updatedSteps
-                );
-                updatedPipelines.put(pipelineName, updatedPipeline);
-                LOG.info("Pipeline '{}' modified to remove connections to/from service '{}'",
-                        pipelineName, serviceName);
-            } else {
-                // Keep the pipeline unchanged
-                updatedPipelines.put(pipelineName, pipeline);
-            }
+            newPipelinesMap.put(pName, new PipelineConfig(pName, newSteps));
         }
+        PipelineGraphConfig newGraph = new PipelineGraphConfig(newPipelinesMap);
 
-        // Create an updated graph config with the updated pipelines
-        PipelineGraphConfig updatedGraphConfig = new PipelineGraphConfig(updatedPipelines);
-
-        // Create an updated cluster config with the updated graph config, module map, and services
-        PipelineClusterConfig finalConfig = PipelineClusterConfig.builder()
-                .clusterName(updatedConfig.clusterName())
-                .pipelineGraphConfig(updatedGraphConfig)
-                .pipelineModuleMap(updatedModuleMap)
-                .defaultPipelineName(updatedConfig.defaultPipelineName())
-                .allowedKafkaTopics(updatedConfig.allowedKafkaTopics())
-                .allowedGrpcServices(updatedServices)
-                .build();
-
+        PipelineClusterConfig finalConfig = new PipelineClusterConfig(
+                currentConfig.clusterName(), newGraph, newModuleMap,
+                currentConfig.defaultPipelineName(), currentConfig.allowedKafkaTopics(),
+                updatedAllowedServices
+        );
         return saveConfigToConsul(finalConfig);
     }
+
+    // --- IMPLEMENTATION OF NEW METHODS ---
+    @Override
+    public boolean isCurrentConfigStale() {
+        return currentConfigIsStale.get();
+    }
+
+    @Override
+    public Optional<String> getCurrentConfigVersionIdentifier() {
+        return Optional.ofNullable(currentConfigVersionIdentifier.get());
+    }
+
+
 }
