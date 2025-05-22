@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package com.krickert.yappy.registration.api;
+
+// Consider standardizing your Java package options across all Yappy protos
+option java_package = "com.krickert.yappy.registration.api";
+option java_multiple_files = true;
+option java_outer_classname = "YappyModuleRegistrationProto"; // Or similar
+
+// Service definition for modules to register with the Yappy platform
+service YappyModuleRegistrationService {
+  // Allows a module instance to register itself with the Yappy platform.
+  // The platform will then handle the actual registration with Consul.
+  rpc RegisterModule (RegisterModuleRequest) returns (RegisterModuleResponse);
+
+  // Future: Allows a module instance to gracefully deregister itself.
+  // rpc DeregisterModule (DeregisterModuleRequest) returns (DeregisterModuleResponse);
+
+  // Future: Allows a module instance to update its status or send heartbeats if using TTL checks.
+  // rpc UpdateModuleStatus (UpdateModuleStatusRequest) returns (UpdateModuleStatusResponse);
+}
+
+// Enum for specifying the type of health check the module exposes.
+enum HealthCheckType {
+  HEALTH_CHECK_TYPE_UNKNOWN = 0; // Default, should not be used
+  HTTP = 1;                      // Standard HTTP GET endpoint
+  GRPC = 2;                      // Standard gRPC health check (grpc.health.v1.Health)
+  TCP = 3;                       // Simple TCP connect check
+  TTL = 4;                       // Time-To-Live; module must send heartbeats via UpdateModuleStatus
+}
+
+// Request message for registering a module instance.
+message RegisterModuleRequest {
+  // The unique identifier for the *type* of this module.
+  // This ID links the running instance to its definition in PipelineModuleConfiguration.
+  // Example: "echo-processor-v1", "opennlp-chunker-v2.1"
+  string implementation_id = 1;
+
+  // The desired service name for this specific instance in Consul.
+  // Can be unique per instance (e.g., "echo-instance-abc12") or a common name
+  // if multiple instances of the same implementationId are load-balanced.
+  // If multiple instances share a name, instance_id_hint becomes more important.
+  string instance_service_name = 2;
+
+  // The network-accessible host or IP address of this module instance.
+  string host = 3;
+
+  // The port number on which this module instance's gRPC server is listening.
+  int32 port = 4;
+
+  // The type of health check this module instance supports.
+  HealthCheckType health_check_type = 5;
+
+  // The endpoint for the health check.
+  // - For HTTP: Path (e.g., "/health/ready")
+  // - For GRPC: Fully qualified service/method (e.g., "grpc.health.v1.Health/Check")
+  // - For TCP: Can be empty (host/port from above are used)
+  // - For TTL: Not applicable here, interval defined by registration service
+  string health_check_endpoint = 6;
+
+  // The MD5 or SHA256 digest of this module instance's custom configuration JSON.
+  // This is used by the Yappy Engine to verify configuration consistency.
+  string config_digest = 7;
+
+  // Optional: The software version of this module instance (e.g., "1.0.2").
+  optional string module_software_version = 8;
+
+  // Optional: A hint for generating a unique instance ID in Consul.
+  // If not provided, the Registration Service will generate one.
+  // Useful if the module instance already has a stable unique ID (e.g., K8s pod name).
+  optional string instance_id_hint = 9;
+
+  // Optional: Any additional tags this module instance suggests for its Consul registration.
+  // The Registration Service may add its own standard tags as well.
+  map<string, string> additional_tags = 10;
+}
+
+// Response message for the RegisterModule RPC.
+message RegisterModuleResponse {
+  // Indicates if the registration request was successfully processed by the
+  // Yappy Registration Service and forwarded to Consul.
+  bool success = 1;
+
+  // A human-readable message indicating the outcome or any errors.
+  string message = 2;
+
+  // The unique service ID assigned to this module instance by Consul
+  // (as registered by the Yappy Registration Service).
+  // This can be useful for the module if it needs to perform self-deregistration later.
+  string registered_service_id = 3;
+}
+
+// Future placeholder messages for DeregisterModule and UpdateModuleStatus
+// message DeregisterModuleRequest {
+//   string registered_service_id = 1; // ID obtained from RegisterModuleResponse
+// }
+// message DeregisterModuleResponse {
+//   bool success = 1;
+//   string message = 2;
+// }
+//
+// message UpdateModuleStatusRequest {
+//   string registered_service_id = 1;
+//   // Could include current load, specific health status details, etc.
+//   // For TTL checks, this would be the heartbeat.
+// }
+// message UpdateModuleStatusResponse {
+//   bool acknowledged = 1;
+// }

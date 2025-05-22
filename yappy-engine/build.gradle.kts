@@ -77,6 +77,11 @@ dependencies {
     runtimeOnly("io.micronaut.discovery:micronaut-discovery-client")
 
 
+    // Apicurio Registry
+    // https://mvnrepository.com/artifact/io.apicurio/apicurio-registry-protobuf-serde-kafka
+    implementation("io.apicurio:apicurio-registry-protobuf-serde-kafka:3.0.6")
+
+
     testImplementation(mn.reactor.test)
     testImplementation(mn.assertj.core)
     runtimeOnly("io.micronaut.discovery:micronaut-discovery-client")
@@ -106,9 +111,11 @@ dependencies {
     api(libs.amazon.connection.client)
     testImplementation(mn.junit.jupiter.api)
     testImplementation(mn.junit.jupiter.engine)
-// https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-params
+    // https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-params
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.12.2")
     testImplementation(mn.mockito.junit.jupiter)
+    // https://mvnrepository.com/artifact/org.awaitility/awaitility
+    testImplementation("org.awaitility:awaitility:4.3.0")
 }
 
 //// Add this block to explicitly configure the Mockito agent

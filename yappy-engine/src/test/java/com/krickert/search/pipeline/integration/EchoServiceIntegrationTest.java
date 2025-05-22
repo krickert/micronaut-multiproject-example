@@ -17,10 +17,7 @@ import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * It uses a simple in-process gRPC server to handle the requests.
  */
 @MicronautTest(environments = {"test-echo-grpc-working-standalone"}, startApplication = true)
+@TestInstance(TestInstance.Lifecycle.PER_METHOD)
 public class EchoServiceIntegrationTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(EchoServiceIntegrationTest.class);
