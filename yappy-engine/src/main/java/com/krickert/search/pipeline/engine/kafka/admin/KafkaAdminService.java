@@ -164,6 +164,18 @@ public interface KafkaAdminService {
 
     void updateTopicConfiguration(String topicName, Map<String, String> configsToUpdate);
 
+    /**
+     * Gets the number of available brokers in the Kafka cluster.
+     * @return CompletableFuture<Integer> containing the number of available brokers.
+     */
+    CompletableFuture<Integer> getAvailableBrokerCountAsync();
+
+    /**
+     * Synchronous version of getAvailableBrokerCountAsync.
+     * @return The number of available brokers.
+     */
+    int getAvailableBrokerCount();
+
     // getStatusForGroup(String groupId, String topic) - This can be composed from describeConsumerGroup, getConsumerLag
     // getStatusForTopic(String topic) - This can be composed from describeTopic and iterating consumer groups
 

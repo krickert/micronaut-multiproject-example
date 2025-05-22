@@ -546,6 +546,17 @@ public class MicronautKafkaAdminService implements KafkaAdminService {
         waitFor(updateTopicConfigurationAsync(topicName, configsToUpdate), config.getRequestTimeout(), "updateTopicConfiguration: " + topicName);
     }
 
+    @Override
+    public CompletableFuture<Integer> getAvailableBrokerCountAsync() {
+        return toCompletableFuture(adminClient.describeCluster().nodes())
+            .thenApply(nodes -> nodes.size());
+    }
+
+    @Override
+    public int getAvailableBrokerCount() {
+        return waitFor(getAvailableBrokerCountAsync(), config.getRequestTimeout(), "getAvailableBrokerCount");
+    }
+
     // ... synchronous wrappers for consumer group and lag methods will be added in subsequent steps ...
 
     private <T> T waitFor(CompletableFuture<T> future, Duration timeout, String operationDescription) {
