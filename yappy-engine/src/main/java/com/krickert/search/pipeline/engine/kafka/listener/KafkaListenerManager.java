@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.HashMap;
 
 /**
  * Manages Kafka listeners for pipeline steps.
@@ -147,9 +148,12 @@ public class KafkaListenerManager {
         String listenerId = generateListenerId(pipelineName, stepName);
 
         try {
+            // Convert Map<String, String> to Map<String, Object>
+            Map<String, Object> consumerConfigObj = new HashMap<>(consumerConfig);
+
             // Create new listener
             DynamicKafkaListener listener = listenerPool.createListener(
-                    listenerId, topic, groupId, consumerConfig, pipelineName, stepName, pipeStreamEngine);
+                    listenerId, topic, groupId, consumerConfigObj, pipelineName, stepName, pipeStreamEngine);
 
             // Update state
             stateManager.updateState(listenerId, new ConsumerState(

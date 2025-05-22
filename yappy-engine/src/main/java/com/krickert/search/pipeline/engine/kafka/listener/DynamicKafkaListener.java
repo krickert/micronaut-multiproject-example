@@ -41,7 +41,7 @@ public class DynamicKafkaListener {
     private final String listenerId;
     private final String topic;
     private final String groupId;
-    private final Map<String, String> consumerConfig;
+    private final Map<String, Object> consumerConfig;
     private final String pipelineName;
     private final String stepName;
     private final PipeStreamEngine pipeStreamEngine;
@@ -53,7 +53,7 @@ public class DynamicKafkaListener {
 
     /**
      * Creates a new DynamicKafkaListener.
-     * 
+     *
      * @param listenerId The ID of the listener
      * @param topic The Kafka topic to listen to
      * @param groupId The consumer group ID
@@ -66,7 +66,7 @@ public class DynamicKafkaListener {
             String listenerId,
             String topic,
             String groupId,
-            Map<String, String> consumerConfig,
+            Map<String, Object> consumerConfig,
             String pipelineName,
             String stepName,
             PipeStreamEngine pipeStreamEngine) {
@@ -81,9 +81,9 @@ public class DynamicKafkaListener {
 
         // Add required properties
         this.consumerConfig.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
-        this.consumerConfig.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, 
+        this.consumerConfig.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
                 "org.apache.kafka.common.serialization.UUIDDeserializer");
-        this.consumerConfig.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, 
+        this.consumerConfig.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
                 "com.krickert.search.model.serialization.PipeStreamDeserializer");
 
         initialize();
@@ -93,7 +93,7 @@ public class DynamicKafkaListener {
      * Initializes the Kafka consumer and starts the polling thread.
      */
     private void initialize() {
-        consumer = new KafkaConsumer<>(consumerConfig);
+        consumer = new KafkaConsumer<UUID,PipeStream>(consumerConfig);
         consumer.subscribe(Collections.singletonList(topic));
 
         executorService = Executors.newSingleThreadExecutor(
@@ -105,7 +105,7 @@ public class DynamicKafkaListener {
         running.set(true);
         executorService.submit(this::pollLoop);
 
-        log.info("Initialized Kafka listener: {} for topic: {}, group: {}", 
+        log.info("Initialized Kafka listener: {} for topic: {}, group: {}",
                 listenerId, topic, groupId);
     }
 
@@ -143,11 +143,11 @@ public class DynamicKafkaListener {
 
     /**
      * Processes a single Kafka record by forwarding it to the PipeStreamEngine.
-     * 
+     *
      * This method acknowledges the message right after deserialization,
      * and then processes it asynchronously to ensure exactly-once processing
      * in a fan-in/fan-out system.
-     * 
+     *
      * @param record The Kafka record to process
      */
     private void processRecord(ConsumerRecord<UUID, PipeStream> record) {
@@ -155,7 +155,7 @@ public class DynamicKafkaListener {
         PipeStream pipeStream = record.value();
 
         // Log that we've received the message
-        log.debug("Received record from topic: {}, partition: {}, offset: {}", 
+        log.debug("Received record from topic: {}, partition: {}, offset: {}",
                 record.topic(), record.partition(), record.offset());
 
         // Update the PipeStream with the current pipeline and step information
@@ -175,13 +175,13 @@ public class DynamicKafkaListener {
 
             @Override
             public void onError(Throwable throwable) {
-                log.error("Error processing record from topic: {}, partition: {}, offset: {}: {}", 
+                log.error("Error processing record from topic: {}, partition: {}, offset: {}: {}",
                         record.topic(), record.partition(), record.offset(), throwable.getMessage(), throwable);
             }
 
             @Override
             public void onCompleted() {
-                log.debug("Completed processing record from topic: {}, partition: {}, offset: {}", 
+                log.debug("Completed processing record from topic: {}, partition: {}, offset: {}",
                         record.topic(), record.partition(), record.offset());
             }
         };
@@ -190,7 +190,7 @@ public class DynamicKafkaListener {
         // This is a non-blocking call that will process the message asynchronously
         pipeStreamEngine.processStream(updatedPipeStream);
 
-        log.debug("Acknowledged record from topic: {}, partition: {}, offset: {}", 
+        log.debug("Acknowledged record from topic: {}, partition: {}, offset: {}",
                 record.topic(), record.partition(), record.offset());
     }
 
@@ -238,7 +238,7 @@ public class DynamicKafkaListener {
 
     /**
      * Checks if the consumer is paused.
-     * 
+     *
      * @return true if the consumer is paused, false otherwise
      */
     public boolean isPaused() {
@@ -247,7 +247,7 @@ public class DynamicKafkaListener {
 
     /**
      * Gets the ID of the listener.
-     * 
+     *
      * @return The listener ID
      */
     public String getListenerId() {
@@ -256,7 +256,7 @@ public class DynamicKafkaListener {
 
     /**
      * Gets the topic the consumer is subscribed to.
-     * 
+     *
      * @return The topic
      */
     public String getTopic() {
@@ -265,7 +265,7 @@ public class DynamicKafkaListener {
 
     /**
      * Gets the consumer group ID.
-     * 
+     *
      * @return The group ID
      */
     public String getGroupId() {
@@ -274,7 +274,7 @@ public class DynamicKafkaListener {
 
     /**
      * Gets the name of the pipeline.
-     * 
+     *
      * @return The pipeline name
      */
     public String getPipelineName() {
@@ -283,7 +283,7 @@ public class DynamicKafkaListener {
 
     /**
      * Gets the name of the step.
-     * 
+     *
      * @return The step name
      */
     public String getStepName() {

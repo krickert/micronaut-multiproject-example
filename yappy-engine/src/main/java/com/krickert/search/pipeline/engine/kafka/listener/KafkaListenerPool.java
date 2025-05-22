@@ -26,12 +26,12 @@ import java.util.concurrent.ConcurrentHashMap;
 @Requires(property = "kafka.enabled", value = "true")
 public class KafkaListenerPool {
     private static final Logger log = LoggerFactory.getLogger(KafkaListenerPool.class);
-    
+
     /**
      * Map of listener IDs to DynamicKafkaListener instances.
      */
     private final Map<String, DynamicKafkaListener> listeners = new ConcurrentHashMap<>();
-    
+
     /**
      * Creates and registers a new dynamic Kafka listener.
      * 
@@ -48,32 +48,32 @@ public class KafkaListenerPool {
             String listenerId,
             String topic, 
             String groupId, 
-            Map<String, String> consumerConfig,
+            Map<String, Object> consumerConfig,
             String pipelineName,
             String stepName,
             PipeStreamEngine pipeStreamEngine) {
-        
+
         // Check if listener already exists
         DynamicKafkaListener existingListener = listeners.get(listenerId);
         if (existingListener != null) {
             log.info("Listener already exists with ID: {}", listenerId);
             return existingListener;
         }
-        
+
         // Create a new dynamic listener
         DynamicKafkaListener listener = new DynamicKafkaListener(
                 listenerId, topic, groupId, consumerConfig, 
                 pipelineName, stepName, pipeStreamEngine);
-        
+
         // Store in our pool
         listeners.put(listenerId, listener);
-        
+
         log.info("Created Kafka listener: {} for topic: {}, group: {}", 
                 listenerId, topic, groupId);
-        
+
         return listener;
     }
-    
+
     /**
      * Removes a listener.
      * 
@@ -88,10 +88,10 @@ public class KafkaListenerPool {
         } else {
             log.warn("Attempted to remove non-existent listener: {}", listenerId);
         }
-        
+
         return listener;
     }
-    
+
     /**
      * Gets a listener by ID.
      * 
@@ -101,7 +101,7 @@ public class KafkaListenerPool {
     public DynamicKafkaListener getListener(String listenerId) {
         return listeners.get(listenerId);
     }
-    
+
     /**
      * Gets all listeners.
      * 
@@ -110,7 +110,7 @@ public class KafkaListenerPool {
     public Collection<DynamicKafkaListener> getAllListeners() {
         return Collections.unmodifiableCollection(listeners.values());
     }
-    
+
     /**
      * Gets the number of listeners.
      * 
@@ -119,7 +119,7 @@ public class KafkaListenerPool {
     public int getListenerCount() {
         return listeners.size();
     }
-    
+
     /**
      * Checks if a listener exists.
      * 
@@ -129,7 +129,7 @@ public class KafkaListenerPool {
     public boolean hasListener(String listenerId) {
         return listeners.containsKey(listenerId);
     }
-    
+
     /**
      * Shuts down all listeners.
      */
@@ -141,7 +141,7 @@ public class KafkaListenerPool {
                 log.error("Error shutting down listener: {}", listener.getListenerId(), e);
             }
         }
-        
+
         listeners.clear();
         log.info("Shut down all Kafka listeners");
     }
