@@ -6,6 +6,7 @@ import com.krickert.search.pipeline.engine.kafka.admin.exceptions.*;
 import io.micronaut.scheduling.TaskScheduler;
 import jakarta.inject.Singleton;
 import org.apache.kafka.clients.admin.*;
+import org.apache.kafka.clients.admin.AlterConsumerGroupOffsetsResult;
 import org.apache.kafka.common.KafkaFuture;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.ConfigResource;
@@ -16,7 +17,9 @@ import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 
 @Singleton
 public class MicronautKafkaAdminService implements KafkaAdminService {
@@ -240,8 +243,214 @@ public class MicronautKafkaAdminService implements KafkaAdminService {
     // --- Consumer Group Management (Asynchronous - Stubs for now for Step 1 focus) ---
     @Override
     public CompletableFuture<Void> resetConsumerGroupOffsetsAsync(String groupId, String topicName, OffsetResetParameters params) {
-        // To be implemented in Step 3
-        return CompletableFuture.failedFuture(new UnsupportedOperationException("resetConsumerGroupOffsetsAsync not implemented yet."));
+        // Validate inputs
+        if (groupId == null || groupId.isBlank()) {
+            return CompletableFuture.failedFuture(
+                    new IllegalArgumentException("Group ID cannot be null or blank"));
+        }
+        if (topicName == null || topicName.isBlank()) {
+            return CompletableFuture.failedFuture(
+                    new IllegalArgumentException("Topic name cannot be null or blank"));
+        }
+
+        // Create a CompletableFuture to return
+        CompletableFuture<Void> resultFuture = new CompletableFuture<>();
+
+        try {
+            // Get topic partitions
+            DescribeTopicsResult topicResult = adminClient.describeTopics(Collections.singleton(topicName));
+            KafkaFuture<Map<String, TopicDescription>> topicFuture = topicResult.allTopicNames();
+
+            topicFuture.whenComplete((topicDescriptions, topicEx) -> {
+                if (topicEx != null) {
+                    resultFuture.completeExceptionally(
+                            new TopicNotFoundException("Failed to describe topic: " + topicName, topicEx));
+                    return;
+                }
+
+                TopicDescription topicDescription = topicDescriptions.get(topicName);
+                if (topicDescription == null) {
+                    resultFuture.completeExceptionally(
+                            new TopicNotFoundException("Topic not found: " + topicName));
+                    return;
+                }
+
+                // Create list of topic partitions
+                List<TopicPartition> partitions = topicDescription.partitions().stream()
+                        .map(partitionInfo -> new TopicPartition(topicName, partitionInfo.partition()))
+                        .collect(Collectors.toList());
+
+                // Handle different reset strategies
+                switch (params.getStrategy()) {
+                    case EARLIEST:
+                        resetToEarliest(groupId, partitions, resultFuture);
+                        break;
+                    case LATEST:
+                        resetToLatest(groupId, partitions, resultFuture);
+                        break;
+                    case TO_TIMESTAMP:
+                        resetToTimestamp(groupId, partitions, params.getTimestamp(), resultFuture);
+                        break;
+                    case TO_SPECIFIC_OFFSETS:
+                        resetToSpecificOffsets(groupId, params.getSpecificOffsets(), resultFuture);
+                        break;
+                    default:
+                        resultFuture.completeExceptionally(
+                                new IllegalArgumentException("Unsupported reset strategy: " + params.getStrategy()));
+                }
+            });
+        } catch (Exception e) {
+            resultFuture.completeExceptionally(
+                    new KafkaAdminServiceException("Error resetting consumer group offsets", e));
+        }
+
+        return resultFuture;
+    }
+
+    private void resetToEarliest(String groupId, List<TopicPartition> partitions, CompletableFuture<Void> resultFuture) {
+        Map<TopicPartition, OffsetSpec> offsetSpecs = partitions.stream()
+                .collect(Collectors.toMap(tp -> tp, tp -> OffsetSpec.earliest()));
+
+        // Get beginning offsets for all partitions
+        adminClient.listOffsets(offsetSpecs)
+                .all()
+                .whenComplete((offsets, ex) -> {
+                    if (ex != null) {
+                        resultFuture.completeExceptionally(
+                                new KafkaAdminServiceException("Failed to get earliest offsets", ex));
+                        return;
+                    }
+
+                    Map<TopicPartition, Long> resetOffsets = new HashMap<>();
+                    offsets.forEach((tp, offsetInfo) -> resetOffsets.put(tp, offsetInfo.offset()));
+
+                    // Alter consumer group offsets
+                    alterConsumerGroupOffsets(groupId, resetOffsets, resultFuture);
+                });
+    }
+
+    private void resetToLatest(String groupId, List<TopicPartition> partitions, CompletableFuture<Void> resultFuture) {
+        Map<TopicPartition, OffsetSpec> offsetSpecs = partitions.stream()
+                .collect(Collectors.toMap(tp -> tp, tp -> OffsetSpec.latest()));
+
+        // Get end offsets for all partitions
+        adminClient.listOffsets(offsetSpecs)
+                .all()
+                .whenComplete((offsets, ex) -> {
+                    if (ex != null) {
+                        resultFuture.completeExceptionally(
+                                new KafkaAdminServiceException("Failed to get latest offsets", ex));
+                        return;
+                    }
+
+                    Map<TopicPartition, Long> resetOffsets = new HashMap<>();
+                    offsets.forEach((tp, offsetInfo) -> resetOffsets.put(tp, offsetInfo.offset()));
+
+                    // Alter consumer group offsets
+                    alterConsumerGroupOffsets(groupId, resetOffsets, resultFuture);
+                });
+    }
+
+    private void resetToTimestamp(String groupId, List<TopicPartition> partitions, Long timestamp, 
+                                 CompletableFuture<Void> resultFuture) {
+        if (timestamp == null) {
+            resultFuture.completeExceptionally(
+                    new IllegalArgumentException("Timestamp cannot be null for TO_TIMESTAMP strategy"));
+            return;
+        }
+
+        Map<TopicPartition, OffsetSpec> offsetSpecs = partitions.stream()
+                .collect(Collectors.toMap(tp -> tp, tp -> OffsetSpec.forTimestamp(timestamp)));
+
+        // Get offsets for the specified timestamp
+        adminClient.listOffsets(offsetSpecs)
+                .all()
+                .whenComplete((offsets, ex) -> {
+                    if (ex != null) {
+                        resultFuture.completeExceptionally(
+                                new KafkaAdminServiceException("Failed to get offsets for timestamp", ex));
+                        return;
+                    }
+
+                    Map<TopicPartition, Long> resetOffsets = new HashMap<>();
+
+                    // Process each partition
+                    CompletableFuture<?>[] futures = new CompletableFuture<?>[partitions.size()];
+                    AtomicInteger index = new AtomicInteger(0);
+
+                    for (TopicPartition tp : partitions) {
+                        ListOffsetsResult.ListOffsetsResultInfo offsetInfo = offsets.get(tp);
+
+                        if (offsetInfo != null && offsetInfo.offset() >= 0) {
+                            // If we found a valid offset for this timestamp, use it
+                            resetOffsets.put(tp, offsetInfo.offset());
+                            futures[index.getAndIncrement()] = CompletableFuture.completedFuture(null);
+                        } else {
+                            // If no offset found for timestamp, use latest
+                            CompletableFuture<Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo>> latestFuture = 
+                                    toCompletableFuture(adminClient.listOffsets(
+                                            Collections.singletonMap(tp, OffsetSpec.latest())).all());
+
+                            futures[index.getAndIncrement()] = latestFuture.thenAccept(latestOffsets -> {
+                                ListOffsetsResult.ListOffsetsResultInfo latestInfo = latestOffsets.get(tp);
+                                if (latestInfo != null) {
+                                    resetOffsets.put(tp, latestInfo.offset());
+                                }
+                            });
+                        }
+                    }
+
+                    // Wait for all partition offset lookups to complete
+                    CompletableFuture.allOf(futures).whenComplete((v, allEx) -> {
+                        if (allEx != null) {
+                            resultFuture.completeExceptionally(
+                                    new KafkaAdminServiceException("Failed to get offsets for some partitions", allEx));
+                            return;
+                        }
+
+                        // Alter consumer group offsets
+                        alterConsumerGroupOffsets(groupId, resetOffsets, resultFuture);
+                    });
+                });
+    }
+
+    private void resetToSpecificOffsets(String groupId, Map<TopicPartition, Long> specificOffsets, 
+                                       CompletableFuture<Void> resultFuture) {
+        if (specificOffsets == null || specificOffsets.isEmpty()) {
+            resultFuture.completeExceptionally(
+                    new IllegalArgumentException("Specific offsets cannot be null or empty for TO_SPECIFIC_OFFSETS strategy"));
+            return;
+        }
+
+        // Directly alter consumer group offsets with the provided specific offsets
+        alterConsumerGroupOffsets(groupId, specificOffsets, resultFuture);
+    }
+
+    private void alterConsumerGroupOffsets(String groupId, Map<TopicPartition, Long> offsets, 
+                                          CompletableFuture<Void> resultFuture) {
+        try {
+            // Convert from Map<TopicPartition, Long> to Map<TopicPartition, OffsetAndMetadata>
+            Map<TopicPartition, OffsetAndMetadata> offsetsAndMetadata = new HashMap<>();
+            for (Map.Entry<TopicPartition, Long> entry : offsets.entrySet()) {
+                offsetsAndMetadata.put(entry.getKey(), new OffsetAndMetadata(entry.getValue()));
+            }
+
+            // Call the AdminClient API to alter consumer group offsets
+            AlterConsumerGroupOffsetsResult alterResult = adminClient.alterConsumerGroupOffsets(groupId, offsetsAndMetadata);
+
+            // Handle the result
+            alterResult.all().whenComplete((v, ex) -> {
+                if (ex != null) {
+                    resultFuture.completeExceptionally(
+                            new KafkaAdminServiceException("Failed to alter consumer group offsets", ex));
+                } else {
+                    resultFuture.complete(null);
+                }
+            });
+        } catch (Exception e) {
+            resultFuture.completeExceptionally(
+                    new KafkaAdminServiceException("Error altering consumer group offsets", e));
+        }
     }
 
     @Override
