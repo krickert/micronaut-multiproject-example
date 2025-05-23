@@ -211,4 +211,85 @@ class TikaParserIntegrationTest {
         }
         assertTrue(foundCustomPrefix, "At least one log message should contain the custom prefix");
     }
+
+    @Test
+    @DisplayName("Should extract metadata and store in custom_data")
+    void testMetadataExtraction() throws IOException {
+        // Load a test document
+        byte[] fileContent = loadTestDocument("PDF.pdf");
+
+        // Create a blob with the document content
+        Blob blob = Blob.newBuilder()
+                .setBlobId("test-blob-id-metadata")
+                .setFilename("PDF.pdf")
+                .setData(ByteString.copyFrom(fileContent))
+                .build();
+
+        // Create a document with the blob
+        PipeDoc document = PipeDoc.newBuilder()
+                .setId("test-doc-id-metadata")
+                .setBlob(blob)
+                .build();
+
+        // Create custom configuration with metadata mapping rules
+        Struct mappersStruct = Struct.newBuilder()
+                // Keep Content-Type as is
+                .putFields("Content-Type", Value.newBuilder().setStructValue(Struct.newBuilder()
+                        .putFields("operation", Value.newBuilder().setStringValue("KEEP").build())
+                        .build()).build())
+                // Copy dc:title to document_title
+                .putFields("dc:title", Value.newBuilder().setStructValue(Struct.newBuilder()
+                        .putFields("operation", Value.newBuilder().setStringValue("COPY").build())
+                        .putFields("destination", Value.newBuilder().setStringValue("document_title").build())
+                        .build()).build())
+                // Apply regex to Content-Length
+                .putFields("Content-Length", Value.newBuilder().setStructValue(Struct.newBuilder()
+                        .putFields("operation", Value.newBuilder().setStringValue("REGEX").build())
+                        .putFields("destination", Value.newBuilder().setStringValue("size_in_bytes").build())
+                        .putFields("pattern", Value.newBuilder().setStringValue("(\\d+)").build())
+                        .putFields("replacement", Value.newBuilder().setStringValue("$1").build())
+                        .build()).build())
+                .build();
+
+        Struct customConfig = Struct.newBuilder()
+                .putFields("extractMetadata", Value.newBuilder().setBoolValue(true).build())
+                .putFields("metadata_field_name", Value.newBuilder().setStringValue("document_metadata").build())
+                .putFields("mappers", Value.newBuilder().setStructValue(mappersStruct).build())
+                .build();
+
+        // Create the request
+        ProcessRequest request = createTestRequest(document, customConfig, null);
+
+        // Call the service
+        ProcessResponse response = blockingClient.processData(request);
+
+        // Verify the response
+        assertTrue(response.getSuccess(), "Response should indicate success");
+        assertNotNull(response.getOutputDoc(), "Response should contain a document");
+        assertTrue(response.getOutputDoc().hasCustomData(), "Output document should have custom_data");
+
+        // Verify custom_data contains the document_metadata field
+        Struct customData = response.getOutputDoc().getCustomData();
+        assertTrue(customData.containsFields("document_metadata"), 
+                "custom_data should contain document_metadata field");
+
+        // Verify document_metadata is a Struct
+        Value metadataValue = customData.getFieldsOrDefault("document_metadata", null);
+        assertNotNull(metadataValue, "document_metadata value should not be null");
+        assertTrue(metadataValue.hasStructValue(), "document_metadata should be a Struct");
+
+        // Verify the Struct contains at least one field
+        Struct metadataStruct = metadataValue.getStructValue();
+        assertTrue(metadataStruct.getFieldsCount() > 0, 
+                "Metadata should contain at least one field");
+
+        // Log the metadata fields for debugging
+        LOG.info("Metadata fields:");
+        for (Map.Entry<String, Value> entry : metadataStruct.getFieldsMap().entrySet()) {
+            LOG.info("  {} = {}", entry.getKey(), 
+                    entry.getValue().hasStringValue() ? entry.getValue().getStringValue() : entry.getValue());
+        }
+
+        LOG.info("Successfully extracted metadata from PDF and stored in custom_data");
+    }
 }

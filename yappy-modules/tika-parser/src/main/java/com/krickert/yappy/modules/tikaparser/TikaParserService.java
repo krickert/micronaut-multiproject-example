@@ -9,6 +9,8 @@ import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.ParsedDocument;
 import com.krickert.search.model.ParsedDocumentReply;
 
+import java.util.Map;
+
 // Imports from pipe_step_processor_service.proto (assuming java_package = "com.krickert.search.sdk")
 import com.krickert.search.sdk.PipeStepProcessorGrpc;
 import com.krickert.search.sdk.ProcessConfiguration;
@@ -200,8 +202,29 @@ public class TikaParserService extends PipeStepProcessorGrpc.PipeStepProcessorIm
 
                 newDocBuilder.setBody(body);
 
-                // Skip copying metadata for now
-                // We could use custom_data field in the future if needed
+                // Process metadata if available
+                if (parsedDoc.getMetadataCount() > 0) {
+                    LOG.info("(Unary) Processing {} metadata entries", parsedDoc.getMetadataCount());
+
+                    // Create a metadata mapper from the configuration
+                    MetadataMapper metadataMapper = MetadataMapperFactory.createFromConfig(customConfig);
+
+                    // Apply mapping rules to the metadata
+                    Map<String, String> transformedMetadata = metadataMapper.applyRules(parsedDoc.getMetadataMap());
+
+                    // Store the transformed metadata in the custom_data field
+                    String metadataFieldName = "tika_metadata";
+                    if (customConfig != null && customConfig.containsFields("metadata_field_name")) {
+                        Value fieldNameValue = customConfig.getFieldsOrDefault("metadata_field_name", null);
+                        if (fieldNameValue != null && fieldNameValue.hasStringValue()) {
+                            metadataFieldName = fieldNameValue.getStringValue();
+                        }
+                    }
+
+                    CustomDataHelper.mergeMetadataIntoCustomData(newDocBuilder, transformedMetadata, metadataFieldName);
+                    LOG.info("(Unary) Added {} transformed metadata entries to custom_data.{}", 
+                            transformedMetadata.size(), metadataFieldName);
+                }
 
                 // Set the output document
                 responseBuilder.setOutputDoc(newDocBuilder.build());
