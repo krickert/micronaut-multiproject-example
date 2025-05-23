@@ -8,9 +8,3 @@ grpc:
     plaintext: true
     discovery:
       enabled: true
-consul:
-  client:
-    registration:
-      enabled: true
-      check:
-        enabled: true
