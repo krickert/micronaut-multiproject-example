@@ -1,0 +1,13 @@
+micronaut:
+  application:
+    name: tikaParserApplication
+grpc:
+  server:
+    port: ${random.port}
+  client:
+    plaintext: true
+    discovery:
+      enabled: true
+  services:
+    tika-parser:
+      enabled: true

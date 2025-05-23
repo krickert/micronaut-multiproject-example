@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Tika Parser Configuration",
+  "description": "Configuration options for the Tika document parser",
+  "type": "object",
+  "properties": {
+    "maxContentLength": {
+      "type": "integer",
+      "description": "Maximum length of content to extract (in characters). Use -1 for no limit.",
+      "default": -1
+    },
+    "extractMetadata": {
+      "type": "boolean",
+      "description": "Whether to extract and include metadata from the document",
+      "default": true
+    },
+    "tikaConfigPath": {
+      "type": "string",
+      "description": "Path to a custom Tika configuration XML file. If not provided, default Tika configuration will be used."
+    },
+    "log_prefix": {
+      "type": "string",
+      "description": "Prefix to add to log messages",
+      "default": ""
+    }
+  },
+  "additionalProperties": false
+}

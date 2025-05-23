@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package com.krickert.search.model;
+
+option java_multiple_files = true;
+option java_package = "com.krickert.search.model";
+option java_outer_classname = "TikaParserProto";
+
+// Represents a document parsed by Apache Tika
+message ParsedDocument {
+  // The title of the document, if available
+  string title = 1;
+  
+  // The main text content of the document
+  string body = 2;
+  
+  // Metadata extracted from the document
+  map<string, string> metadata = 3;
+}
+
+// Response message containing a parsed document
+message ParsedDocumentReply {
+  // The parsed document
+  ParsedDocument doc = 1;
+}
