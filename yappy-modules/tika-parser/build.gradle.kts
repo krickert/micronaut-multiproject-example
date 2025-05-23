@@ -12,6 +12,7 @@ repositories {
 }
 
 dependencies {
+    testAnnotationProcessor(mn.micronaut.inject.java)
     annotationProcessor(mn.micronaut.serde.processor)
     implementation(mn.micronaut.grpc.runtime)
     implementation(mn.micronaut.serde.jackson)
@@ -30,13 +31,16 @@ dependencies {
     implementation("org.apache.tika:tika-core:3.1.0")
     // https://mvnrepository.com/artifact/org.apache.tika/tika-parsers
     implementation("org.apache.tika:tika-parsers:3.1.0")
-    // https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-params
-    testImplementation("org.junit.jupiter:junit-jupiter-params:5.12.2")
+    testImplementation(mn.junit.jupiter.params)
+    testImplementation("org.junit.jupiter:junit-jupiter-api")
+    testImplementation("io.micronaut.test:micronaut-test-junit5")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
+    testImplementation("org.junit.jupiter:junit-jupiter-engine")
 }
 
 
 application {
-    mainClass = "com.krickert.yappy.modules.tikaparser.Application"
+    mainClass = "com.krickert.yappy.modules.echo.TikaParserApplication"
 }
 java {
     sourceCompatibility = JavaVersion.toVersion("21")

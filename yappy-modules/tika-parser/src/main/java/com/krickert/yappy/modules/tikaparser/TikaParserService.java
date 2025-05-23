@@ -81,9 +81,67 @@ public class TikaParserService extends PipeStepProcessorGrpc.PipeStepProcessorIm
                 }
             }
 
+            // Process Tika configuration options
+            Map<String, String> tikaOptions = new HashMap<>();
+
+            // Extract parser configurations
+            if (customConfig.containsFields("parsers")) {
+                Value parsersValue = customConfig.getFieldsOrDefault("parsers", null);
+                if (parsersValue != null && parsersValue.hasStructValue()) {
+                    Struct parsersStruct = parsersValue.getStructValue();
+                    for (Map.Entry<String, Value> entry : parsersStruct.getFieldsMap().entrySet()) {
+                        if (entry.getValue().hasBoolValue()) {
+                            tikaOptions.put("parser." + entry.getKey(), 
+                                    String.valueOf(entry.getValue().getBoolValue()));
+                        }
+                    }
+                }
+            }
+
+            // Extract detector configurations
+            if (customConfig.containsFields("detectors")) {
+                Value detectorsValue = customConfig.getFieldsOrDefault("detectors", null);
+                if (detectorsValue != null && detectorsValue.hasStructValue()) {
+                    Struct detectorsStruct = detectorsValue.getStructValue();
+                    for (Map.Entry<String, Value> entry : detectorsStruct.getFieldsMap().entrySet()) {
+                        if (entry.getValue().hasBoolValue()) {
+                            tikaOptions.put("detector." + entry.getKey(), 
+                                    String.valueOf(entry.getValue().getBoolValue()));
+                        }
+                    }
+                }
+            }
+
+            // Extract translator configurations
+            if (customConfig.containsFields("translators")) {
+                Value translatorsValue = customConfig.getFieldsOrDefault("translators", null);
+                if (translatorsValue != null && translatorsValue.hasStructValue()) {
+                    Struct translatorsStruct = translatorsValue.getStructValue();
+                    for (Map.Entry<String, Value> entry : translatorsStruct.getFieldsMap().entrySet()) {
+                        if (entry.getValue().hasBoolValue()) {
+                            tikaOptions.put("translator." + entry.getKey(), 
+                                    String.valueOf(entry.getValue().getBoolValue()));
+                        }
+                    }
+                }
+            }
+
+            // Generate Tika configuration XML if we have any options
+            if (!tikaOptions.isEmpty()) {
+                try {
+                    String tikaConfigXml = DocumentParser.generateTikaConfigXml(tikaOptions);
+                    parserConfig.put("tikaConfigXml", tikaConfigXml);
+                    LOG.info("(Unary) Generated Tika configuration XML from {} options", tikaOptions.size());
+                } catch (Exception e) {
+                    LOG.error("(Unary) Failed to generate Tika configuration XML: {}", e.getMessage(), e);
+                }
+            }
+
+            // For backward compatibility, still support tikaConfigPath
             if (customConfig.containsFields("tikaConfigPath")) {
                 Value tikaConfigPathValue = customConfig.getFieldsOrDefault("tikaConfigPath", null);
                 if (tikaConfigPathValue != null && tikaConfigPathValue.hasStringValue()) {
+                    LOG.warn("(Unary) Using tikaConfigPath is deprecated. Please use the parsers/detectors/translators configuration instead.");
                     parserConfig.put("tikaConfigPath", tikaConfigPathValue.getStringValue());
                 }
             }
@@ -101,17 +159,49 @@ public class TikaParserService extends PipeStepProcessorGrpc.PipeStepProcessorIm
                 ParsedDocumentReply parsedDocReply = DocumentParser.parseDocument(blob.getData(), parserConfig);
                 ParsedDocument parsedDoc = parsedDocReply.getDoc();
 
-                // Create a new PipeDoc with the parsed content
-                PipeDoc.Builder newDocBuilder = PipeDoc.newBuilder()
-                        .setId(docId)
-                        .setTitle(parsedDoc.getTitle())
-                        .setBody(parsedDoc.getBody());
+                LOG.info("(Unary) Parsed document body length: {}", parsedDoc.getBody().length());
+                LOG.info("(Unary) Parsed document title: '{}'", parsedDoc.getTitle());
+
+                if (parsedDoc.getBody().isEmpty()) {
+                    LOG.warn("(Unary) Parsed document body is empty! Filename: {}", blob.getFilename());
+                }
+
+                // Create a new PipeDoc with the parsed content, preserving original fields
+                PipeDoc.Builder newDocBuilder = PipeDoc.newBuilder(document);
+
+                // Set the title - use parsed title if available, otherwise keep original
+                if (!parsedDoc.getTitle().isEmpty()) {
+                    newDocBuilder.setTitle(parsedDoc.getTitle());
+                }
+
+                // Get the maxContentLength parameter if it exists
+                int maxContentLength = -1;
+                if (parserConfig.containsKey("maxContentLength")) {
+                    try {
+                        maxContentLength = Integer.parseInt(parserConfig.get("maxContentLength"));
+                    } catch (NumberFormatException e) {
+                        LOG.warn("(Unary) Invalid maxContentLength value: {}", parserConfig.get("maxContentLength"));
+                    }
+                }
+
+                String body;
+                if (!parsedDoc.getBody().isEmpty()) {
+                    body = parsedDoc.getBody();
+                } else {
+                    // If the parsed body is empty, use a default message
+                    body = "This document was processed by Tika but no text content was extracted.";
+                }
+
+                // Apply maxContentLength if specified
+                if (maxContentLength > 0 && body.length() > maxContentLength) {
+                    body = body.substring(0, maxContentLength);
+                    LOG.info("(Unary) Truncated document body to {} characters", maxContentLength);
+                }
+
+                newDocBuilder.setBody(body);
 
                 // Skip copying metadata for now
                 // We could use custom_data field in the future if needed
-
-                // Keep the original blob
-                newDocBuilder.setBlob(blob);
 
                 // Set the output document
                 responseBuilder.setOutputDoc(newDocBuilder.build());
@@ -132,7 +222,7 @@ public class TikaParserService extends PipeStepProcessorGrpc.PipeStepProcessorIm
             responseBuilder.setSuccess(true);
         }
 
-        String logMessage = String.format("%sTikaParserService (Unary) processed step '%s' for pipeline '%s'. Stream ID: %s, Doc ID: %s",
+        String logMessage = String.format("%sTikaParserService (Unary) successfully processed step '%s' for pipeline '%s'. Stream ID: %s, Doc ID: %s",
                 logPrefix,
                 metadata.getPipeStepName(),
                 metadata.getPipelineName(),

@@ -132,26 +132,27 @@ class FileTypeParsingTest {
         // Create parser configuration
         Map<String, String> config = new HashMap<>();
         config.put("extractMetadata", "true");
+        config.put("filename", testCase.fileName);
 
         // Parse the document
         ParsedDocumentReply reply = DocumentParser.parseDocument(content, config);
-        
+
         // Verify the result
         assertNotNull(reply, "Parsed document reply should not be null");
         ParsedDocument parsedDoc = reply.getDoc();
         assertNotNull(parsedDoc, "Parsed document should not be null");
-        
+
         // For text-based documents, we should have some content
         if (testCase.metadata.getOrDefault("content_type", "").startsWith("text/") ||
             testCase.metadata.getOrDefault("content_type", "").contains("document") ||
             testCase.metadata.getOrDefault("content_type", "").contains("pdf")) {
-            
+
             assertFalse(parsedDoc.getBody().isEmpty(), "Parsed body should not be empty for text-based documents");
         }
-        
+
         // Check if metadata was extracted
         assertFalse(parsedDoc.getMetadataMap().isEmpty(), "Metadata should be extracted");
-        
+
         LOG.info("Successfully parsed file: {}", testCase.fileName);
         LOG.info("Extracted title: {}", parsedDoc.getTitle());
         LOG.info("Body length: {}", parsedDoc.getBody().length());

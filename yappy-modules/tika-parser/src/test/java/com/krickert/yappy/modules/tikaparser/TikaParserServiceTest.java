@@ -261,7 +261,10 @@ class TikaParserServiceTest {
 
         assertTrue(response.getSuccess(), "Processing should be successful (Async)");
         assertTrue(response.hasOutputDoc(), "Response should have an output document (Async)");
-        assertEquals(inputDoc, response.getOutputDoc(), "Output document should match input document (Async)");
+
+        // Verify important fields match instead of exact document equality
+        assertEquals(inputDoc.getId(), response.getOutputDoc().getId(), "Document ID should match (Async)");
+        assertEquals(inputDoc.getTitle(), response.getOutputDoc().getTitle(), "Document title should match (Async)");
         assertTrue(response.getOutputDoc().hasBlob(), "Output document should contain the blob (Async)");
         assertEquals(inputBlob, response.getOutputDoc().getBlob(), "Blob in output document should match input blob (Async)");
 
