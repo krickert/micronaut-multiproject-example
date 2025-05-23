@@ -35,5 +35,6 @@ include(
     "yappy-models:protobuf-models",
     "yappy-modules:echo",
     "yappy-modules:chunker",
-    "yappy-engine"
+    "yappy-engine",
+    "graalpy-example"
 )

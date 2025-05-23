@@ -13,7 +13,12 @@ group = "com.krickert.search.python"
 repositories {
     mavenCentral()
 }
-
+// Install required Python packages for the gRPC server
+graalPy {
+    packages.add("termcolor==2.2")
+    packages.add("grpcio==1.59.0")
+    packages.add("protobuf==4.24.4")
+}
 dependencies {
     annotationProcessor("io.micronaut.serde:micronaut-serde-processor")
     implementation("io.micronaut:micronaut-discovery-core")
@@ -24,8 +29,6 @@ dependencies {
     runtimeOnly("ch.qos.logback:logback-classic")
     runtimeOnly("org.yaml:snakeyaml")
 
-    // Add dependency on protobuf-models project
-    implementation(project(":yappy-models:protobuf-models"))
 
     // Add test dependencies for gRPC testing
     testImplementation("io.micronaut.test:micronaut-test-junit5")
@@ -51,13 +54,13 @@ sourceSets {
             srcDirs("build/generated/source/proto/main/java")
         }
         resources {
-            // Include Python stubs from protobuf-models project
-            srcDirs(project(":yappy-models:protobuf-models").buildDir.resolve("generated/sources/proto/main/python"))
             // Include locally generated Python stubs
             srcDirs("build/generated/source/proto/main/python")
         }
     }
 }
+
+
 
 protobuf {
     protoc {
@@ -88,6 +91,15 @@ micronaut {
         incremental(true)
         annotations("com.krickert.search.python.*")
     }
+}
+
+// Add dependency between tasks and generateProto
+tasks.named("processResources") {
+    dependsOn("generateProto")
+}
+
+tasks.named("inspectRuntimeClasspath") {
+    dependsOn("generateProto")
 }
 
 

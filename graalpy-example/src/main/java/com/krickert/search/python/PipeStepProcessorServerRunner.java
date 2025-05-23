@@ -16,26 +16,25 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * A class that runs a Python gRPC server using GraalPy.
- * This server uses the generated Python protobuf stubs from both the local project
- * and the protobuf-models project.
+ * A class that runs a Python gRPC server for the PipeStepProcessor service using GraalPy.
+ * This server uses the generated Python protobuf stubs from the protobuf-models project.
  */
 @Singleton
 @Context // Eager initialization
-public class PythonServerRunner implements ApplicationEventListener<ServerStartupEvent> {
+public class PipeStepProcessorServerRunner implements ApplicationEventListener<ServerStartupEvent> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PythonServerRunner.class);
+    private static final Logger LOG = LoggerFactory.getLogger(PipeStepProcessorServerRunner.class);
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private org.graalvm.polyglot.Context pythonContext;
 
     @Override
     public void onApplicationEvent(ServerStartupEvent event) {
-        LOG.info("Starting Python gRPC server...");
+        LOG.info("Starting Python PipeStepProcessor gRPC server...");
         startPythonServer();
     }
 
     /**
-     * Starts the Python gRPC server in a separate thread.
+     * Starts the Python gRPC server for the PipeStepProcessor service in a separate thread.
      */
     private void startPythonServer() {
         executorService.submit(() -> {
@@ -46,9 +45,9 @@ public class PythonServerRunner implements ApplicationEventListener<ServerStartu
                         .build();
 
                 // Load the Python server script
-                String serverScript = loadPythonScript("/python/fibonacci_server.py");
+                String serverScript = loadPythonScript("/python/pipe_step_processor_server.py");
 
-                LOG.info("Loaded Python server script");
+                LOG.info("Loaded Python PipeStepProcessor server script");
 
                 // Execute the Python script
                 pythonContext.eval(Source.create("python", serverScript));
@@ -56,13 +55,13 @@ public class PythonServerRunner implements ApplicationEventListener<ServerStartu
                 // Get the serve function and call it
                 Value serveFunction = pythonContext.getBindings("python").getMember("serve");
                 if (serveFunction != null && serveFunction.canExecute()) {
-                    LOG.info("Starting Python gRPC server on port 50061");
+                    LOG.info("Starting Python PipeStepProcessor gRPC server on port 50062");
                     serveFunction.execute();
                 } else {
                     LOG.error("Failed to find or execute the 'serve' function in the Python script");
                 }
             } catch (Exception e) {
-                LOG.error("Error starting Python gRPC server", e);
+                LOG.error("Error starting Python PipeStepProcessor gRPC server", e);
             }
         });
     }

@@ -17,24 +17,24 @@ class FibonacciServiceServicer(graalpy_example_pb2_grpc.FibonacciServiceServicer
     def CalculateFibonacci(self, request, context):
         """Calculate the Fibonacci number for a given position."""
         logging.info(f"Calculating Fibonacci number at position {request.position}")
-        
+
         # Calculate Fibonacci number
         result = self._fibonacci(request.position)
-        
+
         # Log that we're also able to access types from the protobuf-models project
         logging.info(f"Successfully imported types from protobuf-models: {engine_service_pb2.DESCRIPTOR.name}, {yappy_core_types_pb2.DESCRIPTOR.name}")
-        
+
         return graalpy_example_pb2.FibonacciResponse(result=result)
 
     def CalculateFibonacciSequence(self, request, context):
         """Calculate a sequence of Fibonacci numbers up to a given position."""
         logging.info(f"Calculating Fibonacci sequence of length {request.length}")
-        
+
         # Calculate Fibonacci sequence
         sequence = [self._fibonacci(i) for i in range(request.length)]
-        
+
         return graalpy_example_pb2.FibonacciSequenceResponse(sequence=sequence)
-    
+
     def _fibonacci(self, n):
         """Calculate the nth Fibonacci number."""
         if n <= 0:
@@ -52,9 +52,9 @@ def serve():
     server = grpc.server(ThreadPoolExecutor(max_workers=10))
     graalpy_example_pb2_grpc.add_FibonacciServiceServicer_to_server(
         FibonacciServiceServicer(), server)
-    server.add_insecure_port('[::]:50051')
+    server.add_insecure_port('[::]:50061')
     server.start()
-    logging.info("Server started, listening on port 50051")
+    logging.info("Server started, listening on port 50061")
     server.wait_for_termination()
 
 if __name__ == '__main__':

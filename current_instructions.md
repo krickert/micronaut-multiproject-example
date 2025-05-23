@@ -1,124 +1,201 @@
+# YAPPY Engine: Comprehensive Development and Integration Plan
 
+## I. Foundational Principle: User-Centric Design & Operational Excellence
 
-# Next Steps for YAPPY Project Integration Testing
+This plan aims to create a YAPPY Engine that is not only powerful and flexible but also easy to set up, configure, monitor, and manage. We prioritize a smooth initial bootstrapping experience ("Easy Peasy" setup) which then enables more advanced operational capabilities like detailed status reporting, robust service lifecycle management, and comprehensive health checking.
 
-After examining the codebase, I can see that the project has two main modules (Echo and Chunker) with their implementations in the `yappy-modules` directory. The current integration tests in the `yappy-engine` project are using mock implementations of these services rather than the actual implementations.
+## II. Part A: Initial Engine Bootstrapping & Cluster Association (The "Easy Peasy" Plan)
 
-## Current State
+This part focuses on getting a YAPPY Engine instance minimally operational and connected to its coordination layer (Consul) and a YAPPY cluster.
 
-1. **Current Integration Tests**:
-   - `EchoFullConsulGrpcKafkaIntegrationTest.java`: Tests basic connectivity with Consul, gRPC, and Kafka - not started
-2. Service lifecycle, status, registration
+### Phase A.1: Consul Connection Bootstrap – "Hello, Consul!"
 
+1.  **Engine Startup: The "Are We Talking to Consul Yet?" Check**
+    *   On boot, the engine checks for Consul connection details (host, port, ACL token) from standard Micronaut configuration sources (env vars, `application.yml`, etc.).
+    *   **If Configured:** Proceed to Phase A.2.
+    *   **If NOT Configured:**
+        *   Log a user-friendly message indicating setup mode.
+        *   Activate a minimal "Setup Mode," deferring initialization of Consul-dependent components (e.g., `DynamicConfigurationManager`) to prevent startup failures.
 
-## Recommended Next Steps
+2.  **"Setup Mode": Getting Consul Details**
+    *   **API-Driven (Primary):** Expose a simple, unauthenticated API for providing Consul configuration.
+        *   **gRPC Option:** `BootstrapConfigService.SetConsulConfiguration(ConsulConfigDetails) returns (ConsulConnectionStatus)`
+        *   **HTTP Option:** `POST /setup/consul` with JSON payload.
+    *   **(Optional) UI for Dev/Testing:** A lightweight web form (served by the engine in setup mode) that calls the above API.
+        *   Inputs: Consul Host & Port, ACL Token, other essential client settings.
 
-### Next Steps: Service Lifecycle, Status, and Registration
+3.  **Making the Connection & Remembering It**
+    *   Upon receiving Consul details via the API:
+        *   Attempt to connect/ping the provided Consul instance.
+        *   **If Successful:**
+            *   **Persist Settings:** Save the validated Consul connection details to a local bootstrap configuration file (e.g., `~/.yappy/engine-bootstrap.properties` or a configurable path). This file will be loaded by Micronaut on subsequent startups *before* other configurations.
+            *   Log success and return a success status via the API.
+            *   The engine may then attempt to re-initialize Consul-dependent components or signal that a restart is required to use the new bootstrap configuration.
+        *   **If Unsuccessful:** Return an error status via the API, allowing the user to retry.
 
-#### 1. Define Core Status Models
+### Phase A.2: Yappy Cluster Initialization – "Which Party Are We Joining?"
 
-* **`ServiceOperationalStatus.java` (Enum):**
-  * Create an enum with the primary operational states:
-     * `UNKNOWN`
-     * `DEFINED`
-     * `INITIALIZING`
-     * `AWAITING_HEALTHY_REGISTRATION`
-     * `ACTIVE_HEALTHY`
-     * `ACTIVE_PROXYING`
-     * `DEGRADED_OPERATIONAL`
-     * `CONFIGURATION_ERROR` (to cover `BAD_SCHEMA` and `BAD_CONFIG`)
-     * `UNAVAILABLE`
-     * `UPGRADING`
-     * `STOPPED`
-* **`ServiceAggregatedStatus.java` (Java Record):**
-  * Define this record to hold the comprehensive status information for a logical service.
-    * Fields should include:
-      * `serviceName: String`
-      * `operationalStatus: ServiceOperationalStatus`
-      * `statusDetail: String` (human-readable summary/reason)
-      * `lastCheckedByEngineMillis: long`
-      * `totalInstancesConsul: int`
-      * `healthyInstancesConsul: int`
-      * `isLocalInstanceActive: boolean`
-      * `activeLocalInstanceId: String` (nullable)
-      * `isProxying: boolean`
-      * `proxyTargetInstanceId: String` (nullable)
-      * `isUsingStaleClusterConfig: boolean`
-      * `activeClusterConfigVersion: String` (identifier for the `PipelineClusterConfig`)
-      * `reportedModuleConfigDigest: String` (from module's Consul tags)
-      * `errorMessages: List<String>`
-      * `additionalAttributes: Map<String, String>`
-    * This record will be serialized to JSON and stored in Consul KV.
+*(This phase executes once the engine has successfully connected to Consul via Phase A.1)*
 
-#### 2. Engine Logic for Status Management
+1.  **Cluster Choice Time: API & (Optional) UI**
+    *   Expose API endpoints for cluster management:
+        *   **gRPC Option:** `BootstrapConfigService`
+            *   `ListAvailableClusters(Empty) returns (ClusterList)`: Queries Consul (e.g., lists keys under `pipeline-configs/clusters/`) for existing Yappy clusters.
+            *   `SelectExistingCluster(ClusterSelection) returns (OperationStatus)`: Engine records the selected cluster (e.g., in its local bootstrap config or an instance-specific Consul key) and associates itself with it.
+            *   `CreateNewCluster(NewClusterDetails) returns (ClusterCreationStatus)`: For initializing a new Yappy cluster.
+        *   **HTTP Option:** Endpoints like `GET /setup/clusters`, `POST /setup/cluster/select`, `POST /setup/cluster/create`.
+    *   **(Optional) UI for Dev/Testing:** A simple web page presenting these options (dropdown for existing, textbox for new).
 
-* **Develop Engine Component for Status Aggregation:**
-  * This component will be responsible for:
-      * Monitoring Consul service health and registrations (using `ConsulBusinessOperationsService`).
-      * Observing the state of locally managed modules.
-      * Tracking the currently active `PipelineClusterConfig` (from `DynamicConfigurationManager`).
-      * Detecting `BAD_SCHEMA` (if schema registry reports an issue or schema is unparsable) and `BAD_CONFIG` (if a module's config fails validation against its schema).
-      * Calculating the `ServiceOperationalStatus` and populating the `ServiceAggregatedStatus` record for each logical service defined in the `PipelineClusterConfig.pipelineModuleMap`.
-* **Consul KV Updates for Status:**
-   * The engine will periodically (or event-driven on changes) update the `ServiceAggregatedStatus` JSON object in Consul KV at a path like `yappy/status/services/{logicalServiceName}` using `ConsulBusinessOperationsService.putValue()`.
+2.  **Planting the Seed for a New Cluster**
+    *   If `CreateNewCluster` is invoked:
+        *   The engine uses `ConsulBusinessOperationsService` to write a default, minimal, but valid `PipelineClusterConfig` to the new cluster's path in Consul (e.g., `pipeline-configs/clusters/<new-cluster-name>`).
+        *   **Seed Configuration Details:**
+            *   `pipelineGraphConfig`: Empty or a very simple "hello world" example.
+            *   `pipelineModuleMap`: Empty.
+            *   `allowedKafkaTopics`: Empty or sensible defaults.
+            *   `allowedGrpcServices`: Empty or sensible defaults (perhaps allowing core engine services).
+            *   Whitelist configuration: Empty or allowing only essential initial registrations.
+        *   The engine then considers itself part of this newly seeded cluster.
 
-#### 3. Engine Logic for Service Registration & Lifecycle
+### Phase A.3: Showtime! – Transition to Normal Operation
 
-* **Implement "Bootstrap Cluster" Scenario:**
-   * On startup, if `ConsulBusinessOperationsService.getPipelineClusterConfig()` returns empty for the engine's configured cluster:
-      * Create a default/minimal `PipelineClusterConfig` in memory.
-      * Store it in Consul KV using `ConsulBusinessOperationsService.storeClusterConfiguration()`.
-* **Implement Engine-Managed Module Registration:**
-   * If the engine is responsible for starting and registering certain modules (e.g., "localhost" modules):
-      * **Pre-registration Health Check:** Before registering, the engine should directly ping the module's health endpoint.
-      * **Construct `Registration` Object:** Populate ID, name, address, port, tags (including `yappy-service-name`, `yappy-version`, `yappy-config-digest`), and health check details.
-      * **Register:** Call `ConsulBusinessOperationsService.registerService()`.
-      * **Verify:** After a short delay, use `ConsulBusinessOperationsService.getHealthyServiceInstances()` to confirm successful registration and health.
-      * **Deregister on Shutdown:** Call `ConsulBusinessOperationsService.deregisterService()` when the engine stops a managed module.
-* **Implement Proxying Logic (Basic):**
-   * If a required local module is `UNAVAILABLE` or `CONFIGURATION_ERROR`:
-      * Query Consul for healthy remote instances of the same logical service name using `ConsulBusinessOperationsService.getHealthyServiceInstances()`.
-      * If found, route traffic to a healthy remote instance.
-      * Update the service's `ServiceAggregatedStatus` in KV to `ACTIVE_PROXYING`.
+1.  **Full Steam Ahead**
+    *   With Consul configured (from Phase A.1) and a Yappy cluster identified (from Phase A.2):
+        *   The engine performs its full, normal startup sequence.
+        *   `DynamicConfigurationManager` loads the `PipelineClusterConfig` from Consul.
+        *   The engine registers itself with Consul (if applicable to its role).
+        *   Kafka listeners are started (if Kafka is configured and available).
+        *   Other operational components are initialized.
+    *   The "Setup Mode" is deactivated. The engine is now fully operational.
 
-#### 4. Health Check Integration
+## III. Part B: Enhanced Engine Operations within a Cluster
 
-* **Engine Health Indicator:**
-   * Create a Micronaut `HealthIndicator` for the YAPPY Engine.
-   * Checks:
-      * Consul availability.
-      * `DynamicConfigurationManager` status (current `PipelineClusterConfig` is loaded and valid).
-      * Aggregated health of services required by *active* pipelines (reads from `yappy/status/services/*` KV).
-* **Module Health Endpoints:**
-   * Mandate that all YAPPY modules (gRPC services) expose a standard health check endpoint (HTTP or gRPC Health Checking Protocol).
-   * This health check *must* include the status of its own configuration (valid against schema). If config is bad, module reports unhealthy.
+*(This part assumes the engine has successfully completed Part A and is operating within a configured Yappy cluster)*
 
-#### 5. API Exposure (Initial Focus on JSON/HTTP for UI)
+### Phase B.1: Define Core Status Models & Schema
 
-* **Create REST Controllers in the Engine:**
-   * `GET /api/status/services`: Returns `List<ServiceAggregatedStatus>`.
-   * `GET /api/status/services/{serviceName}`: Returns `ServiceAggregatedStatus`.
-   * `GET /api/status/cluster`: Returns engine's overall health and config status.
-   * `GET /api/config/cluster`: Returns the current `PipelineClusterConfig`.
-   * (Optional) Proxied Consul Endpoints:
-      * `GET /api/consul/services`
-      * `GET /api/consul/services/{serviceName}/instances`
-      * `GET /api/consul/services/{serviceName}/health`
-* These controllers will primarily read data prepared by the engine (from KV for aggregated status) or call `ConsulBusinessOperationsService` for direct Consul info.
+1.  **`ServiceOperationalStatus.java` (Enum):**
+    *   Implement the enum with states: `UNKNOWN`, `DEFINED`, `INITIALIZING`, `AWAITING_HEALTHY_REGISTRATION`, `ACTIVE_HEALTHY`, `ACTIVE_PROXYING`, `DEGRADED_OPERATIONAL`, `CONFIGURATION_ERROR` (covering `BAD_SCHEMA`, `BAD_CONFIG`), `UNAVAILABLE`, `UPGRADING`, `STOPPED`.
+2.  **`ServiceAggregatedStatus.java` (Java Record):**
+    *   Implement the record with fields: `serviceName`, `operationalStatus`, `statusDetail`, `lastCheckedByEngineMillis`, `totalInstancesConsul`, `healthyInstancesConsul`, `isLocalInstanceActive`, `activeLocalInstanceId`, `isProxying`, `proxyTargetInstanceId`, `isUsingStaleClusterConfig`, `activeClusterConfigVersion`, `reportedModuleConfigDigest`, `errorMessages`, `additionalAttributes`.
+    *   This record will be serialized to JSON for storage in Consul KV.
+3.  **Schema for `ServiceAggregatedStatus`:**
+    *   Generate and document the JSON schema for `ServiceAggregatedStatus` for API consumers.
 
-#### 6. Schema for Status Object
+### Phase B.2: Implement Engine Logic for Status Management
 
-* Once the `ServiceAggregatedStatus` Java record is defined, generate/document its JSON schema. This will be useful for API consumers (like the front-end).
+1.  **Develop Engine Component for Status Aggregation:**
+    *   This component will:
+        *   Monitor Consul service health and registrations (via `ConsulBusinessOperationsService`).
+        *   Observe the state of any locally managed modules.
+        *   Track the active `PipelineClusterConfig` version (from `DynamicConfigurationManager`).
+        *   Detect `BAD_SCHEMA` (e.g., schema registry issues, unparsable schemas from Consul) and `BAD_CONFIG` (module config failing validation against its schema, potentially reported by the module's own health check).
+        *   Calculate `ServiceOperationalStatus` and populate `ServiceAggregatedStatus` for each logical service in `PipelineClusterConfig.pipelineModuleMap`.
+2.  **Consul KV Updates for Status:**
+    *   The engine will periodically (or event-driven on relevant changes) update the `ServiceAggregatedStatus` JSON object in Consul KV at a path like `yappy/status/services/{logicalServiceName}` using `ConsulBusinessOperationsService.putValue()`.
 
-#### 7. Testing
+### Phase B.3: Enhance Engine Logic for Service Registration & Lifecycle
 
-* **Unit Tests for Engine Logic:** Mock `ConsulBusinessOperationsService` and `DynamicConfigurationManager` to test the engine's status calculation and registration decision logic under various scenarios.
-* **Integration Tests (MicronautTest with Testcontainers):**
-   * Test the engine's bootstrap scenario.
-   * Test the engine's module registration flow (if it has an API for it or manages local modules).
-   * Test the engine's ability to read module health from Consul and update the KV status objects.
-   * Test the new status APIs.
+1.  **Implement "Bootstrap Cluster" Refinement (Engine Self-Healing for Empty Config):**
+    *   On startup, if the engine is configured for a specific cluster (post-Phase A.2) but `ConsulBusinessOperationsService.getPipelineClusterConfig()` returns an empty or non-existent configuration for that cluster key in Consul:
+        *   Create a default/minimal `PipelineClusterConfig` in memory (similar to the seed in Phase A.2.2).
+        *   Store this minimal config in Consul KV at the expected cluster path using `ConsulBusinessOperationsService.storeClusterConfiguration()`. This ensures the engine can operate even if its designated cluster config was accidentally wiped from Consul.
+2.  **Implement Engine-Managed Module Registration (for co-located/engine-launched modules):**
+    *   If the engine is responsible for starting and registering certain modules:
+        *   **Pre-registration Health Check:** Directly ping the module's health endpoint before attempting Consul registration.
+        *   **Construct `Registration` Object:** Populate ID, name, address, port, tags (including `yappy-service-name`, `yappy-version`, `yappy-config-digest`), and detailed health check information (`Registration.RegCheck`).
+        *   **Register:** Call `ConsulBusinessOperationsService.registerService()`.
+        *   **Verify:** After a short delay, use `ConsulBusinessOperationsService.getHealthyServiceInstances()` to confirm successful registration and health status in Consul.
+        *   **Deregister on Shutdown:** Call `ConsulBusinessOperationsService.deregisterService()` when the engine stops a managed module.
+3.  **Implement Proxying Logic (Basic - Lower Priority/Later):**
+    *   If a required local module is `UNAVAILABLE` or in `CONFIGURATION_ERROR`:
+        *   Query Consul for healthy remote instances of the same logical service name using `ConsulBusinessOperationsService.getHealthyServiceInstances()`.
+        *   If found, the engine (or a component it manages) routes traffic to a healthy remote instance.
+        *   Update the service's `ServiceAggregatedStatus` in KV to `ACTIVE_PROXYING` with `proxyTargetInstanceId`.
 
+### Phase B.4: Implement Health Check Integration
+
+1.  **Engine Health Indicator:**
+    *   Create a Micronaut `HealthIndicator` for the YAPPY Engine.
+    *   Its health check will verify:
+        *   Consul client connectivity and availability.
+        *   `DynamicConfigurationManager` status (e.g., current `PipelineClusterConfig` is loaded, valid, and not unexpectedly stale).
+        *   Aggregated health of critical services required by *active* pipelines (by reading from `yappy/status/services/*` KV).
+2.  **Module Health Endpoint Mandate & Consumption:**
+    *   Formalize the requirement that all YAPPY modules (gRPC services) expose a standard health check endpoint (HTTP or gRPC Health Checking Protocol).
+    *   This module health check *must* include the status of its own configuration (i.e., is its `customConfigJson` valid against its declared schema?). If the module's config is bad, it must report itself as unhealthy.
+    *   The engine's status aggregation component (Phase B.2) will use this information when determining `ServiceOperationalStatus`.
+
+### Phase B.5: Expose Status and Configuration via API (Initial Focus on JSON/HTTP for UI)
+
+1.  **Create REST Controllers in the Engine:**
+    *   `GET /api/status/services`: Returns `List<ServiceAggregatedStatus>`.
+    *   `GET /api/status/services/{serviceName}`: Returns `ServiceAggregatedStatus` for a specific logical service.
+    *   `GET /api/status/cluster`: Returns the engine's overall health (from its `HealthIndicator`) and its current configuration status (e.g., active cluster name, config version).
+    *   `GET /api/config/cluster`: Returns the current `PipelineClusterConfig` being used by the engine.
+    *   **(Optional, Later) Proxied Consul Endpoints for Admin UI convenience:**
+        *   `GET /api/consul/services`
+        *   `GET /api/consul/services/{serviceName}/instances`
+        *   `GET /api/consul/services/{serviceName}/health`
+    *   These controllers will primarily read data prepared by the engine (e.g., from Consul KV for aggregated status) or call `ConsulBusinessOperationsService` for direct Consul information.
+
+### Phase B.6: Testing for Enhanced Operations
+
+1.  **Unit Tests for New Engine Logic:**
+    *   Mock `ConsulBusinessOperationsService`, `DynamicConfigurationManager`, etc., to test the status calculation, engine-managed registration decisions, and other new logic under various scenarios.
+2.  **Integration Tests (MicronautTest with Testcontainers):**
+    *   Test the "Bootstrap Cluster" refinement (engine seeding an empty but existing cluster config).
+    *   Test the engine-managed module registration flow (if an API is added to trigger it for a test module, or for a simple co-located test module).
+    *   Test the engine's ability to read module health from Consul (simulating healthy/unhealthy modules) and correctly update the `ServiceAggregatedStatus` in KV.
+    *   Test the new status and config REST APIs (Phase B.5).
+
+## IV. Parallel Tasks for Coworker (Supporting Parts A & B)
+
+While the core engine logic for the above phases is being developed, a coworker can proceed with:
+
+1.  **Define Setup & Status APIs (Proto/OpenAPI First):**
+    *   Draft gRPC service definitions (`.proto`) or OpenAPI specifications for:
+        *   `BootstrapConfigService` (from Phase A.1, A.2).
+        *   The REST APIs for status and configuration (from Phase B.5).
+    *   Define message types for `ConsulConfigDetails`, `ConsulConnectionStatus`, `ClusterList`, `ClusterSelection`, `NewClusterDetails`, `ClusterCreationStatus`, `OperationStatus`, and the structure for `ServiceAggregatedStatus` (aligning with the Java Record from B.1).
+2.  **Sketch out Minimal UI for Setup:**
+    *   HTML mockups/wireframes for the Consul configuration form and the cluster selection/creation page (supporting Phase A.1, A.2).
+3.  **Define Default Seed `PipelineClusterConfig` Structure:**
+    *   Document the exact JSON/YAML structure for a minimal, valid `PipelineClusterConfig` used for seeding new clusters (supports Phase A.2.2 and B.3.1). Specify what "empty but valid" means for all its sub-components.
+4.  **Research & Plan Bootstrap Config Persistence Mechanism:**
+    *   Finalize the local file format (properties, YAML, JSON), default path (e.g., `~/.yappy/engine-bootstrap.conf`), permission considerations, and how Micronaut will load this *very* early in its bootstrap sequence (supports Phase A.1.3).
+5.  **(Optional) Design Basic CLI Tool Interface for Setup:**
+    *   Outline commands for `yappy-engine setup consul ...` and `yappy-engine setup cluster ...` (supports Phase A).
+6.  **Implement Core Status Models (Phase B.1):**
+    *   The coworker can implement `ServiceOperationalStatus.java` and `ServiceAggregatedStatus.java` once the fields are agreed upon.
+
+## V. Future Integration Testing & Advanced Features (Beyond Initial Setup & Core Operations)
+
+This section covers the broader testing and feature development outlined in the original "Next Steps for YAPPY Project Integration Testing" and "Future Steps" sections of `current_instructions.md`. These will build upon the stable foundation established by Parts A and B.
+
+1.  **Integration Tests with Actual Modules (Echo & Chunker):**
+    *   Adapt existing integration tests or create new ones in `yappy-engine` to use the *actual* Echo and Chunker module implementations from the `yappy-modules` directory, rather than mocks. This will involve managing multiple service contexts within a single test, likely using Testcontainers for shared infrastructure (Consul, Kafka, Schema Registry).
+    *   **Test Configuration Management:** Explore using dedicated test YAML files per service context (e.g., `application-test-echo.yml`) for clarity.
+2.  **Test Kafka Serialization of `PipeStream` Objects:**
+    *   Implement the Kafka serialization/deserialization test for `PipeStream` as outlined.
+3.  **Test End-to-End gRPC Flow (Engine Orchestrating Modules):**
+    *   Create tests where the YAPPY Engine receives a request (e.g., via `processPipe` or `processConnectorDoc`) and orchestrates calls to actual Echo and Chunker modules discovered via Consul.
+4.  **Test Combined Kafka and gRPC Flow:**
+    *   Implement the test for a pipeline that involves both Kafka message passing and gRPC calls between steps, using actual modules.
+5.  **Schema Registry Integration & Testing:**
+    *   Ensure schemas are pre-registered or registered during test setup.
+    *   Test Kafka flows that require schema validation (Apicurio/Glue), ensuring all service contexts point to the same Testcontainer-managed schema registry.
+6.  **Admin API Usage in Tests:**
+    *   As Admin APIs for managing `PipelineClusterConfig`, `PipelineConfig`, module registration, etc., are developed (from "Admin Features Left to Implement"), incorporate their use into integration tests for setup and configuration, rather than always seeding Consul directly.
+7.  **Advanced Feature Implementation & Testing (from original document):**
+    *   **Admin Features:** Module validation service, module registration API, containerization strategies, live config updates for modules, module health monitoring.
+    *   **Observability:** Metrics, distributed tracing, logging, alerting, dashboards.
+    *   **Search Features:** Search API, analytics, white-labeling.
+    *   **Pipeline Editor & Dashboard.**
+    *   **Connectors & Sinks:** Python examples, Wikipedia/Common Crawl connectors, OpenSearch/Docstore sinks.
+    *   **Error Handling, Idempotency, Retries, Security.**
+
+This unified plan should provide a clear roadmap, allowing for parallel work where appropriate and ensuring that foundational pieces are in place before building more complex features on top.
 ## Future Steps
 
 ### 3. Test Kafka Serialization of PipeStream Objects

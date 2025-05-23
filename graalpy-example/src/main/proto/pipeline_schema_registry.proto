@@ -1,0 +1,147 @@
+syntax = "proto3";
+
+package com.krickert.search.schema.registry;
+
+option java_multiple_files = true;
+option java_package = "com.krickert.search.schema.registry";
+option java_outer_classname = "SchemaRegistryServiceProto";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+// Service for managing JSON schema definitions used by pipeline steps.
+// These schemas define the expected structure for the 'custom_json_config'
+// field within a PipelineStepConfig.
+service SchemaRegistryService {
+  // Registers a new JSON schema or updates an existing one.
+  // The schema content itself is validated for being a valid JSON schema.
+  // If a schema with the same schema_id already exists, it will be updated.
+  rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse);
+
+  // Retrieves a specific JSON schema by its ID.
+  rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
+
+  // Deletes a JSON schema by its ID.
+  rpc DeleteSchema(DeleteSchemaRequest) returns (DeleteSchemaResponse);
+
+  // Lists all registered JSON schemas, with optional filtering.
+  rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse); // <--- Description updated
+
+  // Validates the provided JSON schema content without registering it.
+  // This can be used to check schema correctness before attempting registration.
+  rpc ValidateSchemaContent(ValidateSchemaContentRequest) returns (ValidateSchemaContentResponse);
+}
+
+// Contains the definition and metadata of a JSON schema.
+message SchemaInfo {
+  // REQUIRED. A unique identifier for this schema (e.g., "my-processor-config-schema-v1").
+  // This ID is used in PipelineStepConfig.customConfigSchemaId to reference this schema.
+  string schema_id = 1;
+
+  // REQUIRED. The actual JSON schema content as a string.
+  string schema_content = 2;
+
+  // Optional. A human-readable description of the schema.
+  optional string description = 3;
+
+  // Timestamp of when this schema was first created.
+  google.protobuf.Timestamp created_at = 4;
+
+  // Timestamp of when this schema was last updated.
+  google.protobuf.Timestamp updated_at = 5;
+
+  // Optional. Additional metadata for the schema (e.g., author, version tags).
+  map<string, string> metadata = 6;
+
+  // Reserved for future use, e.g., "JSON_SCHEMA", "AVRO". Currently implies "JSON_SCHEMA".
+  // string schema_type = 7;
+}
+
+// Request to register or update a JSON schema.
+message RegisterSchemaRequest {
+  // REQUIRED. The unique identifier for the schema.
+  string schema_id = 1;
+
+  // REQUIRED. The JSON schema content as a string.
+  string schema_content = 2;
+
+  // Optional. A human-readable description.
+  optional string description = 3;
+
+  // Optional. Additional metadata.
+  map<string, string> metadata = 4;
+}
+
+// Response from a RegisterSchema operation.
+message RegisterSchemaResponse {
+  // The schema_id of the registered or updated schema.
+  string schema_id = 1;
+
+  // True if the schema was successfully validated and registered/updated.
+  // False if validation of the schema_content itself failed.
+  bool success = 2;
+
+  // List of validation errors if success is false. Empty if successful.
+  // These errors pertain to the validity of the schema_content as a JSON schema document.
+  repeated string validation_errors = 3;
+
+  // Timestamp of the registration or update.
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+// Request to retrieve a JSON schema.
+message GetSchemaRequest {
+  // REQUIRED. The unique identifier of the schema to retrieve.
+  string schema_id = 1;
+  // Optional: string version_id = 2; // If versioning per schema_id is implemented later.
+}
+
+// Response containing the retrieved JSON schema.
+message GetSchemaResponse {
+  // The requested schema information.
+  // If not found, a gRPC NOT_FOUND error status will be returned.
+  SchemaInfo schema_info = 1;
+}
+
+// Request to delete a JSON schema.
+message DeleteSchemaRequest {
+  // REQUIRED. The unique identifier of the schema to delete.
+  string schema_id = 1;
+  // Optional: string version_id = 2; // If versioning per schema_id is implemented later.
+}
+
+// Response from a DeleteSchema operation.
+// Returns google.protobuf.Empty on successful deletion.
+// Returns gRPC NOT_FOUND error status if schema_id does not exist.
+message DeleteSchemaResponse {
+  google.protobuf.Empty acknowledgement = 1;
+}
+
+// Request to list JSON schemas.
+message ListSchemasRequest {
+  // Optional. A filter to apply to schema_id (e.g., prefix match).
+  optional string id_filter = 1;
+  // page_size and page_token removed
+}
+
+// Response containing a list of JSON schemas.
+message ListSchemasResponse {
+  // A list of schema information objects.
+  repeated SchemaInfo schemas = 1;
+  // next_page_token removed
+}
+
+// Request to validate JSON schema content.
+message ValidateSchemaContentRequest {
+  // REQUIRED. The JSON schema content as a string to be validated.
+  string schema_content = 1;
+}
+
+// Response from a ValidateSchemaContent operation.
+message ValidateSchemaContentResponse {
+  // True if the provided schema_content is a valid JSON schema document.
+  bool is_valid = 1;
+
+  // List of validation errors if is_valid is false. Empty if valid.
+  repeated string validation_errors = 2;
+}
