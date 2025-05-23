@@ -4,24 +4,118 @@
   "description": "Configuration options for the Tika document parser",
   "type": "object",
   "properties": {
-    "maxContentLength": {
-      "type": "integer",
-      "description": "Maximum length of content to extract (in characters). Use -1 for no limit.",
-      "default": -1
+    "parsingOptions": {
+      "type": "object",
+      "description": "Options related to document parsing",
+      "properties": {
+        "maxContentLength": {
+          "type": "integer",
+          "description": "Maximum length of content to extract (in characters). Use -1 for no limit.",
+          "default": -1
+        },
+        "extractMetadata": {
+          "type": "boolean",
+          "description": "Whether to extract and include metadata from the document",
+          "default": true
+        },
+        "tikaConfigPath": {
+          "type": "string",
+          "description": "Path to a custom Tika configuration XML file. If not provided, default Tika configuration will be used. This is deprecated in favor of using the features and parsers options."
+        }
+      },
+      "additionalProperties": false
     },
-    "extractMetadata": {
-      "type": "boolean",
-      "description": "Whether to extract and include metadata from the document",
-      "default": true
+    "processingOptions": {
+      "type": "object",
+      "description": "Options related to document processing",
+      "properties": {
+        "metadata_field_name": {
+          "type": "string",
+          "description": "Field name to use for storing metadata in custom_data",
+          "default": "tika_metadata"
+        },
+        "mappers": {
+          "type": "object",
+          "description": "Metadata field mapping rules. Keys are source field names, values are mapping configurations.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "description": "Operation to perform on the metadata field",
+                "enum": ["KEEP", "DELETE", "COPY", "REGEX"],
+                "default": "KEEP"
+              },
+              "destination": {
+                "type": "string",
+                "description": "Destination field name for COPY and REGEX operations"
+              },
+              "pattern": {
+                "type": "string",
+                "description": "Regex pattern for REGEX operation"
+              },
+              "replacement": {
+                "type": "string",
+                "description": "Replacement string for REGEX operation",
+                "default": ""
+              }
+            },
+            "required": ["operation"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
     },
-    "tikaConfigPath": {
-      "type": "string",
-      "description": "Path to a custom Tika configuration XML file. If not provided, default Tika configuration will be used."
+    "features": {
+      "type": "array",
+      "description": "List of Tika features to enable",
+      "items": {
+        "type": "string",
+        "enum": ["GEO_TOPIC_PARSER", "OCR", "LANGUAGE_DETECTION"]
+      },
+      "uniqueItems": true
+    },
+    "parsers": {
+      "type": "object",
+      "description": "Custom parser configurations",
+      "additionalProperties": {
+        "type": "boolean"
+      }
+    },
+    "detectors": {
+      "type": "object",
+      "description": "Custom detector configurations",
+      "additionalProperties": {
+        "type": "boolean"
+      }
+    },
+    "translators": {
+      "type": "object",
+      "description": "Custom translator configurations",
+      "additionalProperties": {
+        "type": "boolean"
+      }
     },
     "log_prefix": {
       "type": "string",
       "description": "Prefix to add to log messages",
       "default": ""
+    },
+    "maxContentLength": {
+      "type": "integer",
+      "description": "Maximum length of content to extract (in characters). Use -1 for no limit. This is kept for backward compatibility, prefer using parsingOptions.maxContentLength.",
+      "default": -1
+    },
+    "extractMetadata": {
+      "type": "boolean",
+      "description": "Whether to extract and include metadata from the document. This is kept for backward compatibility, prefer using parsingOptions.extractMetadata.",
+      "default": true
+    },
+    "enableGeoTopicParser": {
+      "type": "boolean",
+      "description": "Whether to enable the GeoTopicParser. This is kept for backward compatibility, prefer using features array with GEO_TOPIC_PARSER.",
+      "default": false
     }
   },
   "additionalProperties": false

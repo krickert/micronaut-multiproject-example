@@ -54,15 +54,22 @@ public class DocumentParser {
         // Get configuration options or use defaults
         int maxContentLength = getIntConfig(config, "maxContentLength", -1); // -1 means no limit
         boolean extractMetadata = getBooleanConfig(config, "extractMetadata", true);
-        String tikaConfigXml = config.getOrDefault("tikaConfigXml", null);
+        boolean enableGeoTopicParser = getBooleanConfig(config, "enableGeoTopicParser", false);
 
         // Create the appropriate parser
         Parser parser;
-        if (tikaConfigXml != null) {
-            LOG.info("Using custom Tika configuration from XML");
-            try (InputStream is = new ByteArrayInputStream(tikaConfigXml.getBytes())) {
-                TikaConfig tikaConfig = new TikaConfig(is);
-                parser = new AutoDetectParser(tikaConfig);
+        if (enableGeoTopicParser) {
+            LOG.info("Using Tika configuration with GeoTopicParser enabled");
+            try {
+                String geoTopicConfig = createGeoTopicParserConfig();
+                try (InputStream is = new ByteArrayInputStream(geoTopicConfig.getBytes())) {
+                    TikaConfig tikaConfig = new TikaConfig(is);
+                    parser = new AutoDetectParser(tikaConfig);
+                }
+            } catch (ParserConfigurationException | TransformerException e) {
+                LOG.error("Failed to create GeoTopicParser configuration: {}", e.getMessage(), e);
+                LOG.info("Falling back to default Tika configuration");
+                parser = new AutoDetectParser();
             }
         } else {
             LOG.info("Using default Tika configuration");
@@ -142,6 +149,45 @@ public class DocumentParser {
         return ParsedDocumentReply.newBuilder()
                 .setDoc(docBuilder.build())
                 .build();
+    }
+
+    /**
+     * Creates a Tika configuration XML with GeoTopicParser enabled.
+     * 
+     * @return XML string representation of the Tika configuration with GeoTopicParser
+     * @throws ParserConfigurationException if there's an error creating the XML document
+     * @throws TransformerException if there's an error transforming the XML document to a string
+     */
+    public static String createGeoTopicParserConfig() 
+            throws ParserConfigurationException, TransformerException {
+        DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
+        DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
+
+        // Root element
+        Document doc = docBuilder.newDocument();
+        Element rootElement = doc.createElement("properties");
+        doc.appendChild(rootElement);
+
+        // Add parser options
+        Element parsers = doc.createElement("parsers");
+        rootElement.appendChild(parsers);
+
+        // Add GeoTopicParser
+        Element geoTopicParser = doc.createElement("parser");
+        geoTopicParser.setAttribute("class", "org.apache.tika.parser.geo.topic.GeoTopicParser");
+        geoTopicParser.setAttribute("enabled", "true");
+        parsers.appendChild(geoTopicParser);
+
+        // Write the XML to a string
+        TransformerFactory transformerFactory = TransformerFactory.newInstance();
+        Transformer transformer = transformerFactory.newTransformer();
+        transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+        transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2");
+
+        StringWriter writer = new StringWriter();
+        transformer.transform(new DOMSource(doc), new StreamResult(writer));
+
+        return writer.toString();
     }
 
     /**

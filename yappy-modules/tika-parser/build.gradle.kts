@@ -31,6 +31,8 @@ dependencies {
     implementation("org.apache.tika:tika-core:3.1.0")
     // https://mvnrepository.com/artifact/org.apache.tika/tika-parsers
     implementation("org.apache.tika:tika-parsers:3.1.0")
+    // https://mvnrepository.com/artifact/org.apache.tika/tika-parsers-standard-package
+    implementation("org.apache.tika:tika-parsers-standard-package:3.1.0")
     testImplementation(mn.junit.jupiter.params)
     testImplementation("org.junit.jupiter:junit-jupiter-api")
     testImplementation("io.micronaut.test:micronaut-test-junit5")

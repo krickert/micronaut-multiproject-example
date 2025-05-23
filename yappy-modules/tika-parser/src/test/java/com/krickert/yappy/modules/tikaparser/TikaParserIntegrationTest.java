@@ -213,6 +213,50 @@ class TikaParserIntegrationTest {
     }
 
     @Test
+    @DisplayName("Should use GeoTopicParser to extract geographic information")
+    void testGeoTopicParser() throws IOException {
+        // Load a test document with geographic content
+        byte[] fileContent = loadTestDocument("TXT.txt");
+
+        // Create a blob with the document content
+        Blob blob = Blob.newBuilder()
+                .setBlobId("test-blob-id-geotopic")
+                .setFilename("TXT.txt")
+                .setData(ByteString.copyFrom(fileContent))
+                .build();
+
+        // Create a document with the blob
+        PipeDoc document = PipeDoc.newBuilder()
+                .setId("test-doc-id-geotopic")
+                .setBlob(blob)
+                .build();
+
+        // Create custom configuration with GeoTopicParser enabled
+        Struct customConfig = Struct.newBuilder()
+                .putFields("enableGeoTopicParser", Value.newBuilder().setBoolValue(true).build())
+                .build();
+
+        // Create the request
+        ProcessRequest request = createTestRequest(document, customConfig, null);
+
+        // Call the service
+        ProcessResponse response = blockingClient.processData(request);
+
+        // Verify the response
+        assertTrue(response.getSuccess(), "Response should indicate success");
+        assertNotNull(response.getOutputDoc(), "Response should contain a document");
+
+        // Log the response for debugging
+        LOG.info("GeoTopicParser test response: {}", response);
+
+        // The GeoTopicParser should have processed the document
+        assertNotNull(response.getOutputDoc().getBody(), "Document should have a body");
+        assertFalse(response.getOutputDoc().getBody().isEmpty(), "Document body should not be empty");
+
+        LOG.info("Successfully processed document with GeoTopicParser");
+    }
+
+    @Test
     @DisplayName("Should extract metadata and store in custom_data")
     void testMetadataExtraction() throws IOException {
         // Load a test document
@@ -291,5 +335,95 @@ class TikaParserIntegrationTest {
         }
 
         LOG.info("Successfully extracted metadata from PDF and stored in custom_data");
+    }
+
+    @Test
+    @DisplayName("Should use new schema structure with nested options")
+    void testNewSchemaStructure() throws IOException {
+        // Load a test document
+        byte[] fileContent = loadTestDocument("PDF.pdf");
+
+        // Create a blob with the document content
+        Blob blob = Blob.newBuilder()
+                .setBlobId("test-blob-id-new-schema")
+                .setFilename("PDF.pdf")
+                .setData(ByteString.copyFrom(fileContent))
+                .build();
+
+        // Create a document with the blob
+        PipeDoc document = PipeDoc.newBuilder()
+                .setId("test-doc-id-new-schema")
+                .setBlob(blob)
+                .build();
+
+        // Create mappers configuration
+        Struct mappersStruct = Struct.newBuilder()
+                // Keep Content-Type as is
+                .putFields("Content-Type", Value.newBuilder().setStructValue(Struct.newBuilder()
+                        .putFields("operation", Value.newBuilder().setStringValue("KEEP").build())
+                        .build()).build())
+                // Copy dc:title to document_title
+                .putFields("dc:title", Value.newBuilder().setStructValue(Struct.newBuilder()
+                        .putFields("operation", Value.newBuilder().setStringValue("COPY").build())
+                        .putFields("destination", Value.newBuilder().setStringValue("document_title").build())
+                        .build()).build())
+                .build();
+
+        // Create processing options
+        Struct processingOptionsStruct = Struct.newBuilder()
+                .putFields("metadata_field_name", Value.newBuilder().setStringValue("nested_metadata").build())
+                .putFields("mappers", Value.newBuilder().setStructValue(mappersStruct).build())
+                .build();
+
+        // Create parsing options
+        Struct parsingOptionsStruct = Struct.newBuilder()
+                .putFields("maxContentLength", Value.newBuilder().setNumberValue(1000).build())
+                .putFields("extractMetadata", Value.newBuilder().setBoolValue(true).build())
+                .build();
+
+        // Create features array
+        com.google.protobuf.ListValue.Builder featuresListBuilder = com.google.protobuf.ListValue.newBuilder();
+        featuresListBuilder.addValues(Value.newBuilder().setStringValue("GEO_TOPIC_PARSER").build());
+
+        // Create custom configuration with the new schema structure
+        Struct customConfig = Struct.newBuilder()
+                .putFields("parsingOptions", Value.newBuilder().setStructValue(parsingOptionsStruct).build())
+                .putFields("processingOptions", Value.newBuilder().setStructValue(processingOptionsStruct).build())
+                .putFields("features", Value.newBuilder().setListValue(featuresListBuilder.build()).build())
+                .putFields("log_prefix", Value.newBuilder().setStringValue("[NEW_SCHEMA] ").build())
+                .build();
+
+        // Create the request
+        ProcessRequest request = createTestRequest(document, customConfig, null);
+
+        // Call the service
+        ProcessResponse response = blockingClient.processData(request);
+
+        // Verify the response
+        assertTrue(response.getSuccess(), "Response should indicate success");
+        assertNotNull(response.getOutputDoc(), "Response should contain a document");
+
+        // Verify the body is limited to 1000 characters
+        assertNotNull(response.getOutputDoc().getBody(), "Document should have a body");
+        assertTrue(response.getOutputDoc().getBody().length() <= 1000, 
+                "Document body should be limited to 1000 characters, but was: " + response.getOutputDoc().getBody().length());
+
+        // Verify custom_data contains the nested_metadata field
+        assertTrue(response.getOutputDoc().hasCustomData(), "Output document should have custom_data");
+        Struct customData = response.getOutputDoc().getCustomData();
+        assertTrue(customData.containsFields("nested_metadata"), 
+                "custom_data should contain nested_metadata field");
+
+        // Verify that at least one log message contains the custom prefix
+        boolean foundCustomPrefix = false;
+        for (String log : response.getProcessorLogsList()) {
+            if (log.startsWith("[NEW_SCHEMA]")) {
+                foundCustomPrefix = true;
+                break;
+            }
+        }
+        assertTrue(foundCustomPrefix, "At least one log message should contain the custom prefix");
+
+        LOG.info("Successfully processed document with new schema structure");
     }
 }
