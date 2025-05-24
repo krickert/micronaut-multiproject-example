@@ -38,7 +38,8 @@ public class OpenSearchTestResourceProvider extends AbstractTestContainersProvid
 
     @Override
     public List<String> getResolvableProperties(Map<String, Collection<String>> propertyEntries, Map<String, Object> testResourcesConfig) {
-        LOG.info("Resolving properties: {}", propertyEntries.keySet());
+        LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.getResolvableProperties called with propertyEntries: {}", propertyEntries.keySet());
+        LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.getResolvableProperties returning: {}", RESOLVABLE_PROPERTIES_LIST);
         // Return all properties we can resolve
         return RESOLVABLE_PROPERTIES_LIST;
     }
@@ -60,32 +61,45 @@ public class OpenSearchTestResourceProvider extends AbstractTestContainersProvid
 
     @Override
     protected OpenSearchContainer<?> createContainer(DockerImageName imageName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
-        LOG.info("Creating OpenSearch container with image: {}", imageName);
+        LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.createContainer called with image: {}", imageName);
+        LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.createContainer requestedProperties: {}", requestedProperties);
+        LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.createContainer testResourcesConfig: {}", testResourcesConfig);
+
         // Create a new OpenSearch container with the specified image
         OpenSearchContainer<?> container = new OpenSearchContainer<>(imageName);
 
         // Check if security should be enabled
         if (Boolean.TRUE.equals(requestedProperties.get(PROPERTY_OPENSEARCH_SECURITY_ENABLED))) {
-            LOG.info("Enabling security for OpenSearch container");
+            LOG.info("[DEBUG_LOG] Enabling security for OpenSearch container");
             container.withSecurityEnabled();
         }
 
+        LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.createContainer returning container: {}", container);
         return container;
     }
 
     @Override
     protected Optional<String> resolveProperty(String propertyName, OpenSearchContainer<?> container) {
-        LOG.info("Resolving property: {}", propertyName);
-        Optional<String> result = switch (propertyName) {
-            case PROPERTY_OPENSEARCH_URL -> Optional.of(container.getHttpHostAddress());
-            case PROPERTY_OPENSEARCH_HOST -> Optional.of(container.getHost());
-            case PROPERTY_OPENSEARCH_PORT -> Optional.of(String.valueOf(container.getMappedPort(9200)));
-            case PROPERTY_OPENSEARCH_USERNAME -> Optional.of(container.getUsername());
-            case PROPERTY_OPENSEARCH_PASSWORD -> Optional.of(container.getPassword());
-            case PROPERTY_OPENSEARCH_SECURITY_ENABLED -> Optional.of(String.valueOf(container.isSecurityEnabled()));
-            default -> Optional.empty(); // Property not handled by this provider
-        };
-        LOG.info("Resolved property {} to {}", propertyName, result.orElse("null"));
+        LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.resolveProperty called for property: {}", propertyName);
+        LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.resolveProperty container state: isRunning={}, isCreated={}", 
+                 container.isRunning(), container.isCreated());
+
+        Optional<String> result;
+        try {
+            result = switch (propertyName) {
+                case PROPERTY_OPENSEARCH_URL -> Optional.of(container.getHttpHostAddress());
+                case PROPERTY_OPENSEARCH_HOST -> Optional.of(container.getHost());
+                case PROPERTY_OPENSEARCH_PORT -> Optional.of(String.valueOf(container.getMappedPort(9200)));
+                case PROPERTY_OPENSEARCH_USERNAME -> Optional.of(container.getUsername());
+                case PROPERTY_OPENSEARCH_PASSWORD -> Optional.of(container.getPassword());
+                case PROPERTY_OPENSEARCH_SECURITY_ENABLED -> Optional.of(String.valueOf(container.isSecurityEnabled()));
+                default -> Optional.empty(); // Property not handled by this provider
+            };
+            LOG.info("[DEBUG_LOG] Resolved property {} to {}", propertyName, result.orElse("null"));
+        } catch (Exception e) {
+            LOG.error("[DEBUG_LOG] Error resolving property {}: {}", propertyName, e.getMessage(), e);
+            throw e;
+        }
         return result;
     }
 
@@ -93,8 +107,12 @@ public class OpenSearchTestResourceProvider extends AbstractTestContainersProvid
     @Override
     protected boolean shouldAnswer(String propertyName, Map<String, Object> properties, Map<String, Object> testResourcesConfig) {
         // Answer if the property is one we can resolve
+        LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.shouldAnswer called for property: {}", propertyName);
+        LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.shouldAnswer properties: {}", properties);
+        LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.shouldAnswer testResourcesConfig: {}", testResourcesConfig);
+
         boolean shouldAnswer = propertyName != null && RESOLVABLE_PROPERTIES_LIST.contains(propertyName);
-        LOG.info("Checking if provider should answer property {}: {}", propertyName, shouldAnswer);
+        LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.shouldAnswer returning: {} for property: {}", shouldAnswer, propertyName);
         return shouldAnswer;
     }
 }
