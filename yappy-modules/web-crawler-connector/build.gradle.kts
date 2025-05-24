@@ -7,7 +7,7 @@ plugins {
 }
 
 version = "1.0.0-SNAPSHOT"
-group = "com.krickert.yappy.modules.s3connector"
+group = "com.krickert.yappy.modules.webcrawlerconnector"
 
 repositories {
     mavenCentral()
@@ -30,13 +30,14 @@ dependencies {
     implementation(mn.micronaut.http.client.core)
     implementation("io.micronaut.grpc:micronaut-protobuff-support")
 
-    // AWS SDK for S3
-    implementation("io.micronaut.aws:micronaut-aws-sdk-v2")
-    implementation("software.amazon.awssdk:s3:2.25.11")
+    // Selenium dependencies
+    implementation("org.seleniumhq.selenium:selenium-java:4.18.1")
+    implementation("io.github.bonigarcia:webdrivermanager:5.7.0")
+    implementation("com.google.guava:guava:33.0.0-jre")
 
     // Kafka dependencies
     implementation("io.micronaut.kafka:micronaut-kafka")
-    implementation("io.apicurio:apicurio-registry-protobuf-serde-kafka:3.0.7")
+    implementation("io.apicurio:apicurio-registry-protobuf-serde-kafka:3.0.6")
     testImplementation(mn.assertj.core)
 
     // JSON Schema validation
@@ -63,7 +64,7 @@ dependencies {
 }
 
 application {
-    mainClass = "com.krickert.yappy.modules.s3connector.Application"
+    mainClass = "com.krickert.yappy.modules.webcrawlerconnector.Application"
 }
 
 java {
@@ -84,7 +85,7 @@ micronaut {
     testRuntime("junit5")
     processing {
         incremental(true)
-        annotations("com.krickert.yappy.modules.s3connector.*")
+        annotations("com.krickert.yappy.modules.webcrawlerconnector.*")
     }
     testResources {
         enabled.set(true)

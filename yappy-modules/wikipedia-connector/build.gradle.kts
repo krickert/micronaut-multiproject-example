@@ -7,7 +7,7 @@ plugins {
 }
 
 version = "1.0.0-SNAPSHOT"
-group = "com.krickert.yappy.modules.s3connector"
+group = "com.krickert.yappy.modules.wikipediaconnector"
 
 repositories {
     mavenCentral()
@@ -30,13 +30,16 @@ dependencies {
     implementation(mn.micronaut.http.client.core)
     implementation("io.micronaut.grpc:micronaut-protobuff-support")
 
-    // AWS SDK for S3
-    implementation("io.micronaut.aws:micronaut-aws-sdk-v2")
-    implementation("software.amazon.awssdk:s3:2.25.11")
+    // DKPro JWPL dependencies
+    implementation("org.dkpro.jwpl:dkpro-jwpl-api:2.0.0")
+    implementation("org.dkpro.jwpl:dkpro-jwpl-datamachine:2.0.0")
+    implementation("org.dkpro.jwpl:dkpro-jwpl-revisionmachine:2.0.0")
+    implementation("org.dkpro.jwpl:dkpro-jwpl-timemachine:2.0.0")
+    implementation("org.dkpro.jwpl:dkpro-jwpl-wikimachine:2.0.0")
 
     // Kafka dependencies
     implementation("io.micronaut.kafka:micronaut-kafka")
-    implementation("io.apicurio:apicurio-registry-protobuf-serde-kafka:3.0.7")
+    implementation("io.apicurio:apicurio-registry-protobuf-serde-kafka:3.0.6")
     testImplementation(mn.assertj.core)
 
     // JSON Schema validation
@@ -63,7 +66,7 @@ dependencies {
 }
 
 application {
-    mainClass = "com.krickert.yappy.modules.s3connector.Application"
+    mainClass = "com.krickert.yappy.modules.wikipediaconnector.Application"
 }
 
 java {
@@ -84,7 +87,7 @@ micronaut {
     testRuntime("junit5")
     processing {
         incremental(true)
-        annotations("com.krickert.yappy.modules.s3connector.*")
+        annotations("com.krickert.yappy.modules.wikipediaconnector.*")
     }
     testResources {
         enabled.set(true)

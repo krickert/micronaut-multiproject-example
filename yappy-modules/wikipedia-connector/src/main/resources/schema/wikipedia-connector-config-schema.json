@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Wikipedia Connector Configuration",
+  "description": "Configuration for the Wikipedia connector",
+  "type": "object",
+  "properties": {
+    "host": {
+      "type": "string",
+      "description": "Database host",
+      "default": "localhost"
+    },
+    "port": {
+      "type": "integer",
+      "description": "Database port",
+      "default": 3306,
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "database": {
+      "type": "string",
+      "description": "Database name"
+    },
+    "user": {
+      "type": "string",
+      "description": "Database user"
+    },
+    "password": {
+      "type": "string",
+      "description": "Database password"
+    },
+    "dumpPath": {
+      "type": "string",
+      "description": "Path to Wikipedia dump files"
+    },
+    "language": {
+      "type": "string",
+      "description": "Wikipedia language code",
+      "default": "en",
+      "enum": ["en", "de", "fr", "es", "it", "nl", "pl", "ru", "ja", "zh"]
+    },
+    "categoryFilter": {
+      "type": "string",
+      "description": "Filter articles by category"
+    },
+    "titleFilter": {
+      "type": "string",
+      "description": "Filter articles by title"
+    },
+    "maxArticles": {
+      "type": "integer",
+      "description": "Maximum number of articles to process",
+      "default": 100,
+      "minimum": 1
+    },
+    "includeCategories": {
+      "type": "boolean",
+      "description": "Include category pages",
+      "default": false
+    },
+    "includeDiscussions": {
+      "type": "boolean",
+      "description": "Include discussion pages",
+      "default": false
+    },
+    "includeRedirects": {
+      "type": "boolean",
+      "description": "Include redirect pages",
+      "default": false
+    },
+    "kafkaTopic": {
+      "type": "string",
+      "description": "Kafka topic for output"
+    },
+    "logPrefix": {
+      "type": "string",
+      "description": "Prefix for log messages",
+      "default": ""
+    }
+  },
+  "required": ["database"],
+  "additionalProperties": false
+}
