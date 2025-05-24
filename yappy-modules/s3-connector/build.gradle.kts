@@ -39,6 +39,9 @@ dependencies {
     implementation("io.apicurio:apicurio-registry-protobuf-serde-kafka:3.0.6")
     testImplementation(mn.assertj.core)
 
+    // JSON Schema validation
+    implementation("com.networknt:json-schema-validator:1.0.86")
+
     // Lombok for builder pattern
     compileOnly("org.projectlombok:lombok:1.18.32")
     annotationProcessor("org.projectlombok:lombok:1.18.32")
