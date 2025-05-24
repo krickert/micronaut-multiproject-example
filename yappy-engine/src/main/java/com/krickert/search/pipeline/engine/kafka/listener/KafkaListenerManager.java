@@ -1,8 +1,9 @@
 // File: yappy-engine/src/main/java/com/krickert/search/pipeline/engine/kafka/listener/KafkaListenerManager.java
 package com.krickert.search.pipeline.engine.kafka.listener;
 
-import com.krickert.search.config.consul.DynamicConfigurationManager;
+import com.krickert.search.config.pipeline.event.PipelineClusterConfigChangeEvent; // NEW EVENT
 import com.krickert.search.config.pipeline.model.KafkaInputDefinition;
+import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineConfig;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig;
 import com.krickert.search.model.PipeStream;
@@ -13,7 +14,10 @@ import com.krickert.search.pipeline.engine.kafka.admin.OffsetResetStrategy;
 import io.apicurio.registry.serde.config.SerdeConfig;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Requires;
-import io.micronaut.context.annotation.Value; // Import @Value
+import io.micronaut.context.annotation.Value;
+import io.micronaut.context.event.ApplicationEventListener; // For Micronaut events
+import io.micronaut.core.annotation.NonNull;
+import io.micronaut.scheduling.annotation.Async; // For async event listener
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -24,476 +28,425 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
-/**
- * Manages Kafka listeners for pipeline steps.
- *
- * This class is responsible for:
- * 1. Creating and managing Kafka listeners based on pipeline configuration
- * 2. Pausing and resuming Kafka consumers
- * 3. Resetting consumer offsets (including by date)
- * 4. Providing status information about Kafka consumers
- *
- * The KafkaListenerManager works with the DynamicConfigurationManager to create
- * listeners based on pipeline configuration, and with the KafkaAdminService to
- * manage consumer offsets.
- */
 @Singleton
 @Requires(property = "kafka.enabled", value = "true")
-public class KafkaListenerManager {
-    private static final Logger log = LoggerFactory.getLogger(KafkaListenerManager.class);
+public class KafkaListenerManager implements ApplicationEventListener<PipelineClusterConfigChangeEvent> {
+    private static final Logger LOG = LoggerFactory.getLogger(KafkaListenerManager.class);
 
-    private final KafkaListenerPool listenerPool;
+    private final DefaultKafkaListenerPool listenerPool;
     private final ConsumerStateManager stateManager;
     private final KafkaAdminService kafkaAdminService;
-    private final DynamicConfigurationManager configManager;
     private final PipeStreamEngine pipeStreamEngine;
     private final ApplicationContext applicationContext;
     private final String configuredSchemaRegistryType;
+    private final String appClusterName;
 
     /**
-     * Map to track which listeners have been created for which pipeline steps.
-     * Key: pipelineName:stepName, Value: listenerId
+     * Map to track active listeners.
+     * Key: listenerInstanceKey (e.g., "pipelineName:stepName:topic:groupId")
+     * Value: The DynamicKafkaListener instance itself.
      */
-    private final Map<String, String> pipelineStepToListenerMap = new ConcurrentHashMap<>();
+    private final Map<String, DynamicKafkaListener> activeListenerInstanceMap = new ConcurrentHashMap<>();
 
     @Inject
     public KafkaListenerManager(
-            KafkaListenerPool listenerPool,
+            DefaultKafkaListenerPool listenerPool,
             ConsumerStateManager stateManager,
             KafkaAdminService kafkaAdminService,
-            DynamicConfigurationManager configManager,
             PipeStreamEngine pipeStreamEngine,
             ApplicationContext applicationContext,
-            @Value("${kafka.schema.registry.type:none}") String configuredSchemaRegistryType) {
+            @Value("${kafka.schema.registry.type:none}") String configuredSchemaRegistryType,
+            @Value("${app.config.cluster-name}") String appClusterName) {
         this.listenerPool = listenerPool;
         this.stateManager = stateManager;
         this.kafkaAdminService = kafkaAdminService;
-        this.configManager = configManager;
         this.pipeStreamEngine = pipeStreamEngine;
         this.applicationContext = applicationContext;
         this.configuredSchemaRegistryType = configuredSchemaRegistryType.toLowerCase(Locale.ROOT);
-        log.info("KafkaListenerManager initialized with schema registry type: '{}'", this.configuredSchemaRegistryType);
+        this.appClusterName = appClusterName;
+        LOG.info("KafkaListenerManager initialized for cluster '{}' with schema registry type: '{}'",
+                this.appClusterName, this.configuredSchemaRegistryType);
     }
 
-    /**
-     * Creates Kafka listeners for a pipeline based on configuration.
-     *
-     * @param pipelineName The name of the pipeline
-     * @return A list of created listener IDs
-     */
-    public List<String> createListenersForPipeline(String pipelineName) {
-        // ... (no changes from your existing correct version)
-        log.info("Creating Kafka listeners for pipeline: {}", pipelineName);
-        List<String> createdListeners = new ArrayList<>();
+    @Override
+    @Async // Process events asynchronously to avoid blocking the event publisher
+    public void onApplicationEvent(@NonNull PipelineClusterConfigChangeEvent event) {
+        LOG.info("Received PipelineClusterConfigChangeEvent for cluster: {}. Current app cluster: {}. Is deletion: {}",
+                event.clusterName(), this.appClusterName, event.isDeletion());
 
-        Optional<PipelineConfig> pipelineConfigOpt = configManager.getPipelineConfig(pipelineName);
-        if (pipelineConfigOpt.isEmpty()) {
-            log.warn("Cannot create listeners for non-existent pipeline: {}", pipelineName);
-            return createdListeners;
+        if (!this.appClusterName.equals(event.clusterName())) {
+            LOG.debug("Ignoring config update event for cluster '{}' as this manager is for cluster '{}'.",
+                    event.clusterName(), this.appClusterName);
+            return;
         }
-        PipelineConfig pipelineConfig = pipelineConfigOpt.get();
+        synchronizeListeners(event.newConfig(), event.isDeletion());
+    }
 
-        if (pipelineConfig.pipelineSteps() == null || pipelineConfig.pipelineSteps().isEmpty()) {
-            log.info("Pipeline '{}' has no steps defined. No Kafka listeners will be created.", pipelineName);
-            return createdListeners;
+    private synchronized void synchronizeListeners(PipelineClusterConfig newClusterConfig, boolean isDeletion) {
+        LOG.info("Synchronizing Kafka listeners for cluster '{}'. Is deletion: {}", this.appClusterName, isDeletion);
+
+        if (isDeletion) {
+            LOG.warn("Cluster configuration for '{}' was deleted. Shutting down all active listeners for this cluster.", this.appClusterName);
+            new HashSet<>(activeListenerInstanceMap.keySet()).forEach(this::removeListenerInstance);
+            activeListenerInstanceMap.clear();
+            LOG.info("All Kafka listeners for cluster '{}' have been shut down and removed due to config deletion.", this.appClusterName);
+            return;
         }
 
-        pipelineConfig.pipelineSteps().forEach((stepName, stepConfig) -> {
-            if (stepConfig.kafkaInputs() != null && !stepConfig.kafkaInputs().isEmpty()) {
-                for (KafkaInputDefinition kafkaInput : stepConfig.kafkaInputs()) {
-                    if (kafkaInput.listenTopics() != null) {
-                        for (String topic : kafkaInput.listenTopics()) {
-                            String groupId = kafkaInput.consumerGroupId();
-                            if (groupId == null || groupId.isBlank()) {
-                                groupId = "yappy-" + pipelineName + "-" + stepName + "-group";
-                                log.info("Generated consumer group ID for pipeline {}, step {}: {}", pipelineName, stepName, groupId);
-                            }
-                            DynamicKafkaListener listener = createListener(
-                                    pipelineName,
-                                    stepName,
-                                    topic,
-                                    groupId,
-                                    kafkaInput.kafkaConsumerProperties()
-                            );
-                            if (listener != null) {
-                                createdListeners.add(listener.getListenerId());
+        if (newClusterConfig == null) {
+            LOG.error("Received non-deletion event for cluster '{}' but newClusterConfig is null. This is unexpected. No listeners will be changed.", this.appClusterName);
+            return;
+        }
+
+        if (!this.appClusterName.equals(newClusterConfig.clusterName())) {
+            LOG.warn("SynchronizeListeners called with config for cluster '{}', but this manager is for '{}'. Ignoring.",
+                    newClusterConfig.clusterName(), this.appClusterName);
+            return;
+        }
+
+        Set<String> desiredListenerInstanceKeys = new HashSet<>();
+        if (newClusterConfig.pipelineGraphConfig() != null && newClusterConfig.pipelineGraphConfig().pipelines() != null) {
+            for (PipelineConfig pipeline : newClusterConfig.pipelineGraphConfig().pipelines().values()) {
+                if (pipeline.pipelineSteps() == null) continue;
+                for (PipelineStepConfig step : pipeline.pipelineSteps().values()) {
+                    if (step.kafkaInputs() == null) continue;
+                    for (KafkaInputDefinition inputDef : step.kafkaInputs()) {
+                        if (inputDef.listenTopics() == null || inputDef.listenTopics().isEmpty()) continue;
+                        for (String topic : inputDef.listenTopics()) {
+                            String groupId = determineConsumerGroupId(pipeline.name(), step.stepName(), inputDef);
+                            String listenerKey = generateListenerInstanceKey(pipeline.name(), step.stepName(), topic, groupId);
+                            desiredListenerInstanceKeys.add(listenerKey);
+
+                            DynamicKafkaListener existingListener = activeListenerInstanceMap.get(listenerKey);
+                            if (existingListener == null) {
+                                LOG.info("New listener instance required for key: {}", listenerKey);
+                                createAndRegisterListenerInstance(pipeline.name(), step.stepName(), topic, groupId, inputDef.kafkaConsumerProperties());
+                            } else {
+                                // Check if core identity or properties changed.
+                                // For simplicity, we'll recreate if properties map is different.
+                                // A more granular check on specific properties might be needed if recreation is too disruptive.
+                                if (!existingListener.getTopic().equals(topic) ||
+                                        !existingListener.getGroupId().equals(groupId) ||
+                                        !areConsumerPropertiesEqual(existingListener.getConsumerConfigForComparison(), inputDef.kafkaConsumerProperties())) {
+                                    LOG.info("Configuration changed for listener instance key: {}. Recreating listener.", listenerKey);
+                                    removeListenerInstance(listenerKey);
+                                    createAndRegisterListenerInstance(pipeline.name(), step.stepName(), topic, groupId, inputDef.kafkaConsumerProperties());
+                                } else {
+                                    LOG.debug("Listener instance for key {} already exists and configuration appears unchanged.", listenerKey);
+                                }
                             }
                         }
                     }
                 }
             }
-        });
+        }
 
-        log.info("Created {} Kafka listeners for pipeline: {}", createdListeners.size(), pipelineName);
-        return createdListeners;
+        Set<String> listenersToRemove = new HashSet<>(activeListenerInstanceMap.keySet());
+        listenersToRemove.removeAll(desiredListenerInstanceKeys);
+        if (!listenersToRemove.isEmpty()) {
+            LOG.info("Removing {} listener instance(s) that are no longer in the desired configuration: {}", listenersToRemove.size(), listenersToRemove);
+            listenersToRemove.forEach(this::removeListenerInstance);
+        }
+
+        LOG.info("Kafka listeners synchronization complete for cluster '{}'. Active listeners: {}", this.appClusterName, activeListenerInstanceMap.size());
     }
 
-    /**
-     * Creates a single Kafka listener.
-     *
-     * @param pipelineName The name of the pipeline
-     * @param stepName The name of the step
-     * @param topic The Kafka topic to listen to
-     * @param groupId The consumer group ID
-     * @param consumerConfigFromStep Additional consumer configuration properties
-     * @return The created listener, or null if creation failed
-     */
-    public DynamicKafkaListener createListener(
+    private String determineConsumerGroupId(String pipelineName, String stepName, KafkaInputDefinition inputDef) {
+        if (inputDef.consumerGroupId() != null && !inputDef.consumerGroupId().isBlank()) {
+            return inputDef.consumerGroupId();
+        }
+        String defaultGroupId = String.format("yappy-%s-%s-%s-group", this.appClusterName, pipelineName, stepName);
+        LOG.debug("Generated default consumer group ID '{}' for pipeline '{}', step '{}'", defaultGroupId, pipelineName, stepName);
+        return defaultGroupId;
+    }
+
+    private boolean areConsumerPropertiesEqual(Map<String, Object> currentListenerConfigProps, Map<String, String> newStepDefProps) {
+        // This comparison needs to be robust.
+        // The currentListenerConfigProps are <String, Object> and newStepDefProps are <String, String>.
+        // We should compare the relevant properties that would necessitate a listener recreation.
+        // For now, a simple size and key-value check (converting newStepDefProps values to objects or vice-versa)
+        if (currentListenerConfigProps == null && (newStepDefProps == null || newStepDefProps.isEmpty())) return true;
+        if (currentListenerConfigProps == null || newStepDefProps == null) return false;
+
+        // Filter out properties that are dynamically added by the manager (like bootstrap.servers, deserializers, schema registry urls)
+        // and only compare the ones provided in KafkaInputDefinition.kafkaConsumerProperties
+        Map<String, String> relevantCurrentProps = new HashMap<>();
+        currentListenerConfigProps.forEach((key, value) -> {
+            // Only consider properties that would have come from the original definition
+            if (!(key.equals(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG) ||
+                    key.equals(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG) ||
+                    key.equals(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG) ||
+                    key.equals(ConsumerConfig.GROUP_ID_CONFIG) ||
+                    key.startsWith("apicurio.registry") || // Example for Apicurio
+                    key.startsWith("aws.glue"))) { // Example for Glue
+                if (value != null) {
+                    relevantCurrentProps.put(key, value.toString());
+                }
+            }
+        });
+        return relevantCurrentProps.equals(newStepDefProps);
+    }
+
+    private void createAndRegisterListenerInstance(
             String pipelineName,
             String stepName,
             String topic,
             String groupId,
-            Map<String, String> consumerConfigFromStep) {
-        String pipelineStepKey = generatePipelineStepKey(pipelineName, stepName);
-        String existingListenerId = pipelineStepToListenerMap.get(pipelineStepKey);
+            Map<String, String> consumerConfigFromStep) { // consumerConfigFromStep holds the original properties
 
-        if (existingListenerId != null) {
-            DynamicKafkaListener existingListener = listenerPool.getListener(existingListenerId);
-            if (existingListener != null) {
-                log.info("Listener already exists for pipeline: {}, step: {}", pipelineName, stepName);
-                return existingListener;
-            }
-        }
-        String listenerId = generateListenerId(pipelineName, stepName);
+        String listenerInstanceKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
+        String uniquePoolListenerId = "kafka-listener-" + UUID.randomUUID().toString();
+
+        LOG.info("Creating new listener instance. Key: '{}', Pool ID: '{}', Topic: '{}', Group: '{}'",
+                listenerInstanceKey, uniquePoolListenerId, topic, groupId);
 
         try {
             Map<String, Object> finalConsumerConfig = new HashMap<>(consumerConfigFromStep != null ? consumerConfigFromStep : Collections.emptyMap());
 
-            // 1. Add Bootstrap Servers (Essential for any Kafka client)
-            addBootstrapServers(finalConsumerConfig, listenerId);
+            addBootstrapServers(finalConsumerConfig, uniquePoolListenerId);
 
-            // 2. Add Schema Registry specific properties
-            log.info("KafkaListenerManager (listener: {}): Configuring for schema registry type: '{}'", listenerId, configuredSchemaRegistryType);
+            LOG.debug("Listener (Pool ID: {}): Configuring for schema registry type: '{}'", uniquePoolListenerId, configuredSchemaRegistryType);
             switch (configuredSchemaRegistryType) {
                 case "apicurio":
-                    addApicurioConsumerProperties(finalConsumerConfig, listenerId);
+                    addApicurioConsumerProperties(finalConsumerConfig, uniquePoolListenerId);
                     break;
                 case "glue":
-                    addGlueConsumerProperties(finalConsumerConfig, listenerId); // Placeholder
+                    addGlueConsumerProperties(finalConsumerConfig, uniquePoolListenerId);
                     break;
                 case "none":
                 default:
-                    log.warn("KafkaListenerManager (listener: {}): Schema registry type is '{}' or unknown. " +
+                    LOG.warn("Listener (Pool ID: {}): Schema registry type is '{}' or unknown. " +
                             "No specific schema registry properties will be added. " +
-                            "Ensure deserializer is correctly configured if needed.", listenerId, configuredSchemaRegistryType);
-                    // If no schema registry, but we expect Protobuf, we might default to a non-registry Protobuf deserializer.
-                    // However, the value.deserializer might already be set in consumerConfigFromStep.
+                            "Ensure deserializer is correctly configured if needed.", uniquePoolListenerId, configuredSchemaRegistryType);
                     finalConsumerConfig.putIfAbsent(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
-                            "io.micronaut.protobuf.serialize.ProtobufDeserializer"); // Example default
+                            "io.micronaut.protobuf.serialize.ProtobufDeserializer");
                     break;
             }
 
-            log.debug("KafkaListenerManager (listener: {}): Final consumer config before passing to pool: {}", listenerId, finalConsumerConfig);
+            LOG.debug("Listener (Pool ID: {}): Final consumer config before passing to pool: {}", uniquePoolListenerId, finalConsumerConfig);
 
+            // ***** CORRECTED CALL *****
             DynamicKafkaListener listener = listenerPool.createListener(
-                    listenerId, topic, groupId, finalConsumerConfig,
-                    pipelineName, stepName, pipeStreamEngine);
+                    uniquePoolListenerId,
+                    topic,
+                    groupId,
+                    finalConsumerConfig, // This is the merged config
+                    consumerConfigFromStep, // This is the original properties from the step definition
+                    pipelineName,
+                    stepName,
+                    pipeStreamEngine);
+            // ***** END OF CORRECTION *****
 
-            stateManager.updateState(listenerId, new ConsumerState(
-                    listenerId, topic, groupId, false, Instant.now(), Collections.emptyMap()));
-            pipelineStepToListenerMap.put(pipelineStepKey, listenerId);
-            log.info("Created Kafka listener: {} for pipeline: {}, step: {}, topic: {}, group: {}",
-                    listenerId, pipelineName, stepName, topic, groupId);
-            return listener;
+            activeListenerInstanceMap.put(listenerInstanceKey, listener);
+            stateManager.updateState(uniquePoolListenerId, new ConsumerState(
+                    uniquePoolListenerId, topic, groupId, false, Instant.now(), Collections.emptyMap()));
+            LOG.info("Successfully created and registered Kafka listener. Key: '{}', Pool ID: '{}'", listenerInstanceKey, uniquePoolListenerId);
+
         } catch (Exception e) {
-            log.error("Failed to create Kafka listener for pipeline: {}, step: {}, topic: {}, group: {}",
-                    pipelineName, stepName, topic, groupId, e);
-            return null;
+            LOG.error("Failed to create Kafka listener instance. Key: '{}', Topic: '{}', Group: '{}'. Error: {}",
+                    listenerInstanceKey, topic, groupId, e.getMessage(), e);
         }
     }
 
-    private void addBootstrapServers(Map<String, Object> consumerConfig, String listenerId) {
+    private void removeListenerInstance(String listenerInstanceKey) {
+        DynamicKafkaListener listener = activeListenerInstanceMap.remove(listenerInstanceKey);
+        if (listener != null) {
+            String uniquePoolListenerId = listener.getListenerId();
+            LOG.info("Removing listener instance. Key: '{}', Pool ID: '{}'", listenerInstanceKey, uniquePoolListenerId);
+            try {
+                listener.shutdown();
+                listenerPool.removeListener(uniquePoolListenerId);
+                stateManager.removeState(uniquePoolListenerId);
+                LOG.info("Successfully removed and shut down listener. Key: '{}', Pool ID: '{}'", listenerInstanceKey, uniquePoolListenerId);
+            } catch (Exception e) {
+                LOG.error("Error during shutdown/removal of listener. Key: '{}', Pool ID: '{}'. Error: {}",
+                        listenerInstanceKey, uniquePoolListenerId, e.getMessage(), e);
+            }
+        } else {
+            LOG.warn("Attempted to remove listener instance with key '{}', but it was not found in active map.", listenerInstanceKey);
+        }
+    }
+
+    private void addBootstrapServers(Map<String, Object> consumerConfig, String uniquePoolListenerId) {
         String bootstrapServersPropKeyDefault = "kafka.consumers.default.bootstrap.servers";
         String bootstrapServersPropKeyGlobal = "kafka.bootstrap.servers";
 
-        log.debug("KafkaListenerManager (listener: {}): Attempting to resolve bootstrap servers. Checking property: '{}'", listenerId, bootstrapServersPropKeyDefault);
+        LOG.debug("Listener (Pool ID: {}): Attempting to resolve bootstrap servers. Checking property: '{}'", uniquePoolListenerId, bootstrapServersPropKeyDefault);
         Optional<String> bootstrapServersFromDefaultConsumerPath = applicationContext.getProperty(bootstrapServersPropKeyDefault, String.class);
-        log.debug("KafkaListenerManager (listener: {}): Value for '{}': '{}'", listenerId, bootstrapServersPropKeyDefault, bootstrapServersFromDefaultConsumerPath.orElse("NOT FOUND"));
 
         String resolvedBootstrapServers = bootstrapServersFromDefaultConsumerPath.orElseGet(() -> {
-            log.warn("KafkaListenerManager (listener: {}): Could not find '{}', trying global '{}'", listenerId, bootstrapServersPropKeyDefault, bootstrapServersPropKeyGlobal);
-            Optional<String> bootstrapServersFromGlobalPath = applicationContext.getProperty(bootstrapServersPropKeyGlobal, String.class);
-            log.debug("KafkaListenerManager (listener: {}): Value for '{}': '{}'", listenerId, bootstrapServersPropKeyGlobal, bootstrapServersFromGlobalPath.orElse("NOT FOUND"));
-            return bootstrapServersFromGlobalPath.orElse(null);
+            LOG.warn("Listener (Pool ID: {}): Could not find '{}', trying global '{}'", uniquePoolListenerId, bootstrapServersPropKeyDefault, bootstrapServersPropKeyGlobal);
+            return applicationContext.getProperty(bootstrapServersPropKeyGlobal, String.class).orElse(null);
         });
-        log.info("KafkaListenerManager (listener: {}): Final resolved bootstrap servers: '{}'", listenerId, resolvedBootstrapServers);
 
         if (resolvedBootstrapServers != null && !resolvedBootstrapServers.isBlank()) {
             consumerConfig.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, resolvedBootstrapServers);
-            log.info("KafkaListenerManager (listener: {}): Added '{}' = '{}' to consumerConfig", listenerId, ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, resolvedBootstrapServers);
+            LOG.info("Listener (Pool ID: {}): Added '{}' = '{}' to consumerConfig", uniquePoolListenerId, ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, resolvedBootstrapServers);
         } else {
-            log.error("KafkaListenerManager (listener: {}): CRITICAL - Bootstrap servers are null or blank. NOT ADDING TO CONFIG. KafkaConsumer will fail.", listenerId);
+            LOG.error("Listener (Pool ID: {}): CRITICAL - Bootstrap servers are null or blank. NOT ADDING TO CONFIG. KafkaConsumer will fail.", uniquePoolListenerId);
         }
     }
 
-    private void addApicurioConsumerProperties(Map<String, Object> consumerConfig, String listenerId) {
-        log.info("KafkaListenerManager (listener: {}): Adding Apicurio consumer properties.", listenerId);
-        consumerConfig.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer");
+    private void addApicurioConsumerProperties(Map<String, Object> consumerConfig, String uniquePoolListenerId) {
+        LOG.info("Listener (Pool ID: {}): Adding Apicurio consumer properties.", uniquePoolListenerId);
+        consumerConfig.putIfAbsent(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer");
 
         String urlPropKey = "kafka.consumers.default." + SerdeConfig.REGISTRY_URL;
         applicationContext.getProperty(urlPropKey, String.class).ifPresentOrElse(
                 url -> {
                     consumerConfig.put(SerdeConfig.REGISTRY_URL, url);
-                    log.info("KafkaListenerManager (listener: {}): Added Apicurio property '{}' = '{}'", listenerId, SerdeConfig.REGISTRY_URL, url);
+                    LOG.info("Listener (Pool ID: {}): Added Apicurio property '{}' = '{}'", uniquePoolListenerId, SerdeConfig.REGISTRY_URL, url);
                 },
-                () -> log.error("KafkaListenerManager (listener: {}): Apicurio property '{}' not found in application context.", listenerId, urlPropKey)
+                () -> LOG.error("Listener (Pool ID: {}): Apicurio property '{}' not found in application context.", uniquePoolListenerId, urlPropKey)
         );
 
         String returnClassPropKey = "kafka.consumers.default." + SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS;
         String returnClass = applicationContext.getProperty(returnClassPropKey, String.class).orElse(PipeStream.class.getName());
         consumerConfig.put(SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS, returnClass);
-        log.info("KafkaListenerManager (listener: {}): Added Apicurio property '{}' = '{}'", listenerId, SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS, returnClass);
+        LOG.info("Listener (Pool ID: {}): Added Apicurio property '{}' = '{}'", uniquePoolListenerId, SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS, returnClass);
 
         String strategyPropKey = "kafka.consumers.default." + SerdeConfig.ARTIFACT_RESOLVER_STRATEGY;
         String strategy = applicationContext.getProperty(strategyPropKey, String.class).orElse(io.apicurio.registry.serde.strategy.TopicIdStrategy.class.getName());
         consumerConfig.put(SerdeConfig.ARTIFACT_RESOLVER_STRATEGY, strategy);
-        log.info("KafkaListenerManager (listener: {}): Added Apicurio property '{}' = '{}'", listenerId, SerdeConfig.ARTIFACT_RESOLVER_STRATEGY, strategy);
+        LOG.info("Listener (Pool ID: {}): Added Apicurio property '{}' = '{}'", uniquePoolListenerId, SerdeConfig.ARTIFACT_RESOLVER_STRATEGY, strategy);
 
-        // Add other common Apicurio consumer properties if needed
-        String groupIdPropKey = "kafka.consumers.default." + SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID;
-        applicationContext.getProperty(groupIdPropKey, String.class).ifPresent( value -> {
+        String explicitGroupIdPropKey = "kafka.consumers.default." + SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID;
+        applicationContext.getProperty(explicitGroupIdPropKey, String.class).ifPresent( value -> {
             consumerConfig.put(SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID, value);
-            log.info("KafkaListenerManager (listener: {}): Added Apicurio property '{}' = '{}'", listenerId, SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID, value);
+            LOG.info("Listener (Pool ID: {}): Added Apicurio property '{}' = '{}'", uniquePoolListenerId, SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID, value);
         });
     }
 
-    private void addGlueConsumerProperties(Map<String, Object> consumerConfig, String listenerId) {
-        log.warn("KafkaListenerManager (listener: {}): Placeholder for addGlueConsumerProperties. AWS Glue Schema Registry consumer configuration not yet implemented.", listenerId);
-        // Example of what would go here:
-        // consumerConfig.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "software.amazon.awssdk.services.glue.schemaRegistry.serde.GlueSchemaRegistryKafkaDeserializer");
-        // String region = applicationContext.getProperty("aws.region", String.class).orElse("us-east-1"); // Example
-        // String registryName = applicationContext.getProperty("aws.glue.schema.registry.name", String.class).orElse("default-registry"); // Example
-        // consumerConfig.put(AWSSchemaRegistryConstants.AWS_REGION, region);
-        // consumerConfig.put(AWSSchemaRegistryConstants.REGISTRY_NAME, registryName);
-        // consumerConfig.put(AWSSchemaRegistryConstants.SCHEMA_NAME, topic + "-value"); // Or some other convention
-        // consumerConfig.put(AWSSchemaRegistryConstants.DATA_FORMAT, DataFormat.PROTOBUF.name());
-        // consumerConfig.put(AWSSchemaRegistryConstants.PROTOBUF_MESSAGE_TYPE, ProtobufMessageType.POJO.name());
-        // consumerConfig.put(AWSSchemaRegistryConstants.CLASS_NAME_FOR_SPECIFIC_RETURN_TYPE, PipeStream.class.getName());
-        // log.info("KafkaListenerManager (listener: {}): Added placeholder Glue properties.", listenerId);
+    private void addGlueConsumerProperties(Map<String, Object> consumerConfig, String uniquePoolListenerId) {
+        LOG.warn("Listener (Pool ID: {}): Placeholder for addGlueConsumerProperties. AWS Glue Schema Registry consumer configuration not yet implemented.", uniquePoolListenerId);
+        // TODO: Implement Glue properties fetching from ApplicationContext and adding to consumerConfig
+        // Example:
+        // consumerConfig.putIfAbsent(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "software.amazon.awssdk.services.glue.schemaRegistry.serde.GlueSchemaRegistryKafkaDeserializer");
+        // String region = applicationContext.getProperty("aws.region", String.class).orElse("us-east-1");
+        // consumerConfig.put(software.amazon.awssdk.services.glue.schema.registry.configs.AWSSchemaRegistryConstants.AWS_REGION, region);
+        // ... other Glue specific properties
     }
 
-    // ... (rest of KafkaListenerManager methods: pauseConsumer, resumeConsumer, etc.)
-    public CompletableFuture<Void> pauseConsumer(String pipelineName, String stepName) {
-        String pipelineStepKey = generatePipelineStepKey(pipelineName, stepName);
-        String listenerId = pipelineStepToListenerMap.get(pipelineStepKey);
+    public CompletableFuture<Void> pauseConsumer(String pipelineName, String stepName, String topic, String groupId) {
+        String listenerKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
+        DynamicKafkaListener listener = activeListenerInstanceMap.get(listenerKey);
 
-        if (listenerId == null) {
-            return CompletableFuture.failedFuture(
-                    new IllegalArgumentException("No listener found for pipeline: " + pipelineName +
-                            ", step: " + stepName));
-        }
-
-        DynamicKafkaListener listener = listenerPool.getListener(listenerId);
         if (listener == null) {
-            return CompletableFuture.failedFuture(
-                    new IllegalArgumentException("Listener ID found in mapping but not in pool: " + listenerId));
+            String errorMsg = String.format("No listener found for key: %s (pipeline: %s, step: %s, topic: %s, group: %s)",
+                    listenerKey, pipelineName, stepName, topic, groupId);
+            LOG.warn(errorMsg);
+            return CompletableFuture.failedFuture(new IllegalArgumentException(errorMsg));
         }
 
         CompletableFuture<Void> result = new CompletableFuture<>();
         try {
             listener.pause();
-            stateManager.updateState(listenerId, new ConsumerState(
-                    listenerId, listener.getTopic(), listener.getGroupId(),
+            stateManager.updateState(listener.getListenerId(), new ConsumerState(
+                    listener.getListenerId(), listener.getTopic(), listener.getGroupId(),
                     true, Instant.now(), Collections.emptyMap()));
             result.complete(null);
-            log.info("Paused Kafka consumer for pipeline: {}, step: {}, listener: {}",
-                    pipelineName, stepName, listenerId);
+            LOG.info("Paused Kafka consumer. Key: '{}', Pool ID: '{}'", listenerKey, listener.getListenerId());
         } catch (Exception e) {
-            log.error("Failed to pause Kafka consumer for pipeline: {}, step: {}, listener: {}",
-                    pipelineName, stepName, listenerId, e);
+            LOG.error("Failed to pause Kafka consumer. Key: '{}', Pool ID: '{}'. Error: {}",
+                    listenerKey, listener.getListenerId(), e.getMessage(), e);
             result.completeExceptionally(e);
         }
         return result;
     }
 
-    /**
-     * Resumes a paused consumer for a specific pipeline step.
-     *
-     * @param pipelineName The name of the pipeline
-     * @param stepName The name of the step
-     * @return A CompletableFuture that completes when the consumer is resumed
-     */
-    public CompletableFuture<Void> resumeConsumer(String pipelineName, String stepName) {
-        String pipelineStepKey = generatePipelineStepKey(pipelineName, stepName);
-        String listenerId = pipelineStepToListenerMap.get(pipelineStepKey);
+    public CompletableFuture<Void> resumeConsumer(String pipelineName, String stepName, String topic, String groupId) {
+        String listenerKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
+        DynamicKafkaListener listener = activeListenerInstanceMap.get(listenerKey);
 
-        if (listenerId == null) {
-            return CompletableFuture.failedFuture(
-                    new IllegalArgumentException("No listener found for pipeline: " + pipelineName +
-                            ", step: " + stepName));
-        }
-
-        DynamicKafkaListener listener = listenerPool.getListener(listenerId);
         if (listener == null) {
-            return CompletableFuture.failedFuture(
-                    new IllegalArgumentException("Listener ID found in mapping but not in pool: " + listenerId));
+            String errorMsg = String.format("No listener found for key: %s to resume.", listenerKey);
+            LOG.warn(errorMsg);
+            return CompletableFuture.failedFuture(new IllegalArgumentException(errorMsg));
         }
-
         CompletableFuture<Void> result = new CompletableFuture<>();
         try {
             listener.resume();
-            stateManager.updateState(listenerId, new ConsumerState(
-                    listenerId, listener.getTopic(), listener.getGroupId(),
+            stateManager.updateState(listener.getListenerId(), new ConsumerState(
+                    listener.getListenerId(), listener.getTopic(), listener.getGroupId(),
                     false, Instant.now(), Collections.emptyMap()));
             result.complete(null);
-            log.info("Resumed Kafka consumer for pipeline: {}, step: {}, listener: {}",
-                    pipelineName, stepName, listenerId);
+            LOG.info("Resumed Kafka consumer. Key: '{}', Pool ID: '{}'", listenerKey, listener.getListenerId());
         } catch (Exception e) {
-            log.error("Failed to resume Kafka consumer for pipeline: {}, step: {}, listener: {}",
-                    pipelineName, stepName, listenerId, e);
+            LOG.error("Failed to resume Kafka consumer. Key: '{}', Pool ID: '{}'. Error: {}",
+                    listenerKey, listener.getListenerId(), e.getMessage(), e);
             result.completeExceptionally(e);
         }
         return result;
     }
 
-    /**
-     * Resets consumer offset to a specific date.
-     *
-     * @param pipelineName The name of the pipeline
-     * @param stepName The name of the step
-     * @param date The date to reset to
-     * @return A CompletableFuture that completes when the offset is reset
-     */
-    public CompletableFuture<Void> resetOffsetToDate(String pipelineName, String stepName, Instant date) {
-        String pipelineStepKey = generatePipelineStepKey(pipelineName, stepName);
-        String listenerId = pipelineStepToListenerMap.get(pipelineStepKey);
-
-        if (listenerId == null) {
-            return CompletableFuture.failedFuture(
-                    new IllegalArgumentException("No listener found for pipeline: " + pipelineName +
-                            ", step: " + stepName));
-        }
-        DynamicKafkaListener listener = listenerPool.getListener(listenerId);
+    public CompletableFuture<Void> resetOffsetToDate(String pipelineName, String stepName, String topic, String groupId, Instant date) {
+        String listenerKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
+        DynamicKafkaListener listener = activeListenerInstanceMap.get(listenerKey);
         if (listener == null) {
-            return CompletableFuture.failedFuture(
-                    new IllegalArgumentException("Listener ID found in mapping but not in pool: " + listenerId));
+            return CompletableFuture.failedFuture(new IllegalArgumentException("No listener for key: " + listenerKey));
         }
-
         OffsetResetParameters params = OffsetResetParameters.builder(OffsetResetStrategy.TO_TIMESTAMP)
                 .timestamp(date.toEpochMilli())
                 .build();
-        log.info("Resetting Kafka consumer offset to date {} for pipeline: {}, step: {}, listener: {}",
-                date, pipelineName, stepName, listenerId);
+        LOG.info("Resetting Kafka consumer offset to date {} for key: '{}', Pool ID: '{}'",
+                date, listenerKey, listener.getListenerId());
 
-        CompletableFuture<Void> pauseFuture = pauseConsumer(pipelineName, stepName);
-        return pauseFuture.thenCompose(v ->
-                kafkaAdminService.resetConsumerGroupOffsetsAsync(
-                        listener.getGroupId(), listener.getTopic(), params)
-        ).thenCompose(v -> resumeConsumer(pipelineName, stepName));
+        return pauseConsumer(pipelineName, stepName, topic, groupId)
+                .thenCompose(v -> kafkaAdminService.resetConsumerGroupOffsetsAsync(listener.getGroupId(), listener.getTopic(), params))
+                .thenCompose(v -> resumeConsumer(pipelineName, stepName, topic, groupId));
     }
 
-    /**
-     * Resets consumer offset to earliest.
-     *
-     * @param pipelineName The name of the pipeline
-     * @param stepName The name of the step
-     * @return A CompletableFuture that completes when the offset is reset
-     */
-    public CompletableFuture<Void> resetOffsetToEarliest(String pipelineName, String stepName) {
-        String pipelineStepKey = generatePipelineStepKey(pipelineName, stepName);
-        String listenerId = pipelineStepToListenerMap.get(pipelineStepKey);
-        if (listenerId == null) {
-            return CompletableFuture.failedFuture(new IllegalArgumentException("No listener for " + pipelineName + ":" + stepName));
-        }
-        DynamicKafkaListener listener = listenerPool.getListener(listenerId);
+    public CompletableFuture<Void> resetOffsetToEarliest(String pipelineName, String stepName, String topic, String groupId) {
+        String listenerKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
+        DynamicKafkaListener listener = activeListenerInstanceMap.get(listenerKey);
         if (listener == null) {
-            return CompletableFuture.failedFuture(new IllegalArgumentException("Listener " + listenerId + " not in pool"));
+            return CompletableFuture.failedFuture(new IllegalArgumentException("No listener for key: " + listenerKey));
         }
         OffsetResetParameters params = OffsetResetParameters.builder(OffsetResetStrategy.EARLIEST).build();
-        log.info("Resetting offset to earliest for {}:{}:{}", pipelineName, stepName, listenerId);
-        return pauseConsumer(pipelineName, stepName)
+        LOG.info("Resetting offset to earliest for key: '{}', Pool ID: '{}'", listenerKey, listener.getListenerId());
+        return pauseConsumer(pipelineName, stepName, topic, groupId)
                 .thenCompose(v -> kafkaAdminService.resetConsumerGroupOffsetsAsync(listener.getGroupId(), listener.getTopic(), params))
-                .thenCompose(v -> resumeConsumer(pipelineName, stepName));
+                .thenCompose(v -> resumeConsumer(pipelineName, stepName, topic, groupId));
     }
 
-    /**
-     * Resets consumer offset to latest.
-     *
-     * @param pipelineName The name of the pipeline
-     * @param stepName The name of the step
-     * @return A CompletableFuture that completes when the offset is reset
-     */
-    public CompletableFuture<Void> resetOffsetToLatest(String pipelineName, String stepName) {
-        String pipelineStepKey = generatePipelineStepKey(pipelineName, stepName);
-        String listenerId = pipelineStepToListenerMap.get(pipelineStepKey);
-        if (listenerId == null) {
-            return CompletableFuture.failedFuture(new IllegalArgumentException("No listener for " + pipelineName + ":" + stepName));
-        }
-        DynamicKafkaListener listener = listenerPool.getListener(listenerId);
+    public CompletableFuture<Void> resetOffsetToLatest(String pipelineName, String stepName, String topic, String groupId) {
+        String listenerKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
+        DynamicKafkaListener listener = activeListenerInstanceMap.get(listenerKey);
         if (listener == null) {
-            return CompletableFuture.failedFuture(new IllegalArgumentException("Listener " + listenerId + " not in pool"));
+            return CompletableFuture.failedFuture(new IllegalArgumentException("No listener for key: " + listenerKey));
         }
         OffsetResetParameters params = OffsetResetParameters.builder(OffsetResetStrategy.LATEST).build();
-        log.info("Resetting offset to latest for {}:{}:{}", pipelineName, stepName, listenerId);
-        return pauseConsumer(pipelineName, stepName)
+        LOG.info("Resetting offset to latest for key: '{}', Pool ID: '{}'", listenerKey, listener.getListenerId());
+        return pauseConsumer(pipelineName, stepName, topic, groupId)
                 .thenCompose(v -> kafkaAdminService.resetConsumerGroupOffsetsAsync(listener.getGroupId(), listener.getTopic(), params))
-                .thenCompose(v -> resumeConsumer(pipelineName, stepName));
+                .thenCompose(v -> resumeConsumer(pipelineName, stepName, topic, groupId));
     }
 
-    /**
-     * Gets the status of all consumers.
-     *
-     * @return A map of listener IDs to consumer statuses
-     */
     public Map<String, ConsumerStatus> getConsumerStatuses() {
-        Map<String, ConsumerStatus> statuses = new HashMap<>();
-        for (DynamicKafkaListener listener : listenerPool.getAllListeners()) {
-            ConsumerState state = stateManager.getState(listener.getListenerId());
-            ConsumerStatus status = new ConsumerStatus(
-                    listener.getListenerId(),
-                    listener.getPipelineName(),
-                    listener.getStepName(),
-                    listener.getTopic(),
-                    listener.getGroupId(),
-                    listener.isPaused(),
-                    state != null ? state.lastUpdated() : Instant.now()
-            );
-            statuses.put(listener.getListenerId(), status);
-        }
-        return statuses;
+        return activeListenerInstanceMap.values().stream()
+                .map(listener -> {
+                    ConsumerState state = stateManager.getState(listener.getListenerId());
+                    return new ConsumerStatus(
+                            listener.getListenerId(),
+                            listener.getPipelineName(),
+                            listener.getStepName(),
+                            listener.getTopic(),
+                            listener.getGroupId(),
+                            listener.isPaused(),
+                            state != null ? state.lastUpdated() : Instant.now()
+                    );
+                })
+                .collect(Collectors.toMap(
+                        // Use the listenerInstanceKey for the status map key if that's how users will query
+                        status -> generateListenerInstanceKey(status.pipelineName(), status.stepName(), status.topic(), status.groupId()),
+                        status -> status,
+                        (existing, replacement) -> existing // In case of duplicate keys, which shouldn't happen with unique pool IDs
+                ));
     }
 
-    /**
-     * Removes a listener for a specific pipeline step.
-     *
-     * @param pipelineName The name of the pipeline
-     * @param stepName The name of the step
-     * @return true if the listener was removed, false otherwise
-     */
-    public boolean removeListener(String pipelineName, String stepName) {
-        String pipelineStepKey = generatePipelineStepKey(pipelineName, stepName);
-        String listenerId = pipelineStepToListenerMap.remove(pipelineStepKey);
-        if (listenerId != null) {
-            listenerPool.removeListener(listenerId);
-            stateManager.removeState(listenerId);
-            log.info("Removed Kafka listener for pipeline: {}, step: {}, listener: {}",
-                    pipelineName, stepName, listenerId);
-            return true;
-        }
-        log.warn("No listener found to remove for pipeline: {}, step: {}", pipelineName, stepName);
-        return false;
-    }
-
-    /**
-     * Generates a unique listener ID for a pipeline step.
-     *
-     * @param pipelineName The name of the pipeline
-     * @param stepName The name of the step
-     * @return The generated listener ID
-     */
-    private String generateListenerId(String pipelineName, String stepName) {
-        return "kafka-listener-" + pipelineName + "-" + stepName + "-" + UUID.randomUUID().toString().substring(0, 8);
-    }
-
-    /**
-     * Generates a key for the pipeline step map.
-     *
-     * @param pipelineName The name of the pipeline
-     * @param stepName The name of the step
-     * @return The generated key
-     */
-    private String generatePipelineStepKey(String pipelineName, String stepName) {
-        return pipelineName + ":" + stepName;
+    private String generateListenerInstanceKey(String pipelineName, String stepName, String topic, String groupId) {
+        return String.format("%s:%s:%s:%s", pipelineName, stepName, topic, groupId);
     }
 }

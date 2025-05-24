@@ -40,7 +40,8 @@ public class DynamicKafkaListener {
     private final String listenerId;
     private final String topic;
     private final String groupId;
-    private final Map<String, Object> consumerConfig; // This is now fully prepared by KafkaListenerManager
+    private final Map<String, Object> consumerConfig; // This is the final, fully prepared config
+    private final Map<String, String> originalConsumerProperties; // NEW: Stores properties from KafkaInputDefinition
     private final String pipelineName;
     private final String stepName;
     private final PipeStreamEngine pipeStreamEngine;
@@ -56,7 +57,8 @@ public class DynamicKafkaListener {
             String listenerId,
             String topic,
             String groupId,
-            Map<String, Object> consumerConfig, // Expect this to be fully configured
+            Map<String, Object> finalConsumerConfig, // Renamed for clarity: this is the fully prepared config
+            Map<String, String> originalConsumerPropertiesFromStep, // NEW: Pass original properties
             String pipelineName,
             String stepName,
             PipeStreamEngine pipeStreamEngine) {
@@ -64,20 +66,35 @@ public class DynamicKafkaListener {
         this.listenerId = Objects.requireNonNull(listenerId, "Listener ID cannot be null");
         this.topic = Objects.requireNonNull(topic, "Topic cannot be null");
         this.groupId = Objects.requireNonNull(groupId, "Group ID cannot be null");
-        this.consumerConfig = new HashMap<>(Objects.requireNonNull(consumerConfig, "Consumer config cannot be null"));
+        this.consumerConfig = new HashMap<>(Objects.requireNonNull(finalConsumerConfig, "Final consumer config cannot be null"));
+        // Store a copy of the original properties for comparison purposes
+        this.originalConsumerProperties = (originalConsumerPropertiesFromStep == null)
+                ? Collections.emptyMap()
+                : new HashMap<>(originalConsumerPropertiesFromStep);
         this.pipelineName = Objects.requireNonNull(pipelineName, "Pipeline name cannot be null");
         this.stepName = Objects.requireNonNull(stepName, "Step name cannot be null");
         this.pipeStreamEngine = Objects.requireNonNull(pipeStreamEngine, "PipeStreamEngine cannot be null");
 
         // Essential Kafka properties that are not schema-registry specific
-        this.consumerConfig.putIfAbsent(ConsumerConfig.GROUP_ID_CONFIG, groupId);
-        this.consumerConfig.putIfAbsent(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
-                "org.apache.kafka.common.serialization.UUIDDeserializer");
+        // These should have been added by KafkaListenerManager to finalConsumerConfig
+        // but we can ensure they are present or log if not.
+        if (!this.consumerConfig.containsKey(ConsumerConfig.GROUP_ID_CONFIG) ||
+                !groupId.equals(this.consumerConfig.get(ConsumerConfig.GROUP_ID_CONFIG))) {
+            log.warn("Listener {}: Group ID in finalConsumerConfig ('{}') does not match provided groupId ('{}'). Using value from finalConsumerConfig.",
+                    listenerId, this.consumerConfig.get(ConsumerConfig.GROUP_ID_CONFIG), groupId);
+        }
+        this.consumerConfig.putIfAbsent(ConsumerConfig.GROUP_ID_CONFIG, groupId); // Ensure it's there
+
+        if (!this.consumerConfig.containsKey(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG)) {
+            log.warn("Listener {}: Consumer property '{}' is missing. Defaulting to UUIDDeserializer, but this should be set by KafkaListenerManager.",
+                    listenerId, ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG);
+            this.consumerConfig.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.UUIDDeserializer");
+        }
+
 
         // VALUE_DESERIALIZER_CLASS_CONFIG and schema registry properties (like apicurio.registry.url)
-        // are now expected to be pre-populated in the 'consumerConfig' map by KafkaListenerManager.
+        // are now expected to be pre-populated in the 'finalConsumerConfig' map by KafkaListenerManager.
 
-        // Optional: Add a check/warning if essential properties for the *expected* deserializer are missing
         String valueDeserializerClass = (String) this.consumerConfig.get(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG);
         if (valueDeserializerClass == null || valueDeserializerClass.isBlank()) {
             log.error("Listener {}: CRITICAL - Consumer property '{}' is missing or blank in the provided config. Deserialization will fail.",
@@ -106,7 +123,20 @@ public class DynamicKafkaListener {
         initialize();
     }
 
-    // ... (rest of DynamicKafkaListener: initialize, pollLoop, processRecord, pause, resume, shutdown, getters - no changes needed here)
+    /**
+     * Returns the original consumer properties that were provided from the
+     * KafkaInputDefinition, before any defaults or manager-added properties were merged.
+     * This is used by KafkaListenerManager to compare if the user-defined part of the
+     * configuration has changed.
+     *
+     * @return A map of the original consumer properties.
+     */
+    public Map<String, Object> getConsumerConfigForComparison() {
+        // Convert Map<String, String> to Map<String, Object> for compatibility
+        // with areConsumerPropertiesEqual in KafkaListenerManager
+        return new HashMap<>(this.originalConsumerProperties);
+    }
+
     private void initialize() {
         consumer = new KafkaConsumer<>(this.consumerConfig);
         consumer.subscribe(Collections.singletonList(topic));
@@ -170,7 +200,7 @@ public class DynamicKafkaListener {
                     }
                     for (ConsumerRecord<UUID, PipeStream> record : records) {
                         try {
-                            log.debug("Listener {} processing record with streamId: {}", listenerId, 
+                            log.debug("Listener {} processing record with streamId: {}", listenerId,
                                     record.value() != null ? record.value().getStreamId() : "null");
                             processRecord(record);
                         } catch (Exception e) {
@@ -181,7 +211,7 @@ public class DynamicKafkaListener {
                     }
                 } else {
                     log.debug("Listener {} is paused, not polling for records", listenerId);
-                    Thread.sleep(100);
+                    Thread.sleep(100); //NOSONAR
                 }
             }
         } catch (InterruptedException e) {

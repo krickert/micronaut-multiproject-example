@@ -1,5 +1,0 @@
-micronaut:
-  application:
-    name: graalpy-example
-  graalpy:
-    python-path: classpath:python

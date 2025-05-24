@@ -28,7 +28,6 @@ micronaut {
     testResources {
         enabled.set(true)
         inferClasspath.set(true)
-        additionalModules.add(KnownModules.KAFKA)
         clientTimeout.set(60)
         sharedServer.set(true)
     }

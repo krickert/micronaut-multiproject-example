@@ -6,6 +6,7 @@ import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineConfig;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig;
 import com.krickert.search.config.pipeline.model.TransportType;
+import com.krickert.search.engine.ConnectorEngineGrpc;
 import com.krickert.search.engine.ConnectorRequest;
 import com.krickert.search.engine.ConnectorResponse;
 import com.krickert.search.engine.PipeStreamEngineGrpc;
@@ -37,8 +38,8 @@ import java.util.concurrent.TimeUnit;
  */
 @Singleton
 @GrpcService
-public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineImplBase {
-    private static final Logger log = LoggerFactory.getLogger(PipeStreamEngineImpl.class);
+public class ConnectorEngineImpl extends ConnectorEngineGrpc.ConnectorEngineImplBase {
+    private static final Logger log = LoggerFactory.getLogger(ConnectorEngineImpl.class);
 
     private final PipeStepExecutorFactory executorFactory;
     private final PipeStreamGrpcForwarder grpcForwarder;
@@ -61,80 +62,80 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
 
 
     @Inject
-    public PipeStreamEngineImpl(PipeStepExecutorFactory executorFactory,
-                                PipeStreamGrpcForwarder grpcForwarder,
-                                KafkaForwarder kafkaForwarder,
-                                DynamicConfigurationManager configManager) {
+    public ConnectorEngineImpl(PipeStepExecutorFactory executorFactory,
+                               PipeStreamGrpcForwarder grpcForwarder,
+                               KafkaForwarder kafkaForwarder,
+                               DynamicConfigurationManager configManager) {
         this.executorFactory = executorFactory;
         this.grpcForwarder = grpcForwarder;
         this.kafkaForwarder = kafkaForwarder;
         this.configManager = configManager;
     }
 
+
     /**
-     * Tests the pipe stream execution by processing a given request, applying transformations,
-     * and calculating routes, then returning the processed data to the response observer.
+     * Processes a connector document by identifying the source connector step,
+     * constructing a structured PipeStream, and initiating a pipeline ingestion process.
+     * Responds with either success or error details.
      *
-     * @param request          the incoming PipeStream message containing information required to process
-     *                         the current pipeline and target step
-     * @param responseObserver the observer to send processed PipeStream data or errors back
+     * @param request          the {@link ConnectorRequest} containing the document, source identifier,
+     *                         suggested stream ID, and initial context parameters
+     * @param responseObserver the {@link StreamObserver} for sending back a {@link ConnectorResponse}
+     *                         indicating the processing outcome and stream details
      */
     @Override
-    public void testPipeStream(PipeStream request, StreamObserver<PipeStream> responseObserver) {
+    public void processConnectorDoc(ConnectorRequest request, StreamObserver<ConnectorResponse> responseObserver) {
+        String streamId = null;
+        String pipelineNameForLog = null;
+        String connectorStepNameForLog = null;
+
         try {
-            if (request.getTargetStepName() == null || request.getTargetStepName().isEmpty()) {
-                responseObserver.onError(new IllegalArgumentException("Target step name must be set in the request"));
-                return;
+            if (request.getSourceIdentifier() == null || request.getSourceIdentifier().isBlank()) {
+                throw new IllegalArgumentException("Source identifier must be provided in ConnectorRequest.");
             }
 
-            PipeStreamStateBuilder stateBuilder = new PipeStreamStateBuilderImpl(request, configManager);
-            stateBuilder.withHopNumber((int) request.getCurrentHopNumber() + 1);
+            // The sourceIdentifier IS the name of the PipeStepConfig representing the connector.
+            ConnectorEntryPoint connectorStepDetails = findConnectorStepDetailsByIdentifier(request.getSourceIdentifier());
+            pipelineNameForLog = connectorStepDetails.pipelineName();
+            connectorStepNameForLog = connectorStepDetails.stepName(); // This will be == request.getSourceIdentifier()
 
-            PipeStepExecutor executor = executorFactory.getExecutor(
-                    request.getCurrentPipelineName(),
-                    request.getTargetStepName());
+            streamId = (request.getSuggestedStreamId() == null || request.getSuggestedStreamId().isEmpty() || request.getSuggestedStreamId().isBlank())
+                    ? UUID.randomUUID().toString()
+                    : request.getSuggestedStreamId();
 
-            PipeStream processedStream = executor.execute(stateBuilder.getPresentState().build());
-            stateBuilder = new PipeStreamStateBuilderImpl(processedStream, configManager);
+            PipeStream.Builder pipeStreamBuilder = PipeStream.newBuilder()
+                    .setStreamId(streamId)
+                    .setDocument(request.getDocument())
+                    .setCurrentPipelineName(connectorStepDetails.pipelineName())
+                    .setCurrentHopNumber(0)
+                    .putAllContextParams(request.getInitialContextParamsMap())
+                    .setTargetStepName(connectorStepDetails.stepName()); // Target the connector's own step config
 
-            List<RouteData> routes = stateBuilder.calculateNextRoutes();
-            PipeStream response = stateBuilder.build();
-
-            PipeStream.Builder responseWithRoutes = response.toBuilder();
-            for (int i = 0; i < routes.size(); i++) {
-                RouteData route = routes.get(i);
-                String routePrefix = TEST_ROUTE_PREFIX + i;
-                responseWithRoutes.putContextParams(routePrefix + TEST_ROUTE_TARGET_PIPELINE_SUFFIX, route.targetPipeline());
-                responseWithRoutes.putContextParams(routePrefix + TEST_ROUTE_NEXT_STEP_SUFFIX, route.nextTargetStep());
-                responseWithRoutes.putContextParams(routePrefix + TEST_ROUTE_DESTINATION_SUFFIX, route.destination());
-                responseWithRoutes.putContextParams(routePrefix + TEST_ROUTE_TRANSPORT_TYPE_SUFFIX, route.transportType().toString());
-            }
-
-            responseObserver.onNext(responseWithRoutes.build());
-            responseObserver.onCompleted();
-        } catch (Exception e) {
-            log.error("Error in testPipeStream for streamId {}: {}", request.getStreamId(), e.getMessage(), e);
-            responseObserver.onError(e);
-        }
-    }
-
-    @Override
-    public void processPipeAsync(PipeStream request, StreamObserver<Empty> responseObserver) {
-        try {
-            if (request.getTargetStepName() == null || request.getTargetStepName().isEmpty()) {
-                log.error("processPipeAsync called with invalid request: targetStepName missing. StreamId: {}", request.getStreamId());
-                responseObserver.onError(new IllegalArgumentException("Target step name must be set in the request"));
-                return;
-            }
-            responseObserver.onNext(Empty.getDefaultInstance());
+            ConnectorResponse response = ConnectorResponse.newBuilder()
+                    .setStreamId(streamId)
+                    .setAccepted(true)
+                    .setMessage("Ingestion accepted for stream ID " + streamId +
+                            ", targeting connector step: " + connectorStepDetails.stepName() +
+                            " in pipeline: " + connectorStepDetails.pipelineName())
+                    .build();
+            responseObserver.onNext(response);
             responseObserver.onCompleted();
 
-            executeStepAndForward(request);
+            executeStepAndForward(pipeStreamBuilder.build());
+
         } catch (Exception e) {
-            log.error("Initial error in processPipeAsync for streamId {}: {}", request.getStreamId(), e.getMessage(), e);
+            log.error("Error processing connector document. SourceId: {}, ConnectorStep: {}.{}. StreamId: {}. Error: {}",
+                    request.getSourceIdentifier(), pipelineNameForLog, connectorStepNameForLog, streamId, e.getMessage(), e);
+            ConnectorResponse.Builder errorResponseBuilder = ConnectorResponse.newBuilder()
+                    .setAccepted(false)
+                    .setMessage("Error processing connector document: " + e.getMessage());
+            if (streamId != null) {
+                errorResponseBuilder.setStreamId(streamId);
+            }
+            responseObserver.onNext(errorResponseBuilder.build());
+            responseObserver.onCompleted();
         }
     }
-
 
     // New private helper method in PipeStreamEngineImpl
     void handleFailedDispatch(PipeStream dispatchedStream, RouteData failedRoute, Throwable dispatchException, String errorCode) {

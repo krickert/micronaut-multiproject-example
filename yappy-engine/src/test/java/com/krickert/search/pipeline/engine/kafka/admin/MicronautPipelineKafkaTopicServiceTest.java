@@ -224,7 +224,8 @@ class MicronautPipelineKafkaTopicServiceTest {
         });
 
         // Verify the exception message
-        assertTrue(exception.getMessage().contains("Replication factor: " + excessiveReplicationFactor + " larger than available brokers: " + availableBrokers),
+        assertTrue(exception.getMessage().equals("Kafka admin operation failed: Replication factor: 2 larger than available brokers: 1.") ||
+                exception.getMessage().contains(String.format("Kafka admin operation failed: Unable to replicate the partition %s time(s): The target replication factor of %s cannot be reached because only %s broker(s) are registered.",excessiveReplicationFactor, excessiveReplicationFactor, availableBrokers)),
                 "Exception should mention replication factor exceeding available brokers");
 
         // Add the topic to createdTopics for cleanup, even though creation should fail

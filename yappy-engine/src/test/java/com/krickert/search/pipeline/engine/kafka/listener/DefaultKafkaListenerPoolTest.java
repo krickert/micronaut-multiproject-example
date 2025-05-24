@@ -8,6 +8,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -15,12 +16,12 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for {@link KafkaListenerPool}.
+ * Unit tests for {@link DefaultKafkaListenerPool}.
  */
 @ExtendWith(MockitoExtension.class)
-class KafkaListenerPoolTest {
+class DefaultKafkaListenerPoolTest { // Renamed class for clarity
 
-    private KafkaListenerPool listenerPool;
+    private DefaultKafkaListenerPool listenerPool; // Changed type to DefaultKafkaListenerPool
 
     @Mock
     private PipeStreamEngine mockPipeStreamEngine;
@@ -33,12 +34,14 @@ class KafkaListenerPoolTest {
     private static final String GROUP_ID = "test-group";
     private static final String PIPELINE_NAME = "test-pipeline";
     private static final String STEP_NAME = "test-step";
-    private Map<String, Object> consumerConfig;
+    private Map<String, Object> consumerConfig; // For final merged config
+    private Map<String, String> originalProps;  // For original step properties
 
     @BeforeEach
     void setUp() {
-        listenerPool = new KafkaListenerPool();
+        listenerPool = new DefaultKafkaListenerPool();
         consumerConfig = new HashMap<>();
+        originalProps = Collections.emptyMap(); // Initialize
     }
 
     /**
@@ -58,32 +61,31 @@ class KafkaListenerPoolTest {
     /**
      * Test that createListener returns an existing listener if one exists with the same ID.
      */
+
     @Test
     void testCreateListenerReturnsExistingListener() {
         // Setup: Add a mock listener to the pool using reflection
-        Map<String, DynamicKafkaListener> listeners = new HashMap<>();
-        listeners.put(LISTENER_ID, mockListener);
+        Map<String, DynamicKafkaListener> listenersMap = new HashMap<>(); // Renamed for clarity
+        listenersMap.put(LISTENER_ID, mockListener);
 
         try {
-            // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = KafkaListenerPool.class.getDeclaredField("listeners");
+            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
             listenersField.setAccessible(true);
-            listenersField.set(listenerPool, listeners);
+            listenersField.set(listenerPool, listenersMap);
 
             // Test: Call createListener with the same ID
             DynamicKafkaListener result = listenerPool.createListener(
-                    LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+                    LISTENER_ID, TOPIC, GROUP_ID, consumerConfig,
+                    originalProps, // Added missing argument
+                    PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
 
             // Verify: The existing listener is returned
             assertSame(mockListener, result);
-
-            // Verify: No new listener was created
-            assertEquals(1, listeners.size());
+            assertEquals(1, listenersMap.size()); // Should still be 1, as existing is returned
         } catch (NoSuchFieldException | IllegalAccessException e) {
             fail("Failed to set up test: " + e.getMessage());
         }
     }
-
     /**
      * Test that removeListener correctly removes a listener.
      */
@@ -95,7 +97,7 @@ class KafkaListenerPoolTest {
 
         try {
             // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = KafkaListenerPool.class.getDeclaredField("listeners");
+            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
             listenersField.setAccessible(true);
             listenersField.set(listenerPool, listeners);
 
@@ -138,7 +140,7 @@ class KafkaListenerPoolTest {
 
         try {
             // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = KafkaListenerPool.class.getDeclaredField("listeners");
+            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
             listenersField.setAccessible(true);
             listenersField.set(listenerPool, listeners);
 
@@ -178,7 +180,7 @@ class KafkaListenerPoolTest {
 
         try {
             // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = KafkaListenerPool.class.getDeclaredField("listeners");
+            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
             listenersField.setAccessible(true);
             listenersField.set(listenerPool, listeners);
 
@@ -205,7 +207,7 @@ class KafkaListenerPoolTest {
 
         try {
             // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = KafkaListenerPool.class.getDeclaredField("listeners");
+            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
             listenersField.setAccessible(true);
             listenersField.set(listenerPool, listeners);
 
@@ -233,7 +235,7 @@ class KafkaListenerPoolTest {
 
         try {
             // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = KafkaListenerPool.class.getDeclaredField("listeners");
+            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
             listenersField.setAccessible(true);
             listenersField.set(listenerPool, listeners);
 
@@ -258,7 +260,7 @@ class KafkaListenerPoolTest {
 
         try {
             // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = KafkaListenerPool.class.getDeclaredField("listeners");
+            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
             listenersField.setAccessible(true);
             listenersField.set(listenerPool, listeners);
 
@@ -288,7 +290,7 @@ class KafkaListenerPoolTest {
 
         try {
             // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = KafkaListenerPool.class.getDeclaredField("listeners");
+            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
             listenersField.setAccessible(true);
             listenersField.set(listenerPool, listeners);
 
@@ -323,7 +325,7 @@ class KafkaListenerPoolTest {
 
         try {
             // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = KafkaListenerPool.class.getDeclaredField("listeners");
+            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
             listenersField.setAccessible(true);
             listenersField.set(listenerPool, listeners);
 

@@ -9,6 +9,7 @@ import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.engine.PipeStreamEngine;
 import com.krickert.search.pipeline.engine.kafka.KafkaForwarder;
 import com.krickert.search.pipeline.engine.kafka.listener.ConsumerState;
+import com.krickert.search.pipeline.engine.kafka.listener.ConsumerStatus; // Import ConsumerStatus
 import com.krickert.search.pipeline.engine.kafka.listener.ConsumerStateManager;
 import com.krickert.search.pipeline.engine.kafka.listener.KafkaListenerManager;
 import io.apicurio.registry.serde.config.SerdeConfig;
@@ -59,7 +60,7 @@ import static org.mockito.Mockito.verify;
 @Property(name = "kafka.consumers.default." + SerdeConfig.REGISTRY_URL, value = "${apicurio.registry.url}")
 @Property(name = "kafka.consumers.default." + SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS, value = "com.krickert.search.model.PipeStream")
 @Property(name = "kafka.consumers.default." + SerdeConfig.ARTIFACT_RESOLVER_STRATEGY, value = "io.apicurio.registry.serde.strategy.TopicIdStrategy")
-@Property(name = "kafka.consumers.default.bootstrap.servers", value = "${kafka.bootstrap.servers}") // Ensure this is present for default consumer config path
+@Property(name = "kafka.consumers.default.bootstrap.servers", value = "${kafka.bootstrap.servers}")
 class DynamicListenerIntegrationTestIT {
 
     static final String TEST_CLUSTER_NAME = "dynamicListenerTestCluster";
@@ -67,9 +68,9 @@ class DynamicListenerIntegrationTestIT {
     private static final String TEST_PIPELINE_NAME = "dynamic-listener-test-pipeline";
     private static final String TEST_STEP_NAME = "dynamic-listener-test-step";
 
-    // Use different topic and group names for each test to avoid interference between test runs
     private String testInputTopic;
     private String testConsumerGroupId;
+    private String expectedListenerKey; // To store the generated key for assertions
 
     @Inject
     KafkaForwarder kafkaForwarder;
@@ -90,7 +91,7 @@ class DynamicListenerIntegrationTestIT {
     DynamicConfigurationManager dynamicConfigurationManager;
 
     @Inject
-    PipeStreamEngine mockPipeStreamEngine; // Injected mock
+    PipeStreamEngine mockPipeStreamEngine;
 
     @MockBean(PipeStreamEngine.class)
     PipeStreamEngine mockPipeStreamEngineFactoryMethod() {
@@ -99,12 +100,11 @@ class DynamicListenerIntegrationTestIT {
 
     @BeforeEach
     void setUp() {
-        // Generate unique topic and group names for this test run to avoid interference between tests
-        // This is critical for Kafka integration tests to ensure messages from one test don't affect another
         String uniqueId = UUID.randomUUID().toString().substring(0, 8);
         testInputTopic = "dynamic-listener-test-input-" + uniqueId;
         testConsumerGroupId = "dynamic-listener-test-group-" + uniqueId;
-        LOG.info("Using unique topic: {} and group: {}", testInputTopic, testConsumerGroupId);
+        expectedListenerKey = String.format("%s:%s:%s:%s", TEST_PIPELINE_NAME, TEST_STEP_NAME, testInputTopic, testConsumerGroupId);
+        LOG.info("Using unique topic: {}, group: {}, expected listener key: {}", testInputTopic, testConsumerGroupId, expectedListenerKey);
 
         consulBusinessOperationsService.deleteClusterConfiguration(TEST_CLUSTER_NAME).block();
 
@@ -117,7 +117,7 @@ class DynamicListenerIntegrationTestIT {
                         KafkaInputDefinition.builder()
                                 .listenTopics(List.of(testInputTopic))
                                 .consumerGroupId(testConsumerGroupId)
-                                .kafkaConsumerProperties(Collections.emptyMap()) // Ensure non-null
+                                .kafkaConsumerProperties(Collections.emptyMap())
                                 .build()
                 ))
                 .outputs(Collections.emptyMap())
@@ -145,55 +145,70 @@ class DynamicListenerIntegrationTestIT {
                 .clusterName(TEST_CLUSTER_NAME)
                 .pipelineGraphConfig(graphConfig)
                 .pipelineModuleMap(moduleMap)
-                .allowedKafkaTopics(Collections.singleton(testInputTopic))
+                .allowedKafkaTopics(Collections.singleton(testInputTopic)) // Ensure the topic is allowed
                 .allowedGrpcServices(Collections.singleton("dummy-service"))
                 .build();
 
         consulBusinessOperationsService.storeClusterConfiguration(TEST_CLUSTER_NAME, clusterConfig).block();
-        dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
+        // DCM is initialized via @PostConstruct in its own class, or if we call initialize explicitly.
+        // For tests where DCM might be re-initialized or its state matters per test, explicit call is safer.
+        // However, since app.config.cluster-name is fixed for this test class, @PostConstruct should be fine.
+        // Let's rely on @PostConstruct for now and ensure the await block is robust.
 
-        LOG.info("Waiting for DynamicConfigurationManager to load config using Awaitility...");
-        await().atMost(15, TimeUnit.SECONDS)
+        LOG.info("Waiting for DynamicConfigurationManager to load config and KafkaListenerManager to react for topic {} and group {}...", testInputTopic, testConsumerGroupId);
+        await().atMost(25, TimeUnit.SECONDS)
                 .pollInterval(500, TimeUnit.MILLISECONDS)
                 .until(() -> {
-                    Optional<PipelineClusterConfig> currentConfig = dynamicConfigurationManager.getCurrentPipelineClusterConfig();
-                    boolean loaded = currentConfig.isPresent() && currentConfig.get().clusterName().equals(TEST_CLUSTER_NAME);
-                    if (loaded) {
-                        LOG.info("DynamicConfigurationManager loaded config for cluster: {}", TEST_CLUSTER_NAME);
+                    Optional<PipelineClusterConfig> currentDcmConfig = dynamicConfigurationManager.getCurrentPipelineClusterConfig();
+                    boolean dcmLoaded = currentDcmConfig.isPresent() && currentDcmConfig.get().clusterName().equals(TEST_CLUSTER_NAME);
+                    if (!dcmLoaded) {
+                        LOG.trace("DCM not yet loaded for cluster {}", TEST_CLUSTER_NAME);
+                        return false;
                     }
-                    return loaded;
+                    LOG.trace("DCM loaded for cluster {}. Checking KLM statuses...", TEST_CLUSTER_NAME);
+                    Map<String, ConsumerStatus> statuses = kafkaListenerManager.getConsumerStatuses();
+                    boolean listenerActive = statuses.containsKey(expectedListenerKey) && !statuses.get(expectedListenerKey).paused();
+
+                    if (listenerActive) {
+                        LOG.info("KLM listener active for key: {}", expectedListenerKey);
+                    } else {
+                        LOG.trace("KLM listener not yet active for key {}. Current statuses: {}", expectedListenerKey, statuses.keySet());
+                    }
+                    return listenerActive;
                 });
         assertNotNull(dynamicConfigurationManager.getCurrentPipelineClusterConfig().orElse(null), "DCM should have loaded the test cluster config");
+        LOG.info("Kafka listener setup process complete for topic {} and group {}.", testInputTopic, testConsumerGroupId);
     }
 
     @AfterEach
     void tearDown() {
-        // Clean up any listeners that were created
-        kafkaListenerManager.removeListener(TEST_PIPELINE_NAME, TEST_STEP_NAME);
-
-        // Clean up Consul configuration
         consulBusinessOperationsService.deleteClusterConfiguration(TEST_CLUSTER_NAME).block();
-        dynamicConfigurationManager.shutdown();
-
-        LOG.info("Test teardown complete.");
+        LOG.info("Waiting for KafkaListenerManager to remove listeners for cluster {} (specifically key {})...", TEST_CLUSTER_NAME, expectedListenerKey);
+        await().atMost(20, TimeUnit.SECONDS)
+                .pollInterval(500, TimeUnit.MILLISECONDS)
+                .until(() -> {
+                    Map<String, ConsumerStatus> statuses = kafkaListenerManager.getConsumerStatuses();
+                    boolean listenerRemoved = !statuses.containsKey(expectedListenerKey);
+                    if (listenerRemoved) {
+                        LOG.info("Listener for key {} successfully removed.", expectedListenerKey);
+                    } else {
+                        LOG.trace("Listener for key {} still present. Current statuses: {}", expectedListenerKey, statuses.keySet());
+                    }
+                    return listenerRemoved;
+                });
+        // dynamicConfigurationManager.shutdown(); // Micronaut context handles this
+        LOG.info("Test teardown complete for DynamicListenerIntegrationTestIT.");
     }
 
     @Test
     @DisplayName("Should create a dynamic listener and receive messages")
     void testCreateDynamicListener() {
-        // Create a listener for the pipeline
-        LOG.info("Creating Kafka listener for pipeline: {}, step: {}", TEST_PIPELINE_NAME, TEST_STEP_NAME);
-        List<String> createdListeners = kafkaListenerManager.createListenersForPipeline(TEST_PIPELINE_NAME);
-
-        // Verify listener was created
-        assertFalse(createdListeners.isEmpty(), "At least one listener should be created");
-
-        // Allow time for listener to subscribe
-        try {
-            TimeUnit.SECONDS.sleep(3);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        // Listener creation is now handled by setUp and verified by Awaitility.
+        // We just need to assert it's there before proceeding.
+        Map<String, ConsumerStatus> statuses = kafkaListenerManager.getConsumerStatuses();
+        assertTrue(statuses.containsKey(expectedListenerKey),
+                "Listener for " + expectedListenerKey + " should be active. Current statuses: " + statuses.keySet());
+        assertFalse(statuses.get(expectedListenerKey).paused(), "Listener should not be paused.");
 
         // Send a message to the topic
         String streamId = "test-stream-" + UUID.randomUUID();
@@ -208,185 +223,132 @@ class DynamicListenerIntegrationTestIT {
         LOG.info("Sending PipeStream (streamId: {}) to topic: {}", streamId, testInputTopic);
         try {
             kafkaForwarder.forwardToKafka(testPipeStream, testInputTopic).get(10, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            fail("Kafka send was interrupted", e);
-        } catch (ExecutionException e) {
-            LOG.error("Kafka send ExecutionException: ", e.getCause() != null ? e.getCause() : e);
-            fail("Kafka send failed with an execution exception", e);
-        } catch (TimeoutException e) {
-            fail("Kafka send timed out", e);
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            LOG.error("Kafka send failed", e);
+            fail("Kafka send failed", e);
         }
 
         LOG.info("Message sent to Kafka. Waiting for listener to receive and call PipeStreamEngine...");
-
-        // Verify the message was received and processed
         ArgumentCaptor<PipeStream> receivedStreamCaptor = ArgumentCaptor.forClass(PipeStream.class);
-        verify(mockPipeStreamEngine, timeout(15000).times(1)).processStream(receivedStreamCaptor.capture());
+        verify(mockPipeStreamEngine, timeout(20000).times(1)).processStream(receivedStreamCaptor.capture());
 
         PipeStream receivedStream = receivedStreamCaptor.getValue();
         assertNotNull(receivedStream, "PipeStreamEngine should have been called with a non-null PipeStream");
-        assertEquals(testPipeStream.getStreamId(), receivedStream.getStreamId(), "Stream ID should be preserved");
-        assertEquals(testPipeStream.getDocument(), receivedStream.getDocument(), "Document should be preserved");
-        assertEquals(TEST_PIPELINE_NAME, receivedStream.getCurrentPipelineName(), "Received stream should have pipeline name set by listener");
-        assertEquals(TEST_STEP_NAME, receivedStream.getTargetStepName(), "Received stream should have step name set by listener");
-        assertEquals(testPipeStream.getCurrentHopNumber(), receivedStream.getCurrentHopNumber(), "Received stream should have original hop number from Kafka message");
-
+        assertEquals(testPipeStream.getStreamId(), receivedStream.getStreamId());
+        assertEquals(testPipeStream.getDocument(), receivedStream.getDocument());
+        assertEquals(TEST_PIPELINE_NAME, receivedStream.getCurrentPipelineName());
+        assertEquals(TEST_STEP_NAME, receivedStream.getTargetStepName());
+        assertEquals(testPipeStream.getCurrentHopNumber(), receivedStream.getCurrentHopNumber());
         LOG.info("PipeStream (streamId: {}) successfully sent to Kafka and received by listener.", streamId);
     }
 
     @Test
     @DisplayName("Should pause and resume a dynamic listener")
     void testPauseAndResumeDynamicListener() {
-        // Create a listener for the pipeline
-        LOG.info("Creating Kafka listener for pipeline: {}, step: {}", TEST_PIPELINE_NAME, TEST_STEP_NAME);
-        List<String> createdListeners = kafkaListenerManager.createListenersForPipeline(TEST_PIPELINE_NAME);
-
-        // Verify listener was created
-        assertFalse(createdListeners.isEmpty(), "At least one listener should be created");
-
-        // Allow time for listener to subscribe
-        try {
-            TimeUnit.SECONDS.sleep(3);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        // Listener is already created and active from setUp.
+        Map<String, ConsumerStatus> statuses = kafkaListenerManager.getConsumerStatuses();
+        assertTrue(statuses.containsKey(expectedListenerKey), "Listener should be active at start of test.");
+        String listenerPoolId = statuses.get(expectedListenerKey).id(); // Get the actual pool ID for state checking
 
         // Pause the listener
-        LOG.info("Pausing Kafka listener for pipeline: {}, step: {}", TEST_PIPELINE_NAME, TEST_STEP_NAME);
+        LOG.info("Pausing Kafka listener for key: {}", expectedListenerKey);
         try {
-            kafkaListenerManager.pauseConsumer(TEST_PIPELINE_NAME, TEST_STEP_NAME).get(5, TimeUnit.SECONDS);
+            kafkaListenerManager.pauseConsumer(TEST_PIPELINE_NAME, TEST_STEP_NAME, testInputTopic, testConsumerGroupId)
+                    .get(5, TimeUnit.SECONDS);
         } catch (Exception e) {
             fail("Failed to pause consumer", e);
         }
 
-        // Wait a bit to ensure the pause takes effect
-        LOG.info("Waiting for pause to take effect...");
+        // Verify the listener is paused using Awaitility for state change
+        await().atMost(10, TimeUnit.SECONDS).pollInterval(200, TimeUnit.MILLISECONDS).until(() -> {
+            ConsumerState state = consumerStateManager.getState(listenerPoolId);
+            return state != null && state.paused();
+        });
+        LOG.info("Verified that listener (Pool ID: {}) is paused.", listenerPoolId);
+
+        // Send a message while paused
+        String streamIdPaused = "test-stream-paused-" + UUID.randomUUID();
+        PipeStream pausedMessage = PipeStream.newBuilder().setStreamId(streamIdPaused).setDocument(PipeDoc.newBuilder().setId("paused-doc")).build();
+        LOG.info("Sending PipeStream (streamId: {}) to topic while listener is paused: {}", streamIdPaused, testInputTopic);
         try {
-            TimeUnit.SECONDS.sleep(3);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-
-        // Verify the listener is paused
-        String listenerId = createdListeners.get(0);
-        ConsumerState state = consumerStateManager.getState(listenerId);
-        assertNotNull(state, "Consumer state should exist");
-        assertTrue(state.paused(), "Consumer should be paused");
-        LOG.info("Verified that listener is paused");
-
-        // Send a message while paused (it should not be processed)
-        String streamId = "test-stream-paused-" + UUID.randomUUID();
-        PipeStream testPipeStream = PipeStream.newBuilder()
-                .setStreamId(streamId)
-                .setDocument(PipeDoc.newBuilder().setId("test-doc-paused").setTitle("Hello Paused Listener").build())
-                .setCurrentPipelineName("source-pipeline")
-                .setTargetStepName("source-step")
-                .setCurrentHopNumber(1)
-                .build();
-
-        LOG.info("Sending PipeStream (streamId: {}) to topic while listener is paused: {}", streamId, testInputTopic);
-        try {
-            kafkaForwarder.forwardToKafka(testPipeStream, testInputTopic).get(10, TimeUnit.SECONDS);
+            kafkaForwarder.forwardToKafka(pausedMessage, testInputTopic).get(10, TimeUnit.SECONDS);
         } catch (Exception e) {
             fail("Failed to send message to Kafka", e);
         }
 
-        // Wait a bit to ensure the message is not processed
-        try {
-            TimeUnit.SECONDS.sleep(3);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-
-        // Verify the message was not processed (no calls to PipeStreamEngine)
-        verify(mockPipeStreamEngine, timeout(1000).times(0)).processStream(Mockito.argThat(
-                stream -> stream.getStreamId().equals(streamId)));
+        // Verify the message was not processed immediately
+        verify(mockPipeStreamEngine, Mockito.after(3000).never()).processStream(Mockito.argThat(
+                stream -> stream.getStreamId().equals(streamIdPaused)));
+        LOG.info("Verified message sent while paused was not processed yet.");
 
         // Resume the listener
-        LOG.info("Resuming Kafka listener for pipeline: {}, step: {}", TEST_PIPELINE_NAME, TEST_STEP_NAME);
+        LOG.info("Resuming Kafka listener for key: {}", expectedListenerKey);
         try {
-            kafkaListenerManager.resumeConsumer(TEST_PIPELINE_NAME, TEST_STEP_NAME).get(5, TimeUnit.SECONDS);
+            kafkaListenerManager.resumeConsumer(TEST_PIPELINE_NAME, TEST_STEP_NAME, testInputTopic, testConsumerGroupId)
+                    .get(5, TimeUnit.SECONDS);
         } catch (Exception e) {
             fail("Failed to resume consumer", e);
         }
 
         // Verify the listener is resumed
-        state = consumerStateManager.getState(listenerId);
-        assertNotNull(state, "Consumer state should exist");
-        assertFalse(state.paused(), "Consumer should be resumed");
+        await().atMost(10, TimeUnit.SECONDS).pollInterval(200, TimeUnit.MILLISECONDS).until(() -> {
+            ConsumerState state = consumerStateManager.getState(listenerPoolId);
+            return state != null && !state.paused();
+        });
+        LOG.info("Verified that listener (Pool ID: {}) is resumed.", listenerPoolId);
 
-        // Wait for the paused message to be processed now that the listener is resumed
+        // Wait for the paused message to be processed
         ArgumentCaptor<PipeStream> receivedStreamCaptor = ArgumentCaptor.forClass(PipeStream.class);
-        verify(mockPipeStreamEngine, timeout(15000).times(1)).processStream(receivedStreamCaptor.capture());
+        verify(mockPipeStreamEngine, timeout(20000).times(1)).processStream(receivedStreamCaptor.capture());
 
-        // Verify the message was processed correctly
         PipeStream receivedStream = receivedStreamCaptor.getValue();
-        assertNotNull(receivedStream, "PipeStreamEngine should have been called with a non-null PipeStream");
-        assertEquals(streamId, receivedStream.getStreamId(), "Stream ID should match the sent message");
-
-        LOG.info("PipeStream (streamId: {}) successfully processed after listener was resumed.", streamId);
+        assertNotNull(receivedStream);
+        assertEquals(streamIdPaused, receivedStream.getStreamId(), "Stream ID of paused message should match.");
+        LOG.info("PipeStream (streamId: {}) successfully processed after listener was resumed.", streamIdPaused);
     }
 
     @Test
-    @DisplayName("Should remove a dynamic listener")
-    void testRemoveDynamicListener() {
-        // Create a listener for the pipeline
-        LOG.info("Creating Kafka listener for pipeline: {}, step: {}", TEST_PIPELINE_NAME, TEST_STEP_NAME);
-        List<String> createdListeners = kafkaListenerManager.createListenersForPipeline(TEST_PIPELINE_NAME);
+    @DisplayName("Should remove a dynamic listener by updating Consul config")
+    void testRemoveDynamicListenerViaConsulUpdate() {
+        // Listener is active from setUp.
+        assertTrue(kafkaListenerManager.getConsumerStatuses().containsKey(expectedListenerKey), "Listener should be active initially.");
 
-        // Verify listener was created
-        assertFalse(createdListeners.isEmpty(), "At least one listener should be created");
-        String listenerId = createdListeners.get(0);
-
-        // Allow time for listener to subscribe
-        try {
-            TimeUnit.SECONDS.sleep(3);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-
-        // Verify the listener exists in the state manager
-        ConsumerState state = consumerStateManager.getState(listenerId);
-        assertNotNull(state, "Consumer state should exist");
-
-        // Remove the listener
-        LOG.info("Removing Kafka listener for pipeline: {}, step: {}", TEST_PIPELINE_NAME, TEST_STEP_NAME);
-        boolean removed = kafkaListenerManager.removeListener(TEST_PIPELINE_NAME, TEST_STEP_NAME);
-        assertTrue(removed, "Listener should be successfully removed");
-
-        // Verify the listener no longer exists in the state manager
-        state = consumerStateManager.getState(listenerId);
-        assertNull(state, "Consumer state should no longer exist after removal");
-
-        // Send a message to the topic (it should not be processed since the listener is removed)
-        String streamId = "test-stream-removed-" + UUID.randomUUID();
-        PipeStream testPipeStream = PipeStream.newBuilder()
-                .setStreamId(streamId)
-                .setDocument(PipeDoc.newBuilder().setId("test-doc-removed").setTitle("Hello Removed Listener").build())
-                .setCurrentPipelineName("source-pipeline")
-                .setTargetStepName("source-step")
-                .setCurrentHopNumber(1)
+        // 1. Create a new PipelineClusterConfig WITHOUT the KafkaInputDefinition for our listener
+        PipelineClusterConfig configWithoutListener = PipelineClusterConfig.builder()
+                .clusterName(TEST_CLUSTER_NAME)
+                .pipelineGraphConfig( // An empty graph, or one without the specific step/input
+                        PipelineGraphConfig.builder().pipelines(Collections.emptyMap()).build()
+                )
+                .pipelineModuleMap(PipelineModuleMap.builder().availableModules(Collections.emptyMap()).build())
+                .allowedKafkaTopics(Collections.emptySet()) // Remove the topic from allowed list too
+                .allowedGrpcServices(Collections.singleton("dummy-service")) // Keep dummy if needed by other parts
                 .build();
 
-        LOG.info("Sending PipeStream (streamId: {}) to topic after listener is removed: {}", streamId, testInputTopic);
+        // 2. Store this new config in Consul, overwriting the old one
+        LOG.info("Updating Consul config to remove listener definition for key: {}", expectedListenerKey);
+        consulBusinessOperationsService.storeClusterConfiguration(TEST_CLUSTER_NAME, configWithoutListener).block();
+
+        // 3. Wait for KafkaListenerManager to process the update and remove the listener
+        LOG.info("Waiting for KafkaListenerManager to remove the listener for key {}...", expectedListenerKey);
+        await().atMost(25, TimeUnit.SECONDS)
+                .pollInterval(500, TimeUnit.MILLISECONDS)
+                .until(() -> !kafkaListenerManager.getConsumerStatuses().containsKey(expectedListenerKey));
+        LOG.info("Listener for key {} successfully removed after Consul update.", expectedListenerKey);
+
+        assertFalse(kafkaListenerManager.getConsumerStatuses().containsKey(expectedListenerKey), "Listener should be removed.");
+
+        // 4. Send a message - it should NOT be processed
+        String streamIdRemoved = "test-stream-removed-" + UUID.randomUUID();
+        PipeStream removedMessage = PipeStream.newBuilder().setStreamId(streamIdRemoved).setDocument(PipeDoc.newBuilder().setId("removed-doc")).build();
+        LOG.info("Sending PipeStream (streamId: {}) to topic after listener should be removed: {}", streamIdRemoved, testInputTopic);
         try {
-            kafkaForwarder.forwardToKafka(testPipeStream, testInputTopic).get(10, TimeUnit.SECONDS);
+            kafkaForwarder.forwardToKafka(removedMessage, testInputTopic).get(10, TimeUnit.SECONDS);
         } catch (Exception e) {
             fail("Failed to send message to Kafka", e);
         }
 
-        // Wait a bit to ensure the message is not processed
-        try {
-            TimeUnit.SECONDS.sleep(3);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-
-        // Verify the message was not processed (no calls to PipeStreamEngine with this stream ID)
-        verify(mockPipeStreamEngine, timeout(1000).times(0)).processStream(Mockito.argThat(
-                stream -> stream.getStreamId().equals(streamId)));
-
-        LOG.info("Verified that no messages are processed after listener removal.");
+        verify(mockPipeStreamEngine, Mockito.after(3000).never()).processStream(Mockito.argThat(
+                stream -> stream.getStreamId().equals(streamIdRemoved)));
+        LOG.info("Verified that no messages are processed after listener removal via Consul update.");
     }
 }

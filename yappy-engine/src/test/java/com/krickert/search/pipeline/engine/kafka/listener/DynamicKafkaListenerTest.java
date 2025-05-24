@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -33,10 +34,14 @@ class DynamicKafkaListenerTest {
 
     private DynamicKafkaListener listener;
     private Map<String, Object> consumerConfig;
+    private Map<String, String> originalProps;  // This is for the new constructor argument
 
     @BeforeEach
     void setUp() {
         consumerConfig = new HashMap<>();
+        consumerConfig = new HashMap<>();
+        originalProps = Collections.emptyMap(); // Initialize for the new argument
+
         // We can't actually create a real KafkaConsumer in a unit test,
         // so we'll need to refactor the DynamicKafkaListener class to make it more testable.
         // For now, we'll just test the parts we can.
@@ -54,33 +59,37 @@ class DynamicKafkaListenerTest {
     void testConstructor() {
         // Test that null parameters are rejected
         assertThrows(NullPointerException.class, () -> new DynamicKafkaListener(
-                null, TOPIC, GROUP_ID, consumerConfig, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine
+                null, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine
         ));
 
         assertThrows(NullPointerException.class, () -> new DynamicKafkaListener(
-                LISTENER_ID, null, GROUP_ID, consumerConfig, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine
+                LISTENER_ID, null, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine
         ));
 
         assertThrows(NullPointerException.class, () -> new DynamicKafkaListener(
-                LISTENER_ID, TOPIC, null, consumerConfig, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine
+                LISTENER_ID, TOPIC, null, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine
         ));
 
         assertThrows(NullPointerException.class, () -> new DynamicKafkaListener(
-                LISTENER_ID, TOPIC, GROUP_ID, null, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine
+                LISTENER_ID, TOPIC, GROUP_ID, null, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine
+        ));
+        // The DynamicKafkaListener constructor handles null for originalConsumerPropertiesFromStep by defaulting to emptyMap.
+        // So, passing null for that specific argument should not throw an NPE from its own null check.
+        // We are testing if OTHER null arguments cause an NPE.
+
+        assertThrows(NullPointerException.class, () -> new DynamicKafkaListener(
+                LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, null, STEP_NAME, mockPipeStreamEngine
         ));
 
         assertThrows(NullPointerException.class, () -> new DynamicKafkaListener(
-                LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, null, STEP_NAME, mockPipeStreamEngine
+                LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, null, mockPipeStreamEngine
         ));
 
         assertThrows(NullPointerException.class, () -> new DynamicKafkaListener(
-                LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, PIPELINE_NAME, null, mockPipeStreamEngine
-        ));
-
-        assertThrows(NullPointerException.class, () -> new DynamicKafkaListener(
-                LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, PIPELINE_NAME, STEP_NAME, null
+                LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, null
         ));
     }
+
 
     /**
      * Test that verifies the pause and resume methods work correctly.

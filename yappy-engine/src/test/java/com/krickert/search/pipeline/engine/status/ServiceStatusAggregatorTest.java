@@ -3,6 +3,7 @@ package com.krickert.search.pipeline.engine.status;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.krickert.search.config.consul.DynamicConfigurationManager;
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
 import com.krickert.search.config.consul.service.ConsulKvService;
@@ -25,10 +26,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import reactor.core.publisher.Mono;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -43,6 +41,9 @@ class ServiceStatusAggregatorTest {
 
     @Inject
     ObjectMapper objectMapper;
+
+    // Dedicated ObjectMapper for digest calculation in tests, mirroring SUT's digestObjectMapper
+    private ObjectMapper testDigestObjectMapper;
 
     @Inject
     DynamicConfigurationManager mockDynamicConfigManager;
@@ -81,6 +82,10 @@ class ServiceStatusAggregatorTest {
                 .node(dummyNodeForHealth)
                 .checks(Collections.emptyList())
                 .build();
+        // Initialize the testDigestObjectMapper
+        testDigestObjectMapper = new ObjectMapper();
+        testDigestObjectMapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
+        testDigestObjectMapper.configure(SerializationFeature.INDENT_OUTPUT, false);
     }
     // --- End of dummy object setup ---
 
@@ -556,9 +561,8 @@ class ServiceStatusAggregatorTest {
         if (map == null || map.isEmpty()) {
             return null;
         }
-        // Use the objectMapper injected into the test for consistency if possible,
-        // or ensure the logic matches SUT's objectMapper.
-        String json = objectMapper.writeValueAsString(map);
+        // Use the testDigestObjectMapper for canonical JSON
+        String json = testDigestObjectMapper.writeValueAsString(map);
         java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
         byte[] digest = md.digest(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         StringBuilder sb = new StringBuilder();
@@ -571,7 +575,13 @@ class ServiceStatusAggregatorTest {
     @Test
     void testAggregateAndStore_ConfigurationError_DigestMismatch() throws Exception {
         String serviceName = "config-mismatch-service";
-        Map<String, Object> definedCustomConfig = Map.of("key", "definedValue", "version", 1);
+        // Map.of provides a map whose iteration order might not be alphabetical by default.
+        // Using a TreeMap or ensuring the ObjectMapper sorts keys is important.
+        Map<String, Object> definedCustomConfig = new TreeMap<>(); // Use TreeMap to ensure consistent key order for test setup
+        definedCustomConfig.put("key", "definedValue");
+        definedCustomConfig.put("version", 1);
+
+        // This will now use testDigestObjectMapper which sorts keys
         String expectedDigestForDefinedConfig = calculateDigestForMap(definedCustomConfig);
 
         // Create a PipelineModuleConfiguration that includes the customConfig
@@ -587,7 +597,7 @@ class ServiceStatusAggregatorTest {
                 .pipelineModuleMap(new PipelineModuleMap(Map.of(serviceName, moduleWithCustomConfig)))
                 .build();
 
-        String reportedDigestByInstance = "thisIsADifferentDigest123"; // This digest does NOT match expectedDigestForDefinedConfig
+        String reportedDigestByInstance = "thisIsADifferentDigest123";
         org.kiwiproject.consul.model.catalog.CatalogService instanceWithWrongDigest =
                 ImmutableCatalogService.builder().from(dummyCatalogService)
                         .serviceId(serviceName + "-id1")
@@ -597,14 +607,14 @@ class ServiceStatusAggregatorTest {
 
         // Mock DynamicConfigurationManager
         when(mockDynamicConfigManager.getCurrentPipelineClusterConfig()).thenReturn(Optional.of(clusterConfig));
-        when(mockDynamicConfigManager.isCurrentConfigStale()).thenReturn(false); // Assume cluster config itself is not stale
+        when(mockDynamicConfigManager.isCurrentConfigStale()).thenReturn(false);
         when(mockDynamicConfigManager.getCurrentConfigVersionIdentifier()).thenReturn(Optional.of("v-ok"));
 
-        // Mock Consul - service instance is healthy but has the wrong config digest
+        // Mock Consul
         when(mockConsulBusinessOpsService.getServiceInstances(serviceName))
                 .thenReturn(Mono.just(List.of(instanceWithWrongDigest)));
         when(mockConsulBusinessOpsService.getHealthyServiceInstances(serviceName))
-                .thenReturn(Mono.just(List.of(dummyServiceHealth))); // Assume healthy
+                .thenReturn(Mono.just(List.of(dummyServiceHealth)));
 
         when(mockConsulKvService.putValue(anyString(), anyString())).thenReturn(Mono.just(true));
 
@@ -621,16 +631,24 @@ class ServiceStatusAggregatorTest {
         assertEquals(ServiceOperationalStatus.CONFIGURATION_ERROR, capturedStatus.operationalStatus(), "Status should be CONFIGURATION_ERROR due to digest mismatch.");
         assertEquals(reportedDigestByInstance, capturedStatus.reportedModuleConfigDigest(), "Should report the digest from the instance.");
         assertNotNull(expectedDigestForDefinedConfig, "Expected digest should have been calculated for the test.");
-        assertNotEquals(expectedDigestForDefinedConfig, capturedStatus.reportedModuleConfigDigest(), "Reported and expected digests should differ.");
+        // The SUT calculates its digest using ORDER_MAP_ENTRIES_BY_KEYS.
+        // The test's calculateDigestForMap now also uses an ObjectMapper with ORDER_MAP_ENTRIES_BY_KEYS.
+        // So, expectedDigestForDefinedConfig should now match the SUT's calculation for the same input map.
+        // The log message from SUT: "Expected: 83547fefcc0eb5e2d72fa8a17fdfca14"
+        // This means the SUT calculated 83547fefcc0eb5e2d72fa8a17fdfca14 for definedCustomConfig.
+        // Our test's expectedDigestForDefinedConfig should now also be 83547fefcc0eb5e2d72fa8a17fdfca14.
+
+        assertNotEquals(expectedDigestForDefinedConfig, capturedStatus.reportedModuleConfigDigest(), "Reported and expected digests should differ because instance reports 'thisIsADifferentDigest123'.");
 
         assertFalse(capturedStatus.errorMessages().isEmpty(), "Error messages should not be empty.");
         String errorMessage = capturedStatus.errorMessages().getFirst();
         assertTrue(errorMessage.contains("MISMATCHED config digest"), "Error message should indicate a mismatched digest.");
         assertTrue(errorMessage.contains("Reported: " + reportedDigestByInstance), "Error message should contain the reported digest.");
-        assertTrue(errorMessage.contains("Expected: " + expectedDigestForDefinedConfig), "Error message should contain the expected digest.");
+        // This assertion should now pass because expectedDigestForDefinedConfig is calculated correctly
+        assertTrue(errorMessage.contains("Expected: " + expectedDigestForDefinedConfig), "Error message should contain the (now correctly calculated) expected digest.");
 
         assertEquals(1, capturedStatus.totalInstancesConsul());
-        assertEquals(1, capturedStatus.healthyInstancesConsul()); // Instance is healthy, but config is wrong
+        assertEquals(1, capturedStatus.healthyInstancesConsul());
         assertFalse(capturedStatus.isUsingStaleClusterConfig());
         assertEquals("v-ok", capturedStatus.activeClusterConfigVersion());
     }

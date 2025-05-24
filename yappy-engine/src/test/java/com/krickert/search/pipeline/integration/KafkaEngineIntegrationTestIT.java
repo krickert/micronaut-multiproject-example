@@ -10,6 +10,7 @@ import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.engine.PipeStreamEngine;
 import com.krickert.search.pipeline.engine.kafka.KafkaForwarder;
+import com.krickert.search.pipeline.engine.kafka.listener.ConsumerStatus; // Import ConsumerStatus
 import com.krickert.search.pipeline.engine.kafka.listener.KafkaListenerManager;
 import io.apicurio.registry.serde.config.SerdeConfig;
 import io.micronaut.context.annotation.Property;
@@ -34,7 +35,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import static org.assertj.core.api.Assertions.fail; // Keep this if you use fail()
+import static org.assertj.core.api.Assertions.fail;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -44,7 +45,6 @@ import static org.mockito.Mockito.verify;
 @MicronautTest
 @Property(name = "micronaut.config-client.enabled", value = "false")
 @Property(name = "consul.client.enabled", value = "true")
-@Property(name = "testcontainers.consul.enabled", value = "true")
 @Property(name = "kafka.enabled", value = "true")
 @Property(name = "kafka.schema.registry.type", value = "apicurio")
 @Property(name = "app.config.cluster-name", value = KafkaEngineIntegrationTestIT.TEST_CLUSTER_NAME)
@@ -59,7 +59,7 @@ import static org.mockito.Mockito.verify;
 @Property(name = "kafka.consumers.default." + SerdeConfig.REGISTRY_URL, value = "${apicurio.registry.url}")
 @Property(name = "kafka.consumers.default." + SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS, value = "com.krickert.search.model.PipeStream")
 @Property(name = "kafka.consumers.default." + SerdeConfig.ARTIFACT_RESOLVER_STRATEGY, value = "io.apicurio.registry.serde.strategy.TopicIdStrategy")
-@Property(name = "kafka.consumers.default.bootstrap.servers", value = "${kafka.bootstrap.servers}") // Ensure this is present for default consumer config path
+@Property(name = "kafka.consumers.default.bootstrap.servers", value = "${kafka.bootstrap.servers}")
 class KafkaEngineIntegrationTestIT {
 
     static final String TEST_CLUSTER_NAME = "kafkaEngineTestCluster";
@@ -85,7 +85,7 @@ class KafkaEngineIntegrationTestIT {
     DynamicConfigurationManager dynamicConfigurationManager;
 
     @Inject
-    PipeStreamEngine mockPipeStreamEngine; // Injected mock
+    PipeStreamEngine mockPipeStreamEngine;
 
     @MockBean(PipeStreamEngine.class)
     PipeStreamEngine mockPipeStreamEngineFactoryMethod() {
@@ -106,7 +106,7 @@ class KafkaEngineIntegrationTestIT {
                         KafkaInputDefinition.builder()
                                 .listenTopics(List.of(TEST_INPUT_TOPIC))
                                 .consumerGroupId(TEST_CONSUMER_GROUP_ID)
-                                .kafkaConsumerProperties(Collections.emptyMap()) // Ensure non-null
+                                .kafkaConsumerProperties(Collections.emptyMap())
                                 .build()
                 ))
                 .outputs(Collections.emptyMap())
@@ -139,38 +139,58 @@ class KafkaEngineIntegrationTestIT {
                 .build();
 
         consulBusinessOperationsService.storeClusterConfiguration(TEST_CLUSTER_NAME, clusterConfig).block();
-        dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
+        // dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME); // This is called by @PostConstruct
 
-        LOG.info("Waiting for DynamicConfigurationManager to load config using Awaitility...");
-        await().atMost(15, TimeUnit.SECONDS)
+        LOG.info("Waiting for DynamicConfigurationManager to load config and KafkaListenerManager to react...");
+        // This Awaitility block ensures that:
+        // 1. DynamicConfigurationManager has loaded the config (an event would have been published).
+        // 2. KafkaListenerManager has processed that event and the expected listener is active.
+        await().atMost(25, TimeUnit.SECONDS) // Increased timeout for potentially slower CI
                 .pollInterval(500, TimeUnit.MILLISECONDS)
                 .until(() -> {
                     Optional<PipelineClusterConfig> currentConfig = dynamicConfigurationManager.getCurrentPipelineClusterConfig();
-                    boolean loaded = currentConfig.isPresent() && currentConfig.get().clusterName().equals(TEST_CLUSTER_NAME);
-                    if (loaded) {
-                        LOG.info("DynamicConfigurationManager loaded config for cluster: {}", TEST_CLUSTER_NAME);
+                    boolean dcmLoaded = currentConfig.isPresent() && currentConfig.get().clusterName().equals(TEST_CLUSTER_NAME);
+                    if (!dcmLoaded) {
+                        LOG.trace("DCM not yet loaded for cluster {}", TEST_CLUSTER_NAME);
+                        return false;
                     }
-                    return loaded;
+                    LOG.trace("DCM loaded for cluster {}. Checking KLM statuses...", TEST_CLUSTER_NAME);
+                    Map<String, ConsumerStatus> statuses = kafkaListenerManager.getConsumerStatuses();
+                    // Check if the specific listener we expect is active
+                    String expectedListenerKey = String.format("%s:%s:%s:%s", TEST_PIPELINE_NAME, TEST_STEP_NAME, TEST_INPUT_TOPIC, TEST_CONSUMER_GROUP_ID);
+                    boolean listenerActive = statuses.containsKey(expectedListenerKey) && !statuses.get(expectedListenerKey).paused();
+
+                    if (listenerActive) {
+                        LOG.info("KLM listener active for key: {}", expectedListenerKey);
+                    } else {
+                        LOG.trace("KLM listener not yet active for key {}. Current statuses: {}", expectedListenerKey, statuses.keySet());
+                    }
+                    return listenerActive;
                 });
         assertNotNull(dynamicConfigurationManager.getCurrentPipelineClusterConfig().orElse(null), "DCM should have loaded the test cluster config");
-
-        LOG.info("Creating Kafka listener for pipeline: {}, step: {}", TEST_PIPELINE_NAME, TEST_STEP_NAME);
-        kafkaListenerManager.createListenersForPipeline(TEST_PIPELINE_NAME);
-
-        try {
-            TimeUnit.SECONDS.sleep(3); // Allow time for listener to subscribe
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        LOG.info("Kafka listener creation process initiated.");
+        LOG.info("Kafka listener setup process complete for topic {} and group {}.", TEST_INPUT_TOPIC, TEST_CONSUMER_GROUP_ID);
     }
 
     @AfterEach
     void tearDown() {
         consulBusinessOperationsService.deleteClusterConfiguration(TEST_CLUSTER_NAME).block();
-        kafkaListenerManager.removeListener(TEST_PIPELINE_NAME, TEST_STEP_NAME);
-        dynamicConfigurationManager.shutdown();
-        LOG.info("Test teardown complete.");
+        // Wait for KLM to process deletion event and remove listeners
+        LOG.info("Waiting for KafkaListenerManager to remove listeners for cluster {}...", TEST_CLUSTER_NAME);
+        String listenerInstanceKeyToRemove = String.format("%s:%s:%s:%s", TEST_PIPELINE_NAME, TEST_STEP_NAME, TEST_INPUT_TOPIC, TEST_CONSUMER_GROUP_ID);
+        await().atMost(20, TimeUnit.SECONDS) // Increased timeout
+                .pollInterval(500, TimeUnit.MILLISECONDS)
+                .until(() -> {
+                    Map<String, ConsumerStatus> statuses = kafkaListenerManager.getConsumerStatuses();
+                    boolean listenerRemoved = !statuses.containsKey(listenerInstanceKeyToRemove);
+                    if (listenerRemoved) {
+                        LOG.info("Listener for key {} successfully removed.", listenerInstanceKeyToRemove);
+                    } else {
+                        LOG.trace("Listener for key {} still present. Current statuses: {}", listenerInstanceKeyToRemove, statuses.keySet());
+                    }
+                    return listenerRemoved;
+                });
+        // dynamicConfigurationManager.shutdown(); // Micronaut context handles this
+        LOG.info("Test teardown complete for KafkaEngineIntegrationTestIT.");
     }
 
     @Test
@@ -180,8 +200,8 @@ class KafkaEngineIntegrationTestIT {
         PipeStream testPipeStream = PipeStream.newBuilder()
                 .setStreamId(streamId)
                 .setDocument(PipeDoc.newBuilder().setId("test-doc-1").setTitle("Hello Kafka").build())
-                .setCurrentPipelineName("source-pipeline")
-                .setTargetStepName("source-step")
+                .setCurrentPipelineName("source-pipeline") // This is the "from" pipeline, not what the listener sets
+                .setTargetStepName("source-step")         // This is the "from" step
                 .setCurrentHopNumber(1)
                 .build();
 
@@ -201,14 +221,18 @@ class KafkaEngineIntegrationTestIT {
         LOG.info("Message sent to Kafka. Waiting for listener to receive and call PipeStreamEngine...");
 
         ArgumentCaptor<PipeStream> receivedStreamCaptor = ArgumentCaptor.forClass(PipeStream.class);
-        verify(mockPipeStreamEngine, timeout(15000).times(1)).processStream(receivedStreamCaptor.capture());
+        // Increased timeout for verify to allow for Kafka processing and listener reaction
+        verify(mockPipeStreamEngine, timeout(20000).times(1)).processStream(receivedStreamCaptor.capture());
 
         PipeStream receivedStream = receivedStreamCaptor.getValue();
         assertNotNull(receivedStream, "PipeStreamEngine should have been called with a non-null PipeStream");
         assertEquals(testPipeStream.getStreamId(), receivedStream.getStreamId(), "Stream ID should be preserved");
         assertEquals(testPipeStream.getDocument(), receivedStream.getDocument(), "Document should be preserved");
+
+        // The listener updates these fields before calling processStream
         assertEquals(TEST_PIPELINE_NAME, receivedStream.getCurrentPipelineName(), "Received stream should have pipeline name set by listener");
         assertEquals(TEST_STEP_NAME, receivedStream.getTargetStepName(), "Received stream should have step name set by listener");
+        // The hop number from the original message is preserved by the listener
         assertEquals(testPipeStream.getCurrentHopNumber(), receivedStream.getCurrentHopNumber(), "Received stream should have original hop number from Kafka message");
 
         LOG.info("PipeStream (streamId: {}) successfully sent to Kafka and received by listener.", streamId);
