@@ -1,8 +1,7 @@
-package com.krickert.search.model.test.util;
+package com.krickert.search.model.util;
 
 import com.google.common.jimfs.Configuration;
 import com.google.common.jimfs.Jimfs;
-import com.google.protobuf.Message;
 import com.krickert.search.model.PipeDoc;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

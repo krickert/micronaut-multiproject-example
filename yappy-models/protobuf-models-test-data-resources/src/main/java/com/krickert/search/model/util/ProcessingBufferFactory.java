@@ -1,4 +1,4 @@
-package com.krickert.search.model.test.util;
+package com.krickert.search.model.util;
 
 import com.google.protobuf.Message;
 

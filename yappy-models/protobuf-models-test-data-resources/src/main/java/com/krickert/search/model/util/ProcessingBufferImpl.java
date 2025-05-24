@@ -1,7 +1,6 @@
-package com.krickert.search.model.test.util;
+package com.krickert.search.model.util;
 
 import com.google.protobuf.Message;
-import com.krickert.search.model.ProtobufUtils;
 
 import java.io.IOException;
 import java.io.OutputStream;
