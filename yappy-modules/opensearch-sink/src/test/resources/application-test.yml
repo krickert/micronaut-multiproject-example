@@ -5,15 +5,16 @@ micronaut:
     port: -1 # Random port for testing
   test-resources:
     enabled: true
+    modules:
+      opensearch:
+        enabled: true
 
-
+opesearch:
+  hostname: ${opensearch.host}
 # Kafka configuration
 kafka:
   enabled: true
 
-# OpenSearch configuration
-opensearch:
-  enabled: true
 
 # Logging configuration
 logger:

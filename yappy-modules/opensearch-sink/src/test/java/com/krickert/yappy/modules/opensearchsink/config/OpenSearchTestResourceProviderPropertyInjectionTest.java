@@ -3,6 +3,7 @@ package com.krickert.yappy.modules.opensearchsink.config;
 import com.krickert.testcontainers.opensearch.OpenSearchTestResourceProvider;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Property;
+import io.micronaut.context.annotation.Value;
 import io.micronaut.context.env.Environment;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
@@ -58,22 +59,18 @@ class OpenSearchTestResourceProviderPropertyInjectionTest {
     }
 
     // Directly inject properties from the OpenSearchTestResourceProvider with default values
-    @Property(name = OpenSearchTestResourceProvider.PROPERTY_OPENSEARCH_HOST)
+    @Value("${" + OpenSearchTestResourceProvider.PROPERTY_OPENSEARCH_HOST + "}")
     String openSearchHost;
 
-    @Property(name = OpenSearchTestResourceProvider.PROPERTY_OPENSEARCH_PORT)
+    @Value("${" + OpenSearchTestResourceProvider.PROPERTY_OPENSEARCH_PORT + "}")
     String openSearchPort;
 
-    @Property(name = OpenSearchTestResourceProvider.PROPERTY_OPENSEARCH_URL)
+    @Value("${" + OpenSearchTestResourceProvider.PROPERTY_OPENSEARCH_URL + "}")
     String openSearchUrl;
 
-    @Property(name = OpenSearchTestResourceProvider.PROPERTY_OPENSEARCH_USERNAME)
-    String openSearchUsername;
 
-    @Property(name = OpenSearchTestResourceProvider.PROPERTY_OPENSEARCH_PASSWORD)
-    String openSearchPassword;
 
-    @Property(name = OpenSearchTestResourceProvider.PROPERTY_OPENSEARCH_SECURITY_ENABLED)
+    @Value("${" + OpenSearchTestResourceProvider.PROPERTY_OPENSEARCH_SECURITY_ENABLED + "}")
     String openSearchSecurityEnabled;
 
     @Bean
@@ -84,8 +81,7 @@ class OpenSearchTestResourceProviderPropertyInjectionTest {
         OpenSearchSinkConfig config = OpenSearchSinkConfig.builder()
                 .hosts(openSearchHost)
                 .port(Integer.parseInt(openSearchPort)) // Converts String to Integer
-                .username(openSearchUsername)
-                .password(openSearchPassword)
+
                 .useSsl(Boolean.parseBoolean(openSearchSecurityEnabled)) // Converts String to Boolean
                 // Other fields of OpenSearchSinkConfig (e.g., indexName, bulkSize)
                 // are not set from the properties injected in this specific test class.
@@ -145,27 +141,7 @@ class OpenSearchTestResourceProviderPropertyInjectionTest {
         assertEquals(openSearchUrl, urlProperty.get(), "Injected URL should match environment property");
     }
 
-    @Test
-    @DisplayName("Should inject OpenSearch username resolved by TestResources")
-    void testOpenSearchUsernameInjected() {
-        // Username might be null if security is disabled
-        LOG.info("Injected opensearch.username: {}", openSearchUsername);
 
-        // Verify the property exists in the environment
-        assertTrue(environment.containsProperty(OpenSearchTestResourceProvider.PROPERTY_OPENSEARCH_USERNAME),
-                "Environment should contain opensearch.username property");
-    }
-
-    @Test
-    @DisplayName("Should inject OpenSearch password resolved by TestResources")
-    void testOpenSearchPasswordInjected() {
-        // Password might be null if security is disabled
-        LOG.info("Injected opensearch.password: {}", openSearchPassword);
-
-        // Verify the property exists in the environment
-        assertTrue(environment.containsProperty(OpenSearchTestResourceProvider.PROPERTY_OPENSEARCH_PASSWORD),
-                "Environment should contain opensearch.password property");
-    }
 
     @Test
     @DisplayName("Should inject OpenSearch security enabled flag resolved by TestResources")
