@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EmbedderOptions",
+  "description": "Configuration options for the embedder service.",
+  "type": "object",
+  "properties": {
+    "embedding_models": {
+      "description": "List of embedding models to use. Each model will generate its own set of embeddings.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["ALL_MINILM_L6_V2", "ALL_MPNET_BASE_V2", "ALL_DISTILROBERTA_V1", "PARAPHRASE_MINILM_L3_V2", "PARAPHRASE_MULTILINGUAL_MINILM_L12_V2", "E5_SMALL_V2", "E5_LARGE_V2", "MULTI_QA_MINILM_L6_COS_V1"]
+      },
+      "default": ["ALL_MINILM_L6_V2"]
+    },
+    "check_chunks": {
+      "description": "Whether to check for and process chunks in the document.",
+      "type": "boolean",
+      "default": true
+    },
+    "check_document_fields": {
+      "description": "Whether to check and process document fields if chunks are not present.",
+      "type": "boolean",
+      "default": true
+    },
+    "document_fields": {
+      "description": "List of document fields to process if chunks are not present.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": ["body", "title"]
+    },
+    "custom_field_mappings": {
+      "description": "Custom field mappings for embedding specific fields.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_field": {
+            "type": "string",
+            "description": "The source field to get the text from."
+          },
+          "target_field": {
+            "type": "string",
+            "description": "The target field to store the embedding in."
+          }
+        },
+        "required": ["source_field", "target_field"]
+      },
+      "default": []
+    },
+    "process_keywords": {
+      "description": "Whether to process keywords in the document.",
+      "type": "boolean",
+      "default": true
+    },
+    "keyword_ngram_sizes": {
+      "description": "List of n-gram sizes to use for keywords. For example, [1, 2, 3] would create embeddings for individual keywords, pairs of keywords, and triplets of keywords.",
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "default": [1]
+    },
+    "max_token_size": {
+      "description": "Maximum token size for text to be embedded.",
+      "type": "integer",
+      "minimum": 1,
+      "default": 512
+    },
+    "log_prefix": {
+      "description": "Prefix to add to log messages.",
+      "type": "string",
+      "default": ""
+    },
+    "result_set_name_template": {
+      "description": "Template for naming the result set. Placeholders: %s for pipe step name, %s for embedding model ID.",
+      "type": "string",
+      "default": "%s_embeddings_%s"
+    }
+  }
+}
