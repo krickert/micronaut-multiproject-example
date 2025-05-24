@@ -1,0 +1,21 @@
+
+stream-async-123È
+doc-async-abc"Async Test Doc*Hello, Yappy Async!bÎ
+Ë
+tika_metadata¹*¶
+ 
+Content-Encoding
+ISO-8859-1
+'
+X-TIKA:detectedEncoding
+ISO-8859-1
+6
+X-TIKA:encodingDetectorUniversalEncodingDetector
+:
+X-TIKA:Parsed-By&$org.apache.tika.parser.DefaultParser
+C
+X-TIKA:Parsed-By-Full-Set&$org.apache.tika.parser.DefaultParser
+0
+Content-Type text/plain; charset=ISO-8859-1zA
+blob-async-xyzHello, Yappy Async!
+text/plain"test-async.txttest-pipeline-async"tika-parser-step-async(

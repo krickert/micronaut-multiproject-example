@@ -1,0 +1,22 @@
+
+
+stream-123à
+doc-abc*0Hello, this is a test document for Tika parsing!bÎ
+Ë
+tika_metadata¹*¶
+ 
+Content-Encoding
+ISO-8859-1
+'
+X-TIKA:detectedEncoding
+ISO-8859-1
+6
+X-TIKA:encodingDetectorUniversalEncodingDetector
+:
+X-TIKA:Parsed-By&$org.apache.tika.parser.DefaultParser
+C
+X-TIKA:Parsed-By-Full-Set&$org.apache.tika.parser.DefaultParser
+0
+Content-Type text/plain; charset=ISO-8859-1zR
+blob-xyz0Hello, this is a test document for Tika parsing!
+text/plain"test.txttest-pipeline"tika-parser-step(
