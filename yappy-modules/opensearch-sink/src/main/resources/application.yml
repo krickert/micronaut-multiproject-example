@@ -1,0 +1,33 @@
+micronaut:
+  application:
+    name: opensearch-sink
+  server:
+    port: 8080
+
+# OpenSearch configuration
+opensearch:
+  hosts: localhost
+  port: 9200
+  username: 
+  password: 
+  use-ssl: false
+  index-name: yappy
+  index-type: _doc
+  id-field: id
+  bulk-size: 100
+  bulk-concurrency: 2
+  max-retries: 3
+  retry-backoff-ms: 1000
+
+# Kafka configuration
+kafka:
+  enabled: true
+  schema:
+    registry:
+      type: apicurio
+
+# Logging configuration
+logger:
+  levels:
+    com.krickert.yappy.modules.opensearchsink: INFO
+    io.micronaut.context.condition: INFO
