@@ -1,6 +1,8 @@
 package com.krickert.search.pipeline.engine.kafka.listener;
 
 import com.krickert.search.pipeline.engine.PipeStreamEngine;
+import io.micronaut.context.annotation.Value;
+import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +43,8 @@ class DefaultKafkaListenerPoolTest { // Renamed class for clarity
     void setUp() {
         listenerPool = new DefaultKafkaListenerPool();
         consumerConfig = new HashMap<>();
+        consumerConfig.put("value.deserializer", "io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer");
+        consumerConfig.put("apicurio.registry.url", "anything");
         originalProps = Collections.emptyMap(); // Initialize
     }
 

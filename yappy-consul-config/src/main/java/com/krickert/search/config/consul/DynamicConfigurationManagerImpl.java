@@ -14,6 +14,7 @@ import io.micronaut.context.event.ApplicationEventPublisher;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.inject.Singleton;
+import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +35,7 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
 
     private final String defaultClusterName;
     private final ConsulConfigFetcher consulConfigFetcher;
+    @Getter
     private final ConfigurationValidator configurationValidator;
     private final CachedConfigHolder cachedConfigHolder;
     // Use the new event type

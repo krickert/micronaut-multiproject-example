@@ -13,6 +13,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.util.*;
@@ -21,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class CustomConfigSchemaValidatorTest {
+    private static final Logger log = LoggerFactory.getLogger(CustomConfigSchemaValidatorTest.class);
 
     // Test JSON schemas
     private static final String USER_SCHEMA_V1_CONTENT = """
@@ -103,7 +106,7 @@ class CustomConfigSchemaValidatorTest {
             return Mono.just(messages);
         });
 
-        validator = new CustomConfigSchemaValidator(objectMapper, schemaRegistryDelegate);
+        validator = new CustomConfigSchemaValidator(objectMapper);
 
         // Register test schemas with the mock schemaRegistryDelegate
         for (Map.Entry<SchemaReference, String> entry : schemaContentsMap.entrySet()) {
@@ -116,7 +119,6 @@ class CustomConfigSchemaValidatorTest {
         }
     }
 
-    // Function to provide schema content based on SchemaReference
     private Optional<String> testSchemaContentProvider(SchemaReference ref) {
         return Optional.ofNullable(schemaContentsMap.get(ref));
     }
@@ -219,7 +221,7 @@ class CustomConfigSchemaValidatorTest {
                 moduleImplementationId,
                 missingSchemaRef
         ));
-        // IMPORTANT: Do NOT add missingSchemaRef to schemaContentsMap
+        // IMPORTANT: Do NOT add missingSchemaRef to schemaContentsMap in testSchemaContentProvider
 
         PipelineStepConfig step = new PipelineStepConfig(
                 "step-schema-not-found", StepType.PIPELINE,
@@ -233,13 +235,22 @@ class CustomConfigSchemaValidatorTest {
         PipelineModuleMap moduleMap = new PipelineModuleMap(availableModules);
         PipelineClusterConfig clusterConfig = new PipelineClusterConfig("c1", graphConfig, moduleMap, null, Collections.emptySet(), Collections.emptySet());
 
-        // Use validateUsingRegistry instead of validate with schemaContentProvider
-        // CORRECTED LINE: Call the public 'validate' method
         List<String> errors = validator.validate(clusterConfig, this::testSchemaContentProvider);
 
-        assertFalse(errors.isEmpty(), "Should return error if schema content is not found in registry.");
-        assertTrue(errors.get(0).contains("Schema content for SchemaReference[subject=module-with-missing-schema-subject, version=1] (step 'step-schema-not-found') not found in registry."), "Error message content mismatch. Got: " + errors.get(0));
+        assertFalse(errors.isEmpty(), "Should return error if schema content is not found via provider.");
+        assertEquals(1, errors.size(), "Expected exactly one error message.");
+        String actualErrorMessage = errors.get(0);
+        log.info("Actual error for schema not found: {}", actualErrorMessage);
+
+        // Construct the expected message based on the validator's logic
+        String expectedSchemaSourceDescription = "module-defined schemaRef '" + missingSchemaRef.toIdentifier() + "'";
+        String expectedErrorMessage = String.format("Schema content for %s (referenced by step '%s') not found via provider. Cannot validate configuration.",
+                expectedSchemaSourceDescription, step.stepName());
+
+        assertEquals(expectedErrorMessage, actualErrorMessage, "Error message content mismatch.");
     }
+
+
 
     @Test
     void validate_stepWithCustomConfigButModuleHasNoSchemaRef_noErrorFromThisValidator() {
@@ -452,12 +463,12 @@ class CustomConfigSchemaValidatorTest {
         // Use validateUsingRegistry instead of validate with schemaContentProvider
         // CORRECTED LINE: Call the public 'validate' method
         List<String> errors = validator.validate(clusterConfig, this::testSchemaContentProvider);
-        assertFalse(errors.isEmpty(), "Config with null JsonNode should fail (as empty object) against a strict schema. Errors: " + errors.get(0));
+        assertFalse(errors.isEmpty(), "Config with null JsonNode should fail (as empty object) against a strict schema. Errors: " + errors.getFirst());
         // Print the actual error message for debugging
         System.out.println("[DEBUG_LOG] Actual error message: " + errors.get(0));
 
         // Check for requiredField validation error - the exact message format may vary
-        assertTrue(errors.get(0).contains("requiredField"), "Error message should mention 'requiredField'");
+        assertTrue(errors.getFirst().contains("requiredField"), "Error message should mention 'requiredField'");
     }
 
     @Test

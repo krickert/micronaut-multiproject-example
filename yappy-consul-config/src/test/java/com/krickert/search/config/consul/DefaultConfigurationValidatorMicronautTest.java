@@ -271,14 +271,14 @@ class DefaultConfigurationValidatorMicronautTest {
                 module2.implementationId(), module2
         ));
 
-        // --- Whitelists (Adjusted for the new topic structure) ---
+// --- Whitelists (Adjusted for the new topic structure) ---
         Set<String> allowedKafkaTopics = Set.of("input-topic", "p1s1-produces-topic", "p1s2-listens-topic", "output-topic");
         Set<String> allowedGrpcServices = Set.of("grpc-service-A", "mod1_impl", "mod2_impl");
 
-        // --- Pipeline 1 Steps (Modified to use the new transport model) ---
+// --- Pipeline 1 Steps (Modified to use the new transport model) ---
         Map<String, PipelineStepConfig> p1Steps = new HashMap<>();
 
-        // Create KafkaInputDefinition for p1s1
+// Create KafkaInputDefinition for p1s1
         List<KafkaInputDefinition> p1s1KafkaInputs = List.of(
                 KafkaInputDefinition.builder()
                         .listenTopics(List.of("input-topic"))
@@ -286,7 +286,7 @@ class DefaultConfigurationValidatorMicronautTest {
                         .build()
         );
 
-        // Create output target for p1s1
+// Create output target for p1s1
         Map<String, PipelineStepConfig.OutputTarget> p1s1Outputs = new HashMap<>();
         p1s1Outputs.put("default", PipelineStepConfig.OutputTarget.builder()
                 .targetStepName("p1s2")
@@ -296,18 +296,19 @@ class DefaultConfigurationValidatorMicronautTest {
                         .build())
                 .build());
 
-        // Create p1s1 step
+// Create p1s1 step
         PipelineStepConfig p1s1 = PipelineStepConfig.builder()
                 .stepName("p1s1")
                 .stepType(StepType.PIPELINE)
                 .processorInfo(new PipelineStepConfig.ProcessorInfo("mod1_impl", null))
-                .customConfigSchemaId("schema-subject-1")
+                // .customConfigSchemaId("schema-subject-1") // REMOVE THIS LINE to use module's schema
                 .customConfig(new PipelineStepConfig.JsonConfigOptions(OBJECT_MAPPER.createObjectNode().put("key", "value"), Map.of()))
                 .kafkaInputs(p1s1KafkaInputs)
                 .outputs(p1s1Outputs)
                 .build();
 
         p1Steps.put(p1s1.stepName(), p1s1);
+
 
         // Create KafkaInputDefinition for p1s2
         List<KafkaInputDefinition> p1s2KafkaInputs = List.of(
@@ -379,8 +380,11 @@ class DefaultConfigurationValidatorMicronautTest {
                 .build();
 
         // --- Schema Provider ---
+        // This schema content should match what schema-subject-1:1 is expected to validate
+        // The customConfig for p1s1 is {"key":"value"}
         String validSchemaContent = "{\"type\":\"object\", \"properties\":{\"key\":{\"type\":\"string\"}}, \"required\":[\"key\"]}";
         Function<SchemaReference, Optional<String>> schemaProvider = ref -> {
+            // schemaRef1 is "schema-subject-1:1"
             if (ref.equals(schemaRef1)) {
                 return Optional.of(validSchemaContent);
             }

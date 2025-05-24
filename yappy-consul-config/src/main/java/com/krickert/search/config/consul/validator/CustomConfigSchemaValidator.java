@@ -3,16 +3,11 @@ package com.krickert.search.config.consul.validator;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.krickert.search.config.consul.schema.delegate.ConsulSchemaRegistryDelegate;
 import com.krickert.search.config.pipeline.model.*;
-// NetworkNT imports for direct usage
 import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.SpecVersion;
 import com.networknt.schema.ValidationMessage;
-import com.networknt.schema.ExecutionContext; // Import ExecutionContext
-import com.networknt.schema.JsonNodePath;    // Import JsonNodePath
-
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
@@ -26,39 +21,24 @@ import java.util.stream.Collectors;
 public class CustomConfigSchemaValidator implements ClusterValidationRule {
     private static final Logger LOG = LoggerFactory.getLogger(CustomConfigSchemaValidator.class);
     private final ObjectMapper objectMapper;
-    private final ConsulSchemaRegistryDelegate schemaRegistryDelegate; // Stays as is
-    private final JsonSchemaFactory schemaFactory; // For networknt validator
+    private final JsonSchemaFactory schemaFactory;
 
     @Inject
-    public CustomConfigSchemaValidator(ObjectMapper objectMapper, ConsulSchemaRegistryDelegate schemaRegistryDelegate) {
+    public CustomConfigSchemaValidator(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
-        this.schemaRegistryDelegate = schemaRegistryDelegate;
-        this.schemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7); // Or your preferred version
+        this.schemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7);
     }
 
     @Override
     public List<String> validate(PipelineClusterConfig clusterConfig,
                                  Function<SchemaReference, Optional<String>> schemaContentProvider) {
-        // The original implementation ignored schemaContentProvider.
-        // This remains consistent with that, as we're using the injected delegate.
-        LOG.warn("CustomConfigSchemaValidator is ignoring the provided schemaContentProvider and using the injected ConsulSchemaRegistryDelegate.");
-        return validateUsingConsulDelegate(clusterConfig);
-    }
-
-    private List<String> validateUsingConsulDelegate(PipelineClusterConfig clusterConfig) {
         List<String> errors = new ArrayList<>();
         if (clusterConfig == null) {
             LOG.warn("PipelineClusterConfig is null, skipping custom config schema validation.");
             return errors;
         }
 
-        if (schemaRegistryDelegate == null) {
-            LOG.error("ConsulSchemaRegistryDelegate is null, cannot validate custom config schemas.");
-            errors.add("ConsulSchemaRegistryDelegate is null, cannot validate custom config schemas.");
-            return errors;
-        }
-
-        LOG.debug("Performing custom config JSON schema validation for cluster: {}", clusterConfig.clusterName());
+        LOG.debug("Performing custom config JSON schema validation for cluster: {} using provided schema provider.", clusterConfig.clusterName());
 
         Map<String, PipelineModuleConfiguration> availableModules =
                 (clusterConfig.pipelineModuleMap() != null && clusterConfig.pipelineModuleMap().availableModules() != null) ?
@@ -68,7 +48,7 @@ public class CustomConfigSchemaValidator implements ClusterValidationRule {
             for (PipelineConfig pipeline : clusterConfig.pipelineGraphConfig().pipelines().values()) {
                 if (pipeline.pipelineSteps() != null) {
                     for (PipelineStepConfig step : pipeline.pipelineSteps().values()) {
-                        validateStepConfig(step, availableModules, errors);
+                        validateStepConfigWithProvider(step, availableModules, errors, schemaContentProvider);
                     }
                 }
             }
@@ -76,94 +56,78 @@ public class CustomConfigSchemaValidator implements ClusterValidationRule {
         return errors;
     }
 
-    private void validateStepConfig(PipelineStepConfig step, Map<String, PipelineModuleConfiguration> availableModules, List<String> errors) {
+    private void validateStepConfigWithProvider(PipelineStepConfig step,
+                                                Map<String, PipelineModuleConfiguration> availableModules,
+                                                List<String> errors,
+                                                Function<SchemaReference, Optional<String>> schemaContentProvider) {
         String implementationKey = getImplementationKey(step);
         PipelineModuleConfiguration moduleConfig = (implementationKey != null) ? availableModules.get(implementationKey) : null;
 
-        SchemaReference schemaRefForLogging = null; // Used for consistent logging if a valid SchemaReference can be made
+        SchemaReference schemaRefToUse = null;
         String schemaSourceDescription = "";
-        String schemaSubjectForDelegate = null; // This will be used to fetch from Consul
 
-        // Priority 1: Step-specific schema ID (step.customConfigSchemaId())
+        // Determine the SchemaReference to use (from step or module)
         if (step.customConfigSchemaId() != null && !step.customConfigSchemaId().isBlank()) {
             String rawSchemaId = step.customConfigSchemaId();
             String[] parts = rawSchemaId.split(":", 2);
-            schemaSubjectForDelegate = parts[0]; // Always use the subject part for the delegate
-            schemaSourceDescription = "step-defined schemaId '" + rawSchemaId + "'"; // Use raw for description
-
-            if (parts.length == 2 && !parts[1].isBlank()) { // If a version part exists and is not blank
+            String subject = parts[0];
+            schemaSourceDescription = "step-defined schemaId '" + rawSchemaId + "'";
+            if (parts.length == 2 && !parts[1].isBlank()) {
                 try {
-                    Integer numericVersion = Integer.parseInt(parts[1]);
-                    // The SchemaReference constructor will validate if numericVersion > 0
-                    schemaRefForLogging = new SchemaReference(schemaSubjectForDelegate, numericVersion);
-                    LOG.debug("Step '{}' uses step-defined schema: {}", step.stepName(), schemaRefForLogging.toIdentifier());
-                } catch (NumberFormatException e) {
-                    String errMsg = String.format(
-                            "Step '%s' has an invalid numeric version in customConfigSchemaId: '%s'. Version must be an integer. Error: %s",
-                            step.stepName(), rawSchemaId, e.getMessage());
-                    LOG.warn(errMsg);
-                    errors.add(errMsg);
-                    return; // Cannot proceed if version is not a valid integer string
-                } catch (IllegalArgumentException e) { // Catch validation errors from SchemaReference constructor (e.g., version < 1)
-                    String errMsg = String.format(
-                            "Step '%s' has an invalid version in customConfigSchemaId: '%s'. %s",
-                            step.stepName(), rawSchemaId, e.getMessage());
-                    LOG.warn(errMsg);
-                    errors.add(errMsg);
-                    return; // Cannot proceed if SchemaReference construction fails
+                    schemaRefToUse = new SchemaReference(subject, Integer.parseInt(parts[1]));
+                    LOG.debug("Step '{}' uses step-defined schema: {}", step.stepName(), schemaRefToUse.toIdentifier());
+                } catch (IllegalArgumentException e) {
+                    errors.add(String.format("Step '%s' has invalid customConfigSchemaId '%s': %s", step.stepName(), rawSchemaId, e.getMessage()));
+                    return;
                 }
             } else {
-                // No version part, or version part is blank in customConfigSchemaId.
-                // schemaRefForLogging remains null. schemaSubjectForDelegate is set.
-                // The ConsulSchemaRegistryDelegate will fetch based on subject (implicitly latest or only version).
-                LOG.debug("Step '{}' uses step-defined schemaId '{}' (version not specified or blank, delegate will fetch based on subject).", step.stepName(), rawSchemaId);
-            }
-        }
-        // Priority 2: Module-defined schema reference
-        else if (moduleConfig != null && moduleConfig.customConfigSchemaReference() != null) {
-            schemaRefForLogging = moduleConfig.customConfigSchemaReference(); // This is already a valid SchemaReference
-            schemaSubjectForDelegate = schemaRefForLogging.subject();
-            // Use the identifier from the valid SchemaReference for description
-            schemaSourceDescription = "module-defined schemaRef '" + schemaRefForLogging.toIdentifier() + "'";
-            LOG.debug("Step '{}' (module/processor key: '{}') uses module-defined schema: {}", step.stepName(), implementationKey, schemaRefForLogging.toIdentifier());
-        }
-
-        JsonNode configNodeToValidate = (step.customConfig() != null && step.customConfig().jsonConfig() != null && !step.customConfig().jsonConfig().isNull())
-                ? step.customConfig().jsonConfig()
-                : objectMapper.createObjectNode(); // Default to empty object if config is null/missing
-
-        if (schemaSubjectForDelegate != null) { // We have a schema subject to look up
-            // If schemaRefForLogging is null here but schemaSubjectForDelegate is not,
-            // it means customConfigSchemaId was "subject" without a version.
-            // schemaSourceDescription would have been set to "step-defined schemaId 'subject'".
-            LOG.debug("Validating custom config for step '{}' using schema subject '{}' from {}",
-                    step.stepName(), schemaSubjectForDelegate, schemaSourceDescription);
-
-            Optional<String> schemaStringOpt;
-            try {
-                schemaStringOpt = schemaRegistryDelegate.getSchemaContent(schemaSubjectForDelegate).blockOptional();
-            } catch (Exception e) {
-                LOG.warn("Failed to retrieve schema content for subject '{}' from Consul: {}", schemaSubjectForDelegate, e.getMessage());
-                if (schemaSubjectForDelegate.contains("non-existent-schema")) {
-                    errors.add(String.format("Step '%s' references schema '%s' which is a non-existent-schema",
-                            step.stepName(), step.customConfigSchemaId() != null ? step.customConfigSchemaId() : schemaSubjectForDelegate));
-                } else {
-                    errors.add(String.format("Failed to retrieve schema content for %s (step '%s'). Error: %s",
-                            schemaSourceDescription, step.stepName(), e.getMessage()));
-                }
+                errors.add(String.format("Step '%s' has customConfigSchemaId '%s' which is missing a version or is improperly formatted for direct SchemaReference use.", step.stepName(), rawSchemaId));
                 return;
             }
+        } else if (moduleConfig != null && moduleConfig.customConfigSchemaReference() != null) {
+            schemaRefToUse = moduleConfig.customConfigSchemaReference();
+            schemaSourceDescription = "module-defined schemaRef '" + schemaRefToUse.toIdentifier() + "'";
+            LOG.debug("Step '{}' (module/processor key: '{}') uses module-defined schema: {}", step.stepName(), implementationKey, schemaRefToUse.toIdentifier());
+        }
+
+        // Determine the JsonNode to validate
+        JsonNode configNodeToValidate;
+        if (step.customConfig() == null) {
+            // No customConfig object at all for the step
+            if (schemaRefToUse != null) {
+                 LOG.debug("Step '{}' has an applicable schema {} but no customConfig object. Skipping schema validation for this step.",
+                        step.stepName(), schemaSourceDescription);
+            }
+            return; // No customConfig, so nothing for this validator to do.
+        } else if (step.customConfig().jsonConfig() == null || step.customConfig().jsonConfig().isNull()) {
+            // customConfig object exists, but its jsonConfig field is null or a JSON null.
+            // Treat as an empty JSON object for validation if a schema is applicable.
+            if (schemaRefToUse != null) {
+                configNodeToValidate = objectMapper.createObjectNode(); // Default to empty object {}
+                LOG.debug("Step '{}' has null/JSON null jsonConfig; defaulting to empty object {{}} for schema validation against {}.",
+                        step.stepName(), schemaSourceDescription);
+            } else {
+                // No schema applicable, and jsonConfig is effectively absent. Nothing to do.
+                return;
+            }
+        } else {
+            // Actual JsonNode provided by the step.
+            configNodeToValidate = step.customConfig().jsonConfig();
+        }
+
+
+        if (schemaRefToUse != null) {
+            // At this point, configNodeToValidate is guaranteed to be non-null if schemaRefToUse is non-null
+            // (because if configNodeToValidate was going to be null due to step.customConfig() == null, we would have returned already).
+            LOG.debug("Validating custom config for step '{}' (data: {}) using {} from provider",
+                    step.stepName(), configNodeToValidate.toString(), schemaSourceDescription);
+
+            Optional<String> schemaStringOpt = schemaContentProvider.apply(schemaRefToUse);
 
             if (schemaStringOpt.isEmpty()) {
-                String message = String.format("Schema subject '%s' (from %s) not found in Consul. Cannot validate configuration for step '%s'.",
-                        schemaSubjectForDelegate, schemaSourceDescription, step.stepName());
-                LOG.warn(message);
-                if (schemaSubjectForDelegate.contains("non-existent-schema")) {
-                    errors.add(String.format("Step '%s' references schema '%s' which is a non-existent-schema",
-                            step.stepName(), step.customConfigSchemaId() != null ? step.customConfigSchemaId() : schemaSubjectForDelegate));
-                } else {
-                    errors.add(message);
-                }
+                errors.add(String.format("Schema content for %s (referenced by step '%s') not found via provider. Cannot validate configuration.",
+                        schemaSourceDescription, step.stepName()));
+                LOG.warn("Schema content for {} (step '{}') not found via provider.", schemaSourceDescription, step.stepName());
             } else {
                 try {
                     JsonSchema schema = schemaFactory.getSchema(schemaStringOpt.get());
@@ -188,8 +152,10 @@ public class CustomConfigSchemaValidator implements ClusterValidationRule {
                     errors.add(message);
                 }
             }
-        } else if (step.customConfig() != null && step.customConfig().jsonConfig() != null && !step.customConfig().jsonConfig().isNull()) {
-            LOG.warn("Step '{}' (module/processor key: '{}') has customConfig but no schema reference was found. Config will not be schema-validated.",
+        } else if (!configNodeToValidate.isEmpty()) { // configNodeToValidate could be an empty object from the default
+            // Only warn if there's actual custom config data but no schema was found/defined for it.
+            // If configNodeToValidate is an empty object (defaulted), this warning won't trigger.
+            LOG.warn("Step '{}' (module/processor key: '{}') has customConfig data but no schema reference was found (either on step or module). Config will not be schema-validated by CustomConfigSchemaValidator.",
                     step.stepName(), implementationKey != null ? implementationKey : "N/A");
         }
     }
@@ -202,7 +168,6 @@ public class CustomConfigSchemaValidator implements ClusterValidationRule {
                 return step.processorInfo().internalProcessorBeanName();
             }
         }
-        LOG.warn("Could not determine implementation key for step: {}", step.stepName());
         return null;
     }
 }
