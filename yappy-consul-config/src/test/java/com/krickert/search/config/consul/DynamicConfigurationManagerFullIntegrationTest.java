@@ -1,7 +1,8 @@
 package com.krickert.search.config.consul;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent;
+// NEW EVENT TYPE
+import com.krickert.search.config.pipeline.event.PipelineClusterConfigChangeEvent;
 import com.krickert.search.config.consul.factory.DynamicConfigurationManagerFactory;
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
 import com.krickert.search.config.pipeline.model.*;
@@ -19,18 +20,14 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
-// NO Mockito imports needed for the core SUT dependencies in this class
 
-@MicronautTest(startApplication = false, environments = {"test-dynamic-manager-full"}) // Use a distinct environment if needed
+@MicronautTest(startApplication = false, environments = {"test-dynamic-manager-full"})
 @Property(name = "micronaut.config-client.enabled", value = "false")
 @Property(name = "consul.client.enabled", value = "true")
 @Property(name = "testcontainers.consul.enabled", value = "true")
@@ -47,11 +44,11 @@ class DynamicConfigurationManagerFullIntegrationTest {
     @Inject
     CachedConfigHolder testCachedConfigHolder;
 
-    @Inject
-    DefaultConfigurationValidator realConfigurationValidator; // Inject your DefaultConfigurationValidator
+    // DefaultConfigurationValidator is injected into DynamicConfigurationManagerImpl by Micronaut
+    // No need to inject it separately here unless you want to mock it, which we are not.
 
     @Inject
-    TestApplicationEventListener testApplicationEventListener; // Reusing from the other test for convenience
+    TestApplicationEventListener testApplicationEventListener; // Using the dedicated listener
 
     @Inject
     DynamicConfigurationManagerFactory dynamicConfigurationManagerFactory;
@@ -69,11 +66,12 @@ class DynamicConfigurationManagerFullIntegrationTest {
         appWatchSeconds = realConsulConfigFetcher.appWatchSeconds;
 
         deleteConsulKeysForCluster(TEST_EXECUTION_CLUSTER);
+        deleteConsulKeysForCluster(DEFAULT_PROPERTY_CLUSTER);
         testApplicationEventListener.clear();
 
-        // Construct SUT using the factory
+        // Construct SUT using the factory.
         dynamicConfigurationManager = dynamicConfigurationManagerFactory.createDynamicConfigurationManager(TEST_EXECUTION_CLUSTER);
-        LOG.info("DynamicConfigurationManagerImpl (Full Integ) constructed for cluster: {} with DefaultConfigurationValidator", TEST_EXECUTION_CLUSTER);
+        LOG.info("DynamicConfigurationManagerImpl (Full Integ) constructed for cluster: {}", TEST_EXECUTION_CLUSTER);
     }
 
     @AfterEach
@@ -82,10 +80,10 @@ class DynamicConfigurationManagerFullIntegrationTest {
             dynamicConfigurationManager.shutdown();
         }
         deleteConsulKeysForCluster(TEST_EXECUTION_CLUSTER);
+        deleteConsulKeysForCluster(DEFAULT_PROPERTY_CLUSTER);
         LOG.info("Test (Full Integ) finished, keys for cluster {} potentially cleaned.", TEST_EXECUTION_CLUSTER);
     }
 
-    // --- Helper methods (copy from DynamicConfigurationManagerImplMicronautTest) ---
     private void deleteConsulKeysForCluster(String clusterName) {
         LOG.debug("Attempting to clean Consul key for cluster: {}", clusterName);
         consulBusinessOperationsService.deleteClusterConfiguration(clusterName).block();
@@ -99,27 +97,88 @@ class DynamicConfigurationManagerFullIntegrationTest {
         return String.format("%s%s/%d", schemaVersionsKeyPrefix, subject, version);
     }
 
-    private PipelineClusterConfig createDummyClusterConfig(String name, String... topics) {
+    // In DynamicConfigurationManagerFullIntegrationTest.java
+
+    // Helper to create a fully valid config for happy path tests
+    private PipelineClusterConfig createFullyValidClusterConfig(String clusterName, SchemaReference schemaRef, String actualJsonDataForStep) {
+        PipelineModuleConfiguration module = PipelineConfigTestUtils.createModuleWithSchema(
+                "HappyModule", "happy_module_impl", schemaRef, Map.of("moduleKey", "moduleValue")
+        );
+        PipelineModuleMap moduleMap = new PipelineModuleMap(Map.of(module.implementationId(), module));
+
+        PipelineStepConfig step1 = null;
+        try {
+            step1 = PipelineConfigTestUtils.createStep(
+                    "happyStep1",
+                    StepType.PIPELINE,
+                    "happy_module_impl",
+                    PipelineConfigTestUtils.createJsonConfigOptions(actualJsonDataForStep),
+                    List.of(PipelineConfigTestUtils.createKafkaInput("input-" + clusterName)), // Consumes from external Kafka
+                    // Step 1 outputs INTERNALLY to step2
+                    Map.of("default", PipelineConfigTestUtils.createInternalOutputTarget("happyStep2"))
+            );
+        } catch (JsonProcessingException e) {
+            fail("Error creating step1 config: " + e.getMessage(), e);
+        }
+
+        PipelineStepConfig step2 = PipelineConfigTestUtils.createStep(
+                "happyStep2",
+                StepType.SINK,
+                "happy_module_impl",
+                null,
+                Collections.emptyList(), // No Kafka input; receives data internally from step1
+                null
+        );
+
+        Objects.requireNonNull(step1, "step1 should not be null after try-catch");
+
+        PipelineConfig pipeline = PipelineConfigTestUtils.createPipeline("happyPipe", Map.of(step1.stepName(), step1, step2.stepName(), step2));
+        PipelineGraphConfig graphConfig = new PipelineGraphConfig(Map.of(pipeline.name(), pipeline));
+
+        return PipelineClusterConfig.builder()
+                .clusterName(clusterName)
+                .pipelineGraphConfig(graphConfig)
+                .pipelineModuleMap(moduleMap)
+                .defaultPipelineName(pipeline.name())
+                // Only the initial input topic is needed if internal transport is used between steps
+                .allowedKafkaTopics(Set.of("input-" + clusterName))
+                .allowedGrpcServices(Set.of("happy_module_impl"))
+                .build();
+    }
+    private PipelineClusterConfig createClusterConfigWithSchema(String name, SchemaReference schemaRef, String... topics) {
+        PipelineModuleConfiguration moduleWithSchema = new PipelineModuleConfiguration(
+                "ModuleWithSchema",
+                "module_schema_impl_id",
+                schemaRef,
+                Map.of("sampleConfigKey", "sampleValue")
+        );
+        PipelineModuleMap moduleMap = new PipelineModuleMap(Map.of(moduleWithSchema.implementationId(), moduleWithSchema));
+
+        PipelineStepConfig stepUsingSchema = null;
+        try {
+            stepUsingSchema = PipelineStepConfig.builder()
+                    .stepName("stepUsingSchemaFromModule")
+                    .stepType(StepType.PIPELINE)
+                    .processorInfo(new PipelineStepConfig.ProcessorInfo(null, "module_schema_impl_id"))
+                    .customConfig(PipelineConfigTestUtils.createJsonConfigOptions("{\"sampleConfigKey\":\"a string value\"}"))
+                    .build();
+        } catch (JsonProcessingException e) {
+            fail(e);
+        }
+
+        PipelineConfig pipeline = new PipelineConfig(name + "-pipe", Map.of(stepUsingSchema.stepName(), stepUsingSchema));
+        PipelineGraphConfig graphConfig = new PipelineGraphConfig(Map.of(pipeline.name(), pipeline));
+
         return PipelineClusterConfig.builder()
                 .clusterName(name)
-                .pipelineModuleMap(new PipelineModuleMap(Collections.emptyMap()))
-                .defaultPipelineName(name + "-default")
+                .pipelineGraphConfig(graphConfig)
+                .pipelineModuleMap(moduleMap)
+                .defaultPipelineName(name + "-pipe")
                 .allowedKafkaTopics(topics != null ? Set.of(topics) : Collections.emptySet())
-                .allowedGrpcServices(Collections.emptySet())
+                .allowedGrpcServices(Set.of("module_schema_impl_id"))
                 .build();
     }
 
-    private PipelineClusterConfig createClusterConfigWithSchema(String name, SchemaReference schemaRef, String... topics) {
-        PipelineModuleConfiguration moduleWithSchema = new PipelineModuleConfiguration("ModuleWithSchema", "module_schema_impl_id", schemaRef);
-        PipelineModuleMap moduleMap = new PipelineModuleMap(Map.of(moduleWithSchema.implementationId(), moduleWithSchema));
-        return PipelineClusterConfig.builder()
-                .clusterName(name)
-                .pipelineModuleMap(moduleMap)
-                .defaultPipelineName(name + "-default")
-                .allowedKafkaTopics(topics != null ? Set.of(topics) : Collections.emptySet())
-                .allowedGrpcServices(Collections.emptySet())
-                .build();
-    }
 
     private SchemaVersionData createDummySchemaData(String subject, int version, String content) {
         Instant createdAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
@@ -131,39 +190,28 @@ class DynamicConfigurationManagerFullIntegrationTest {
         LOG.info("Seeding Consul KV (Full Integ): {} = {}", key,
                 object.toString().length() > 150 ? object.toString().substring(0, 150) + "..." : object.toString());
 
-        // Determine if this is a cluster config or schema version based on the key
         if (key.startsWith(clusterConfigKeyPrefix)) {
-            // Extract cluster name from key
             String clusterName = key.substring(clusterConfigKeyPrefix.length());
-
-            // Store cluster configuration
             Boolean result = consulBusinessOperationsService.storeClusterConfiguration(clusterName, object).block();
             assertTrue(result != null && result, "Failed to seed cluster configuration for key: " + key);
         } else if (key.startsWith(schemaVersionsKeyPrefix)) {
-            // Extract subject and version from key
             String path = key.substring(schemaVersionsKeyPrefix.length());
-
             String[] parts = path.split("/");
             if (parts.length == 2) {
                 String subject = parts[0];
                 int version = Integer.parseInt(parts[1]);
-
-                // Store schema version
                 Boolean result = consulBusinessOperationsService.storeSchemaVersion(subject, version, object).block();
                 assertTrue(result != null && result, "Failed to seed schema version for key: " + key);
             } else {
-                // Fallback to generic putValue for other keys
                 Boolean result = consulBusinessOperationsService.putValue(key, object).block();
                 assertTrue(result != null && result, "Failed to seed Consul KV for key: " + key);
             }
         } else {
-            // Fallback to generic putValue for other keys
             Boolean result = consulBusinessOperationsService.putValue(key, object).block();
             assertTrue(result != null && result, "Failed to seed Consul KV for key: " + key);
         }
-
         try {
-            TimeUnit.MILLISECONDS.sleep(300);
+            TimeUnit.MILLISECONDS.sleep(500);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -174,17 +222,24 @@ class DynamicConfigurationManagerFullIntegrationTest {
     @Timeout(value = 90, unit = TimeUnit.SECONDS)
     void fullIntegration_happyPath_initialLoad_update_delete() throws Exception {
         // --- 1. Initial Load ---
-        // Create a config that you expect to pass ALL your validation rules.
-        // This might involve setting up specific topics, module configurations, schemas, etc.
-        // For simplicity, let's assume a basic config with a schema passes your rules.
         SchemaReference schemaRef1 = new SchemaReference("fullIntegHappySchema1", 1);
-        PipelineClusterConfig initialConfig = createClusterConfigWithSchema(TEST_EXECUTION_CLUSTER, schemaRef1, "topicFullHappyInit");
-        SchemaVersionData schemaData1 = createDummySchemaData(schemaRef1.subject(), schemaRef1.version(), "{\"type\":\"string\"}");
+
+        // This is the SCHEMA for the step's customConfig
+        String schemaForStep1Config = "{\"type\":\"object\", \"properties\":{\"configKey\":{\"type\":\"string\"}}, \"required\":[\"configKey\"]}";
+        // This is the actual DATA for the step's customConfig, valid against the schema above
+        String actualJsonDataForStep1 = "{\"configKey\":\"someValue\"}";
+
+        PipelineClusterConfig initialConfig = createFullyValidClusterConfig(TEST_EXECUTION_CLUSTER, schemaRef1, actualJsonDataForStep1);
+        // The SchemaVersionData in Consul should contain the SCHEMA, not the data
+        SchemaVersionData schemaData1 = createDummySchemaData(schemaRef1.subject(), schemaRef1.version(), schemaForStep1Config);
+
         String fullSchemaKey1 = getFullSchemaKey(schemaRef1.subject(), schemaRef1.version());
         String fullClusterKey = getFullClusterKey(TEST_EXECUTION_CLUSTER);
 
-        // Delete schema version
+        // Clean up previous state if any
         consulBusinessOperationsService.deleteSchemaVersion(schemaRef1.subject(), schemaRef1.version()).block();
+        consulBusinessOperationsService.deleteClusterConfiguration(TEST_EXECUTION_CLUSTER).block(); // Ensure cluster config is also clean
+
         seedConsulKv(fullSchemaKey1, schemaData1);
         seedConsulKv(fullClusterKey, initialConfig);
 
@@ -192,148 +247,145 @@ class DynamicConfigurationManagerFullIntegrationTest {
         dynamicConfigurationManager.initialize(TEST_EXECUTION_CLUSTER);
         LOG.info("FullInteg-HappyPath: Initialization complete.");
 
-        ClusterConfigUpdateEvent initialEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 15, TimeUnit.SECONDS);
-        assertNotNull(initialEvent, "Should have received an initial load event");
-        assertTrue(initialEvent.oldConfig().isEmpty(), "Old config should be empty for initial load");
+        // ... rest of the test assertions for initial load, update, delete ...
+        // The polling logic for events should now work as the initial load should succeed.
+
+        PipelineClusterConfigChangeEvent initialEvent = null;
+        long initialEndTime = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(appWatchSeconds + 25);
+        LOG.info("Polling for initial load event for config: {}", initialConfig.clusterName());
+        while (System.currentTimeMillis() < initialEndTime) {
+            PipelineClusterConfigChangeEvent polled = testApplicationEventListener.pollEvent(1, TimeUnit.SECONDS);
+            if (polled != null) {
+                LOG.info("Polled event during initial load: cluster='{}', isDeletion={}", polled.clusterName(), polled.isDeletion());
+                if (TEST_EXECUTION_CLUSTER.equals(polled.clusterName()) && !polled.isDeletion() &&
+                        initialConfig.equals(polled.newConfig())) {
+                    initialEvent = polled;
+                    LOG.info("Matched expected initial event.");
+                    break;
+                }
+            }
+        }
+        assertNotNull(initialEvent, "Should have received the specific initial load event for " + initialConfig.clusterName());
+        assertFalse(initialEvent.isDeletion(), "Initial event should not be a deletion");
         assertEquals(initialConfig, initialEvent.newConfig(), "New config in event should match initial seeded config");
         assertEquals(initialConfig, testCachedConfigHolder.getCurrentConfig().orElse(null), "Cache should hold initial config");
         assertEquals(schemaData1.schemaContent(), testCachedConfigHolder.getSchemaContent(schemaRef1).orElse(null), "Schema should be cached");
         LOG.info("FullInteg-HappyPath: Initial load verified.");
+        testApplicationEventListener.clear();
 
         // --- 2. Watch Update (also valid) ---
-        PipelineClusterConfig updatedConfig = createClusterConfigWithSchema(TEST_EXECUTION_CLUSTER, schemaRef1, "topicFullHappyInit", "topicFullHappyUpdate");
+        Set<String> updatedTopics = new java.util.HashSet<>(initialConfig.allowedKafkaTopics());
+        updatedTopics.add("new-topic-for-update-" + TEST_EXECUTION_CLUSTER);
+
+        PipelineClusterConfig updatedConfig = initialConfig.toBuilder()
+                .allowedKafkaTopics(updatedTopics)
+                .build();
+
         LOG.info("FullInteg-HappyPath: Seeding updated config to trigger watch...");
         seedConsulKv(fullClusterKey, updatedConfig);
         LOG.info("FullInteg-HappyPath: Updated config seeded.");
 
-        ClusterConfigUpdateEvent updateEvent = null;
-        long endTimeUpdate = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(appWatchSeconds + 20);
+        PipelineClusterConfigChangeEvent updateEvent = null;
+        long endTimeUpdate = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(appWatchSeconds + 25);
+        LOG.info("Polling for update event for config: {}", updatedConfig.clusterName());
         while (System.currentTimeMillis() < endTimeUpdate) {
-            ClusterConfigUpdateEvent polledEvent = testApplicationEventListener.pollEvent(1, TimeUnit.SECONDS);
-            if (polledEvent != null && updatedConfig.equals(polledEvent.newConfig())) {
-                updateEvent = polledEvent;
-                break;
+            PipelineClusterConfigChangeEvent polledEvent = testApplicationEventListener.pollEvent(1, TimeUnit.SECONDS);
+            if (polledEvent != null) {
+                LOG.info("Polled event during update: cluster='{}', isDeletion={}", polledEvent.clusterName(), polledEvent.isDeletion());
+                if (TEST_EXECUTION_CLUSTER.equals(polledEvent.clusterName()) && !polledEvent.isDeletion() && updatedConfig.equals(polledEvent.newConfig())) {
+                    updateEvent = polledEvent;
+                    LOG.info("Matched expected update event.");
+                    break;
+                }
             }
         }
-        assertNotNull(updateEvent, "Should have received an update event from watch");
-        assertEquals(Optional.of(initialConfig), updateEvent.oldConfig(), "Old config in update event should be the initial one");
+        assertNotNull(updateEvent, "Should have received an update event from watch for " + updatedConfig.clusterName());
+        assertFalse(updateEvent.isDeletion());
         assertEquals(updatedConfig, updateEvent.newConfig(), "New config in update event should match updated config");
         assertEquals(updatedConfig, testCachedConfigHolder.getCurrentConfig().orElse(null), "Cache should hold updated config");
         LOG.info("FullInteg-HappyPath: Watch update verified.");
+        testApplicationEventListener.clear();
 
         // --- 3. Deletion ---
         LOG.info("FullInteg-HappyPath: Deleting config from Consul...");
         consulBusinessOperationsService.deleteClusterConfiguration(TEST_EXECUTION_CLUSTER).block();
-        TimeUnit.MILLISECONDS.sleep(appWatchSeconds * 1000L / 2 + 500);
-        LOG.info("FullInteg-HappyPath: Config deleted from Consul.");
 
-        ClusterConfigUpdateEvent deletionEvent = null;
-        long endTimeDelete = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(appWatchSeconds + 15);
+        PipelineClusterConfigChangeEvent deletionEvent = null;
+        long endTimeDelete = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(appWatchSeconds + 20);
+        LOG.info("Polling for deletion event for cluster: {}", TEST_EXECUTION_CLUSTER);
         while (System.currentTimeMillis() < endTimeDelete) {
-            ClusterConfigUpdateEvent polledEvent = testApplicationEventListener.pollEvent(1, TimeUnit.SECONDS);
-            if (polledEvent != null && polledEvent.oldConfig().isPresent() && updatedConfig.equals(polledEvent.oldConfig().get()) &&
-                    (polledEvent.newConfig().allowedKafkaTopics() == null || polledEvent.newConfig().allowedKafkaTopics().isEmpty())) {
-                deletionEvent = polledEvent;
-                break;
+            PipelineClusterConfigChangeEvent polledEvent = testApplicationEventListener.pollEvent(1, TimeUnit.SECONDS);
+            if (polledEvent != null) {
+                LOG.info("Polled event during deletion: clusterName='{}', isDeletion={}", polledEvent.clusterName(), polledEvent.isDeletion());
+                if (TEST_EXECUTION_CLUSTER.equals(polledEvent.clusterName()) && polledEvent.isDeletion()) {
+                    deletionEvent = polledEvent;
+                    LOG.info("Matched expected deletion event.");
+                    break;
+                }
             }
         }
-        assertNotNull(deletionEvent, "Should have received a deletion event");
-        assertEquals(Optional.of(updatedConfig), deletionEvent.oldConfig(), "Old config in deletion event should be the updated one");
+        assertNotNull(deletionEvent, "Should have received a deletion event for " + TEST_EXECUTION_CLUSTER);
+        assertTrue(deletionEvent.isDeletion());
+        assertNull(deletionEvent.newConfig(), "newConfig should be null for a deletion event");
         assertFalse(testCachedConfigHolder.getCurrentConfig().isPresent(), "Cache should be empty after deletion");
         LOG.info("FullInteg-HappyPath: Deletion verified.");
 
-        // Clean up schema
         consulBusinessOperationsService.deleteSchemaVersion(schemaRef1.subject(), schemaRef1.version()).block();
     }
 
-    // --- Test Scenarios ---
 
     @Test
-    @DisplayName("Full Integration: Initial Load - Fails CustomConfigSchemaValidator (Example)")
+    @DisplayName("Full Integration: Initial Load - Fails CustomConfigSchemaValidator (Missing Schema)")
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
-    void fullIntegration_initialLoad_failsCustomConfigSchemaValidator() throws Exception {
-        // --- Setup Data that will FAIL the CustomConfigSchemaValidator ---
-        SchemaReference missingSchemaRef = new SchemaReference("customSchemaMissing", 1);
-        String moduleImplementationId = "module_schema_impl_id";
-
-        // Create a module that references the missing schema
-        PipelineModuleConfiguration moduleWithMissingSchema = new PipelineModuleConfiguration(
-                "ModuleWithMissingSchema",
-                moduleImplementationId,
-                missingSchemaRef
-        );
-        PipelineModuleMap moduleMap = new PipelineModuleMap(Map.of(moduleImplementationId, moduleWithMissingSchema));
-
-        // Create a step that uses this module and has a customConfig
-        PipelineStepConfig stepUsingMissingSchema = PipelineStepConfig.builder()
-                .stepName("step1_uses_missing_schema")
-                .stepType(StepType.PIPELINE)
-                .processorInfo(new PipelineStepConfig.ProcessorInfo(moduleImplementationId, null))
-                .customConfig(PipelineConfigTestUtils.createJsonConfigOptions("{\"someKey\":\"someValue\"}"))
-                .build();
-
-        // Create a pipeline containing this step
-        PipelineConfig pipelineConfig = new PipelineConfig(
-                "pipeline_with_bad_step", // name
-                Map.of(stepUsingMissingSchema.stepName(), stepUsingMissingSchema) // pipelineSteps
-        );
-
-        // Create a pipeline graph containing this pipeline
-        PipelineGraphConfig graphConfig = new PipelineGraphConfig(
-                Map.of(pipelineConfig.name(), pipelineConfig) // pipelines (use pipelineConfig.name() as key)
-        );
-
-        // Create the final cluster config
-        PipelineClusterConfig configViolatingRule = PipelineClusterConfig.builder()
-                .clusterName(TEST_EXECUTION_CLUSTER)
-                .pipelineGraphConfig(graphConfig)
-                .pipelineModuleMap(moduleMap)
-                .defaultPipelineName(TEST_EXECUTION_CLUSTER + "-default")
-                .allowedKafkaTopics(Set.of("topicViolatesRule"))
-                .allowedGrpcServices(Collections.emptySet())
-                .build();
+    void fullIntegration_initialLoad_failsCustomConfigSchemaValidator_missingSchema() throws Exception {
+        SchemaReference missingSchemaRef = new SchemaReference("customSchemaTrulyMissing", 1);
+        // This config will reference 'missingSchemaRef' via its module.
+        // The schema for 'missingSchemaRef' will NOT be seeded.
+        PipelineClusterConfig configViolatingRule = createClusterConfigWithSchema(TEST_EXECUTION_CLUSTER, missingSchemaRef, "topicViolatesRule");
 
         String fullClusterKey = getFullClusterKey(TEST_EXECUTION_CLUSTER);
-        String fullMissingSchemaKey = getFullSchemaKey(missingSchemaRef.subject(), missingSchemaRef.version());
 
         // Ensure schema is NOT there
         consulBusinessOperationsService.deleteSchemaVersion(missingSchemaRef.subject(), missingSchemaRef.version()).block();
         seedConsulKv(fullClusterKey, configViolatingRule);
 
-        LOG.info("FullInteg-RuleFail: Initializing DynamicConfigurationManager with config violating CustomConfigSchemaValidator...");
+        LOG.info("FullInteg-RuleFail-MissingSchema: Initializing DynamicConfigurationManager...");
         dynamicConfigurationManager.initialize(TEST_EXECUTION_CLUSTER);
-        LOG.info("FullInteg-RuleFail: Initialization complete (expecting validation failure).");
+        LOG.info("FullInteg-RuleFail-MissingSchema: Initialization complete (expecting validation failure due to missing schema).");
 
         // --- Verify Initial Load Failure ---
-        ClusterConfigUpdateEvent initialEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 5, TimeUnit.SECONDS);
-        assertNull(initialEvent, "Should NOT have received a successful config update event due to validation failure");
+        PipelineClusterConfigChangeEvent initialEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 10, TimeUnit.SECONDS);
+        assertNull(initialEvent, "Should NOT have received a successful config update event due to missing schema");
 
         Optional<PipelineClusterConfig> cachedConfigAfterInit = testCachedConfigHolder.getCurrentConfig();
-        assertFalse(cachedConfigAfterInit.isPresent(), "Config should NOT be in cache after validation failure");
-        LOG.info("FullInteg-RuleFail: Verified no config cached and no successful event published.");
+        assertFalse(cachedConfigAfterInit.isPresent(), "Config should NOT be in cache after failure due to missing schema");
+        LOG.info("FullInteg-RuleFail-MissingSchema: Verified no config cached and no successful event published.");
     }
 
-    // Re-use TestApplicationEventListener and SimpleMapCachedConfigHolder
-    // (They are already suitable as real, simple implementations for testing)
+
+    // Dedicated Event Listener for this Test Class
     @Singleton
-    static class TestApplicationEventListener { // Copied from DynamicConfigurationManagerImplMicronautTest
+    static class TestApplicationEventListener {
         private static final Logger EVENT_LISTENER_LOG = LoggerFactory.getLogger(TestApplicationEventListener.class);
-        private final BlockingQueue<ClusterConfigUpdateEvent> receivedEvents = new ArrayBlockingQueue<>(10);
+        // Listen for the NEW event type
+        private final BlockingQueue<PipelineClusterConfigChangeEvent> receivedEvents = new ArrayBlockingQueue<>(20);
 
         @io.micronaut.runtime.event.annotation.EventListener
-        void onClusterConfigUpdate(ClusterConfigUpdateEvent event) {
-            EVENT_LISTENER_LOG.info("TestApplicationEventListener (Full Integ) received event for cluster '{}'. Old present: {}, New cluster: {}",
-                    event.newConfig().clusterName(), event.oldConfig().isPresent(), event.newConfig().clusterName());
-            if (TEST_EXECUTION_CLUSTER.equals(event.newConfig().clusterName()) ||
-                    (event.oldConfig().isPresent() && TEST_EXECUTION_CLUSTER.equals(event.oldConfig().get().clusterName()))) {
-                receivedEvents.offer(event);
+        void onClusterConfigUpdate(PipelineClusterConfigChangeEvent event) { // CORRECTED Event Type
+            EVENT_LISTENER_LOG.info("TestApplicationEventListener (Full Integ) received event for cluster '{}'. Is Deletion: {}",
+                    event.clusterName(), event.isDeletion());
+            // Filter based on the event's clusterName using THIS class's constant
+            if (DynamicConfigurationManagerFullIntegrationTest.TEST_EXECUTION_CLUSTER.equals(event.clusterName())) {
+                if (!receivedEvents.offer(event)) {
+                    EVENT_LISTENER_LOG.error("TestApplicationEventListener (Full Integ): FAILED TO OFFER EVENT TO QUEUE! Queue might be full. Event: {}", event);
+                }
             } else {
                 EVENT_LISTENER_LOG.warn("TestApplicationEventListener (Full Integ) ignored event for different cluster: {}. Expected: {}",
-                        event.newConfig().clusterName(), TEST_EXECUTION_CLUSTER);
+                        event.clusterName(), DynamicConfigurationManagerFullIntegrationTest.TEST_EXECUTION_CLUSTER);
             }
         }
 
-        public ClusterConfigUpdateEvent pollEvent(long timeout, TimeUnit unit) throws InterruptedException {
+        public PipelineClusterConfigChangeEvent pollEvent(long timeout, TimeUnit unit) throws InterruptedException {
             return receivedEvents.poll(timeout, unit);
         }
 
@@ -341,5 +393,4 @@ class DynamicConfigurationManagerFullIntegrationTest {
             receivedEvents.clear();
         }
     }
-
 }

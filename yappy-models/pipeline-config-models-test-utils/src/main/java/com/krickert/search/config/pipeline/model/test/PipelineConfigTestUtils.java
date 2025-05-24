@@ -6,18 +6,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
-import com.krickert.search.config.pipeline.model.GrpcTransportConfig;
-import com.krickert.search.config.pipeline.model.KafkaTransportConfig;
-import com.krickert.search.config.pipeline.model.PipelineStepConfig;
-import com.krickert.search.config.pipeline.model.TransportType;
+import com.krickert.search.config.pipeline.model.*; // Import all from model
+import com.krickert.search.config.pipeline.model.SchemaReference;
 
 import java.io.IOException;
+import java.util.Collections; // Import Collections
+import java.util.List; // Import List
 import java.util.Map;
+import java.util.Set; // Import Set
 import java.util.function.Function;
 
 /**
  * Utility class for testing pipeline configuration models.
- * Provides methods for serialization, deserialization, and validation.
+ * Provides methods for serialization, deserialization, and creation of model objects.
  */
 public class PipelineConfigTestUtils {
 
@@ -82,7 +83,9 @@ public class PipelineConfigTestUtils {
      */
     public static PipelineStepConfig.JsonConfigOptions createJsonConfigOptions(String jsonString) throws JsonProcessingException {
         if (jsonString == null || jsonString.isBlank()) {
-            return new PipelineStepConfig.JsonConfigOptions(null, Map.of());
+            // Return an empty JsonNode if the string is null or blank,
+            // as JsonConfigOptions expects a JsonNode.
+            return new PipelineStepConfig.JsonConfigOptions(OBJECT_MAPPER.createObjectNode(), Map.of());
         }
         return new PipelineStepConfig.JsonConfigOptions(OBJECT_MAPPER.readTree(jsonString), Map.of());
     }
@@ -104,7 +107,9 @@ public class PipelineConfigTestUtils {
      * @return The JsonConfigOptions object
      */
     public static PipelineStepConfig.JsonConfigOptions createJsonConfigOptions(Map<String, String> configParams) {
-        return new PipelineStepConfig.JsonConfigOptions(null, configParams);
+        // Assuming if only configParams are provided, jsonConfig can be null or an empty node.
+        // Let's default to an empty JsonNode for consistency.
+        return new PipelineStepConfig.JsonConfigOptions(OBJECT_MAPPER.createObjectNode(), configParams);
     }
 
     /**
@@ -130,13 +135,24 @@ public class PipelineConfigTestUtils {
     /**
      * Creates an OutputTarget object for a Kafka transport.
      *
-     * @param targetStepName          The name of the target step
+     * @param topic The Kafka topic
+     * @param targetStepName The name of the target step for this output
+     * @return The OutputTarget object
+     */
+    public static PipelineStepConfig.OutputTarget createKafkaOutputTarget(String topic, String targetStepName) {
+        return createKafkaOutputTarget(topic, targetStepName, Collections.emptyMap());
+    }
+
+    /**
+     * Creates an OutputTarget object for a Kafka transport.
+     *
      * @param topic                   The Kafka topic
+     * @param targetStepName          The name of the target step for this output
      * @param kafkaProducerProperties The Kafka producer properties
      * @return The OutputTarget object
      */
     public static PipelineStepConfig.OutputTarget createKafkaOutputTarget(
-            String targetStepName, String topic, Map<String, String> kafkaProducerProperties) {
+            String topic, String targetStepName, Map<String, String> kafkaProducerProperties) {
         KafkaTransportConfig kafkaTransport = new KafkaTransportConfig(topic, kafkaProducerProperties);
         return new PipelineStepConfig.OutputTarget(targetStepName, TransportType.KAFKA, null, kafkaTransport);
     }
@@ -144,13 +160,25 @@ public class PipelineConfigTestUtils {
     /**
      * Creates an OutputTarget object for a gRPC transport.
      *
-     * @param targetStepName       The name of the target step
      * @param serviceName          The gRPC service name
+     * @param targetStepName       The name of the target step for this output
+     * @return The OutputTarget object
+     */
+    public static PipelineStepConfig.OutputTarget createGrpcOutputTarget(String serviceName, String targetStepName) {
+        return createGrpcOutputTarget(serviceName, targetStepName, Collections.emptyMap());
+    }
+
+
+    /**
+     * Creates an OutputTarget object for a gRPC transport.
+     *
+     * @param serviceName          The gRPC service name
+     * @param targetStepName       The name of the target step for this output
      * @param grpcClientProperties The gRPC client properties
      * @return The OutputTarget object
      */
     public static PipelineStepConfig.OutputTarget createGrpcOutputTarget(
-            String targetStepName, String serviceName, Map<String, String> grpcClientProperties) {
+            String serviceName, String targetStepName, Map<String, String> grpcClientProperties) {
         GrpcTransportConfig grpcTransport = new GrpcTransportConfig(serviceName, grpcClientProperties);
         return new PipelineStepConfig.OutputTarget(targetStepName, TransportType.GRPC, grpcTransport, null);
     }
@@ -164,6 +192,113 @@ public class PipelineConfigTestUtils {
     public static PipelineStepConfig.OutputTarget createInternalOutputTarget(String targetStepName) {
         return new PipelineStepConfig.OutputTarget(targetStepName, TransportType.INTERNAL, null, null);
     }
+
+    /**
+     * Creates a KafkaInputDefinition.
+     *
+     * @param listenTopic The topic to listen to.
+     * @return The KafkaInputDefinition object.
+     */
+    public static KafkaInputDefinition createKafkaInput(String listenTopic) {
+        return createKafkaInput(List.of(listenTopic), listenTopic + "-group", Collections.emptyMap());
+    }
+
+    /**
+     * Creates a KafkaInputDefinition.
+     *
+     * @param listenTopics            List of topics to listen to.
+     * @param consumerGroupId         The consumer group ID.
+     * @param kafkaConsumerProperties Additional Kafka consumer properties.
+     * @return The KafkaInputDefinition object.
+     */
+    public static KafkaInputDefinition createKafkaInput(List<String> listenTopics, String consumerGroupId, Map<String, String> kafkaConsumerProperties) {
+        return KafkaInputDefinition.builder()
+                .listenTopics(listenTopics)
+                .consumerGroupId(consumerGroupId)
+                .kafkaConsumerProperties(kafkaConsumerProperties)
+                .build();
+    }
+
+    /**
+     * Creates a basic PipelineStepConfig.
+     *
+     * @param stepName        The name of the step.
+     * @param stepType        The type of the step.
+     * @param processorImplId The implementation ID for the processor (can be gRPC service name or internal bean name).
+     * @param customConfig    The custom configuration for the step.
+     * @param kafkaInputs     List of Kafka inputs.
+     * @param outputs         Map of output targets.
+     * @return The PipelineStepConfig object.
+     */
+    public static PipelineStepConfig createStep(
+            String stepName,
+            StepType stepType,
+            String processorImplId,
+            PipelineStepConfig.JsonConfigOptions customConfig,
+            List<KafkaInputDefinition> kafkaInputs,
+            Map<String, PipelineStepConfig.OutputTarget> outputs) {
+
+        PipelineStepConfig.ProcessorInfo processorInfo = null;
+        if (processorImplId != null && !processorImplId.isBlank()) {
+            // Heuristic: if it looks like a bean name (e.g., contains "Bean" or is camelCase without dots),
+            // assume internal. Otherwise, assume gRPC. This might need refinement based on your conventions.
+            if (processorImplId.contains(".") || processorImplId.contains("/")) { // Common in gRPC full service names
+                processorInfo = createGrpcProcessorInfo(processorImplId);
+            } else {
+                processorInfo = createInternalProcessorInfo(processorImplId);
+            }
+        }
+
+        return PipelineStepConfig.builder()
+                .stepName(stepName)
+                .stepType(stepType)
+                .processorInfo(processorInfo) // Can be null if step doesn't have a processor
+                .customConfig(customConfig)
+                .kafkaInputs(kafkaInputs == null ? Collections.emptyList() : kafkaInputs)
+                .outputs(outputs == null ? Collections.emptyMap() : outputs)
+                .build();
+    }
+
+
+    /**
+     * Creates a PipelineModuleConfiguration.
+     *
+     * @param name            The display name of the module.
+     * @param implementationId The unique implementation ID.
+     * @param schemaRef       Optional schema reference for the module's own configuration (if any)
+     *                        or for steps using this module if they don't define their own.
+     * @param customConfig    Custom configuration for the module itself.
+     * @return The PipelineModuleConfiguration object.
+     */
+    public static PipelineModuleConfiguration createModule(String name, String implementationId, SchemaReference schemaRef, Map<String, Object> customConfig) {
+        return new PipelineModuleConfiguration(name, implementationId, schemaRef, customConfig);
+    }
+
+    /**
+     * Creates a PipelineModuleConfiguration with a schema reference.
+     *
+     * @param name            The display name of the module.
+     * @param implementationId The unique implementation ID.
+     * @param schemaRef       The schema reference for steps using this module.
+     * @param moduleCustomConfig A map representing the module's own custom configuration.
+     * @return The PipelineModuleConfiguration object.
+     */
+    public static PipelineModuleConfiguration createModuleWithSchema(String name, String implementationId, SchemaReference schemaRef, Map<String, Object> moduleCustomConfig) {
+        return new PipelineModuleConfiguration(name, implementationId, schemaRef, moduleCustomConfig);
+    }
+
+
+    /**
+     * Creates a PipelineConfig.
+     *
+     * @param name  The name of the pipeline.
+     * @param steps A map of step names to their configurations.
+     * @return The PipelineConfig object.
+     */
+    public static PipelineConfig createPipeline(String name, Map<String, PipelineStepConfig> steps) {
+        return new PipelineConfig(name, steps);
+    }
+
 
     /**
      * Performs a serialization test on a pipeline configuration object.

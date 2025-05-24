@@ -10,7 +10,7 @@ import java.util.Set;
 // import java.util.stream.Collectors; // Not needed for this version
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@Builder
+@Builder(toBuilder = true)
 public record PipelineClusterConfig(
         @JsonProperty("clusterName") String clusterName,
         @JsonProperty("pipelineGraphConfig") PipelineGraphConfig pipelineGraphConfig,
