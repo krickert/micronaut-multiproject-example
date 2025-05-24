@@ -3,11 +3,12 @@ package com.krickert.yappy.modules.tikaparser;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 
-// Imports from yappy_core_types.proto (assuming java_package = "com.krickert.search.model")
 import com.krickert.search.model.Blob;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.ParsedDocument;
 import com.krickert.search.model.ParsedDocumentReply;
+import com.krickert.search.model.util.ProcessingBuffer;
+import com.krickert.search.model.util.ProcessingBufferFactory;
 
 import java.util.Map;
 
@@ -19,8 +20,10 @@ import com.krickert.search.sdk.ProcessResponse;
 import com.krickert.search.sdk.ServiceMetadata;
 
 import io.grpc.stub.StreamObserver;
+import io.micronaut.context.annotation.Property;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.grpc.annotation.GrpcService;
+import jakarta.annotation.PreDestroy;
 import jakarta.inject.Singleton;
 import org.apache.tika.exception.TikaException;
 import org.slf4j.Logger;
@@ -29,7 +32,6 @@ import org.xml.sax.SAXException;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.Map;
 
 @Singleton
 @GrpcService
@@ -37,6 +39,19 @@ import java.util.Map;
 public class TikaParserService extends PipeStepProcessorGrpc.PipeStepProcessorImplBase {
 
     private static final Logger LOG = LoggerFactory.getLogger(TikaParserService.class);
+
+    @Property(name = "tika.parser.test-data-buffer.enabled", defaultValue = "false")
+    private boolean dataBufferEnabled;
+
+    @Property(name = "tika.parser.test-data-buffer.precision", defaultValue = "3")
+    private int dataBufferPrecision;
+
+    private final ProcessingBuffer<PipeDoc> pipeDocBuffer;
+
+    public TikaParserService() {
+        this.pipeDocBuffer = ProcessingBufferFactory.createBuffer(dataBufferEnabled, dataBufferPrecision, PipeDoc.class);
+        LOG.info("TikaParserService initialized with test data buffer enabled: {}, precision: {}", dataBufferEnabled, dataBufferPrecision);
+    }
 
     @Override
     public void processData (ProcessRequest request, StreamObserver < ProcessResponse > responseObserver){
@@ -401,7 +416,36 @@ public class TikaParserService extends PipeStepProcessorGrpc.PipeStepProcessorIm
         responseBuilder.addProcessorLogs(logMessage);
         LOG.info("(Unary) Sending response for stream ID: {}", streamId);
 
-        responseObserver.onNext(responseBuilder.build());
+        // Build the response
+        ProcessResponse response = responseBuilder.build();
+
+        // Add the document to the buffer if it was successfully processed
+        if (response.getSuccess() && response.hasOutputDoc()) {
+            LOG.debug("Adding document to test data buffer: {}", docId);
+            pipeDocBuffer.add(response.getOutputDoc());
+        }
+
+        responseObserver.onNext(response);
         responseObserver.onCompleted();
+    }
+
+    /**
+     * Saves the buffered data to disk when the service is destroyed.
+     * This method is called automatically by the container when the service is shut down.
+     * It saves the buffered PipeDoc and PipeStream objects to disk and copies them to the test resources directory.
+     */
+    @PreDestroy
+    public void saveBufferedData() {
+        if (!dataBufferEnabled) {
+            LOG.info("Test data buffer is disabled, skipping save operation");
+            return;
+        }
+
+        LOG.info("Saving buffered test data to disk");
+
+        pipeDocBuffer.saveToDisk("tika-doc", dataBufferPrecision);
+
+        LOG.info("Saved buffered data to temporary directories");
+
     }
 }

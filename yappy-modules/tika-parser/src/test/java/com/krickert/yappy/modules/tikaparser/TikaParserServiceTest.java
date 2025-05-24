@@ -8,6 +8,8 @@ import com.google.protobuf.Value;
 import com.krickert.search.model.Blob;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.ErrorData;
+import com.krickert.search.model.PipeStream;
+import com.krickert.search.model.ProtobufUtils;
 import com.krickert.search.model.StepExecutionRecord;
 
 // Imports from pipe_step_processor_service.proto (e.g., com.krickert.search.sdk)
@@ -28,6 +30,8 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -40,6 +44,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @Property(name = "grpc.client.plaintext", value = "true")
 @Property(name = "micronaut.test.resources.enabled", value = "false")
 @Property(name = "grpc.services.tika-parser.enabled", value = "true")
+@Property(name = "tika.parser.test-data-buffer.enabled", value = "true")
+@Property(name = "tika.parser.test-data-buffer.precision", value = "3")
 class TikaParserServiceTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(TikaParserServiceTest.class);
@@ -273,5 +279,6 @@ class TikaParserServiceTest {
                 stepName, pipelineName, streamId, docId);
         assertTrue(response.getProcessorLogs(0).contains(expectedLogMessagePart),
                 "Processor log message mismatch (Async). Expected to contain: '" + expectedLogMessagePart + "', Actual: '" + response.getProcessorLogs(0) + "'");
+        assertFalse(response.hasErrorDetails() && response.getErrorDetails().getFieldsCount() > 0, "There should be no error details (Async)");
     }
 }

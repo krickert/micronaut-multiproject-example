@@ -56,9 +56,31 @@ public class DocumentParser {
         boolean extractMetadata = getBooleanConfig(config, "extractMetadata", true);
         boolean enableGeoTopicParser = getBooleanConfig(config, "enableGeoTopicParser", false);
 
+        // Check if we need to disable EMF parser for problematic file types
+        boolean disableEmfParser = false;
+        if (config.containsKey("filename")) {
+            String filename = config.get("filename").toLowerCase();
+            if (filename.endsWith(".ppt") || filename.endsWith(".doc")) {
+                disableEmfParser = true;
+                LOG.info("Disabling EMF parser for file: {}", filename);
+            }
+        }
+
         // Create the appropriate parser
         Parser parser;
-        if (enableGeoTopicParser) {
+        if (disableEmfParser) {
+            try {
+                String customConfig = createCustomParserConfig();
+                try (InputStream is = new ByteArrayInputStream(customConfig.getBytes())) {
+                    TikaConfig tikaConfig = new TikaConfig(is);
+                    parser = new AutoDetectParser(tikaConfig);
+                }
+            } catch (ParserConfigurationException | TransformerException e) {
+                LOG.error("Failed to create custom parser configuration: {}", e.getMessage(), e);
+                LOG.info("Falling back to default Tika configuration");
+                parser = new AutoDetectParser();
+            }
+        } else if (enableGeoTopicParser) {
             LOG.info("Using Tika configuration with GeoTopicParser enabled");
             try {
                 String geoTopicConfig = createGeoTopicParserConfig();
@@ -149,6 +171,45 @@ public class DocumentParser {
         return ParsedDocumentReply.newBuilder()
                 .setDoc(docBuilder.build())
                 .build();
+    }
+
+    /**
+     * Creates a custom Tika configuration XML that disables problematic parsers.
+     * 
+     * @return XML string representation of the custom Tika configuration
+     * @throws ParserConfigurationException if there's an error creating the XML document
+     * @throws TransformerException if there's an error transforming the XML document to a string
+     */
+    public static String createCustomParserConfig() 
+            throws ParserConfigurationException, TransformerException {
+        DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
+        DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
+
+        // Root element
+        Document doc = docBuilder.newDocument();
+        Element rootElement = doc.createElement("properties");
+        doc.appendChild(rootElement);
+
+        // Add parser options
+        Element parsers = doc.createElement("parsers");
+        rootElement.appendChild(parsers);
+
+        // Disable EMF Parser
+        Element emfParser = doc.createElement("parser");
+        emfParser.setAttribute("class", "org.apache.tika.parser.microsoft.EMFParser");
+        emfParser.setAttribute("enabled", "false");
+        parsers.appendChild(emfParser);
+
+        // Write the XML to a string
+        TransformerFactory transformerFactory = TransformerFactory.newInstance();
+        Transformer transformer = transformerFactory.newTransformer();
+        transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+        transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2");
+
+        StringWriter writer = new StringWriter();
+        transformer.transform(new DOMSource(doc), new StreamResult(writer));
+
+        return writer.toString();
     }
 
     /**

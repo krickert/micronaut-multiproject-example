@@ -11,3 +11,7 @@ grpc:
   services:
     tika-parser:
       enabled: true
+tika:
+  parser:
+    test-data-buffer:
+      enabled: true

@@ -58,7 +58,7 @@ class FileTypeParsingTest {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(dirStream))) {
                 List<String> fileNames = reader.lines()
                         .filter(name -> !name.equals(METADATA_CSV)) // Skip the metadata CSV file
-                        .collect(Collectors.toList());
+                        .toList();
 
                 for (String fileName : fileNames) {
                     Map<String, String> metadata = metadataMap.getOrDefault(fileName, new HashMap<>());
