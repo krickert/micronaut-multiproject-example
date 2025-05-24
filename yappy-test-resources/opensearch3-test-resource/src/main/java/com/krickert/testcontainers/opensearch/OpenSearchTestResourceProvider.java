@@ -30,7 +30,7 @@ public class OpenSearchTestResourceProvider extends AbstractTestContainersProvid
             PROPERTY_OPENSEARCH_PASSWORD,
             PROPERTY_OPENSEARCH_SECURITY_ENABLED
     ));
-    
+
     public static final String DEFAULT_IMAGE = "opensearchproject/opensearch:3.0.0";
     public static final String SIMPLE_NAME = "opensearch3";
     public static final String DISPLAY_NAME = "OpenSearch";
@@ -38,6 +38,7 @@ public class OpenSearchTestResourceProvider extends AbstractTestContainersProvid
 
     @Override
     public List<String> getResolvableProperties(Map<String, Collection<String>> propertyEntries, Map<String, Object> testResourcesConfig) {
+        LOG.info("Resolving properties: {}", propertyEntries.keySet());
         // Return all properties we can resolve
         return RESOLVABLE_PROPERTIES_LIST;
     }
@@ -59,40 +60,41 @@ public class OpenSearchTestResourceProvider extends AbstractTestContainersProvid
 
     @Override
     protected OpenSearchContainer<?> createContainer(DockerImageName imageName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
+        LOG.info("Creating OpenSearch container with image: {}", imageName);
         // Create a new OpenSearch container with the specified image
         OpenSearchContainer<?> container = new OpenSearchContainer<>(imageName);
-        
+
         // Check if security should be enabled
         if (Boolean.TRUE.equals(requestedProperties.get(PROPERTY_OPENSEARCH_SECURITY_ENABLED))) {
+            LOG.info("Enabling security for OpenSearch container");
             container.withSecurityEnabled();
         }
-        
+
         return container;
     }
 
     @Override
     protected Optional<String> resolveProperty(String propertyName, OpenSearchContainer<?> container) {
-        switch (propertyName) {
-            case PROPERTY_OPENSEARCH_URL:
-                return Optional.of(container.getHttpHostAddress());
-            case PROPERTY_OPENSEARCH_HOST:
-                return Optional.of(container.getHost());
-            case PROPERTY_OPENSEARCH_PORT:
-                return Optional.of(String.valueOf(container.getMappedPort(9200)));
-            case PROPERTY_OPENSEARCH_USERNAME:
-                return Optional.of(container.getUsername());
-            case PROPERTY_OPENSEARCH_PASSWORD:
-                return Optional.of(container.getPassword());
-            case PROPERTY_OPENSEARCH_SECURITY_ENABLED:
-                return Optional.of(String.valueOf(container.isSecurityEnabled()));
-            default:
-                return Optional.empty(); // Property not handled by this provider
-        }
+        LOG.info("Resolving property: {}", propertyName);
+        Optional<String> result = switch (propertyName) {
+            case PROPERTY_OPENSEARCH_URL -> Optional.of(container.getHttpHostAddress());
+            case PROPERTY_OPENSEARCH_HOST -> Optional.of(container.getHost());
+            case PROPERTY_OPENSEARCH_PORT -> Optional.of(String.valueOf(container.getMappedPort(9200)));
+            case PROPERTY_OPENSEARCH_USERNAME -> Optional.of(container.getUsername());
+            case PROPERTY_OPENSEARCH_PASSWORD -> Optional.of(container.getPassword());
+            case PROPERTY_OPENSEARCH_SECURITY_ENABLED -> Optional.of(String.valueOf(container.isSecurityEnabled()));
+            default -> Optional.empty(); // Property not handled by this provider
+        };
+        LOG.info("Resolved property {} to {}", propertyName, result.orElse("null"));
+        return result;
     }
+
 
     @Override
     protected boolean shouldAnswer(String propertyName, Map<String, Object> properties, Map<String, Object> testResourcesConfig) {
         // Answer if the property is one we can resolve
-        return propertyName != null && RESOLVABLE_PROPERTIES_LIST.contains(propertyName);
+        boolean shouldAnswer = propertyName != null && RESOLVABLE_PROPERTIES_LIST.contains(propertyName);
+        LOG.info("Checking if provider should answer property {}: {}", propertyName, shouldAnswer);
+        return shouldAnswer;
     }
 }

@@ -65,11 +65,11 @@ public class OpenSearchContainer<SELF extends OpenSearchContainer<SELF>> extends
      * name.
      *
      * @param dockerImageName Full docker image name as a {@link DockerImageName}, like:
-     *
-     *      DockerImageName.parse("opensearchproject/opensearch:1.2.4")
-     *      DockerImageName.parse("opensearchproject/opensearch:1.3.1")
-     *      DockerImageName.parse("opensearchproject/opensearch:2.0.0")
-     *
+     *<ul>
+     *      <li>DockerImageName.parse("opensearchproject/opensearch:1.2.4")</li>
+     *      <li>DockerImageName.parse("opensearchproject/opensearch:1.3.1")</li>
+     *      <li>DockerImageName.parse("opensearchproject/opensearch:2.0.0")</li>
+     *</ul>
      */
     public OpenSearchContainer(final DockerImageName dockerImageName) {
         super(dockerImageName);
