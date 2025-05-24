@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package com.krickert.search.engine;
+
+option java_multiple_files = true;
+option java_package = "com.krickert.search.engine";
+option java_outer_classname = "S3EventServiceProto";
+
+message s3_crawl_request {
+  string bucket = 1;
+  string key = 2;
+
+  // Optional date range parameters for partial crawl
+  // Dates should be in ISO-8601 format (e.g., "2023-01-01T00:00:00Z")
+  optional string start_date = 3;
+  optional string end_date = 4;
+}

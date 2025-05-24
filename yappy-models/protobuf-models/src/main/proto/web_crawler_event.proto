@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package com.krickert.search.engine;
+
+option java_multiple_files = true;
+option java_package = "com.krickert.search.engine";
+option java_outer_classname = "WebCrawlerEventProto";
+
+// Request to crawl a web page
+message web_crawl_request {
+  // URL to crawl
+  string url = 1;
+  
+  // Maximum crawl depth (0 means only the specified URL)
+  int32 max_depth = 2;
+  
+  // Maximum number of pages to crawl
+  int32 max_pages = 3;
+  
+  // Whether to stay within the same domain
+  bool stay_within_domain = 4;
+  
+  // Whether to follow redirects
+  bool follow_redirects = 5;
+  
+  // Optional user agent string to use
+  optional string user_agent = 6;
+  
+  // Optional timeout in seconds
+  optional int32 timeout_seconds = 7;
+  
+  // Optional date when the request was created
+  optional string date_created = 8;
+  
+  // Optional requestor information
+  optional string requestor = 9;
+}

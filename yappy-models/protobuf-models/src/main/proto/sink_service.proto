@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package com.krickert.search.engine;
+
+option java_multiple_files = true;
+option java_package = "com.krickert.search.engine";
+option java_outer_classname = "SinkServiceProto";
+
+import "yappy_core_types.proto"; // This should define com.krickert.search.model.PipeStream
+import "google/protobuf/empty.proto";
+
+// SinkService represents the final destination for a PipeStream in a pipeline.
+// Unlike other pipeline steps, a sink does not forward the PipeStream to another step.
+// It processes the PipeStream and performs a terminal action (e.g., storing in a database,
+// indexing in a search engine, writing to a file, etc.).
+service SinkService {
+  // Processes a PipeStream as a terminal step in the pipeline.
+  // Returns an Empty response as no further processing is needed.
+  rpc processSink(com.krickert.search.model.PipeStream) returns (google.protobuf.Empty);
+  
+  // For testing purposes only - allows verification of sink processing without side effects.
+  // This method should not be used in production.
+  rpc testSink(com.krickert.search.model.PipeStream) returns (SinkTestResponse);
+}
+
+// Response message for the testSink RPC.
+// This is only used for testing and verification purposes.
+message SinkTestResponse {
+  // Indicates if the sink processing was successful.
+  bool success = 1;
+  
+  // Optional message providing details about the sink processing.
+  string message = 2;
+  
+  // The stream_id of the processed PipeStream.
+  string stream_id = 3;
+}

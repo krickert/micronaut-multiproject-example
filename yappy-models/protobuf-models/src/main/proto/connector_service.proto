@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package com.krickert.search.engine;
+
+option java_multiple_files = true;
+option java_package = "com.krickert.search.engine";
+option java_outer_classname = "ConnectorServiceProto";
+
+import "yappy_core_types.proto"; // This should define com.krickert.search.model.PipeDoc
+
+
+// --- Messages for the Connector RPC ---
+message ConnectorRequest {
+  // REQUIRED. An identifier for the connector or data source submitting this data.
+  // The engine will use this ID to look up the pre-configured target pipeline and initial step.
+  // Example: "s3-landing-bucket-connector", "customer-api-ingest-v1".
+  string source_identifier = 1;
+
+  // REQUIRED. The initial document data to be processed.
+  com.krickert.search.model.PipeDoc document = 2;
+
+  // Optional. Key-value parameters to be included in the PipeStream's context_params.
+  // Useful for passing global run context like tenant_id, user_id, correlation_id from the connector.
+  map<string, string> initial_context_params = 3;
+
+  // Optional. If the connector wants to suggest a stream_id.
+  // If empty, the engine MUST generate a unique one.
+  // If provided, the engine MAY use it or generate its own if there's a conflict or policy.
+  optional string suggested_stream_id = 4;
+}
+
+message ConnectorResponse {
+  // The unique stream_id assigned by the engine to this ingestion flow.
+  // This allows the connector to correlate this ingestion with the pipeline execution.
+  string stream_id = 1;
+
+  // Indicates if the ingestion request was successfully accepted and queued by the engine.
+  // This does not guarantee the pipeline itself will succeed, only that ingestion was accepted.
+  bool accepted = 2;
+
+  // Optional message, e.g., "Ingestion accepted for stream ID [stream_id], targeting configured pipeline."
+  string message = 3;
+}
+// PipeStreamEngine service orchestrates pipeline execution.
+service ConnectorEngine {
+  // Ingests new data (as a PipeDoc identified by a source_identifier) into the system
+  // to start a pipeline asynchronously. The engine will:
+  // 1. Use source_identifier to look up the configured target pipeline and initial step.
+  // 2. Create the PipeStream, generate a stream_id.
+  // 3. Initiate the pipeline.
+  rpc processConnectorDoc(ConnectorRequest) returns (ConnectorResponse);
+}

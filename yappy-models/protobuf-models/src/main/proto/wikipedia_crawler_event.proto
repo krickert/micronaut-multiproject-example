@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package com.krickert.search.model;
+
+option java_multiple_files = true;
+option java_package = "com.krickert.search.model";
+option java_outer_classname = "WikipediaCrawlerEventProto";
+
+// Request to crawl Wikipedia articles
+message wikipedia_crawl_request {
+  // Language code (e.g., "en" for English)
+  string language = 1;
+  
+  // Specific article title to retrieve
+  string title = 2;
+  
+  // Category to retrieve articles from
+  string category = 3;
+  
+  // Maximum number of articles to retrieve
+  int32 max_articles = 4;
+  
+  // Whether to include category pages
+  bool include_categories = 5;
+  
+  // Whether to include discussion pages
+  bool include_discussions = 6;
+  
+  // Whether to include redirect pages
+  bool include_redirects = 7;
+}

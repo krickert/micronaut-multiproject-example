@@ -38,6 +38,7 @@ dependencies {
 
     testImplementation(mn.junit.jupiter.api)
     testRuntimeOnly(mn.junit.jupiter.engine)
+    testImplementation("com.google.jimfs:jimfs:1.3.0")
 }
 
 // Simplified protobuf configuration
