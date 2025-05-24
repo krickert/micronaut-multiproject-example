@@ -9,9 +9,8 @@
         <appender-ref ref="STDOUT" />
     </root>
 
-    <logger name="com.krickert.yappy.modules.s3connector" level="DEBUG" />
+    <logger name="com.krickert.yappy.modules.s3connector" level="INFO" />
     <logger name="io.micronaut.context.condition" level="INFO" />
-    <logger name="io.micronaut.test" level="INFO" />
     <logger name="org.apache.kafka" level="WARN" />
     <logger name="io.apicurio" level="WARN" />
 </configuration>

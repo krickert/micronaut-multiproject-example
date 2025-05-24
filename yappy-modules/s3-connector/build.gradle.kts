@@ -1,3 +1,5 @@
+import io.micronaut.testresources.buildtools.KnownModules
+
 plugins {
     id("io.micronaut.minimal.application") version "4.5.3"
     id("io.micronaut.test-resources") version "4.5.3"
@@ -32,6 +34,11 @@ dependencies {
     implementation("io.micronaut.aws:micronaut-aws-sdk-v2")
     implementation("software.amazon.awssdk:s3:2.25.11")
 
+    // Kafka dependencies
+    implementation("io.micronaut.kafka:micronaut-kafka")
+    implementation("io.apicurio:apicurio-registry-protobuf-serde-kafka:3.0.6")
+    testImplementation(mn.assertj.core)
+
     // Lombok for builder pattern
     compileOnly("org.projectlombok:lombok:1.18.32")
     annotationProcessor("org.projectlombok:lombok:1.18.32")
@@ -44,6 +51,12 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-engine")
     testImplementation("org.mockito:mockito-core:5.11.0")
     testImplementation("org.mockito:mockito-junit-jupiter:5.11.0")
+
+    // Test resources
+    testImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
+    testImplementation(project(":yappy-test-resources:apicurio-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
 }
 
 application {
@@ -69,5 +82,11 @@ micronaut {
     processing {
         incremental(true)
         annotations("com.krickert.yappy.modules.s3connector.*")
+    }
+    testResources {
+        enabled.set(true)
+        inferClasspath.set(true)
+        clientTimeout.set(60)
+        sharedServer.set(true)
     }
 }

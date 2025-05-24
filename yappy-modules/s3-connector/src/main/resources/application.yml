@@ -1,0 +1,28 @@
+micronaut:
+  application:
+    name: s3-connector
+  server:
+    port: 8080
+
+# S3 connector configuration
+s3:
+  connector:
+    kafka:
+      enabled: true
+      input-topic: s3-crawl-requests
+      output-topic: s3-crawl-results
+      group-id: s3-connector-group
+      client-id: s3-connector-client
+
+# Kafka configuration
+kafka:
+  enabled: true
+  schema:
+    registry:
+      type: apicurio
+
+# Logging configuration
+logger:
+  levels:
+    com.krickert.yappy.modules.s3connector: INFO
+    io.micronaut.context.condition: INFO

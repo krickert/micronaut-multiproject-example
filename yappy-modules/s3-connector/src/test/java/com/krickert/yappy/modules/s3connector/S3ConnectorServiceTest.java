@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-@MicronautTest
+@MicronautTest(environments = "test")
 class S3ConnectorServiceTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(S3ConnectorServiceTest.class);
