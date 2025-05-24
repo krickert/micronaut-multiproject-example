@@ -1,9 +1,9 @@
-/*
+package com.krickert.testcontainers.opensearch;/*
  * Copyright OpenSearch Contributors.
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package com.krickert.testcontainers.opensearch;
+
 
 import static java.net.HttpURLConnection.HTTP_OK;
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED;
