@@ -36,7 +36,7 @@ dependencies {
     implementation("io.micronaut.grpc:micronaut-protobuff-support")
 
     // OpenSearch dependencies
-    implementation("io.micronaut.opensearch:micronaut-opensearch-httpclient5")
+    implementation("org.opensearch.client:opensearch-java:3.0.0")
 
     // Protobuf JSON conversion
     implementation("com.google.protobuf:protobuf-java-util:3.25.3")
@@ -76,6 +76,8 @@ dependencies {
     implementation("org.fusesource.jansi:jansi:2.4.2")
     // OpenSearch TestContainer
     //testImplementation("org.opensearch:opensearch-testcontainers:3.0.0")
+    implementation("org.apache.httpcomponents.client5:httpclient5:5.2.1")
+    implementation("org.apache.httpcomponents:httpclient:4.5.14")
 }
 
 application {

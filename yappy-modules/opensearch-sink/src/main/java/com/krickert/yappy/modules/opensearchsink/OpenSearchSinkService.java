@@ -7,26 +7,23 @@ import com.krickert.search.engine.SinkServiceGrpc;
 import com.krickert.search.engine.SinkTestResponse;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeStream;
-import com.krickert.yappy.modules.opensearchsink.config.OpenSearchSinkConfig;
 import io.grpc.stub.StreamObserver;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.grpc.annotation.GrpcService;
 import jakarta.inject.Inject;
+import jakarta.inject.Named;
 import jakarta.inject.Singleton;
-import org.opensearch.client.RequestOptions;
-import org.opensearch.client.RestHighLevelClient;
-import org.opensearch.client.indices.CreateIndexRequest;
-import org.opensearch.client.indices.GetIndexRequest;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.client.opensearch.OpenSearchClient;
+import org.opensearch.client.opensearch.core.IndexResponse;
+import org.opensearch.client.opensearch.indices.CreateIndexRequest;
+import org.opensearch.client.opensearch.indices.CreateIndexResponse;
+import org.opensearch.client.opensearch.indices.ExistsRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * OpenSearch sink service that implements the SinkService interface.
@@ -40,7 +37,7 @@ public class OpenSearchSinkService extends SinkServiceGrpc.SinkServiceImplBase {
     private static final Logger LOG = LoggerFactory.getLogger(OpenSearchSinkService.class);
 
     @Inject
-    private RestHighLevelClient openSearchClient;
+    private OpenSearchClient openSearchClient;
 
     /**
      * Processes a PipeStream as a terminal step in the pipeline.
@@ -61,12 +58,12 @@ public class OpenSearchSinkService extends SinkServiceGrpc.SinkServiceImplBase {
         try {
             // Convert PipeDoc to JSON using Google Protobuf util
             String jsonDocument = convertPipeDocToJson(document);
-            
+
             // Index the document in OpenSearch
             indexDocument(docId, jsonDocument);
-            
+
             LOG.info("Successfully indexed document {} in OpenSearch", docId);
-            
+
             // Return empty response as no further processing is needed
             responseObserver.onNext(Empty.getDefaultInstance());
             responseObserver.onCompleted();
@@ -94,29 +91,29 @@ public class OpenSearchSinkService extends SinkServiceGrpc.SinkServiceImplBase {
         try {
             // Convert PipeDoc to JSON using Google Protobuf util
             String jsonDocument = convertPipeDocToJson(document);
-            
+
             // Log the JSON document but don't index it
             LOG.info("Test mode: Would index document {} with content: {}", docId, jsonDocument);
-            
+
             // Return success response
             SinkTestResponse response = SinkTestResponse.newBuilder()
                     .setSuccess(true)
                     .setMessage("Document would be indexed in OpenSearch")
                     .setStreamId(streamId)
                     .build();
-            
+
             responseObserver.onNext(response);
             responseObserver.onCompleted();
         } catch (Exception e) {
             LOG.error("Error in OpenSearchSinkService test: {}", e.getMessage(), e);
-            
+
             // Return error response
             SinkTestResponse response = SinkTestResponse.newBuilder()
                     .setSuccess(false)
                     .setMessage("Error: " + e.getMessage())
                     .setStreamId(streamId)
                     .build();
-            
+
             responseObserver.onNext(response);
             responseObserver.onCompleted();
         }
@@ -134,7 +131,7 @@ public class OpenSearchSinkService extends SinkServiceGrpc.SinkServiceImplBase {
         JsonFormat.Printer printer = JsonFormat.printer()
                 .omittingInsignificantWhitespace()
                 .preservingProtoFieldNames();
-        
+
         return printer.print(document);
     }
 
@@ -148,15 +145,21 @@ public class OpenSearchSinkService extends SinkServiceGrpc.SinkServiceImplBase {
     private void indexDocument(String docId, String jsonDocument) throws IOException {
         // Create index if it doesn't exist
         ensureIndexExists();
-        
-        // Create index request
-        IndexRequest indexRequest = new IndexRequest("yappy")
+
+        // Parse JSON document to Map
+        Map<String, Object> documentMap = JsonUtils.parseJsonToMap(jsonDocument);
+
+        // Create index request using the builder pattern
+        org.opensearch.client.opensearch.core.IndexRequest<Map<String, Object>> indexRequest = 
+            new org.opensearch.client.opensearch.core.IndexRequest.Builder<Map<String, Object>>()
+                .index("yappy")
                 .id(docId)
-                .source(jsonDocument, XContentType.JSON);
-        
+                .document(documentMap)
+                .build();
+
         // Index the document
-        IndexResponse indexResponse = openSearchClient.index(indexRequest, RequestOptions.DEFAULT);
-        
+        IndexResponse indexResponse = openSearchClient.index(indexRequest);
+
         LOG.debug("Document indexed with response: {}", indexResponse);
     }
 
@@ -166,13 +169,35 @@ public class OpenSearchSinkService extends SinkServiceGrpc.SinkServiceImplBase {
      * @throws IOException if the operation fails
      */
     private void ensureIndexExists() throws IOException {
-        GetIndexRequest getIndexRequest = new GetIndexRequest("yappy");
-        boolean indexExists = openSearchClient.indices().exists(getIndexRequest, RequestOptions.DEFAULT);
-        
+        // Check if index exists
+        ExistsRequest existsRequest = new ExistsRequest.Builder().index("yappy").build();
+        boolean indexExists = openSearchClient.indices().exists(existsRequest).value();
+
         if (!indexExists) {
             LOG.info("Creating index 'yappy'");
-            CreateIndexRequest createIndexRequest = new CreateIndexRequest("yappy");
-            openSearchClient.indices().create(createIndexRequest, RequestOptions.DEFAULT);
+            // Create index using the builder pattern
+            CreateIndexRequest createIndexRequest = new CreateIndexRequest.Builder().index("yappy").build();
+            CreateIndexResponse createResponse = openSearchClient.indices().create(createIndexRequest);
+            LOG.debug("Index created with response: {}", createResponse);
+        }
+    }
+
+    /**
+     * Utility class for JSON operations.
+     */
+    private static class JsonUtils {
+        /**
+         * Parses a JSON string to a Map.
+         *
+         * @param json the JSON string to parse
+         * @return the parsed Map
+         * @throws IOException if parsing fails
+         */
+        @SuppressWarnings("unchecked")
+        public static Map<String, Object> parseJsonToMap(String json) throws IOException {
+            // Use Jackson to parse JSON to Map
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            return mapper.readValue(json, HashMap.class);
         }
     }
 }
