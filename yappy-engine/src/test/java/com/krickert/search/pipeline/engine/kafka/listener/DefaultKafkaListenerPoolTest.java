@@ -1,8 +1,7 @@
 package com.krickert.search.pipeline.engine.kafka.listener;
 
 import com.krickert.search.pipeline.engine.PipeStreamEngine;
-import io.micronaut.context.annotation.Value;
-import jakarta.inject.Inject;
+// Micronaut @Value and jakarta.inject.Inject are not needed for this specific unit test setup
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,337 +12,235 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+// No need to import ConcurrentHashMap for direct use in tests if we don't use reflection for the listeners map
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-/**
- * Unit tests for {@link DefaultKafkaListenerPool}.
- */
 @ExtendWith(MockitoExtension.class)
-class DefaultKafkaListenerPoolTest { // Renamed class for clarity
+class DefaultKafkaListenerPoolTest {
 
-    private DefaultKafkaListenerPool listenerPool; // Changed type to DefaultKafkaListenerPool
-
+    @Mock
+    private DynamicKafkaListenerFactory mockListenerFactory; // Mock the factory
     @Mock
     private PipeStreamEngine mockPipeStreamEngine;
-
     @Mock
-    private DynamicKafkaListener mockListener;
+    private DynamicKafkaListener mockCreatedListener; // A generic mock for listeners returned by the factory
+    @Mock
+    private DynamicKafkaListener mockExistingListener; // A generic mock for pre-existing listeners
+
+    private DefaultKafkaListenerPool listenerPool;
 
     private static final String LISTENER_ID = "test-listener";
+    private static final String OTHER_LISTENER_ID = "other-listener";
     private static final String TOPIC = "test-topic";
     private static final String GROUP_ID = "test-group";
     private static final String PIPELINE_NAME = "test-pipeline";
     private static final String STEP_NAME = "test-step";
-    private Map<String, Object> consumerConfig; // For final merged config
-    private Map<String, String> originalProps;  // For original step properties
+    private Map<String, Object> consumerConfig;
+    private Map<String, String> originalProps;
 
     @BeforeEach
     void setUp() {
-        listenerPool = new DefaultKafkaListenerPool();
-        consumerConfig = new HashMap<>();
-        consumerConfig.put("value.deserializer", "io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer");
-        consumerConfig.put("apicurio.registry.url", "anything");
-        originalProps = Collections.emptyMap(); // Initialize
+        listenerPool = new DefaultKafkaListenerPool(mockListenerFactory); // Inject the mock factory
+        consumerConfig = new HashMap<>(); // Keep for passing to createListener
+        consumerConfig.put("bootstrap.servers", "dummy:9092"); // Still good practice for parameters
+        originalProps = Collections.emptyMap();
     }
-
-    /**
-     * Test that createListener correctly creates and stores a listener.
-     * 
-     * Note: This test is challenging because DynamicKafkaListener creates a real KafkaConsumer
-     * in its constructor, which we can't do in a unit test. We'll need to refactor the code
-     * to make it more testable, or use a more integration-test approach.
-     */
-    @Test
-    void testCreateListener() {
-        // This test is incomplete because we can't create a real DynamicKafkaListener in a unit test.
-        // We would need to refactor the KafkaListenerPool class to make it more testable.
-        // For example, by allowing a DynamicKafkaListener to be injected rather than created internally.
-    }
-
-    /**
-     * Test that createListener returns an existing listener if one exists with the same ID.
-     */
 
     @Test
-    void testCreateListenerReturnsExistingListener() {
-        // Setup: Add a mock listener to the pool using reflection
-        Map<String, DynamicKafkaListener> listenersMap = new HashMap<>(); // Renamed for clarity
-        listenersMap.put(LISTENER_ID, mockListener);
+    void testCreateListener_createsAndStoresNewListener() {
+        when(mockListenerFactory.create(
+                eq(LISTENER_ID), eq(TOPIC), eq(GROUP_ID), eq(consumerConfig),
+                eq(originalProps), eq(PIPELINE_NAME), eq(STEP_NAME), eq(mockPipeStreamEngine)
+        )).thenReturn(mockCreatedListener); // Factory returns our mock
 
-        try {
-            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
-            listenersField.setAccessible(true);
-            listenersField.set(listenerPool, listenersMap);
+        DynamicKafkaListener createdListener = listenerPool.createListener(
+                LISTENER_ID, TOPIC, GROUP_ID, consumerConfig,
+                originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
 
-            // Test: Call createListener with the same ID
-            DynamicKafkaListener result = listenerPool.createListener(
-                    LISTENER_ID, TOPIC, GROUP_ID, consumerConfig,
-                    originalProps, // Added missing argument
-                    PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
-
-            // Verify: The existing listener is returned
-            assertSame(mockListener, result);
-            assertEquals(1, listenersMap.size()); // Should still be 1, as existing is returned
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            fail("Failed to set up test: " + e.getMessage());
-        }
+        assertSame(mockCreatedListener, createdListener, "Listener returned by pool should be the one from the factory.");
+        assertEquals(1, listenerPool.getListenerCount());
+        assertSame(mockCreatedListener, listenerPool.getListener(LISTENER_ID), "Created listener should be in the pool.");
+        verify(mockListenerFactory).create(anyString(), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class));
     }
-    /**
-     * Test that removeListener correctly removes a listener.
-     */
+
+    @Test
+    void testCreateListener_whenListenerExists_replacesExistingListener() throws Exception {
+        // 1. Setup initial state: Pool has an existing listener
+        // We can't directly put into the pool's map anymore without reflection,
+        // so we'll simulate it by having createListener called once, then again.
+
+        // First call to createListener (simulates pre-existing listener)
+        when(mockListenerFactory.create(
+                eq(LISTENER_ID), eq(TOPIC), eq(GROUP_ID), eq(consumerConfig),
+                eq(originalProps), eq(PIPELINE_NAME), eq(STEP_NAME), eq(mockPipeStreamEngine)
+        )).thenReturn(mockExistingListener); // Factory returns mockExistingListener first time
+
+        listenerPool.createListener( // This puts mockExistingListener into the pool
+                LISTENER_ID, TOPIC, GROUP_ID, consumerConfig,
+                originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+
+        assertEquals(1, listenerPool.getListenerCount());
+        assertSame(mockExistingListener, listenerPool.getListener(LISTENER_ID));
+
+        // 2. Setup for the second call that will replace the existing one
+        Map<String, Object> newConsumerConfig = new HashMap<>(consumerConfig);
+        newConsumerConfig.put("some.new.prop", "newValue");
+        when(mockListenerFactory.create( // Factory will return a *different* mock for the replacement
+                eq(LISTENER_ID), eq(TOPIC), eq(GROUP_ID), eq(newConsumerConfig), // Potentially new config
+                eq(originalProps), eq(PIPELINE_NAME), eq(STEP_NAME), eq(mockPipeStreamEngine)
+        )).thenReturn(mockCreatedListener); // mockCreatedListener is the "new" one
+
+        // 3. Test: Call createListener again with the same ID
+        DynamicKafkaListener newReturnedListener = listenerPool.createListener(
+                LISTENER_ID, TOPIC, GROUP_ID, newConsumerConfig, // Pass new config
+                originalProps,
+                PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+
+        // 4. Verify
+        verify(mockExistingListener).shutdown(); // Shutdown called on the first listener
+        assertSame(mockCreatedListener, newReturnedListener, "The newly created listener should be returned.");
+        assertEquals(1, listenerPool.getListenerCount(), "Pool should still have 1 listener after replacement.");
+        assertSame(mockCreatedListener, listenerPool.getListener(LISTENER_ID), "Pool should now contain the new listener.");
+        verify(mockListenerFactory, times(2)).create(anyString(), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class));
+    }
+
     @Test
     void testRemoveListener() {
-        // Setup: Add a mock listener to the pool using reflection
-        Map<String, DynamicKafkaListener> listeners = new HashMap<>();
-        listeners.put(LISTENER_ID, mockListener);
+        // Setup: Add a listener to the pool by calling createListener
+        when(mockListenerFactory.create(anyString(), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+                .thenReturn(mockExistingListener);
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
 
-        try {
-            // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
-            listenersField.setAccessible(true);
-            listenersField.set(listenerPool, listeners);
+        // Test
+        DynamicKafkaListener removedListener = listenerPool.removeListener(LISTENER_ID);
 
-            // Test: Remove the listener
-            DynamicKafkaListener result = listenerPool.removeListener(LISTENER_ID);
-
-            // Verify: The correct listener was returned
-            assertSame(mockListener, result);
-
-            // Verify: The listener was removed from the pool
-            assertEquals(0, listeners.size());
-
-            // Verify: The listener was shut down
-            verify(mockListener).shutdown();
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            fail("Failed to set up test: " + e.getMessage());
-        }
+        // Verify
+        assertSame(mockExistingListener, removedListener);
+        verify(mockExistingListener).shutdown();
+        assertEquals(0, listenerPool.getListenerCount());
+        assertNull(listenerPool.getListener(LISTENER_ID));
     }
 
-    /**
-     * Test that removeListener returns null for a non-existent listener.
-     */
     @Test
     void testRemoveListenerForNonExistentListener() {
-        // Test: Remove a non-existent listener
         DynamicKafkaListener result = listenerPool.removeListener("non-existent-listener");
-
-        // Verify: null is returned
         assertNull(result);
     }
 
-    /**
-     * Test that getListener returns the correct listener.
-     */
     @Test
     void testGetListener() {
-        // Setup: Add a mock listener to the pool using reflection
-        Map<String, DynamicKafkaListener> listeners = new HashMap<>();
-        listeners.put(LISTENER_ID, mockListener);
+        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+                .thenReturn(mockExistingListener);
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
 
-        try {
-            // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
-            listenersField.setAccessible(true);
-            listenersField.set(listenerPool, listeners);
-
-            // Test: Get the listener
-            DynamicKafkaListener result = listenerPool.getListener(LISTENER_ID);
-
-            // Verify: The correct listener is returned
-            assertSame(mockListener, result);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            fail("Failed to set up test: " + e.getMessage());
-        }
+        DynamicKafkaListener found = listenerPool.getListener(LISTENER_ID);
+        assertSame(mockExistingListener, found);
     }
 
-    /**
-     * Test that getListener returns null for a non-existent listener.
-     */
     @Test
     void testGetListenerForNonExistentListener() {
-        // Test: Get a non-existent listener
-        DynamicKafkaListener result = listenerPool.getListener("non-existent-listener");
-
-        // Verify: null is returned
-        assertNull(result);
+        assertNull(listenerPool.getListener("non-existent-listener"));
     }
 
-    /**
-     * Test that getAllListeners returns all listeners.
-     */
     @Test
     void testGetAllListeners() {
-        // Setup: Add mock listeners to the pool using reflection
-        Map<String, DynamicKafkaListener> listeners = new HashMap<>();
-        DynamicKafkaListener mockListener1 = mock(DynamicKafkaListener.class);
-        DynamicKafkaListener mockListener2 = mock(DynamicKafkaListener.class);
-        listeners.put("listener1", mockListener1);
-        listeners.put("listener2", mockListener2);
+        DynamicKafkaListener listener1 = mock(DynamicKafkaListener.class);
+        DynamicKafkaListener listener2 = mock(DynamicKafkaListener.class);
 
-        try {
-            // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
-            listenersField.setAccessible(true);
-            listenersField.set(listenerPool, listeners);
+        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+                .thenReturn(listener1);
+        when(mockListenerFactory.create(eq(OTHER_LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+                .thenReturn(listener2);
 
-            // Test: Get all listeners
-            Collection<DynamicKafkaListener> result = listenerPool.getAllListeners();
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+        listenerPool.createListener(OTHER_LISTENER_ID, "other-topic", GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
 
-            // Verify: All listeners are returned
-            assertEquals(2, result.size());
-            assertTrue(result.contains(mockListener1));
-            assertTrue(result.contains(mockListener2));
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            fail("Failed to set up test: " + e.getMessage());
-        }
+        Collection<DynamicKafkaListener> allListeners = listenerPool.getAllListeners();
+        assertEquals(2, allListeners.size());
+        assertTrue(allListeners.contains(listener1));
+        assertTrue(allListeners.contains(listener2));
     }
 
-    /**
-     * Test that getAllListeners returns an unmodifiable collection.
-     */
     @Test
     void testGetAllListenersReturnsUnmodifiableCollection() {
-        // Setup: Add a mock listener to the pool using reflection
-        Map<String, DynamicKafkaListener> listeners = new HashMap<>();
-        listeners.put(LISTENER_ID, mockListener);
+        when(mockListenerFactory.create(anyString(), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+                .thenReturn(mockCreatedListener);
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
 
-        try {
-            // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
-            listenersField.setAccessible(true);
-            listenersField.set(listenerPool, listeners);
-
-            // Test: Get all listeners
-            Collection<DynamicKafkaListener> result = listenerPool.getAllListeners();
-
-            // Verify: The collection is unmodifiable
-            assertThrows(UnsupportedOperationException.class, () -> result.add(mock(DynamicKafkaListener.class)));
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            fail("Failed to set up test: " + e.getMessage());
-        }
+        Collection<DynamicKafkaListener> result = listenerPool.getAllListeners();
+        assertThrows(UnsupportedOperationException.class, () -> result.add(mock(DynamicKafkaListener.class)));
     }
 
-    /**
-     * Test that getListenerCount returns the correct count.
-     */
+
     @Test
     void testGetListenerCount() {
-        // Setup: Add mock listeners to the pool using reflection
-        Map<String, DynamicKafkaListener> listeners = new HashMap<>();
-        DynamicKafkaListener mockListener1 = mock(DynamicKafkaListener.class);
-        DynamicKafkaListener mockListener2 = mock(DynamicKafkaListener.class);
-        listeners.put("listener1", mockListener1);
-        listeners.put("listener2", mockListener2);
+        DynamicKafkaListener listener1 = mock(DynamicKafkaListener.class);
+        DynamicKafkaListener listener2 = mock(DynamicKafkaListener.class);
 
-        try {
-            // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
-            listenersField.setAccessible(true);
-            listenersField.set(listenerPool, listeners);
+        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+                .thenReturn(listener1);
+        when(mockListenerFactory.create(eq(OTHER_LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+                .thenReturn(listener2);
 
-            // Test: Get the listener count
-            int result = listenerPool.getListenerCount();
-
-            // Verify: The correct count is returned
-            assertEquals(2, result);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            fail("Failed to set up test: " + e.getMessage());
-        }
+        assertEquals(0, listenerPool.getListenerCount());
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+        assertEquals(1, listenerPool.getListenerCount());
+        listenerPool.createListener(OTHER_LISTENER_ID, "other-topic", GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+        assertEquals(2, listenerPool.getListenerCount());
     }
 
-    /**
-     * Test that hasListener correctly reports whether a listener exists.
-     */
     @Test
     void testHasListener() {
-        // Setup: Add a mock listener to the pool using reflection
-        Map<String, DynamicKafkaListener> listeners = new HashMap<>();
-        listeners.put(LISTENER_ID, mockListener);
+        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+                .thenReturn(mockCreatedListener);
 
-        try {
-            // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
-            listenersField.setAccessible(true);
-            listenersField.set(listenerPool, listeners);
-
-            // Test: Check if listeners exist
-            boolean hasExistingListener = listenerPool.hasListener(LISTENER_ID);
-            boolean hasNonExistentListener = listenerPool.hasListener("non-existent-listener");
-
-            // Verify: hasListener returns the correct results
-            assertTrue(hasExistingListener);
-            assertFalse(hasNonExistentListener);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            fail("Failed to set up test: " + e.getMessage());
-        }
+        assertFalse(listenerPool.hasListener(LISTENER_ID));
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+        assertTrue(listenerPool.hasListener(LISTENER_ID));
+        assertFalse(listenerPool.hasListener("non-existent-listener"));
     }
 
-    /**
-     * Test that shutdownAllListeners correctly shuts down all listeners.
-     */
     @Test
     void testShutdownAllListeners() {
-        // Setup: Add mock listeners to the pool using reflection
-        Map<String, DynamicKafkaListener> listeners = new HashMap<>();
-        DynamicKafkaListener mockListener1 = mock(DynamicKafkaListener.class);
-        DynamicKafkaListener mockListener2 = mock(DynamicKafkaListener.class);
-        listeners.put("listener1", mockListener1);
-        listeners.put("listener2", mockListener2);
+        DynamicKafkaListener listener1 = mock(DynamicKafkaListener.class);
+        DynamicKafkaListener listener2 = mock(DynamicKafkaListener.class);
 
-        try {
-            // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
-            listenersField.setAccessible(true);
-            listenersField.set(listenerPool, listeners);
+        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+                .thenReturn(listener1);
+        when(mockListenerFactory.create(eq(OTHER_LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+                .thenReturn(listener2);
 
-            // Test: Shut down all listeners
-            listenerPool.shutdownAllListeners();
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+        listenerPool.createListener(OTHER_LISTENER_ID, "other-topic", GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
 
-            // Verify: All listeners were shut down
-            verify(mockListener1).shutdown();
-            verify(mockListener2).shutdown();
+        listenerPool.shutdownAllListeners();
 
-            // Verify: The listeners map was cleared
-            assertEquals(0, listeners.size());
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            fail("Failed to set up test: " + e.getMessage());
-        }
+        verify(listener1).shutdown();
+        verify(listener2).shutdown();
+        assertEquals(0, listenerPool.getListenerCount());
     }
 
-    /**
-     * Test that shutdownAllListeners handles exceptions from listeners.
-     */
     @Test
     void testShutdownAllListenersHandlesExceptions() {
-        // Setup: Add mock listeners to the pool using reflection
-        Map<String, DynamicKafkaListener> listeners = new HashMap<>();
-        DynamicKafkaListener mockListener1 = mock(DynamicKafkaListener.class);
-        DynamicKafkaListener mockListener2 = mock(DynamicKafkaListener.class);
-        listeners.put("listener1", mockListener1);
-        listeners.put("listener2", mockListener2);
+        DynamicKafkaListener listener1 = mock(DynamicKafkaListener.class);
+        DynamicKafkaListener listener2 = mock(DynamicKafkaListener.class);
 
-        // Make the first listener throw an exception when shutdown is called
-        doThrow(new RuntimeException("Test exception")).when(mockListener1).shutdown();
+        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+                .thenReturn(listener1);
+        when(mockListenerFactory.create(eq(OTHER_LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+                .thenReturn(listener2);
 
-        try {
-            // Use reflection to set the private listeners field
-            java.lang.reflect.Field listenersField = DefaultKafkaListenerPool.class.getDeclaredField("listeners");
-            listenersField.setAccessible(true);
-            listenersField.set(listenerPool, listeners);
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+        listenerPool.createListener(OTHER_LISTENER_ID, "other-topic", GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
 
-            // Test: Shut down all listeners
-            listenerPool.shutdownAllListeners();
+        doThrow(new RuntimeException("Test exception")).when(listener1).shutdown();
 
-            // Verify: All listeners were shut down, even though one threw an exception
-            verify(mockListener1).shutdown();
-            verify(mockListener2).shutdown();
+        listenerPool.shutdownAllListeners(); // Should not throw, should log error
 
-            // Verify: The listeners map was cleared
-            assertEquals(0, listeners.size());
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            fail("Failed to set up test: " + e.getMessage());
-        }
+        verify(listener1).shutdown();
+        verify(listener2).shutdown(); // Ensure second listener is still shut down
+        assertEquals(0, listenerPool.getListenerCount());
     }
 }
