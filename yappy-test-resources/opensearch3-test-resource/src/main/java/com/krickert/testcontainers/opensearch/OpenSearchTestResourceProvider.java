@@ -12,6 +12,22 @@ import java.util.*;
  * It provides properties for OpenSearch connection and client configuration.
  */
 public class OpenSearchTestResourceProvider extends AbstractTestContainersProvider<OpenSearchContainer<?>> {
+
+    static {
+        // This will be executed when the class is loaded
+        System.out.println("[DEBUG_LOG] OpenSearchTestResourceProvider class is being loaded");
+        LoggerFactory.getLogger(OpenSearchTestResourceProvider.class)
+            .info("[DEBUG_LOG] OpenSearchTestResourceProvider class is being loaded");
+    }
+
+    /**
+     * No-args constructor required by ServiceLoader
+     */
+    public OpenSearchTestResourceProvider() {
+        System.out.println("[DEBUG_LOG] OpenSearchTestResourceProvider constructor called");
+        LoggerFactory.getLogger(OpenSearchTestResourceProvider.class)
+            .info("[DEBUG_LOG] OpenSearchTestResourceProvider constructor called");
+    }
     // OpenSearch Properties
     public static final String OPENSEARCH_PREFIX = "opensearch";
     public static final String PROPERTY_OPENSEARCH_HOST = OPENSEARCH_PREFIX + ".host";
@@ -89,38 +105,63 @@ public class OpenSearchTestResourceProvider extends AbstractTestContainersProvid
             // Handle each property with appropriate fallbacks
             if (PROPERTY_OPENSEARCH_URL.equals(propertyName)) {
                 result = Optional.of(container.getHttpHostAddress());
+                LOG.info("[DEBUG_LOG] Resolved URL property to: {}", result.get());
             } else if (PROPERTY_OPENSEARCH_HOST.equals(propertyName)) {
                 result = Optional.of(container.getHost());
+                LOG.info("[DEBUG_LOG] Resolved HOST property to: {}", result.get());
             } else if (PROPERTY_OPENSEARCH_PORT.equals(propertyName)) {
                 result = Optional.of(String.valueOf(container.getMappedPort(9200)));
+                LOG.info("[DEBUG_LOG] Resolved PORT property to: {}", result.get());
             } else if (PROPERTY_OPENSEARCH_USERNAME.equals(propertyName)) {
                 // Always provide a username, even if security is disabled
                 result = Optional.of(container.isSecurityEnabled() ? container.getUsername() : "admin");
+                LOG.info("[DEBUG_LOG] Resolved USERNAME property to: {}", result.get());
             } else if (PROPERTY_OPENSEARCH_PASSWORD.equals(propertyName)) {
                 // Always provide a password, even if security is disabled
                 result = Optional.of(container.isSecurityEnabled() ? container.getPassword() : "admin");
+                LOG.info("[DEBUG_LOG] Resolved PASSWORD property to: {}", result.get());
             } else if (PROPERTY_OPENSEARCH_SECURITY_ENABLED.equals(propertyName)) {
                 result = Optional.of(String.valueOf(container.isSecurityEnabled()));
+                LOG.info("[DEBUG_LOG] Resolved SECURITY_ENABLED property to: {}", result.get());
             } else {
                 result = Optional.empty(); // Property not handled by this provider
+                LOG.info("[DEBUG_LOG] Property not handled by this provider: {}", propertyName);
             }
 
             LOG.info("[DEBUG_LOG] Resolved property {} to {}", propertyName, result.orElse("null"));
         } catch (Exception e) {
             LOG.error("[DEBUG_LOG] Error resolving property {}: {}", propertyName, e.getMessage(), e);
             // Instead of throwing, provide a default value for the property
-            if (PROPERTY_OPENSEARCH_USERNAME.equals(propertyName)) {
-                result = Optional.of("admin");
-                LOG.info("[DEBUG_LOG] Using default value 'admin' for property {}", propertyName);
-            } else if (PROPERTY_OPENSEARCH_PASSWORD.equals(propertyName)) {
-                result = Optional.of("admin");
-                LOG.info("[DEBUG_LOG] Using default value 'admin' for property {}", propertyName);
-            } else if (PROPERTY_OPENSEARCH_SECURITY_ENABLED.equals(propertyName)) {
-                result = Optional.of("false");
-                LOG.info("[DEBUG_LOG] Using default value 'false' for property {}", propertyName);
-            } else {
-                // For other properties, we might need to rethrow as we can't provide sensible defaults
-                throw e;
+            switch (propertyName) {
+                case PROPERTY_OPENSEARCH_URL -> {
+                    result = Optional.of("LET_THIS_BREAK_DO_NOT_CHANGE");
+                    LOG.info("[DEBUG_LOG] GIVING A BAD PROPERTY BECCAUSE WE ARE NOT TO INJECT FAKE ONES.  NO DEFAULTS ALLOWED");
+                }
+                case PROPERTY_OPENSEARCH_HOST -> {
+                    result = Optional.of("[DEBUG_LOG] GIVING A BAD PROPERTY BECCAUSE WE ARE NOT TO INJECT FAKE ONES.  NO DEFAULTS ALLOWED");
+                    LOG.info("[DEBUG_LOG] GIVING A BAD PROPERTY BECCAUSE WE ARE NOT TO INJECT FAKE ONES.  NO DEFAULTS ALLOWED");
+                }
+                case PROPERTY_OPENSEARCH_PORT -> {
+                    result = Optional.of("[DEBUG_LOG] GIVING A BAD PROPERTY BECCAUSE WE ARE NOT TO INJECT FAKE ONES.  NO DEFAULTS ALLOWED");
+                    LOG.info("[DEBUG_LOG] GIVING A BAD PROPERTY BECCAUSE WE ARE NOT TO INJECT FAKE ONES.  NO DEFAULTS ALLOWED");
+                }
+                case PROPERTY_OPENSEARCH_USERNAME -> {
+                    result = Optional.of("[DEBUG_LOG] GIVING A BAD PROPERTY BECCAUSE WE ARE NOT TO INJECT FAKE ONES.  NO DEFAULTS ALLOWED");
+                    LOG.info("[DEBUG_LOG] GIVING A BAD PROPERTY BECCAUSE WE ARE NOT TO INJECT FAKE ONES.  NO DEFAULTS ALLOWED");
+                }
+                case PROPERTY_OPENSEARCH_PASSWORD -> {
+                    result = Optional.of("[DEBUG_LOG] GIVING A BAD PROPERTY BECCAUSE WE ARE NOT TO INJECT FAKE ONES.  NO DEFAULTS ALLOWED");
+                    LOG.info("[DEBUG_LOG] GIVING A BAD PROPERTY BECCAUSE WE ARE NOT TO INJECT FAKE ONES.  NO DEFAULTS ALLOWED");
+                }
+                case PROPERTY_OPENSEARCH_SECURITY_ENABLED -> {
+                    result = Optional.of("[DEBUG_LOG] GIVING A BAD PROPERTY BECCAUSE WE ARE NOT TO INJECT FAKE ONES.  NO DEFAULTS ALLOWED");
+                    LOG.info("[DEBUG_LOG] GIVING A BAD PROPERTY BECCAUSE WE ARE NOT TO INJECT FAKE ONES.  NO DEFAULTS ALLOWED");
+                }
+                case null, default -> {
+                    // For properties we don't recognize, return empty
+                    LOG.warn("[DEBUG_LOG] Unknown property {}, returning empty", propertyName);
+                    result = Optional.empty();
+                }
             }
         }
         return result;
@@ -133,9 +174,20 @@ public class OpenSearchTestResourceProvider extends AbstractTestContainersProvid
         LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.shouldAnswer called for property: {}", propertyName);
         LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.shouldAnswer properties: {}", properties);
         LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.shouldAnswer testResourcesConfig: {}", testResourcesConfig);
+        LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.shouldAnswer RESOLVABLE_PROPERTIES_LIST: {}", RESOLVABLE_PROPERTIES_LIST);
 
         boolean shouldAnswer = propertyName != null && RESOLVABLE_PROPERTIES_LIST.contains(propertyName);
         LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider.shouldAnswer returning: {} for property: {}", shouldAnswer, propertyName);
+
+        // Log all properties we can resolve
+        if (shouldAnswer) {
+            LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider will resolve property: {}", propertyName);
+        } else if (propertyName != null) {
+            LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider will NOT resolve property: {} (not in resolvable list)", propertyName);
+        } else {
+            LOG.info("[DEBUG_LOG] OpenSearchTestResourceProvider received null property name");
+        }
+
         return shouldAnswer;
     }
 }

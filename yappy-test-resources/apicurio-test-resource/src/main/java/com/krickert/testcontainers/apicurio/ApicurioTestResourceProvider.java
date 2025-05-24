@@ -147,9 +147,7 @@ public class ApicurioTestResourceProvider extends AbstractTestContainersProvider
             resolvedValue = Optional.of(APICURIO_PROTOBUF_VALUE_DESERIALIZER_CLASS);
         }
 
-        if (resolvedValue.isPresent()) {
-            LOG.info("ApicurioTestResourceProvider resolved property '{}' to '{}'", propertyName, resolvedValue.get());
-        }
+        resolvedValue.ifPresent(s -> LOG.info("ApicurioTestResourceProvider resolved property '{}' to '{}'", propertyName, s));
         return resolvedValue;
     }
 
