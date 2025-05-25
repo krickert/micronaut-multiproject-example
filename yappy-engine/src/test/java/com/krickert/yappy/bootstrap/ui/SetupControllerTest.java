@@ -115,7 +115,7 @@ class SetupControllerTest {
         HttpResponse<?> response = controller.setConsulConfig(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
-        assertEquals("/setup/cluster?message=Configured!&success=true", response.getHeaders().get("Location"));
+        assertEquals("/setup/cluster?message=Configured%21&success=true", response.getHeaders().get("Location"));
 
         verify(mockBootstrapConfigClient).setConsulConfiguration(consulConfigDetailsCaptor.capture());
         ConsulConfigDetails capturedDetails = consulConfigDetailsCaptor.getValue();
@@ -137,7 +137,7 @@ class SetupControllerTest {
         HttpResponse<?> response = controller.setConsulConfig(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
-        assertEquals("/setup/cluster?message=Configured%20without%20ACL.&success=true", response.getHeaders().get("Location"));
+        assertEquals("/setup/cluster?message=Configured+without+ACL.&success=true", response.getHeaders().get("Location"));
 
         verify(mockBootstrapConfigClient).setConsulConfiguration(consulConfigDetailsCaptor.capture());
         ConsulConfigDetails capturedDetails = consulConfigDetailsCaptor.getValue();
@@ -158,7 +158,7 @@ class SetupControllerTest {
         HttpResponse<?> response = controller.setConsulConfig(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
-        assertEquals("/setup/consul?message=Connection%20failed.&success=false", response.getHeaders().get("Location"));
+        assertEquals("/setup/consul?message=Connection+failed.&success=false", response.getHeaders().get("Location"));
     }
 
     @Test
@@ -170,7 +170,7 @@ class SetupControllerTest {
         HttpResponse<?> response = controller.setConsulConfig(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
-        assertEquals("/setup/consul?message=Invalid%20port%20format.&success=false", response.getHeaders().get("Location"));
+        assertEquals("/setup/consul?message=Invalid+port+format.&success=false", response.getHeaders().get("Location"));
         verify(mockBootstrapConfigClient, never()).setConsulConfiguration(any());
     }
 
@@ -185,7 +185,7 @@ class SetupControllerTest {
         HttpResponse<?> response = controller.setConsulConfig(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
-        assertTrue(response.getHeaders().get("Location").startsWith("/setup/consul?message=gRPC%20call%20failed"));
+        assertTrue(response.getHeaders().get("Location").startsWith("/setup/consul?message=gRPC+call+failed"));
         assertTrue(response.getHeaders().get("Location").contains("&success=false"));
     }
 
@@ -299,7 +299,7 @@ class SetupControllerTest {
         HttpResponse<?> response = controller.selectCluster(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
-        assertEquals("/setup/cluster?message=Selected!&success=true", response.getHeaders().get("Location"));
+        assertEquals("/setup/cluster?message=Selected%21&success=true", response.getHeaders().get("Location"));
 
         verify(mockBootstrapConfigClient).selectExistingCluster(clusterSelectionCaptor.capture());
         assertEquals("myCluster", clusterSelectionCaptor.getValue().getClusterName());
@@ -316,7 +316,7 @@ class SetupControllerTest {
         HttpResponse<?> response = controller.selectCluster(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
-        assertEquals("/setup/cluster?message=Selection%20failed.&success=false", response.getHeaders().get("Location"));
+        assertEquals("/setup/cluster?message=Selection+failed.&success=false", response.getHeaders().get("Location"));
     }
 
     @Test
@@ -327,7 +327,7 @@ class SetupControllerTest {
         HttpResponse<?> response = controller.selectCluster(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
-        assertEquals("/setup/cluster?message=Cluster%20name%20cannot%20be%20empty.&success=false", response.getHeaders().get("Location"));
+        assertEquals("/setup/cluster?message=Cluster+name+cannot+be+empty.&success=false", response.getHeaders().get("Location"));
         verify(mockBootstrapConfigClient, never()).selectExistingCluster(any());
     }
 
@@ -339,7 +339,7 @@ class SetupControllerTest {
         HttpResponse<?> response = controller.selectCluster(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
-        assertEquals("/setup/cluster?message=Cluster%20name%20cannot%20be%20empty.&success=false", response.getHeaders().get("Location"));
+        assertEquals("/setup/cluster?message=Cluster+name+cannot+be+empty.&success=false", response.getHeaders().get("Location"));
         verify(mockBootstrapConfigClient, never()).selectExistingCluster(any());
     }
 
@@ -354,7 +354,7 @@ class SetupControllerTest {
         HttpResponse<?> response = controller.selectCluster(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
-        assertTrue(response.getHeaders().get("Location").startsWith("/setup/cluster?message=gRPC%20call%20failed"));
+        assertTrue(response.getHeaders().get("Location").startsWith("/setup/cluster?message=gRPC+call+failed"));
         assertTrue(response.getHeaders().get("Location").contains("&success=false"));
     }
 
@@ -371,7 +371,7 @@ class SetupControllerTest {
         HttpResponse<?> response = controller.createCluster(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
-        assertEquals("/setup/cluster?message=Created%20Min!&success=true", response.getHeaders().get("Location"));
+        assertEquals("/setup/cluster?message=Created+Min%21&success=true", response.getHeaders().get("Location"));
 
         verify(mockBootstrapConfigClient).createNewCluster(newClusterDetailsCaptor.capture());
         NewClusterDetails capturedDetails = newClusterDetailsCaptor.getValue();
@@ -454,7 +454,7 @@ class SetupControllerTest {
         HttpResponse<?> response = controller.createCluster(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
-        assertEquals("/setup/cluster?message=Creation%20failed%20internally.&success=false", response.getHeaders().get("Location"));
+        assertEquals("/setup/cluster?message=Creation+failed+internally.&success=false", response.getHeaders().get("Location"));
     }
 
     @Test
@@ -465,7 +465,7 @@ class SetupControllerTest {
         HttpResponse<?> response = controller.createCluster(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
-        assertEquals("/setup/cluster?message=Cluster%20name%20cannot%20be%20empty%20for%20creation.&success=false", response.getHeaders().get("Location"));
+        assertEquals("/setup/cluster?message=Cluster+name+cannot+be+empty+for+creation.&success=false", response.getHeaders().get("Location"));
         verify(mockBootstrapConfigClient, never()).createNewCluster(any());
     }
 
@@ -477,7 +477,7 @@ class SetupControllerTest {
         HttpResponse<?> response = controller.createCluster(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
-        assertEquals("/setup/cluster?message=Cluster%20name%20cannot%20be%20empty%20for%20creation.&success=false", response.getHeaders().get("Location"));
+        assertEquals("/setup/cluster?message=Cluster+name+cannot+be+empty+for+creation.&success=false", response.getHeaders().get("Location"));
         verify(mockBootstrapConfigClient, never()).createNewCluster(any());
     }
 
@@ -491,7 +491,7 @@ class SetupControllerTest {
         HttpResponse<?> response = controller.createCluster(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
-        assertTrue(response.getHeaders().get("Location").startsWith("/setup/cluster?message=gRPC%20call%20failed"));
+        assertTrue(response.getHeaders().get("Location").startsWith("/setup/cluster?message=gRPC+call+failed"));
         assertTrue(response.getHeaders().get("Location").contains("&success=false"));
     }
 }
