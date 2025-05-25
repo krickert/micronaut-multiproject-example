@@ -1,12 +1,8 @@
-# YAPPY (Yet Another Pipeline Processor)
-
-YAPPY is a multi-project Micronaut application that serves as a configurable pipeline platform for creating multiple indexes through a scalable container-based microservice architecture. The system is designed for processing data pipelines with a decentralized approach where information is shared between components in a control plane and configuration changes happen in near real-time.
-
 ## 1. Summary
 
 YAPPY (Yet Another Pipeline Processor) is a highly flexible and scalable platform for building, managing, and executing dynamic data
-processing pipelines. Think of this system as a dynamic node pipeline system that is managed through an engine that is dedicated to a module business logic.
-This way the module is just a processor and the engine handles all the routing and configuration of the ecosystem. That ecosystem is fast!
+processing pipelines.  Think of this system as a dynamic node pipeline system that is managed through an engine that is dedicated to a module business logic.
+This way the module is just a processor and the engine handles all the routing and configuration of the ecosystem.  That that ecosystem is fast!
 
 Each node is a fan-in / fan-out methodology where the connections between nodes are supported by gRPC or Kafka.  The document structure is type safe and supports binary blob processing.
 
@@ -184,35 +180,7 @@ users to define complex workflows for diverse applications like data science and
 easily integrated. The system's design for live configuration updates facilitates agile pipeline evolution and A/B testing without requiring
 full service redeployments.
 
-## 2. Project Structure
-
-- **Root Directory**: Contains build configuration, documentation, and subproject definitions
-- **bom**: Bill of Materials for centralized dependency management
-- **docker-dev**: Docker development environment setup
-- **docs**: Project documentation
-- **util**: Utility code and shared functionality
-- **yappy-admin**: Administration interface for managing YAPPY
-- **yappy-consul-config**: Dynamic Configuration Management Service for loading, watching, validating, and providing live updates of pipeline and schema configurations stored in Consul
-- **yappy-engine**: Core engine that orchestrates pipeline execution and module management
-- **yappy-models**: Contains multiple submodules:
-    - **pipeline-config-models**: Defines the structure of pipelines, steps, schema registration, and their configurations
-    - **protobuf-models**: Protocol Buffer model definitions for gRPC communication
-    - **pipeline-config-models-test-utils**: Test utilities for pipeline configuration models
-    - **protobuf-models-test-data-resources**: Test resources for protobuf models
-- **yappy-modules**: Collection of pipeline processing modules:
-    - **chunker**: Text chunking module
-    - **echo**: Simple echo module for testing
-    - **embedder**: Text embedding generation module
-    - **opensearch-sink**: Module for indexing to OpenSearch
-    - **project-generator**: Scaffolding tool for new modules
-    - **s3-connector**: AWS S3 connector module
-    - **tika-parser**: Document parsing module
-    - **web-crawler-connector**: Web crawling module
-    - **wikipedia-connector**: Wikipedia content connector
-- **yappy-test-resources**: TestContainers configuration and test resources
-- **yappy-ui**: User interface for interacting with YAPPY
-
-## 3. Overview of Components
+## 2. Overview of Components
 
 The YAPPY ecosystem comprises several key components that interact to provide a robust and decentralized pipeline processing environment.
 Each Pipeline Module operates with an awareness of its role and the next steps, guided by the shared Pipeline Configuration and its own
@@ -334,65 +302,11 @@ graph TD
 | **Consul**                                | Service discovery and distributed Key-Value store for `PipelineClusterConfig` and runtime parameters.                                                                                                                                                                                                                                                                                                                                                                                         | Stores `PipelineClusterConfig`; Provides service addresses for gRPC modules; Read by all Module Frameworks/Embedded Engines for configuration.                                                                                                                                                            |
 | **Kafka**                                 | Acts as the primary message bus for `PipeStream` objects, decoupling pipeline steps and providing resilience.                                                                                                                                                                                                                                                                                                                                                                                 | `PipeStream` messages are published to topics corresponding to target steps; Consumed by the Module Framework/Embedded Engine of the respective step.                                                                                                                                                         |
 
-## 4. Development Environment
-
-A Docker-based development environment is available in the `docker-dev` directory, which includes:
-
-- **Kafka** (in Kraft mode): Message broker (localhost:9092)
-- **Apicurio Registry**: Schema registry (http://localhost:8080)
-- **Solr** (in cloud mode): Search platform (http://localhost:8983)
-- **Kafka UI**: Web UI for Kafka management (http://localhost:8081)
-- **Moto server/Glue Mock**: Mock server for AWS services including Glue Schema Registry (localhost:5001)
-- **OpenSearch**: Search and analytics engine (http://localhost:9200)
-- **OpenSearch Dashboards**: UI for OpenSearch (http://localhost:5601)
-- **Consul**: Service discovery and configuration storage (http://localhost:8500)
-
-To start the development environment:
-
-```bash
-cd docker-dev
-docker-compose up -d
-```
-
-To stop all services:
-
-```bash
-cd docker-dev
-docker-compose down
-```
-
-To verify the setup:
-
-```bash
-cd docker-dev
-./test-docker-setup.sh
-```
-
-### Service Registration
-
-In the YAPPY architecture, modules do NOT register themselves with Consul. Instead, the engine handles registration on behalf of modules. This simplifies the architecture and reduces the burden on module developers.
-
-The engine is responsible for:
-1. Discovering modules (trying localhost first, then falling back to service discovery)
-2. Registering modules with Consul
-3. Monitoring module health
-
-### Consul Paths
-
-YAPPY currently uses paths like `pipeline-configs/clusters` for storing cluster configurations in Consul. Note that this path will be changed to `/yappy-clusters` in future updates.
-
-### Cluster Name Handling
-
-There is no default "yappy-default" cluster name in the system. The cluster name must be explicitly configured through one of these methods:
-- The `app.config.cluster-name` property in application.yml
-- During the bootstrap process when selecting or creating a cluster
-- The `YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME` property in the bootstrap file
-
-## 5. Example Usage of Pipeline
+## 3. Example Usage of Pipeline
 
 YAPPY's decentralized engine logic within each step allows for robust and scalable pipeline execution.
 
-### 5.1. Data Science Model Training & Feature Engineering Pipeline
+### 3.1. Data Science Model Training & Feature Engineering Pipeline
 
 **Goal:** To ingest raw data, preprocess it, engineer features, train a machine learning model, and manage model artifacts. Each step
 operates with its own engine logic to fetch configuration and route data.
@@ -486,7 +400,7 @@ graph LR
       a consolidated view of the distributed execution.
     * **Admin UI:** Manages schemas for `custom_json_config` of each module type.
 
-### 5.2. Search Engine Indexing Pipeline
+### 3.2. Search Engine Indexing Pipeline
 
 **Goal:** To ingest documents, process them for search (text extraction, chunking, embedding), and load them into a search index, with each
 step autonomously managing its execution and handoff.
@@ -576,55 +490,3 @@ graph LR
 
 This decentralized engine model emphasizes the role of Kafka as the backbone for inter-step communication and relies on each step's
 framework to correctly interpret its role and route the `PipeStream` based on the dynamic configuration fetched from Consul.
-
-## 6. Testing Guidelines
-
-1. **Running Tests**:
-    - Tests should be run using the standard Gradle test task: `./gradlew test`
-    - For specific modules: `./gradlew :module-name:test`
-    - For specific tests: `./gradlew :module-name:test --tests "com.krickert.search.TestClass"`
-
-2. **Test Structure**:
-    - Unit tests should be placed in the same package as the class being tested
-    - Integration tests should be placed in a separate package with "integration" in the name
-    - Use Micronaut's testing support for integration tests
-    - Use TestContainers for tests that require external services
-
-## 7. Build Guidelines
-
-1. **Building the Project**:
-    - Use Gradle with the Kotlin DSL: `./gradlew build`
-    - For specific modules: `./gradlew :module-name:build`
-
-2. **Dependency Management**:
-    - Use the BOM for centralized dependency management
-    - Add new dependencies to the appropriate module's build.gradle.kts file
-    - Use the libs.versions.toml file for version management
-    - Always favor the Micronaut BOM for Micronaut dependencies
-
-## 8. Code Style Guidelines
-
-1. **Java Version**: The project uses Java 21
-2. **Testing Framework**: JUnit 5 with Micronaut's testing support
-3. **Logging**: Use SLF4J with Logback
-4. **Documentation**: Document public APIs with Javadoc
-5. **Naming Conventions**:
-    - Classes: PascalCase
-    - Methods and variables: camelCase
-    - Constants: UPPER_SNAKE_CASE
-6. **Error Handling**:
-    - Use appropriate exception types
-    - Log exceptions with context information
-    - Provide meaningful error messages
-
-## 9. Additional Resources
-
-- [Micronaut Documentation](https://docs.micronaut.io/)
-- [Gradle Documentation](https://docs.gradle.org/)
-- [Protocol Buffers Documentation](https://developers.google.com/protocol-buffers)
-- [Kafka Documentation](https://kafka.apache.org/documentation/)
-- [gRPC Documentation](https://grpc.io/docs/)
-- [Consul Documentation](https://developer.hashicorp.com/consul/docs)
-- [Solr Documentation](https://solr.apache.org/guide/)
-- [OpenSearch Documentation](https://opensearch.org/docs/latest/)
-- [OpenSearch Dashboards Documentation](https://opensearch.org/docs/latest/dashboards/index/)

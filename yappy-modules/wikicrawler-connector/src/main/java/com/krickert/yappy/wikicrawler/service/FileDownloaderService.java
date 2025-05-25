@@ -58,7 +58,6 @@ public class FileDownloaderService {
         Path tempFilePath = targetDirectory.resolve(request.getFileName() + ".incomplete");
         Path finalFilePath = targetDirectory.resolve(request.getFileName());
 
-        // Extract path from full URL for the client
         String relativeUrlPath;
         String serverName;
         try {
@@ -75,23 +74,35 @@ public class FileDownloaderService {
         
         AtomicLong totalBytesWritten = new AtomicLong(0);
 
-        return Mono.from(fileDownloaderClient.downloadFile(relativeUrlPath))
-            .publishOn(Schedulers.boundedElastic()) // Offload file writing to a bounded elastic scheduler
+        // Ensure temp file's parent directory exists before starting the flux
+        try {
+            Files.createDirectories(tempFilePath.getParent());
+            // Delete temp file if it exists from a previous failed attempt
+            Files.deleteIfExists(tempFilePath); 
+        } catch (IOException e) {
+            return Mono.error(new RuntimeException("Error preparing temporary file: " + tempFilePath, e));
+        }
+
+        return reactor.core.publisher.Flux.from(fileDownloaderClient.downloadFile(relativeUrlPath))
+            .publishOn(Schedulers.boundedElastic()) // Offload file writing
             .map(byteBuffer -> {
                 try {
-                    // Ensure temp file is created for writing
-                    if (!Files.exists(tempFilePath)) {
-                         Files.createFile(tempFilePath);
-                    }
-                    Files.write(tempFilePath, byteBuffer.array(), StandardOpenOption.APPEND, StandardOpenOption.CREATE);
-                    totalBytesWritten.addAndGet(byteBuffer.array().length);
-                    return byteBuffer; // Or some status
+                    // Convert ByteBuffer to byte array. Note: If direct buffer, .array() might not be available.
+                    // Assuming heap buffer from client or that .array() works.
+                    byte[] bytes = new byte[byteBuffer.remaining()];
+                    byteBuffer.get(bytes);
+
+                    Files.write(tempFilePath, bytes, StandardOpenOption.APPEND, StandardOpenOption.CREATE);
+                    totalBytesWritten.addAndGet(bytes.length);
+                    return bytes.length; // Or some other status, actual byte data not needed downstream of map
                 } catch (IOException e) {
+                    LOG.error("Error writing chunk to temporary file {}: ", tempFilePath, e);
                     throw new RuntimeException("Error writing to temporary file: " + tempFilePath, e);
                 }
             })
-            .reduce((bb1, bb2) -> bb2) // Process all buffers, take the last signal
-            .flatMap(ignored -> { // Now that file is written, validate it
+            .then(Mono.defer(() -> { // defer ensures this part runs after Flux completes
+                LOG.info("Finished writing {} bytes to temporary file {}", totalBytesWritten.get(), tempFilePath);
+                // Now validate the completed temporary file
                 try (InputStream is = Files.newInputStream(tempFilePath)) {
                     MessageDigest md = getMessageDigest(request.getErrorCheck().getErrorCheckType());
                     DigestInputStream dis = new DigestInputStream(is, md);
@@ -122,7 +133,7 @@ public class FileDownloaderService {
                             .addAllAccessUris(accessUris)
                             .setErrorCheck(request.getErrorCheck())
                             .setFileDumpDate(request.getFileDumpDate())
-                            .setServerName(serverName) // Or extract from URL
+                            .setServerName(serverName)
                             .setDownloadStart(Timestamp.newBuilder().setSeconds(downloadStartTimeEpoch / 1000).setNanos((int) (downloadStartTimeEpoch % 1000) * 1_000_000).build())
                             .setDownloadEnd(Timestamp.newBuilder().setSeconds(downloadEndTimeEpoch / 1000).setNanos((int) (downloadEndTimeEpoch % 1000) * 1_000_000).build())
                             .build());
@@ -130,14 +141,14 @@ public class FileDownloaderService {
                 } catch (IOException | NoSuchAlgorithmException e) {
                     LOG.error("Error during file validation or finalization for {}: ", request.getFileName(), e);
                     try {
-                        Files.deleteIfExists(tempFilePath); // Attempt cleanup on error
+                        Files.deleteIfExists(tempFilePath); 
                     } catch (IOException cleanupEx) {
                         LOG.error("Failed to delete temporary file {} on error: ", tempFilePath, cleanupEx);
                     }
                     return Mono.error(e);
                 }
-            })
-            .doOnError(e -> LOG.error("Download failed for {}: {}", request.getFileName(), e.getMessage()));
+            }))
+            .doOnError(e -> LOG.error("Download or processing failed for {}: {}", request.getFileName(), e.getMessage()));
     }
 
     private MessageDigest getMessageDigest(ErrorCheckType type) throws NoSuchAlgorithmException {

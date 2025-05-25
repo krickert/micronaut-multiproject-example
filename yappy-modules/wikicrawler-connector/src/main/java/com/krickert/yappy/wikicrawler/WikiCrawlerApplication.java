@@ -13,8 +13,8 @@ import io.swagger.v3.oas.annotations.info.License;
             license = @License(name = "Apache 2.0", url = "https://www.apache.org/licenses/LICENSE-2.0")
     )
 )
-public class Application {
+public class WikiCrawlerApplication { // Renamed class
     public static void main(String[] args) {
-        Micronaut.run(Application.class, args);
+        Micronaut.run(WikiCrawlerApplication.class, args); // Updated class name here
     }
 }
