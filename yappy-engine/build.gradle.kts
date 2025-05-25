@@ -64,6 +64,7 @@ dependencies {
     implementation(mn.micronaut.protobuff.support)
     implementation(mn.micronaut.grpc.server.runtime)
     implementation(mn.micronaut.grpc.runtime)
+    implementation(mn.micronaut.context)
     implementation(mn.netty.common)
 // https://mvnrepository.com/artifact/io.grpc/grpc-core
     implementation("io.grpc:grpc-core:1.72.0")
@@ -122,6 +123,7 @@ dependencies {
     testImplementation(mn.mockito.junit.jupiter)
     // https://mvnrepository.com/artifact/org.awaitility/awaitility
     testImplementation("org.awaitility:awaitility:4.3.0")
+    implementation(mn.micronaut.views.thymeleaf)
 }
 
 //// Add this block to explicitly configure the Mockito agent

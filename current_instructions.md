@@ -37,10 +37,15 @@ This part focuses on getting a YAPPY Engine instance minimally operational and c
 
 *(This phase executes once the engine has successfully connected to Consul via Phase A.1)*
 
+**Note on Cluster Names:** There is no default "yappy-default" cluster name in the system. The cluster name must be explicitly configured through one of these methods:
+* The `app.config.cluster-name` property in application.yml
+* During the bootstrap process when selecting or creating a cluster
+* The `YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME` property in the bootstrap file
+
 1.  **Cluster Choice Time: API & (Optional) UI**
     *   Expose API endpoints for cluster management:
         *   **gRPC Option:** `BootstrapConfigService`
-            *   `ListAvailableClusters(Empty) returns (ClusterList)`: Queries Consul (e.g., lists keys under `pipeline-configs/clusters/`) for existing Yappy clusters.
+            *   `ListAvailableClusters(Empty) returns (ClusterList)`: Queries Consul (e.g., lists keys under `pipeline-configs/clusters/`) for existing Yappy clusters. Note: This path will be changed to `/yappy-clusters` in future updates.
             *   `SelectExistingCluster(ClusterSelection) returns (OperationStatus)`: Engine records the selected cluster (e.g., in its local bootstrap config or an instance-specific Consul key) and associates itself with it.
             *   `CreateNewCluster(NewClusterDetails) returns (ClusterCreationStatus)`: For initializing a new Yappy cluster.
         *   **HTTP Option:** Endpoints like `GET /setup/clusters`, `POST /setup/cluster/select`, `POST /setup/cluster/create`.
@@ -48,7 +53,7 @@ This part focuses on getting a YAPPY Engine instance minimally operational and c
 
 2.  **Planting the Seed for a New Cluster**
     *   If `CreateNewCluster` is invoked:
-        *   The engine uses `ConsulBusinessOperationsService` to write a default, minimal, but valid `PipelineClusterConfig` to the new cluster's path in Consul (e.g., `pipeline-configs/clusters/<new-cluster-name>`).
+        *   The engine uses `ConsulBusinessOperationsService` to write a default, minimal, but valid `PipelineClusterConfig` to the new cluster's path in Consul (e.g., `pipeline-configs/clusters/<new-cluster-name>`). Note: This path will be changed to `/yappy-clusters/<new-cluster-name>` in future updates.
         *   **Seed Configuration Details:**
             *   `pipelineGraphConfig`: Empty or a very simple "hello world" example.
             *   `pipelineModuleMap`: Empty.
@@ -100,9 +105,11 @@ This part focuses on getting a YAPPY Engine instance minimally operational and c
     *   On startup, if the engine is configured for a specific cluster (post-Phase A.2) but `ConsulBusinessOperationsService.getPipelineClusterConfig()` returns an empty or non-existent configuration for that cluster key in Consul:
         *   Create a default/minimal `PipelineClusterConfig` in memory (similar to the seed in Phase A.2.2).
         *   Store this minimal config in Consul KV at the expected cluster path using `ConsulBusinessOperationsService.storeClusterConfiguration()`. This ensures the engine can operate even if its designated cluster config was accidentally wiped from Consul.
-2.  **Implement Engine-Managed Module Registration (for co-located/engine-launched modules):**
-    *   If the engine is responsible for starting and registering certain modules:
+2.  **Implement Engine-Managed Module Registration:**
+    *   **Important Note:** Modules do NOT register themselves - the engine handles registration on behalf of modules. This simplifies the architecture and reduces the burden on module developers.
+    *   The engine is responsible for registering modules:
         *   **Pre-registration Health Check:** Directly ping the module's health endpoint before attempting Consul registration.
+        *   **Authentication:** Implement a stub that always returns true as a placeholder for future security enhancements.
         *   **Construct `Registration` Object:** Populate ID, name, address, port, tags (including `yappy-service-name`, `yappy-version`, `yappy-config-digest`), and detailed health check information (`Registration.RegCheck`).
         *   **Register:** Call `ConsulBusinessOperationsService.registerService()`.
         *   **Verify:** After a short delay, use `ConsulBusinessOperationsService.getHealthyServiceInstances()` to confirm successful registration and health status in Consul.

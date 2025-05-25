@@ -33,7 +33,6 @@ services:
     volumes:
       - kafka-data:/var/lib/kafka/data
 
-
   # 2. Apicurio Registry
   apicurio:
     image: apicurio/apicurio-registry:latest
@@ -57,7 +56,6 @@ services:
     environment:
       SOLR_HEAP: "2g"
 
-
   # 4. Kafka UI
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -70,52 +68,63 @@ services:
     depends_on:
       - kafka
 
-  consul:
-    image: hashicorp/consul:latest # Use the latest official Consul image
-    container_name: consul-server-dev # Optional: give the container a specific name
+  # 5. OpenSearch 3.0
+  opensearch:
+    image: opensearchproject/opensearch:3.0.0
+    container_name: opensearch
     ports:
-      # --- Standard Consul Ports ---
-      # Port 8500 (TCP): HTTP API & Web UI access
-      # Used for interacting with Consul via API or the graphical user interface.
-      - "8500:8500"
+      - "9200:9200"
+      - "9600:9600"  # Required for Performance Analyzer
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "DISABLE_INSTALL_DEMO_CONFIG=true"
+      - "DISABLE_SECURITY_PLUGIN=true"  # For development simplicity
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    networks:
+      - internal_app_net
 
-      # Port 8600 (TCP & UDP): DNS Interface
-      # Used for service discovery via DNS queries.
+  # 6. OpenSearch Dashboards
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:3.0.0
+    container_name: opensearch-dashboards
+    ports:
+      - "5601:5601"
+    environment:
+      - OPENSEARCH_HOSTS=["http://opensearch:9200"]
+      - "DISABLE_SECURITY_DASHBOARDS_PLUGIN=true"  # For development simplicity
+    depends_on:
+      - opensearch
+    networks:
+      - internal_app_net
+
+  consul:
+    image: hashicorp/consul:latest
+    container_name: consul-server-dev
+    ports:
+      - "8500:8500"
       - "8600:8600/tcp"
       - "8600:8600/udp"
-
-      # --- Ports primarily for Agent Communication (within a cluster) ---
-      # Port 8300 (TCP): Server RPC
-      # Used for communication between Consul servers and between servers and clients.
-      - "8300:8300" # Exposing this is useful if other agents outside compose need to connect
-
-      # Port 8301 (TCP & UDP): Serf LAN Gossip
-      # Used for agent discovery and health checking within the local datacenter (LAN).
+      - "8300:8300"
       - "8301:8301/tcp"
       - "8301:8301/udp"
-
-      # Port 8302 (TCP & UDP): Serf WAN Gossip
-      # Used by servers to communicate across different datacenters (WAN).
-      # Often not needed for single-datacenter or dev setups, but included for completeness.
-      # - "8302:8302/tcp"  # Uncomment if needed for WAN federation
-      # - "8302:8302/udp"  # Uncomment if needed for WAN federation
-
-    # Command to run Consul agent in development mode
     command: "agent -dev -client=0.0.0.0 -ui"
-    # Explanation of command flags:
-    # agent:           Runs the Consul agent process.
-    # -dev:            Starts a single-node server in development mode.
-    #                  This is convenient for testing but not for production (in-memory storage).
-    #                  It implies -server, -bootstrap-expect=1, and enables the UI.
-    # -client=0.0.0.0: Binds client interfaces (HTTP API, DNS) to all network interfaces
-    #                  within the container, making them accessible from the host via the mapped ports.
-    # -ui:             Explicitly enables the web UI (though often implied by -dev).
 
 networks:
-  internal_app_net: # Define the custom network
+  internal_app_net:
     driver: bridge
-    name: search-dev # Optional: give the docker network a specific name
+    name: search-dev
 
 volumes:
   kafka-data:
   solr-data:
+  opensearch-data:

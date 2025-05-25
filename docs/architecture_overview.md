@@ -138,7 +138,7 @@ end
     ConnectorService -->|Sends PipeStream via Kafka/gRPC to| ModuleFramework
     ConnectorService -->|Uses Models| PipelineConfigModels
     ConnectorService -->|Uses Contracts| GRPCSDK
-    
+
     ModuleFramework -->|Reads Config, Registers, Discovers| Consul
     ModuleFramework -->|Gets JSON Schemas| CustomJsonSR
     ModuleFramework -->|"Invokes (In-Process Java Call to gRPC object)"| InternalPMP
@@ -152,7 +152,7 @@ end
     RemotePMP -->|Registers| Consul
     RemotePMP -.->|Uses Contract| GRPCSDK
     InternalPMP -.->|Implements Contract| GRPCSDK 
-    
+
     CustomJsonSR -->|"Stores/Reads Schemas in"| Consul
     CustomJsonSR -->|"Uses Models"| SchemaRegistryInternalModels
     CustomJsonSR -.->|Registers| Consul
@@ -261,7 +261,7 @@ PMC["PipelineModuleConfiguration <br/> String moduleName <br/> String moduleVers
 * **`SchemaReference`**: Contains `subject` and `version` to identify a JSON schema in the Custom JSON Schema Registry.
 * **`TransportType`**, **`KafkaTransportConfig`**, **`GrpcTransportConfig`**: Define transport parameters for `PipelineStepConfig` ingress.
 
-## 3\. Core Components & Responsibilities (Continued)
+## 3. Core Components & Responsibilities (Continued)
 
 *(These subsections will be updated to reflect the precise roles and interactions based on the model above)*
 
@@ -323,9 +323,9 @@ PMC["PipelineModuleConfiguration <br/> String moduleName <br/> String moduleVers
         * **`INTERNAL_JAVA_GRPC`:** A Java class implementing `PipeStepProcessor`, invoked in-process by its Module Framework. Not
           separately Consul-registered.
         * **`REMOTE_GRPC_SERVICE` (Polyglot):** A separate gRPC service implementing `PipeStepProcessor`, invoked via network gRPC.
-          Registers itself with Consul.
+          The Module Framework registers this service with Consul on its behalf.
     * Receives `ProcessRequest`, returns `ProcessResponse`.
-* **Key Interaction:** Invoked by its Module Framework. Remote gRPC PMP services register with Consul.
+* **Key Interaction:** Invoked by its Module Framework. Module Frameworks register remote gRPC PMP services with Consul on their behalf.
 
 ### 3.5. `grpc-developer-sdk`
 
@@ -351,11 +351,10 @@ PMC["PipelineModuleConfiguration <br/> String moduleName <br/> String moduleVers
         * Module Framework instances (for their gRPC `PipeStream` ingress endpoints if `transportType=GRPC` for that step).
         * Custom JSON Schema Registry service.
         * Admin API Service (future).
-    3. **Service Registration & Health Checking:** All deployed YAPPY services (Connector Service, Module Frameworks, remote gRPC PMPs,
-       Custom JSON Schema Registry, Admin API) register.
+    3. **Service Registration & Health Checking:** Connector Service, Module Frameworks, Custom JSON Schema Registry, and Admin API register themselves with Consul. Module Frameworks also register remote gRPC PMPs with Consul on their behalf.
 * **Key Interaction:** Central for runtime configuration and discovering gRPC endpoints.
 
-## 4\. Key Data Structures
+## 4. Key Data Structures
 
 ### 4.1. Protobuf Messages
 
@@ -367,7 +366,7 @@ RPCs in `PipeStreamEngine` can be implemented by Module Frameworks for their gRP
 
 *(Covered in detail with the ER diagram in Section III and described previously.)*
 
-## 5\. Core Workflows & Data Flows
+## 5. Core Workflows & Data Flows
 
 These diagrams illustrate key operational sequences, reflecting the clarified roles and transport mechanisms.
 
@@ -398,7 +397,7 @@ sequenceDiagram
     MF_StepX->>DCM: Get PipelineModuleConfiguration (using stepConfig_X.pipelineImplementationId)
     DCM->>ConsulKV: Load moduleConfig_X
     DCM-->>MF_StepX: Return moduleConfig_X (contains customConfigSchemaReference)
-    
+
     alt moduleConfig_X.customConfigSchemaReference is Present
         MF_StepX->>MF_StepX: Construct schema_id string from SchemaReference (subject, version)
         MF_StepX->>CustomJsonSR: gRPC: GetSchema(GetSchemaRequest with schema_id)
@@ -451,7 +450,7 @@ sequenceDiagram
 
 ### 5.3. Generic Step Execution & Routing (Module Framework X to Next Step(s) - Handles Fan-Out)
 
-Illustrates MF\_X processing a `PipeStream`, invoking its PMP, and then routing to one or more next steps.
+Illustrates MF_X processing a `PipeStream`, invoking its PMP, and then routing to one or more next steps.
 
 ```mermaid
 sequenceDiagram
@@ -461,7 +460,7 @@ sequenceDiagram
     participant Consul_SD as Consul Service Discovery
     participant JsonSR_X as Custom JSON Schema Registry
     participant PMP_X as Pipeline Module Processor X (Implements PipeStepProcessor)
-    
+
     participant Kafka_Out as Apache Kafka
     participant MF_Next_Target as Next Module Framework (generic target, e.g., MF_Y)
 
@@ -471,7 +470,7 @@ sequenceDiagram
     DCM_X-->>MF_X: Return config_X (contains customConfig, pipelineImplId, nextSteps list)
     MF_X->>DCM_X: Get PipelineModuleConfiguration for config_X.pipelineImplementationId (moduleConfig_X)
     DCM_X-->>MF_X: Return moduleConfig_X (processorInvocationType, customConfigSchemaRef, etc.)
-    
+
     alt moduleConfig_X.customConfigSchemaReference is Present
         MF_X->>MF_X: Construct schema_id from SchemaReference
         MF_X->>JsonSR_X: gRPC: GetSchema(schema_id)
@@ -480,7 +479,7 @@ sequenceDiagram
     end
 
     MF_X->>MF_X: Prepare ProcessRequest for PMP_X
-    
+
     alt moduleConfig_X.processorInvocationType is "REMOTE_GRPC_SERVICE"
         MF_X->>Consul_SD: Discover PMP_X (using moduleConfig_X.grpcProcessorServiceId)
         Consul_SD-->>MF_X: PMP_X_Address
@@ -494,13 +493,13 @@ sequenceDiagram
         PMP_X-->>MF_X: ProcessResponse
         deactivate PMP_X
     end
-        
+
     MF_X->>MF_X: Update PipeStream from ProcessResponse
-    
+
     loop For each targetStepId in config_X.nextSteps (or errorSteps if applicable)
         MF_X->>DCM_X: Get PipelineStepConfig for "CurrentPipeline".targetStepId (target_config)
         DCM_X-->>MF_X: Return target_config (contains target_config.transportType, .kafkaConfig, .grpcConfig)
-        
+
         MF_X->>MF_X: Set PipeStream.target_step_name = targetStepId
         alt target_config.transportType is KAFKA
             MF_X->>Kafka_Out: Publish updated PipeStream to topic from target_config.kafkaConfig.listenTopics[0]
@@ -522,7 +521,7 @@ sequenceDiagram
     deactivate MF_X
 ```
 
-## 6\. Developer Workflow: Creating a New Pipeline Module Processor
+## 6. Developer Workflow: Creating a New Pipeline Module Processor
 
 1. **Define `custom_json_config` Schema (JSON Schema):** If your module requires specific configuration parameters.
     * Create a JSON schema document.
@@ -557,7 +556,7 @@ sequenceDiagram
     * Define `nextSteps` and `errorSteps` (lists of target `pipelineStepId`s). The Module Framework for this step will use these IDs to look
       up each target step's configuration to determine how to route the outgoing `PipeStream` to them.
 
-## 7\. Glossary of Key Terms
+## 7. Glossary of Key Terms
 
 * **Module Framework:** The runtime component/service (often called the "engine" for a step) responsible for executing a single
   `PipelineStepConfig`. It:
@@ -588,7 +587,7 @@ sequenceDiagram
 * **Custom JSON Schema Registry:** The YAPPY gRPC service (implementing `SchemaRegistryService.proto`) for managing JSON Schemas used to
   validate `custom_json_config` for Pipeline Module Processors. Registers with Consul.
 
-## 8\. Security Considerations (High Level)
+## 8. Security Considerations (High Level)
 
 * The Module Framework, by leveraging platforms like Micronaut, can aid in implementing security best practices such as mTLS configuration
   for its outgoing gRPC calls (to remote Pipeline Module Processors *or* to other Module Frameworks' `PipeStreamEngine` ingress endpoints
@@ -598,7 +597,7 @@ sequenceDiagram
 * Access to Consul, Kafka, and both Schema Registries (Protobuf and Custom JSON) must be secured with appropriate ACLs and
   authentication/authorization.
 
-## 9\. Future Considerations / Advanced Topics
+## 9. Future Considerations / Advanced Topics
 
 * **Unified Schema Management:** While distinct for V1 (Protobuf `PipeStream` schemas in an external registry like Apicurio/Glue; JSON
   `custom_json_config` schemas in YAPPY's Custom JSON Schema Registry), future evaluation could explore consolidating JSON schema management

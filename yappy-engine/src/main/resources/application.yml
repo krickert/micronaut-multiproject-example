@@ -11,3 +11,4 @@ kafka:
       # max.in.flight.requests.per.connection: 5 # If idempotence is enabled
       # You can add other standard Kafka producer properties here
       # Example: compression.type: snappy
+

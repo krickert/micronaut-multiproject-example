@@ -8,22 +8,23 @@ import com.krickert.search.config.pipeline.model.PipelineGraphConfig;
 import com.krickert.search.config.pipeline.model.PipelineModuleConfiguration;
 import com.krickert.search.config.pipeline.model.PipelineModuleMap;
 import io.micronaut.context.annotation.Value;
-import io.micronaut.core.util.CollectionUtils;
+// import io.micronaut.core.util.CollectionUtils; // Not used directly in this snippet
 import jakarta.inject.Singleton;
-import org.apache.commons.compress.utils.Lists;
+import org.apache.commons.compress.utils.Lists; // Consider replacing with Collections.emptyList()
 import org.kiwiproject.consul.AgentClient;
 import org.kiwiproject.consul.CatalogClient;
 import org.kiwiproject.consul.HealthClient;
 import org.kiwiproject.consul.StatusClient;
+import org.kiwiproject.consul.NotRegisteredException; // Import this
 import org.kiwiproject.consul.model.ConsulResponse;
-import org.kiwiproject.consul.model.agent.FullService;
+import org.kiwiproject.consul.model.agent.FullService; // Correct import
 import org.kiwiproject.consul.model.agent.Registration;
 import org.kiwiproject.consul.model.catalog.CatalogService;
 import org.kiwiproject.consul.model.health.HealthCheck;
-import org.kiwiproject.consul.model.health.Service;
+// import org.kiwiproject.consul.model.health.Service; // Not directly used in the corrected getAgentServiceDetails
 import org.kiwiproject.consul.model.health.ServiceHealth;
 import org.kiwiproject.consul.option.Options;
-import org.kiwiproject.consul.option.QueryOptions;
+// import org.kiwiproject.consul.option.QueryOptions; // Options.BLANK_QUERY_OPTIONS is sufficient
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -37,6 +38,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+// import java.util.stream.Collectors; // Not used directly in this snippet
 
 @Singleton
 public class ConsulBusinessOperationsService {
@@ -119,6 +121,8 @@ public class ConsulBusinessOperationsService {
         Objects.requireNonNull(clusterConfig, "Cluster configuration cannot be null");
         String fullClusterKey = getFullClusterKey(clusterName);
         LOG.info("Storing cluster configuration for cluster: {}, key: {}", clusterName, fullClusterKey);
+        // Ensure the object passed is what you intend to serialize.
+        // If clusterConfig is already a PipelineClusterConfig, this is fine.
         return putValue(fullClusterKey, clusterConfig);
     }
 
@@ -220,22 +224,12 @@ public class ConsulBusinessOperationsService {
 
     // --- NEWLY ADDED/EXPANDED METHODS for Pipeline and Whitelist Configurations ---
 
-    /**
-     * Fetches the complete PipelineClusterConfig for a given cluster name.
-     *
-     * @param clusterName The name of the cluster.
-     * @return A Mono emitting an Optional of PipelineClusterConfig.
-     */
-// In ConsulBusinessOperationsService.java
-
     public Mono<Optional<PipelineClusterConfig>> getPipelineClusterConfig(String clusterName) {
         validateClusterName(clusterName);
-        // Use the same key construction logic as for writing
         String keyForKvRead = getFullClusterKey(clusterName);
-
         LOG.debug("Fetching PipelineClusterConfig for cluster: '{}' from final key: {}", clusterName, keyForKvRead);
 
-        return consulKvService.getValue(keyForKvRead) // Pass the correctly formed final key
+        return consulKvService.getValue(keyForKvRead)
                 .flatMap(jsonStringOptional -> {
                     if (jsonStringOptional.isPresent()) {
                         String jsonString = jsonStringOptional.get();
@@ -258,57 +252,26 @@ public class ConsulBusinessOperationsService {
                 });
     }
 
-    /**
-     * Fetches the PipelineGraphConfig for a given cluster name.
-     *
-     * @param clusterName The name of the cluster.
-     * @return A Mono emitting an Optional of PipelineGraphConfig.
-     */
     public Mono<Optional<PipelineGraphConfig>> getPipelineGraphConfig(String clusterName) {
         return getPipelineClusterConfig(clusterName)
                 .map(clusterConfigOpt -> clusterConfigOpt.map(PipelineClusterConfig::pipelineGraphConfig));
     }
 
-    /**
-     * Fetches the PipelineModuleMap for a given cluster name.
-     *
-     * @param clusterName The name of the cluster.
-     * @return A Mono emitting an Optional of PipelineModuleMap.
-     */
     public Mono<Optional<PipelineModuleMap>> getPipelineModuleMap(String clusterName) {
         return getPipelineClusterConfig(clusterName)
                 .map(clusterConfigOpt -> clusterConfigOpt.map(PipelineClusterConfig::pipelineModuleMap));
     }
 
-    /**
-     * Fetches the set of allowed Kafka topics for a given cluster name.
-     *
-     * @param clusterName The name of the cluster.
-     * @return A Mono emitting a Set of allowed Kafka topics, or an empty set if not found/configured.
-     */
     public Mono<Set<String>> getAllowedKafkaTopics(String clusterName) {
         return getPipelineClusterConfig(clusterName)
                 .map(clusterConfigOpt -> clusterConfigOpt.map(PipelineClusterConfig::allowedKafkaTopics).orElse(Collections.emptySet()));
     }
 
-    /**
-     * Fetches the set of allowed gRPC services for a given cluster name.
-     *
-     * @param clusterName The name of the cluster.
-     * @return A Mono emitting a Set of allowed gRPC services, or an empty set if not found/configured.
-     */
     public Mono<Set<String>> getAllowedGrpcServices(String clusterName) {
         return getPipelineClusterConfig(clusterName)
                 .map(clusterConfigOpt -> clusterConfigOpt.map(PipelineClusterConfig::allowedGrpcServices).orElse(Collections.emptySet()));
     }
 
-    /**
-     * Fetches a specific PipelineConfig from a cluster by its name.
-     *
-     * @param clusterName  The name of the cluster.
-     * @param pipelineName The name of the pipeline.
-     * @return A Mono emitting an Optional of PipelineConfig.
-     */
     public Mono<Optional<PipelineConfig>> getSpecificPipelineConfig(String clusterName, String pipelineName) {
         return getPipelineGraphConfig(clusterName)
                 .map(graphConfigOpt -> graphConfigOpt.flatMap(graph ->
@@ -316,28 +279,15 @@ public class ConsulBusinessOperationsService {
                 ));
     }
 
-    /**
-     * Lists all pipeline names defined within a specific cluster.
-     *
-     * @param clusterName The name of the cluster.
-     * @return A Mono emitting a List of pipeline names, or an empty list if none found.
-     */
     public Mono<List<String>> listPipelineNames(String clusterName) {
         return getPipelineGraphConfig(clusterName)
                 .map(graphConfigOpt -> graphConfigOpt
                         .map(PipelineGraphConfig::pipelines)
                         .map(Map::keySet)
                         .map(ArrayList::new) // Convert Set to List
-                        .orElse(Lists.newArrayList()));
+                        .orElseGet(ArrayList::new)); // Use orElseGet for new collections
     }
 
-    /**
-     * Fetches a specific PipelineModuleConfiguration from a cluster by its implementation ID.
-     *
-     * @param clusterName      The name of the cluster.
-     * @param implementationId The implementation ID of the module.
-     * @return A Mono emitting an Optional of PipelineModuleConfiguration.
-     */
     public Mono<Optional<PipelineModuleConfiguration>> getSpecificPipelineModuleConfiguration(String clusterName, String implementationId) {
         return getPipelineModuleMap(clusterName)
                 .map(moduleMapOpt -> moduleMapOpt.flatMap(map ->
@@ -345,27 +295,15 @@ public class ConsulBusinessOperationsService {
                 ));
     }
 
-    /**
-     * Lists all available PipelineModuleConfigurations for a specific cluster.
-     *
-     * @param clusterName The name of the cluster.
-     * @return A Mono emitting a List of PipelineModuleConfiguration, or an empty list if none found.
-     */
     public Mono<List<PipelineModuleConfiguration>> listAvailablePipelineModuleImplementations(String clusterName) {
         return getPipelineModuleMap(clusterName)
                 .map(moduleMapOpt -> moduleMapOpt
                         .map(PipelineModuleMap::availableModules)
                         .map(Map::values)
                         .map(ArrayList::new) // Convert Collection to List
-                        .orElse(Lists.newArrayList()));
+                        .orElseGet(ArrayList::new)); // Use orElseGet for new collections
     }
 
-    /**
-     * Gets the service whitelist from Consul.
-     * Assumes the whitelist is stored as a JSON array of strings.
-     *
-     * @return A Mono emitting a list of whitelisted service identifiers.
-     */
     public Mono<List<String>> getServiceWhitelist() {
         String serviceWhitelistKey = whitelistsKeyPrefix.endsWith("/") ? whitelistsKeyPrefix + "services" : whitelistsKeyPrefix + "/services";
         LOG.debug("Fetching service whitelist from key: {}", serviceWhitelistKey);
@@ -385,12 +323,6 @@ public class ConsulBusinessOperationsService {
                 });
     }
 
-    /**
-     * Gets the topic whitelist from Consul.
-     * Assumes the whitelist is stored as a JSON array of strings.
-     *
-     * @return A Mono emitting a list of whitelisted topic names.
-     */
     public Mono<List<String>> getTopicWhitelist() {
         String topicWhitelistKey = whitelistsKeyPrefix.endsWith("/") ? whitelistsKeyPrefix + "topics" : whitelistsKeyPrefix + "/topics";
         LOG.debug("Fetching topic whitelist from key: {}", topicWhitelistKey);
@@ -410,12 +342,6 @@ public class ConsulBusinessOperationsService {
                 });
     }
 
-    /**
-     * Gets all health checks for a specific service name.
-     *
-     * @param serviceName The name of the service.
-     * @return A Mono emitting a list of HealthCheck instances.
-     */
     public Mono<List<HealthCheck>> getServiceChecks(String serviceName) {
         validateKey(serviceName);
         LOG.debug("Getting all health checks for service: {}", serviceName);
@@ -435,45 +361,57 @@ public class ConsulBusinessOperationsService {
 
     /**
      * Gets detailed information about a specific service instance as known by the agent.
-     * Note: This method's ability to return FullService might be limited by kiwiproject-consul's AgentClient.
-     * It's often more reliable to get service details via HealthClient or CatalogClient by service name and then filter.
+     * This uses the /v1/agent/service/:service_id endpoint.
      *
      * @param serviceId The ID of the service instance.
-     * @return A Mono emitting an Optional of FullService.
+     * @return A Mono emitting an Optional of {@link FullService}.
      */
     public Mono<Optional<FullService>> getAgentServiceDetails(String serviceId) {
         validateKey(serviceId);
         LOG.debug("Attempting to get agent details for service instance ID: {}", serviceId);
         return Mono.fromCallable(() -> {
-                    Map<String, org.kiwiproject.consul.model.health.Service> agentServices = agentClient.getServices(); // Corrected type from your code
-                    if (agentServices.containsKey(serviceId)) {
-                        LOG.info("Service ID '{}' is known to the agent. For full health details, query HealthClient.", serviceId);
-                        return Optional.<FullService>empty(); // Return the Optional directly
+                    try {
+                        ConsulResponse<FullService> consulResponse = agentClient.getService(serviceId, Options.BLANK_QUERY_OPTIONS);
+                        if (consulResponse != null && consulResponse.getResponse() != null) {
+                            LOG.info("FullService details found for service ID '{}': {}", serviceId, consulResponse.getResponse());
+                            return Optional.of(consulResponse.getResponse());
+                        } else {
+                            // This case might indicate the service exists but response was empty,
+                            // or a more general issue. NotRegisteredException is more specific.
+                            LOG.warn("Received null or empty response when fetching FullService details for service ID '{}'.", serviceId);
+                            return Optional.<FullService>empty();
+                        }
+                    } catch (NotRegisteredException e) {
+                        LOG.warn("Service ID '{}' not registered with the agent. Error: {}", serviceId, e.getMessage());
+                        return Optional.<FullService>empty();
+                    } catch (Exception e) {
+                        // Catch other potential runtime exceptions from the client call
+                        LOG.error("Failed to get FullService details for service instance ID '{}'", serviceId, e);
+                        return Optional.<FullService>empty();
                     }
-                    LOG.warn("Service ID '{}' not found in agent's list of services.", serviceId);
-                    return Optional.<FullService>empty(); // Return the Optional directly
                 })
                 .onErrorResume(e -> {
-                    LOG.error("Failed to get agent details for service instance ID '{}'", serviceId, e);
-                    // Explicitly state the type of the Mono being returned by Mono.just
-                    Mono<Optional<FullService>> errorFallback = Mono.just(Optional.<FullService>empty());
-                    return errorFallback;
-                    // Or, more concisely, but sometimes less clear for the compiler:
-                    // return Mono.<Optional<FullService>>just(Optional.empty());
+                    // This catches errors from Mono.fromCallable itself if it throws before/during execution
+                    LOG.error("Unexpected error in Mono stream while getting FullService details for service ID '{}'", serviceId, e);
+                    return Mono.just(Optional.<FullService>empty());
                 });
     }
 
 
-
     // --- Helper and Validation Methods ---
 
-    private String getFullClusterKey(String clusterName) {
-        String prefix = clusterConfigKeyPrefix.endsWith("/") ? clusterConfigKeyPrefix : clusterConfigKeyPrefix + "/";
+    public String getFullClusterKey(String clusterName) {
+        // Ensure prefix always ends with a slash if it's not empty
+        String prefix = clusterConfigKeyPrefix.isEmpty() || clusterConfigKeyPrefix.endsWith("/")
+                ? clusterConfigKeyPrefix
+                : clusterConfigKeyPrefix + "/";
         return prefix + clusterName;
     }
 
     private String getFullSchemaKey(String subject, int version) {
-        String prefix = schemaVersionsKeyPrefix.endsWith("/") ? schemaVersionsKeyPrefix : schemaVersionsKeyPrefix + "/";
+        String prefix = schemaVersionsKeyPrefix.isEmpty() || schemaVersionsKeyPrefix.endsWith("/")
+                ? schemaVersionsKeyPrefix
+                : schemaVersionsKeyPrefix + "/";
         return String.format("%s%s/%d", prefix, subject, version);
     }
 
@@ -501,6 +439,56 @@ public class ConsulBusinessOperationsService {
         }
     }
 
+    // In com.krickert.search.config.consul.service.ConsulBusinessOperationsService.java
+
+    /**
+     * Lists the names of available clusters by looking for keys under the standard path.
+     * Assumes cluster configurations are stored like: "your-cluster-prefix/cluster-name-A"
+     * or "your-cluster-prefix/cluster-name-B/some-sub-key".
+     *
+     * @return A Mono emitting a list of distinct cluster names.
+     */
+    public Mono<List<String>> listAvailableClusterNames() {
+        // Ensure the prefix ends with a "/" for listing "subdirectories" or keys within it.
+        String queryPrefix = clusterConfigKeyPrefix.endsWith("/") ? clusterConfigKeyPrefix : clusterConfigKeyPrefix + "/";
+        LOG.debug("Attempting to list available cluster names from Consul KV prefix: {}", queryPrefix);
+
+        return consulKvService.getKeysWithPrefix(queryPrefix)
+                .map(keys -> {
+                    if (keys == null || keys.isEmpty()) {
+                        LOG.info("No keys found under Consul prefix: {}", queryPrefix);
+                        return Collections.<String>emptyList();
+                    }
+
+                    LOG.debug("Found raw keys under {}: {}", queryPrefix, keys);
+
+                    // Extract unique cluster names.
+                    // e.g., from "pipeline-configs/clusters/my-cluster-1" -> "my-cluster-1"
+                    // e.g., from "pipeline-configs/clusters/my-cluster-2/some-other-file" -> "my-cluster-2"
+                    Set<String> clusterNamesSet = keys.stream()
+                            .map(key -> {
+                                if (key.startsWith(queryPrefix)) {
+                                    String remainingPath = key.substring(queryPrefix.length());
+                                    // The cluster name is the first segment of the remaining path
+                                    String[] segments = remainingPath.split("/");
+                                    if (segments.length > 0 && !segments[0].isEmpty()) {
+                                        return segments[0];
+                                    }
+                                }
+                                return null;
+                            })
+                            .filter(Objects::nonNull)
+                            .collect(Collectors.toSet()); // Use Set for distinct names
+
+                    LOG.info("Extracted distinct cluster names: {}", clusterNamesSet);
+                    return new ArrayList<>(clusterNamesSet);
+                })
+                .onErrorResume(e -> {
+                    LOG.error("Unexpected error listing cluster names from Consul prefix {}: {}", queryPrefix, e.getMessage(), e);
+                    return Mono.just(Collections.<String>emptyList());
+                });
+    }
+
     public Mono<Void> cleanupTestResources(Iterable<String> clusterNames, Iterable<String> schemaSubjects, Iterable<String> serviceIds) {
         LOG.info("Cleaning up test resources: clusters, schemas, and services.");
         Mono<Void> deleteClustersMono = Mono.empty();
@@ -512,6 +500,7 @@ public class ConsulBusinessOperationsService {
         Mono<Void> deleteSchemasMono = Mono.empty();
         if (schemaSubjects != null) {
             for (String subject : schemaSubjects) {
+                // Assuming version 1 for cleanup, adjust if tests use other versions
                 deleteSchemasMono = deleteSchemasMono.then(deleteSchemaVersion(subject, 1).then());
             }
         }
@@ -520,7 +509,7 @@ public class ConsulBusinessOperationsService {
             for (String serviceId : serviceIds) {
                 deregisterServicesMono = deregisterServicesMono.then(deregisterService(serviceId).onErrorResume(e -> {
                     LOG.warn("Failed to deregister service '{}' during cleanup, continuing. Error: {}", serviceId, e.getMessage());
-                    return Mono.empty();
+                    return Mono.empty(); // Continue cleanup even if one deregistration fails
                 }));
             }
         }
