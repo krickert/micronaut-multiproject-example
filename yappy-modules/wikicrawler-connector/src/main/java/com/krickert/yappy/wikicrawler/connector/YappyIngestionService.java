@@ -47,8 +47,26 @@ public class YappyIngestionService {
                 // .setSuggestedStreamId() // Optional: if needed
                 .build();
 
-        // Convert Google's ListenableFuture (from gRPC FutureStub) to Mono
-        return Mono.fromFuture(() -> futureStub.processConnectorDoc(connectorRequest))
+        com.google.common.util.concurrent.ListenableFuture<ConnectorResponse> listenableFuture =
+            futureStub.processConnectorDoc(connectorRequest);
+
+        return Mono.create(sink -> {
+            listenableFuture.addListener(() -> {
+                try {
+                    ConnectorResponse response = listenableFuture.get();
+                    sink.success(response);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt(); // Restore interruption status
+                    LOG.error("gRPC call interrupted while waiting for ListenableFuture", e);
+                    sink.error(e);
+                } catch (java.util.concurrent.ExecutionException e) {
+                    // Unwrap the actual exception from gRPC
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    LOG.error("gRPC call failed via ListenableFuture", cause);
+                    sink.error(cause);
+                }
+            }, Runnable::run); // Or use a specific executor if needed, Runnable::run executes inline on Guava's thread
+        })
             .doOnSuccess(response -> {
                 if (response.getAccepted()) {
                     LOG.info("PipeDoc ID: {} successfully ingested. Stream ID: {}", pipeDoc.getId(), response.getStreamId());
@@ -60,4 +78,4 @@ public class YappyIngestionService {
     }
 }
 
-
+// Factory to provide the gRPC stub

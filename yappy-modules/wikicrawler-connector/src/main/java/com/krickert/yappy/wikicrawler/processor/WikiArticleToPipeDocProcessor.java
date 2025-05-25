@@ -25,25 +25,15 @@ public class WikiArticleToPipeDocProcessor {
 
         // === Direct Mappings ===
         pipeDocBuilder.setId("wiki_" + wikiArticle.getSiteInfo().getBase() + "_" + wikiArticle.getId()); // Construct a unique ID
-        if (wikiArticle.hasTitle()) {
-            pipeDocBuilder.setTitle(wikiArticle.getTitle());
-        }
-        if (wikiArticle.hasText()) {
-            pipeDocBuilder.setBody(wikiArticle.getText());
-        }
-        if (wikiArticle.hasRevisionId()) {
-            pipeDocBuilder.setRevisionId(wikiArticle.getRevisionId());
-        }
+        pipeDocBuilder.setTitle(wikiArticle.getTitle()); // Removed hasTitle check
+        pipeDocBuilder.setBody(wikiArticle.getText()); // Removed hasText check
+        pipeDocBuilder.setRevisionId(wikiArticle.getRevisionId()); // Removed hasRevisionId check
 
         // === Date Mappings ===
         // WikiArticle.timestamp (article's last revision/edit from the dump) -> PipeDoc.last_modified_date
-        if (wikiArticle.hasTimestamp()) {
-            pipeDocBuilder.setLastModifiedDate(wikiArticle.getTimestamp());
-        }
+        pipeDocBuilder.setLastModifiedDate(wikiArticle.getTimestamp()); // Removed hasTimestamp check
         // WikiArticle.date_parsed (When Yappy processed this article) -> PipeDoc.processed_date
-        if (wikiArticle.hasDateParsed()) {
-            pipeDocBuilder.setProcessedDate(wikiArticle.getDateParsed());
-        }
+        pipeDocBuilder.setProcessedDate(wikiArticle.getDateParsed()); // Removed hasDateParsed check
         // WikiArticle.dump_timestamp (Timestamp from the dump file itself) can go into custom_data
 
         // === Complex Mappings / Custom Data ===
@@ -54,12 +44,10 @@ public class WikiArticleToPipeDocProcessor {
         customDataBuilder.putFields("wikipedia_namespace_code", Value.newBuilder().setNumberValue(wikiArticle.getNamespaceCode()).build());
         customDataBuilder.putFields("wikipedia_wiki_type", Value.newBuilder().setStringValue(wikiArticle.getWikiType().toString()).build());
 
-        if (wikiArticle.hasArticleVersion()) {
-            customDataBuilder.putFields("wikipedia_article_version", Value.newBuilder().setStringValue(wikiArticle.getArticleVersion()).build());
-        }
-        if (wikiArticle.hasDumpTimestamp()) {
-             customDataBuilder.putFields("wikipedia_dump_timestamp", Value.newBuilder().setStringValue(wikiArticle.getDumpTimestamp()).build());
-        }
+        // Removed hasArticleVersion check
+        customDataBuilder.putFields("wikipedia_article_version", Value.newBuilder().setStringValue(wikiArticle.getArticleVersion()).build());
+        // Removed hasDumpTimestamp check
+        customDataBuilder.putFields("wikipedia_dump_timestamp", Value.newBuilder().setStringValue(wikiArticle.getDumpTimestamp()).build());
 
         // SiteInfo into custom_data
         if (wikiArticle.hasSiteInfo()) {
@@ -79,10 +67,9 @@ public class WikiArticleToPipeDocProcessor {
         }
 
         // URL References into custom_data or keywords
-        if (wikiArticle.getUrlReferencesCount() > 0) {
-            // As a list of strings in custom_data
-            Value.ListValue.Builder linksListBuilder = Value.ListValue.newBuilder();
-            for (Link link : wikiArticle.getUrlReferencesList()) {
+        if (wikiArticle.getUrlReferencesCount() > 0) { // Keep the check for empty list
+            com.google.protobuf.ListValue.Builder linksListBuilder = com.google.protobuf.ListValue.newBuilder();
+            for (com.krickert.search.model.wiki.Link link : wikiArticle.getUrlReferencesList()) { // Assuming Link is your proto type
                 linksListBuilder.addValues(Value.newBuilder().setStringValue(link.getUrl()).build());
             }
             customDataBuilder.putFields("wikipedia_url_references", Value.newBuilder().setListValue(linksListBuilder.build()).build());
@@ -94,6 +81,15 @@ public class WikiArticleToPipeDocProcessor {
         // Raw Wikitext into custom_data (optional, can be large)
         // customDataBuilder.putFields("wikipedia_raw_wikitext", Value.newBuilder().setStringValue(wikiArticle.getWikiText()).build());
 
+        // Add redirect target title if the article is a redirect
+        if (wikiArticle.getWikiType() == com.krickert.search.model.wiki.WikiType.REDIRECT && wikiArticle.hasRedirectTargetTitle()) {
+            customDataBuilder.putFields("wikipedia_redirect_target_title", Value.newBuilder().setStringValue(wikiArticle.getRedirectTargetTitle()).build());
+            // Optionally, you might want to adjust the body for redirect pages if it's not already handled by plain text extraction
+            // For example:
+            // if (pipeDocBuilder.getBody().isEmpty() || !pipeDocBuilder.getBody().toLowerCase().contains("redirect")) {
+            //     pipeDocBuilder.setBody("This page is a redirect to: " + wikiArticle.getRedirectTargetTitle());
+            // }
+        }
 
         pipeDocBuilder.setCustomData(customDataBuilder.build());
         pipeDocBuilder.setDocumentType("wikipedia_article"); // Set document type

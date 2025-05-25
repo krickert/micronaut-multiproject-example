@@ -16,7 +16,7 @@ public class InitiateCrawlRequest {
     private String fileDumpDate; // "YYYYMMDD"
     @Schema(description = "Checksum value for verifying file integrity.", required = true)
     private String errorCheckValue;
-    @Schema(description = "Type of checksum algorithm used.", required = true, allowableValues = {"MD5", "SHA1", "SHA256"})
+    @Schema(description = "Type of checksum algorithm used. Allowed values: MD5, SHA1, SHA256.", required = true, type = "string", example = "MD5")
     private String errorCheckType; // "MD5", "SHA1", "SHA256"
     @Schema(description = "Optional list of expected file names within the dump (for multi-stream dumps).")
     private List<String> expectedFilesInDump;

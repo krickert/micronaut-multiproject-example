@@ -5,6 +5,10 @@ import com.krickert.search.model.wiki.WikiArticle;
 import com.krickert.search.model.wiki.WikiSiteInfo;
 import com.krickert.search.model.wiki.WikiType;
 import com.google.protobuf.Timestamp;
+import info.bliki.wiki.dump.IArticleFilter;
+import info.bliki.wiki.dump.Siteinfo;
+import info.bliki.wiki.dump.WikiXMLParser;
+import info.bliki.wiki.model.WikiModel;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,11 +21,11 @@ import org.slf4j.LoggerFactory;
 // Example: import com.krickert.shaded.bliki.wiki.dump.WikiXMLParser;
 // Example: import com.krickert.shaded.bliki.wiki.model.WikiModel;
 
-import com.krickert.shaded.info.bliki.wiki.dump.IArticleFilter;
-import com.krickert.shaded.info.bliki.wiki.dump.Siteinfo;
-import com.krickert.shaded.info.bliki.wiki.dump.WikiXMLParser;
-import com.krickert.shaded.info.bliki.wiki.model.WikiModel;
-import com.krickert.shaded.info.bliki.wiki.namespaces.Namespace;
+import info.bliki.wiki.dump.IArticleFilter;
+import info.bliki.wiki.dump.Siteinfo;
+import info.bliki.wiki.dump.WikiXMLParser;
+import info.bliki.wiki.model.WikiModel;
+import info.bliki.wiki.namespaces.Namespace;
 
 
 import java.io.FileInputStream;
@@ -95,7 +99,7 @@ public class BlikiArticleExtractorProcessor {
         }
 
         @Override
-        public void process(com.krickert.shaded.info.bliki.wiki.dump.WikiArticle page, Siteinfo siteinfo) {
+        public void process(info.bliki.wiki.dump.WikiArticle page, Siteinfo siteinfo) {
             if (page.isMain() || page.isCategory()) { // Process articles and categories, extend if needed
                 wikiModel.setUp(); // Important: Reset model for each page
                 String plainText = wikiModel.render(page.getText());
@@ -129,25 +133,34 @@ public class BlikiArticleExtractorProcessor {
                     siteInfoBuilder.setSiteName(siteinfo.getSitename());
                     siteInfoBuilder.setBase(siteinfo.getBase());
                     siteInfoBuilder.setGenerator(siteinfo.getGenerator());
-                    siteInfoBuilder.setCharacterCase(siteinfo.getCase());
+                    // Based on user's old code, try getCharacterCase().
+                    // If this method doesn't exist in Bliki 3.1.0, it will fail compilation.
+                    // The original error was for getCase().
+                    String siteCase = siteinfo.getCharacterCase();
+                    if (siteCase != null) {
+                         siteInfoBuilder.setCharacterCase(siteCase);
+                    }
                 }
                 articleBuilder.setSiteInfo(siteInfoBuilder.build());
 
-                // Determine WikiType (basic example)
-                if (page.isCategory()) {
+                // Determine WikiType
+                String redirectTarget = page.getRedirectLink();
+                if (redirectTarget != null && !redirectTarget.isEmpty()) {
+                    articleBuilder.setWikiType(WikiType.REDIRECT);
+                    articleBuilder.setRedirectTargetTitle(redirectTarget);
+                } else if (page.isCategory()) {
                     articleBuilder.setWikiType(WikiType.CATEGORY);
                 } else if (page.isTemplate()) {
                     articleBuilder.setWikiType(WikiType.TEMPLATE);
-                } else if (page.isRedirect()) {
-                    articleBuilder.setWikiType(WikiType.REDIRECT);
                 } else if (page.isFile()) {
                     articleBuilder.setWikiType(WikiType.FILE);
+                } else if (page.isMain()) { // isMain() for regular articles
+                    articleBuilder.setWikiType(WikiType.ARTICLE);
                 } else {
-                    articleBuilder.setWikiType(WikiType.ARTICLE); // Default
+                    LOG.debug("Skipping page '{}' (ID: {}) of namespace {} as its type is not explicitly handled.", page.getTitle(), page.getId(), page.getIntegerNamespace());
+                    return; // Don't process this page further
                 }
-                // Add more logic for other WikiTypes (LIST, DRAFT, WIKIPEDIA) if identifiable
-
-                consumer.accept(articleBuilder.build());
+                consumer.accept(articleBuilder.build()); // All processed types reach here
             }
         }
         

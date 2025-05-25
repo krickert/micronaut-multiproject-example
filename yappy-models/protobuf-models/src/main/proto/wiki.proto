@@ -80,4 +80,5 @@ message WikiArticle {
   google.protobuf.Timestamp date_parsed = 12;    // When Yappy processed this article
   google.protobuf.Timestamp timestamp = 13;      // Timestamp of the article's last revision/edit from the dump
   string article_version = 14;
+  optional string redirect_target_title = 15; // New field
 }
