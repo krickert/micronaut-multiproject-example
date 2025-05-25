@@ -1,8 +1,8 @@
 package com.krickert.yappy.bootstrap.service;
 
+import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
+import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.yappy.bootstrap.api.*;
-import com.krickert.yappy.model.pipeline.PipelineClusterConfig;
-import com.krickert.yappy.services.ConsulBusinessOperationsService;
 
 import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;

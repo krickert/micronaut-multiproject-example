@@ -11,7 +11,6 @@ import com.krickert.yappy.bootstrap.api.OperationStatus;
 import com.krickert.yappy.bootstrap.api.ClusterCreationStatus;
 
 import com.google.protobuf.Empty;
-import io.micronaut.grpc.client.inject.GrpcClient;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.MutableHttpResponse;
@@ -45,7 +44,7 @@ public class SetupController {
     // private final ViewsRenderer viewsRenderer; // Optional: if direct rendering needed
 
     @Inject
-    public SetupController(@GrpcClient("bootstrap-config-service") BootstrapConfigServiceGrpc.BootstrapConfigServiceBlockingStub bootstrapConfigClient) {
+    public SetupController(final BootstrapConfigServiceGrpc.BootstrapConfigServiceBlockingStub bootstrapConfigClient) {
         this.bootstrapConfigClient = bootstrapConfigClient;
         // this.viewsRenderer = viewsRenderer;
         LOG.info("SetupController instantiated with gRPC client.");

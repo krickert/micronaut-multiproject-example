@@ -14,10 +14,7 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -57,12 +54,12 @@ class SetupControllerTest {
                 .build();
         when(mockBootstrapConfigClient.getConsulConfiguration(any(Empty.class))).thenReturn(mockDetails);
 
-        ModelAndView<?> modelAndView = controller.consulConfig(Optional.empty(), Optional.empty());
+        ModelAndView<> modelAndView = controller.consulConfig(Optional.empty(), Optional.empty());
 
         assertNotNull(modelAndView);
-        assertEquals("setup/consul-config", modelAndView.getViewName().orElse(null));
+        assertEquals("setup/consul-config", modelAndView.getView().orElse(null));
         assertTrue(modelAndView.getModel().isPresent());
-        Map<String, Object> model = modelAndView.getModel().get();
+        Object model = modelAndView.getModel().get();
         assertEquals(mockDetails, model.get("consulConfig"));
         assertNull(model.get("errorMessage")); // No error expected
 
@@ -76,7 +73,7 @@ class SetupControllerTest {
         ModelAndView<?> modelAndView = controller.consulConfig(Optional.empty(), Optional.empty());
 
         assertNotNull(modelAndView);
-        assertEquals("setup/consul-config", modelAndView.getViewName().orElse(null));
+        assertEquals("setup/consul-config", modelAndView.getView().orElse(null));
         assertTrue(modelAndView.getModel().isPresent());
         Map<String, Object> model = modelAndView.getModel().get();
         assertNotNull(model.get("errorMessage"));
@@ -196,7 +193,7 @@ class SetupControllerTest {
 
         ModelAndView<?> modelAndView = controller.clusterManagement(Optional.empty(), Optional.empty());
 
-        assertEquals("setup/cluster-management", modelAndView.getViewName().orElse(null));
+        assertEquals("setup/cluster-management", modelAndView.getView().orElse(null));
         assertTrue(modelAndView.getModel().isPresent());
         Map<String, Object> model = modelAndView.getModel().get();
         assertTrue((Boolean) model.get("consulNotConfigured"));
@@ -221,7 +218,7 @@ class SetupControllerTest {
 
         ModelAndView<?> modelAndView = controller.clusterManagement(Optional.of("Test Message"), Optional.of(true));
 
-        assertEquals("setup/cluster-management", modelAndView.getViewName().orElse(null));
+        assertEquals("setup/cluster-management", modelAndView.getView().orElse(null));
         assertTrue(modelAndView.getModel().isPresent());
         Map<String, Object> model = modelAndView.getModel().get();
         
@@ -266,7 +263,7 @@ class SetupControllerTest {
 
         ModelAndView<?> modelAndView = controller.clusterManagement(Optional.empty(), Optional.empty());
         
-        assertEquals("setup/cluster-management", modelAndView.getViewName().orElse(null));
+        assertEquals("setup/cluster-management", modelAndView.getView().orElse(null));
         assertTrue(modelAndView.getModel().isPresent());
         Map<String, Object> model = modelAndView.getModel().get();
         assertTrue(((String)model.get("errorMessage")).contains("List clusters failed"));

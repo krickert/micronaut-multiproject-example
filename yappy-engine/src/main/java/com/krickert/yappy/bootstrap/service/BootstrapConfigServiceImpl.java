@@ -1,7 +1,8 @@
 package com.krickert.yappy.bootstrap.service;
 
+import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
+import com.krickert.search.config.pipeline.model.*;
 import com.krickert.yappy.bootstrap.api.*;
-import com.krickert.yappy.services.ConsulBusinessOperationsService;
 import io.grpc.stub.StreamObserver;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -21,25 +22,13 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Properties;
-import java.util.Optional;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
-import java.util.Arrays; // For hardcoded list simulation
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 // Yappy pipeline models - assuming these exist in this package structure
-import com.krickert.yappy.model.pipeline.PipelineClusterConfig;
-import com.krickert.yappy.model.pipeline.PipelineConfig;
-import com.krickert.yappy.model.pipeline.PipelineGraphConfig;
-import com.krickert.yappy.model.pipeline.PipelineModuleConfiguration;
-import com.krickert.yappy.model.pipeline.PipelineModuleMap;
 // Potentially for JSON logging if chosen later:
 // import com.fasterxml.jackson.databind.ObjectMapper;
 // import com.fasterxml.jackson.databind.SerializationFeature;
@@ -323,42 +312,44 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
 
     private PipelineClusterConfig createMinimalClusterConfig(NewClusterDetails details) {
         LOG.debug("Creating minimal cluster config for cluster name: {}", details.getClusterName());
-        PipelineClusterConfig.Builder clusterConfigBuilder = PipelineClusterConfig.newBuilder();
-        clusterConfigBuilder.setClusterName(details.getClusterName());
+        PipelineClusterConfig.PipelineClusterConfigBuilder clusterConfigBuilder = PipelineClusterConfig.builder();
+        clusterConfigBuilder.clusterName(details.getClusterName());
 
-        PipelineGraphConfig.Builder graphConfigBuilder = PipelineGraphConfig.newBuilder();
-        PipelineModuleMap.Builder moduleMapBuilder = PipelineModuleMap.newBuilder();
+        PipelineGraphConfig.PipelineGraphConfigBuilder graphConfigBuilder = PipelineGraphConfig.builder();
+        PipelineModuleMap.PipelineModuleMapBuilder moduleMapBuilder = PipelineModuleMap.builder();
 
         if (details.hasFirstPipelineName() && !details.getFirstPipelineName().isEmpty()) {
             String firstPipelineName = details.getFirstPipelineName();
-            clusterConfigBuilder.setDefaultPipelineName(firstPipelineName);
+            clusterConfigBuilder.defaultPipelineName(firstPipelineName);
 
-            PipelineConfig.Builder pipelineBuilder = PipelineConfig.newBuilder();
-            pipelineBuilder.setPipelineName(firstPipelineName);
-            // pipelineBuilder.putAllPipelineSteps(new HashMap<>()); // Empty steps map
-
-            graphConfigBuilder.putPipelines(firstPipelineName, pipelineBuilder.build());
+            PipelineConfig.PipelineConfigBuilder pipelineBuilder = PipelineConfig.builder();
+            pipelineBuilder.name(firstPipelineName);
+            pipelineBuilder.pipelineSteps(new HashMap<>()); // Empty steps map
+            Map<String, PipelineConfig> configs = new TreeMap<>();
+            configs.put(firstPipelineName, pipelineBuilder.build());
+            graphConfigBuilder.pipelines(configs);
         } else {
             // No default pipeline if none specified
             // graphConfigBuilder.putAllPipelines(new HashMap<>()); // Empty pipelines map
         }
         
-        clusterConfigBuilder.setPipelineGraphConfig(graphConfigBuilder.build());
+        clusterConfigBuilder.pipelineGraphConfig(graphConfigBuilder.build());
 
         if (details.getInitialModulesForFirstPipelineList() != null && !details.getInitialModulesForFirstPipelineList().isEmpty()) {
             for (InitialModuleConfig initialModule : details.getInitialModulesForFirstPipelineList()) {
-                PipelineModuleConfiguration.Builder moduleConfigBuilder = PipelineModuleConfiguration.newBuilder();
-                moduleConfigBuilder.setImplementationId(initialModule.getImplementationId());
-                moduleConfigBuilder.setImplementationName("Module_" + initialModule.getImplementationId()); // Placeholder name
+                PipelineModuleConfiguration.PipelineModuleConfigurationBuilder moduleConfigBuilder = PipelineModuleConfiguration.builder();
+                moduleConfigBuilder.implementationId(initialModule.getImplementationId());
+                moduleConfigBuilder.implementationName("Module_" + initialModule.getImplementationId()); // Placeholder name
                 // moduleConfigBuilder.setCustomConfigSchemaReference(""); // Optional: can be empty or null
                 // moduleConfigBuilder.putAllDefaultConfig(new HashMap<>()); // Optional: empty default config
-
-                moduleMapBuilder.putAvailableModules(initialModule.getImplementationId(), moduleConfigBuilder.build());
+                Map<String, PipelineModuleConfiguration> configurationMap = new TreeMap<>();
+                configurationMap.put(initialModule.getImplementationId(), moduleConfigBuilder.build());
+                moduleMapBuilder.availableModules(configurationMap);
             }
         } else {
             // moduleMapBuilder.putAllAvailableModules(new HashMap<>()); // Empty modules map
         }
-        clusterConfigBuilder.setPipelineModuleMap(moduleMapBuilder.build());
+        clusterConfigBuilder.pipelineModuleMap(moduleMapBuilder.build());
         
         // Set other fields to defaults or empty lists as per subtask
         // clusterConfigBuilder.addAllAllowedKafkaTopics(new ArrayList<>());
@@ -391,7 +382,7 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
             String consulPath = "pipeline-configs/clusters/" + clusterName;
             // Assuming storeClusterConfiguration returns void or throws exception on failure.
             // Adjust if it returns a boolean status.
-            consulBusinessOperationsService.storeClusterConfiguration(minimalConfig); 
+            consulBusinessOperationsService.storeClusterConfiguration(clusterName, minimalConfig);
             LOG.info("Successfully stored minimal configuration for cluster '{}' at Consul path '{}'", clusterName, consulPath);
 
             // Update bootstrap properties to select this new cluster

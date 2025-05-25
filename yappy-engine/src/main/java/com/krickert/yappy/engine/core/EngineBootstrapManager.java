@@ -2,7 +2,6 @@ package com.krickert.yappy.engine.core;
 
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value;
-import io.micronaut.context.event.ApplicationConfigurationEvent;
 import io.micronaut.context.event.ApplicationEventListener;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;

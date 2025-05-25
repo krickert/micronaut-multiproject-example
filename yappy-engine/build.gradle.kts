@@ -122,6 +122,7 @@ dependencies {
     testImplementation(mn.mockito.junit.jupiter)
     // https://mvnrepository.com/artifact/org.awaitility/awaitility
     testImplementation("org.awaitility:awaitility:4.3.0")
+    implementation(mn.micronaut.views.thymeleaf)
 }
 
 //// Add this block to explicitly configure the Mockito agent
