@@ -405,3 +405,53 @@ I think this is already setup.  I'm utilizing the micronaut test resources
 
 This should handle all the setup.  This is already extensively used in [yappy-engine](yappy-engine) and [yappy-consul-config](yappy-consul-config)
 
+## Validation and Follow-up
+
+Based on my review of the codebase, I can validate the following:
+
+### Cluster Name Handling
+1. You're correct that there is no default "yappy-default" cluster name in the code. The cluster name comes from either:
+   - The `app.config.cluster-name` property in application.yml
+   - The bootstrap process when selecting or creating a cluster
+   - The `YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME` property in the bootstrap file
+
+2. The `BootstrapConfigServiceImpl` handles cluster selection and creation, storing the selected cluster name in the bootstrap properties file.
+
+### Bootstrap Process
+1. The bootstrap file path is configurable via `${yappy.engine.bootstrap-file.path:~/.yappy/engine-bootstrap.properties}` which provides flexibility for different deployment scenarios.
+
+2. Regarding restarts: The code currently recommends a restart after setting Consul configuration because it's the safest approach. While some properties are updated programmatically via `System.setProperty()`, a full restart ensures all components initialize correctly with the new configuration.
+
+### Service Registration
+1. The `YappyModuleRegistrationServiceImpl` implementation matches what you described. It handles module registration with Consul, including:
+   - Generating a service ID
+   - Configuring health checks
+   - Adding appropriate tags
+   - Calculating config digests
+
+2. Your approach of having the engine register modules on their behalf simplifies the architecture and reduces the burden on module developers.
+
+### Consul Paths
+1. The code uses paths like `pipeline-configs/clusters` for storing cluster configurations. If this should be changed to make clusters the "chroot" of the implementation, we would need to:
+   - Update the `ConsulBusinessOperationsService.getFullClusterKey()` method
+   - Update the `KiwiprojectConsulConfigFetcher.getClusterConfigKey()` method
+   - Ensure all references to these paths are updated consistently
+   - Update tests that rely on these paths
+
+2. Regarding path customization: The current implementation uses configurable prefixes via properties like `app.config.consul.key-prefixes.pipeline-clusters`, but you're right that standardizing these paths would be simpler and less error-prone.
+
+### Questions for Clarification:
+1. For the Consul paths issue, would you like me to implement changes to make clusters the "chroot" of the implementation? If so, what would be the preferred path structure?
+
+Ahh you mena to look up where each cluster location is at?  Let's make it /yappy-clusters... Is that what you mean?
+
+2. For service registration, should we implement the authentication stub you mentioned that always returns true? This would provide a placeholder for future security enhancements.
+
+Yes.
+
+3. Should we update the documentation to explicitly state that modules don't need to register themselves, as the engine handles this?
+
+Yes.
+
+
+
