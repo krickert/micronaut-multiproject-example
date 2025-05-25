@@ -61,13 +61,3 @@ public class YappyIngestionService {
 }
 
 // Factory to provide the gRPC stub
-@Factory
-class GrpcClientFactory {
-    // Micronaut will inject the channel configured for 'connector-engine-service'
-    // This name ('connector-engine-service') needs to be defined in application.yml
-    // under grpc.channels.connector-engine-service.address (e.g., "localhost:50051")
-    @Bean
-    ConnectorEngineGrpc.ConnectorEngineFutureStub futureStub(@GrpcChannel("connector-engine-service") ManagedChannel channel) {
-        return ConnectorEngineGrpc.newFutureStub(channel);
-    }
-}

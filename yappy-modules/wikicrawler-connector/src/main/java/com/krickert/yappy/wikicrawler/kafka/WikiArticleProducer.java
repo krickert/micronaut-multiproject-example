@@ -15,7 +15,7 @@ public interface WikiArticleProducer {
      * @param articleId The ID of the wiki article, used as the Kafka key.
      * @param wikiArticle The WikiArticle message to send.
      */
-    @Topic("\${kafka.topic.wiki.article:wiki-articles}") // Topic name from config, defaults to 'wiki-articles'
+    @Topic("\\${kafka.topic.wiki.article:wiki-articles}") // Topic name from config, defaults to 'wiki-articles'
     void sendWikiArticle(@KafkaKey String articleId, WikiArticle wikiArticle);
 
 }

@@ -5,6 +5,10 @@ import com.krickert.search.model.wiki.WikiArticle;
 import com.krickert.search.model.wiki.WikiSiteInfo;
 import com.krickert.search.model.wiki.WikiType;
 import com.google.protobuf.Timestamp;
+import info.bliki.wiki.dump.IArticleFilter;
+import info.bliki.wiki.dump.Siteinfo;
+import info.bliki.wiki.dump.WikiXMLParser;
+import info.bliki.wiki.model.WikiModel;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,11 +21,6 @@ import org.slf4j.LoggerFactory;
 // Example: import com.krickert.shaded.bliki.wiki.dump.WikiXMLParser;
 // Example: import com.krickert.shaded.bliki.wiki.model.WikiModel;
 
-import com.krickert.shaded.info.bliki.wiki.dump.IArticleFilter;
-import com.krickert.shaded.info.bliki.wiki.dump.Siteinfo;
-import com.krickert.shaded.info.bliki.wiki.dump.WikiXMLParser;
-import com.krickert.shaded.info.bliki.wiki.model.WikiModel;
-import com.krickert.shaded.info.bliki.wiki.namespaces.Namespace;
 
 
 import java.io.FileInputStream;
@@ -95,7 +94,7 @@ public class BlikiArticleExtractorProcessor {
         }
 
         @Override
-        public void process(com.krickert.shaded.info.bliki.wiki.dump.WikiArticle page, Siteinfo siteinfo) {
+        public void process(info.bliki.wiki.dump.WikiArticle page, Siteinfo siteinfo) {
             if (page.isMain() || page.isCategory()) { // Process articles and categories, extend if needed
                 wikiModel.setUp(); // Important: Reset model for each page
                 String plainText = wikiModel.render(page.getText());
