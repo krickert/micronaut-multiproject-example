@@ -64,6 +64,7 @@ dependencies {
     implementation(mn.micronaut.protobuff.support)
     implementation(mn.micronaut.grpc.server.runtime)
     implementation(mn.micronaut.grpc.runtime)
+    implementation(mn.micronaut.context)
     implementation(mn.netty.common)
 // https://mvnrepository.com/artifact/io.grpc/grpc-core
     implementation("io.grpc:grpc-core:1.72.0")

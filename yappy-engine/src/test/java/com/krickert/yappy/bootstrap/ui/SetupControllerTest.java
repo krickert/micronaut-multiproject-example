@@ -54,12 +54,15 @@ class SetupControllerTest {
                 .build();
         when(mockBootstrapConfigClient.getConsulConfiguration(any(Empty.class))).thenReturn(mockDetails);
 
-        ModelAndView<> modelAndView = controller.consulConfig(Optional.empty(), Optional.empty());
+        // Corrected line:
+        ModelAndView<?> modelAndView = controller.consulConfig(Optional.empty(), Optional.empty());
 
         assertNotNull(modelAndView);
         assertEquals("setup/consul-config", modelAndView.getView().orElse(null));
         assertTrue(modelAndView.getModel().isPresent());
-        Object model = modelAndView.getModel().get();
+        // Since the model is a Map<String, Object>, you might need to cast if you use specific map methods
+        @SuppressWarnings("unchecked") // Suppress if you are sure about the model type
+        Map<String, Object> model = (Map<String, Object>) modelAndView.getModel().get();
         assertEquals(mockDetails, model.get("consulConfig"));
         assertNull(model.get("errorMessage")); // No error expected
 
@@ -70,24 +73,28 @@ class SetupControllerTest {
     void getConsulConfig_grpcClientThrowsException() {
         when(mockBootstrapConfigClient.getConsulConfiguration(any(Empty.class))).thenThrow(new RuntimeException("gRPC unavailable"));
 
+        // Corrected line:
         ModelAndView<?> modelAndView = controller.consulConfig(Optional.empty(), Optional.empty());
 
         assertNotNull(modelAndView);
         assertEquals("setup/consul-config", modelAndView.getView().orElse(null));
         assertTrue(modelAndView.getModel().isPresent());
-        Map<String, Object> model = modelAndView.getModel().get();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> model = (Map<String, Object>) modelAndView.getModel().get();
         assertNotNull(model.get("errorMessage"));
         assertTrue(((String)model.get("errorMessage")).contains("gRPC unavailable"));
         assertEquals(ConsulConfigDetails.newBuilder().setHost("Error fetching").build(), model.get("consulConfig"));
     }
-    
+
     @Test
     void getConsulConfig_withMessageAndSuccessParams() {
         when(mockBootstrapConfigClient.getConsulConfiguration(any(Empty.class))).thenReturn(ConsulConfigDetails.newBuilder().build());
 
+        // Corrected line:
         ModelAndView<?> modelAndView = controller.consulConfig(Optional.of("Test Message"), Optional.of(true));
         assertTrue(modelAndView.getModel().isPresent());
-        Map<String, Object> model = modelAndView.getModel().get();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> model = (Map<String, Object>) modelAndView.getModel().get();
         assertEquals("Test Message", model.get("message"));
         assertEquals(true, model.get("success"));
     }
@@ -153,7 +160,7 @@ class SetupControllerTest {
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
         assertEquals("/setup/consul?message=Connection%20failed.&success=false", response.getHeaders().get("Location"));
     }
-    
+
     @Test
     void setConsulConfig_invalidPortFormat() {
         Map<String, String> formData = new HashMap<>();
@@ -174,7 +181,7 @@ class SetupControllerTest {
         formData.put("port", "8500");
 
         when(mockBootstrapConfigClient.setConsulConfiguration(any(ConsulConfigDetails.class))).thenThrow(new RuntimeException("gRPC unavailable"));
-        
+
         HttpResponse<?> response = controller.setConsulConfig(formData);
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
@@ -191,11 +198,13 @@ class SetupControllerTest {
         when(mockBootstrapConfigClient.getConsulConfiguration(any(Empty.class)))
                 .thenReturn(ConsulConfigDetails.newBuilder().setHost("").setPort(0).build());
 
+        // Corrected line:
         ModelAndView<?> modelAndView = controller.clusterManagement(Optional.empty(), Optional.empty());
 
         assertEquals("setup/cluster-management", modelAndView.getView().orElse(null));
         assertTrue(modelAndView.getModel().isPresent());
-        Map<String, Object> model = modelAndView.getModel().get();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> model = (Map<String, Object>) modelAndView.getModel().get();
         assertTrue((Boolean) model.get("consulNotConfigured"));
         assertEquals("Consul is not configured. Please configure Consul connection first.", model.get("errorMessage"));
         verify(mockBootstrapConfigClient, never()).listAvailableClusters(any()); // Should not list clusters
@@ -216,12 +225,14 @@ class SetupControllerTest {
         when(mockBootstrapConfigClient.getConsulConfiguration(any(Empty.class))).thenReturn(consulDetails);
         when(mockBootstrapConfigClient.listAvailableClusters(any(Empty.class))).thenReturn(clusterList);
 
+        // Corrected line:
         ModelAndView<?> modelAndView = controller.clusterManagement(Optional.of("Test Message"), Optional.of(true));
 
         assertEquals("setup/cluster-management", modelAndView.getView().orElse(null));
         assertTrue(modelAndView.getModel().isPresent());
-        Map<String, Object> model = modelAndView.getModel().get();
-        
+        @SuppressWarnings("unchecked")
+        Map<String, Object> model = (Map<String, Object>) modelAndView.getModel().get();
+
         assertTrue((Boolean) model.get("consulConfigured"));
         assertFalse(model.containsKey("consulNotConfigured"));
         assertEquals(clusterList.getClustersList(), model.get("clusters"));
@@ -229,7 +240,7 @@ class SetupControllerTest {
         assertEquals("Test Message", model.get("message"));
         assertEquals(true, model.get("success"));
     }
-    
+
     @Test
     void getClusterManagement_consulConfigured_noSelectedCluster() {
         ConsulConfigDetails consulDetails = ConsulConfigDetails.newBuilder()
@@ -242,30 +253,34 @@ class SetupControllerTest {
         when(mockBootstrapConfigClient.getConsulConfiguration(any(Empty.class))).thenReturn(consulDetails);
         when(mockBootstrapConfigClient.listAvailableClusters(any(Empty.class))).thenReturn(clusterList);
 
+        // Corrected line:
         ModelAndView<?> modelAndView = controller.clusterManagement(Optional.empty(), Optional.empty());
         assertTrue(modelAndView.getModel().isPresent());
-        Map<String, Object> model = modelAndView.getModel().get();
-        
+        @SuppressWarnings("unchecked")
+        Map<String, Object> model = (Map<String, Object>) modelAndView.getModel().get();
+
         assertTrue((Boolean) model.get("consulConfigured"));
-        assertNull(model.get("currentSelectedCluster")); 
+        assertNull(model.get("currentSelectedCluster"));
         assertEquals(0, ((List<?>)model.get("clusters")).size());
     }
 
 
     @Test
     void getClusterManagement_listAvailableClusters_grpcException() {
-         ConsulConfigDetails consulDetails = ConsulConfigDetails.newBuilder()
+        ConsulConfigDetails consulDetails = ConsulConfigDetails.newBuilder()
                 .setHost("localhost")
                 .setPort(8500)
                 .build();
         when(mockBootstrapConfigClient.getConsulConfiguration(any(Empty.class))).thenReturn(consulDetails);
         when(mockBootstrapConfigClient.listAvailableClusters(any(Empty.class))).thenThrow(new RuntimeException("List clusters failed"));
 
+        // Corrected line:
         ModelAndView<?> modelAndView = controller.clusterManagement(Optional.empty(), Optional.empty());
-        
+
         assertEquals("setup/cluster-management", modelAndView.getView().orElse(null));
         assertTrue(modelAndView.getModel().isPresent());
-        Map<String, Object> model = modelAndView.getModel().get();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> model = (Map<String, Object>) modelAndView.getModel().get();
         assertTrue(((String)model.get("errorMessage")).contains("List clusters failed"));
         assertEquals(Collections.emptyList(), model.get("clusters"));
     }
@@ -285,7 +300,7 @@ class SetupControllerTest {
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
         assertEquals("/setup/cluster?message=Selected!&success=true", response.getHeaders().get("Location"));
-        
+
         verify(mockBootstrapConfigClient).selectExistingCluster(clusterSelectionCaptor.capture());
         assertEquals("myCluster", clusterSelectionCaptor.getValue().getClusterName());
     }
@@ -310,19 +325,19 @@ class SetupControllerTest {
         formData.put("clusterName", ""); // Empty cluster name
 
         HttpResponse<?> response = controller.selectCluster(formData);
-        
+
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
         assertEquals("/setup/cluster?message=Cluster%20name%20cannot%20be%20empty.&success=false", response.getHeaders().get("Location"));
         verify(mockBootstrapConfigClient, never()).selectExistingCluster(any());
     }
-    
+
     @Test
     void selectCluster_nullClusterNameInForm() {
         Map<String, String> formData = new HashMap<>();
         // formData.put("clusterName", null); // This would be equivalent to not providing the field
 
         HttpResponse<?> response = controller.selectCluster(formData);
-        
+
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
         assertEquals("/setup/cluster?message=Cluster%20name%20cannot%20be%20empty.&success=false", response.getHeaders().get("Location"));
         verify(mockBootstrapConfigClient, never()).selectExistingCluster(any());
@@ -373,9 +388,9 @@ class SetupControllerTest {
 
         ClusterCreationStatus mockStatus = ClusterCreationStatus.newBuilder().setSuccess(true).setMessage("Created Pipe!").setClusterName("newPipeCluster").build();
         when(mockBootstrapConfigClient.createNewCluster(any(NewClusterDetails.class))).thenReturn(mockStatus);
-        
+
         HttpResponse<?> response = controller.createCluster(formData);
-        
+
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
         verify(mockBootstrapConfigClient).createNewCluster(newClusterDetailsCaptor.capture());
         NewClusterDetails capturedDetails = newClusterDetailsCaptor.getValue();
@@ -406,7 +421,7 @@ class SetupControllerTest {
         assertEquals("module2", capturedDetails.getInitialModulesForFirstPipeline(1).getImplementationId());
         assertEquals("module3", capturedDetails.getInitialModulesForFirstPipeline(2).getImplementationId());
     }
-    
+
     @Test
     void createCluster_success_withEmptyModulesString() {
         Map<String, String> formData = new HashMap<>();
@@ -453,10 +468,10 @@ class SetupControllerTest {
         assertEquals("/setup/cluster?message=Cluster%20name%20cannot%20be%20empty%20for%20creation.&success=false", response.getHeaders().get("Location"));
         verify(mockBootstrapConfigClient, never()).createNewCluster(any());
     }
-    
+
     @Test
     void createCluster_nullClusterNameInForm() {
-         Map<String, String> formData = new HashMap<>();
+        Map<String, String> formData = new HashMap<>();
         // formData.put("clusterName", null); // Equivalent to not providing
 
         HttpResponse<?> response = controller.createCluster(formData);
@@ -477,6 +492,6 @@ class SetupControllerTest {
 
         assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
         assertTrue(response.getHeaders().get("Location").startsWith("/setup/cluster?message=gRPC%20call%20failed"));
-         assertTrue(response.getHeaders().get("Location").contains("&success=false"));
+        assertTrue(response.getHeaders().get("Location").contains("&success=false"));
     }
 }

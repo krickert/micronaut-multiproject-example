@@ -1,6 +1,7 @@
 package com.krickert.yappy.engine.core;
 
-import io.micronaut.context.event.ApplicationConfigurationEvent;
+// Changed import
+import io.micronaut.context.event.StartupEvent;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,7 +49,7 @@ class EngineBootstrapManagerTest {
     private static final String YAPPY_BOOTSTRAP_CONSUL_ACL_TOKEN = "yappy.bootstrap.consul.acl_token";
 
     @Mock
-    private ApplicationConfigurationEvent mockEvent;
+    private StartupEvent mockEvent; // Changed type here
 
     @BeforeEach
     void setUp() throws IOException {
@@ -85,7 +86,7 @@ class EngineBootstrapManagerTest {
             props.store(output, null);
         }
     }
-    
+
     private void assertSetupModeProperties() {
         assertNull(System.getProperty("yappy.consul.configured"), "yappy.consul.configured should not be set to true");
         assertNull(System.getProperty("consul.client.host"));
@@ -118,7 +119,7 @@ class EngineBootstrapManagerTest {
         manager.onApplicationEvent(mockEvent);
         assertSetupModeProperties();
     }
-    
+
     @Test
     void onApplicationEvent_bootstrapFileLacksConsulPort_setupMode() throws IOException {
         Properties props = new Properties();
@@ -173,7 +174,7 @@ class EngineBootstrapManagerTest {
         assertEquals("true", System.getProperty("micronaut.config-client.enabled"));
         assertEquals("super-secret-token", System.getProperty("consul.client.acl-token"));
     }
-    
+
     @Test
     void onApplicationEvent_validConsulHostPortAndEmptyAcl() throws IOException {
         Properties props = new Properties();
@@ -196,8 +197,8 @@ class EngineBootstrapManagerTest {
     @Test
     void onApplicationEvent_IOExceptionReadingFile_setupMode() throws IOException {
         // Simulate IOException by making the path a directory
-        Files.deleteIfExists(testBootstrapFilePath); 
-        Files.createDirectories(testBootstrapFilePath); 
+        Files.deleteIfExists(testBootstrapFilePath);
+        Files.createDirectories(testBootstrapFilePath);
 
         manager.onApplicationEvent(mockEvent);
         assertSetupModeProperties();

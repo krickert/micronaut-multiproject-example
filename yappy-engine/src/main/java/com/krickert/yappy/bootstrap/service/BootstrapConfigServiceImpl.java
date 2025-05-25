@@ -85,8 +85,8 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
 
     @Override
     public void setConsulConfiguration(ConsulConfigDetails request, StreamObserver<ConsulConnectionStatus> responseObserver) {
-        LOG.info("setConsulConfiguration called with host: {}, port: {}, ACL token present: {}, resolved path: {}", 
-            request.getHost(), request.getPort(), request.hasAclToken(), resolvedBootstrapPath);
+        LOG.info("setConsulConfiguration called with host: {}, port: {}, ACL token present: {}, resolved path: {}",
+                request.getHost(), request.getPort(), request.hasAclToken(), resolvedBootstrapPath);
         try {
             Properties props = loadProperties(resolvedBootstrapPath);
 
@@ -95,14 +95,35 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
             if (request.hasAclToken() && !request.getAclToken().isEmpty()) {
                 props.setProperty(YAPPY_BOOTSTRAP_CONSUL_ACL_TOKEN, request.getAclToken());
             } else {
-                props.remove(YAPPY_BOOTSTRAP_CONSUL_ACL_TOKEN); // Remove if empty or not present
+                props.remove(YAPPY_BOOTSTRAP_CONSUL_ACL_TOKEN);
             }
 
             saveProperties(resolvedBootstrapPath, props);
 
-            // TODO: Implement actual Consul ping/health check
-            // For now, assume success if write succeeds.
-            boolean consulPingSuccess = true; 
+            // Set system properties first, so ConsulBusinessOperationsService can use them if it's re-initialized
+            // or if its internal Consul client relies on these properties at runtime.
+            System.setProperty("consul.client.host", request.getHost());
+            System.setProperty("consul.client.port", String.valueOf(request.getPort()));
+            System.setProperty("consul.client.registration.enabled", "true");
+            System.setProperty("consul.client.config.enabled", "true");
+            System.setProperty("micronaut.config-client.enabled", "true");
+            System.setProperty("yappy.consul.configured", "true");
+            if (request.hasAclToken() && !request.getAclToken().isEmpty()) {
+                System.setProperty("consul.client.acl-token", request.getAclToken());
+            } else {
+                System.clearProperty("consul.client.acl-token");
+            }
+            LOG.info("System properties updated for Consul client. Host: {}, Port: {}", request.getHost(), request.getPort());
+
+
+            boolean consulPingSuccess = false;
+            if (this.consulBusinessOperationsService != null) {
+                LOG.info("Attempting to check Consul availability after saving properties and setting system properties...");
+                // Block on the reactive call for this synchronous gRPC method
+                consulPingSuccess = this.consulBusinessOperationsService.isConsulAvailable().blockOptional().orElse(false);
+            } else {
+                LOG.warn("ConsulBusinessOperationsService is null, cannot check Consul availability. Assuming ping failure for safety, though properties were saved.");
+            }
 
             ConsulConfigDetails.Builder currentConfigBuilder = request.toBuilder();
             String selectedCluster = props.getProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME);
@@ -112,37 +133,23 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
 
             ConsulConnectionStatus.Builder responseBuilder = ConsulConnectionStatus.newBuilder();
             if (consulPingSuccess) {
-                // Set system properties to reflect the new configuration
-                System.setProperty("consul.client.host", request.getHost());
-                System.setProperty("consul.client.port", String.valueOf(request.getPort()));
-                // System.setProperty("consul.client.defaultZone", request.getHost() + ":" + request.getPort()); // Alternative
-                System.setProperty("consul.client.registration.enabled", "true");
-                System.setProperty("consul.client.config.enabled", "true");
-                System.setProperty("micronaut.config-client.enabled", "true");
-                System.setProperty("yappy.consul.configured", "true");
-                if (request.hasAclToken() && !request.getAclToken().isEmpty()) {
-                    System.setProperty("consul.client.acl-token", request.getAclToken());
-                } else {
-                    System.clearProperty("consul.client.acl-token");
-                }
-
-                LOG.info("System properties updated for Consul client. Host: {}, Port: {}, Registration: true, Config: true, Yappy Configured: true, Micronaut Config Client: true", request.getHost(), request.getPort());
+                LOG.info("Consul configuration updated, saved, and Consul is available. RESTART RECOMMENDED.");
                 LOG.warn("**************************************************************************************");
                 LOG.warn("* Consul has been configured. Key Consul settings have been updated programmatically. *");
                 LOG.warn("* A RESTART of the YAPPY Engine is STRONGLY RECOMMENDED to ensure all components     *");
                 LOG.warn("* initialize correctly with the new configuration.                                 *");
                 LOG.warn("**************************************************************************************");
-                
+
                 responseBuilder.setSuccess(true)
-                               .setMessage("Consul configuration updated and saved successfully to " + resolvedBootstrapPath.toString() + ". RESTART RECOMMENDED.");
+                        .setMessage("Consul configuration updated and saved to " + resolvedBootstrapPath.toString() + ". Consul is available. RESTART RECOMMENDED.");
                 responseBuilder.setCurrentConfig(currentConfigBuilder.build());
             } else {
-                // This part is currently unreachable due to consulPingSuccess being true
-                responseBuilder.setSuccess(false)
-                               .setMessage("Consul configuration saved, but failed to ping Consul (not implemented).");
-                responseBuilder.setCurrentConfig(currentConfigBuilder.build());
+                LOG.warn("Consul configuration saved to {}, but FAILED TO CONFIRM CONSUL AVAILABILITY. Please verify settings and Consul status. RESTART RECOMMENDED once Consul is reachable.", resolvedBootstrapPath);
+                responseBuilder.setSuccess(false) // Indicate ping/connection failure
+                        .setMessage("Consul configuration saved to " + resolvedBootstrapPath.toString() + ", but FAILED TO CONFIRM CONSUL AVAILABILITY. Verify settings. RESTART RECOMMENDED.");
+                responseBuilder.setCurrentConfig(currentConfigBuilder.build()); // Still return the saved config
             }
-            
+
             responseObserver.onNext(responseBuilder.build());
             responseObserver.onCompleted();
 
@@ -157,6 +164,201 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
                     .withDescription("Unexpected error setting Consul configuration: " + e.getMessage())
                     .asRuntimeException());
         }
+    }
+
+    // In com.krickert.yappy.bootstrap.service.BootstrapConfigServiceImpl.java
+    @Override
+    public void listAvailableClusters(Empty request, StreamObserver<ClusterList> responseObserver) {
+        LOG.info("listAvailableClusters called");
+        try {
+            List<String> clusterNames;
+            boolean isSimulation = false; // Flag to track if we are in simulation mode
+
+            if (consulBusinessOperationsService != null) {
+                if (Boolean.parseBoolean(System.getProperty("yappy.consul.configured", "false"))) {
+                    LOG.info("Consul is configured, attempting to list clusters from ConsulBusinessOperationsService.");
+                    clusterNames = consulBusinessOperationsService.listAvailableClusterNames().blockOptional().orElse(Collections.emptyList());
+                    LOG.info("Retrieved {} cluster names from ConsulBusinessOperationsService: {}", clusterNames.size(), clusterNames);
+                } else {
+                    LOG.warn("Consul is not marked as configured (yappy.consul.configured is not true). Not listing clusters from Consul.");
+                    clusterNames = Collections.emptyList();
+                }
+            } else {
+                LOG.warn("ConsulBusinessOperationsService is null. Cannot list clusters from Consul. Simulating with hardcoded list for dev/test purposes.");
+                clusterNames = Arrays.asList("simulatedCluster_NoService1", "simulatedCluster_NoService2");
+                isSimulation = true; // Mark that we are in simulation
+            }
+
+            ClusterList.Builder clusterListBuilder = ClusterList.newBuilder();
+            if (clusterNames != null) {
+                for (String name : clusterNames) {
+                    String currentStatus;
+                    String clusterId;
+
+                    if (isSimulation) {
+                        currentStatus = "UNKNOWN"; // Status for simulated clusters
+                        clusterId = getFullClusterKey(name); // Use local robust getFullClusterKey
+                    } else {
+                        // This path assumes consulBusinessOperationsService is not null
+                        currentStatus = "NEEDS_VERIFICATION"; // Or determine dynamically if needed in future
+                        clusterId = consulBusinessOperationsService.getFullClusterKey(name);
+                    }
+
+                    ClusterInfo info = ClusterInfo.newBuilder()
+                            .setClusterName(name)
+                            .setClusterId(clusterId)
+                            .setStatus(currentStatus)
+                            .build();
+                    clusterListBuilder.addClusters(info);
+                }
+            }
+            LOG.info("Responding with {} clusters: {}", clusterListBuilder.getClustersCount(), clusterNames);
+            responseObserver.onNext(clusterListBuilder.build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            LOG.error("Failed to list available clusters: {}", e.getMessage(), e);
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                    .withDescription("Failed to list available clusters: " + e.getMessage())
+                    .asRuntimeException());
+        }
+    }
+
+
+
+    @Override
+    public void createNewCluster(NewClusterDetails request, StreamObserver<ClusterCreationStatus> responseObserver) {
+        String clusterName = request.getClusterName();
+        LOG.info("createNewCluster called for: {}", clusterName);
+
+        if (clusterName == null || clusterName.trim().isEmpty()) {
+            LOG.warn("createNewCluster called with empty cluster name.");
+            responseObserver.onError(io.grpc.Status.INVALID_ARGUMENT
+                    .withDescription("Cluster name cannot be empty for new cluster creation.")
+                    .asRuntimeException());
+            return;
+        }
+
+        if (consulBusinessOperationsService == null) {
+            LOG.error("ConsulBusinessOperationsService is null. Cannot create new cluster '{}' in Consul.", clusterName);
+            ClusterCreationStatus response = ClusterCreationStatus.newBuilder()
+                    .setSuccess(false)
+                    .setMessage("Failed to create new cluster '" + clusterName + "': Consul interaction service is not available.")
+                    .setClusterName(clusterName)
+                    .build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+            return;
+        }
+        if (!Boolean.parseBoolean(System.getProperty("yappy.consul.configured", "false"))) {
+            LOG.error("Consul is not configured (yappy.consul.configured is not true). Cannot create new cluster '{}' in Consul.", clusterName);
+            ClusterCreationStatus response = ClusterCreationStatus.newBuilder()
+                    .setSuccess(false)
+                    .setMessage("Failed to create new cluster '" + clusterName + "': Consul is not configured in the system.")
+                    .setClusterName(clusterName)
+                    .build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+            return;
+        }
+
+
+        try {
+            PipelineClusterConfig minimalConfig = createMinimalClusterConfig(request);
+            // Using Jackson for potentially better logging of the object structure
+            // ObjectMapper localObjectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+            // LOG.debug("Generated minimal PipelineClusterConfig for {}: {}", clusterName, localObjectMapper.writeValueAsString(minimalConfig));
+            LOG.debug("Generated minimal PipelineClusterConfig for cluster name: {}", clusterName);
+
+
+            // Store in Consul using the reactive method and blocking for the result
+            Boolean storedSuccessfully = consulBusinessOperationsService.storeClusterConfiguration(clusterName, minimalConfig)
+                    .blockOptional()
+                    .orElse(false);
+
+            if (!storedSuccessfully) {
+                LOG.error("Failed to store minimal configuration for cluster '{}' in Consul.", clusterName);
+                ClusterCreationStatus response = ClusterCreationStatus.newBuilder()
+                        .setSuccess(false)
+                        .setMessage("Failed to store new cluster configuration for '" + clusterName + "' in Consul.")
+                        .setClusterName(clusterName)
+                        .build();
+                responseObserver.onNext(response);
+                responseObserver.onCompleted();
+                return;
+            }
+
+            String consulPath = consulBusinessOperationsService.getFullClusterKey(clusterName); // Assuming getFullClusterKey is public
+            LOG.info("Successfully stored minimal configuration for cluster '{}' at Consul path '{}'", clusterName, consulPath);
+
+
+            // Update bootstrap properties to select this new cluster
+            Properties props = loadProperties(resolvedBootstrapPath);
+            props.setProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME, clusterName);
+            saveProperties(resolvedBootstrapPath, props);
+            LOG.info("Set newly created cluster '{}' as selected in bootstrap properties file {}", clusterName, resolvedBootstrapPath);
+
+            ClusterCreationStatus response = ClusterCreationStatus.newBuilder()
+                    .setSuccess(true)
+                    .setMessage("Cluster '" + clusterName + "' created successfully and configuration stored in Consul.")
+                    .setClusterName(clusterName)
+                    .setSeededConfigPath(consulPath)
+                    .build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            LOG.error("Failed to create or store new cluster configuration for '{}': {}", clusterName, e.getMessage(), e);
+            // Determine a path for the response, even if storage failed.
+            // It's better to use the path that *would have been* used.
+            String pathForResponse = "unknown/error"; // Default error path
+            if (consulBusinessOperationsService != null) {
+                pathForResponse = consulBusinessOperationsService.getFullClusterKey(clusterName);
+            } else {
+                // Fallback if service is null, though this case is handled earlier
+                pathForResponse = getFullClusterKey(clusterName); // Local robust version
+            }
+
+            ClusterCreationStatus response = ClusterCreationStatus.newBuilder()
+                    .setSuccess(false)
+                    .setMessage("Failed to create new cluster '" + clusterName + "': " + e.getMessage())
+                    .setClusterName(clusterName)
+                    .setSeededConfigPath(pathForResponse) // Always set a non-null path
+                    .build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }
+    }
+    // In BootstrapConfigServiceImpl.java
+    private static final String DEFAULT_CONSUL_CONFIG_BASE_PATH = "pipeline-configs/clusters"; // Define a constant
+    // In com.krickert.yappy.bootstrap.service.BootstrapConfigServiceImpl.java
+    private String getConsulConfigPathFromProperties() {
+        try {
+            Properties props = loadProperties(resolvedBootstrapPath);
+            String basePath = props.getProperty("yappy.bootstrap.consul.config.base_path");
+            if (basePath == null || basePath.trim().isEmpty()) {
+                LOG.warn("Property 'yappy.bootstrap.consul.config.base_path' not found or is empty in {}.",
+                        resolvedBootstrapPath);
+                return null;
+            }
+            return basePath;
+        } catch (IOException e) {
+            LOG.error("Error loading properties from {} to get base path: {}", resolvedBootstrapPath, e.getMessage(), e);
+            return null;
+        }
+    }
+    private String getFullClusterKey(String clusterName) {
+        String basePath = getConsulConfigPathFromProperties();
+        if (basePath == null || basePath.isBlank()) {
+            LOG.warn("Consul base path (yappy.bootstrap.consul.config.base_path) is not configured in bootstrap properties. Using default '{}' for key construction for cluster '{}'.", DEFAULT_CONSUL_CONFIG_BASE_PATH, clusterName);
+            basePath = DEFAULT_CONSUL_CONFIG_BASE_PATH; // Provide a default
+        }
+        // Ensure clusterName is not null or blank (already validated in public methods, but good for a private util)
+        if (clusterName == null || clusterName.isBlank()) {
+            LOG.error("Cluster name is null or blank in getFullClusterKey. This should not happen. Using UNKNOWN_CLUSTER.");
+            clusterName = "UNKNOWN_CLUSTER"; // Fallback
+        }
+        String fullPath = basePath.endsWith("/") ? basePath + clusterName : basePath + "/" + clusterName;
+        return fullPath; // Now guaranteed non-null
     }
 
     @Override
@@ -186,7 +388,7 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
                 if (selectedClusterName != null && !selectedClusterName.isEmpty()) {
                     detailsBuilder.setSelectedYappyClusterName(selectedClusterName);
                 }
-                 LOG.info("Loaded Consul config from {}: Host={}, Port={}, ACL token present: {}, Selected Cluster: {}", 
+                 LOG.info("Loaded Consul config from {}: Host={}, Port={}, ACL token present: {}, Selected Cluster: {}",
                      resolvedBootstrapPath, host, portStr, (aclToken != null && !aclToken.isEmpty()), selectedClusterName != null ? selectedClusterName : "N/A");
             } else {
                 LOG.info("No Consul configuration found in {} or properties are incomplete. Returning defaults/empty.", resolvedBootstrapPath);
@@ -211,63 +413,6 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
             LOG.error("Unexpected error in getConsulConfiguration: {}", e.getMessage(), e);
             responseObserver.onError(io.grpc.Status.INTERNAL
                     .withDescription("Unexpected error getting Consul configuration: " + e.getMessage())
-                    .asRuntimeException());
-        }
-    }
-
-    @Override
-    public void listAvailableClusters(Empty request, StreamObserver<ClusterList> responseObserver) {
-        LOG.info("listAvailableClusters called");
-        try {
-            // TODO: Implement actual Consul key listing in ConsulBusinessOperationsService
-            // The yappy_service_registration.md document implies that cluster configurations are stored under "pipeline-configs/clusters/".
-            // If ConsulBusinessOperationsService has a generic listKeys(String prefix) method, use it with the prefix "pipeline-configs/clusters/".
-            // The returned keys would be the full paths, so you'd need to extract the cluster name part.
-            // Example: key = "pipeline-configs/clusters/my-cluster-name/config.json", extracted name = "my-cluster-name"
-            // For now, simulating with a hardcoded list.
-            
-            List<String> clusterNames;
-            try {
-                 // clusterNames = consulBusinessOperationsService.listAvailableClusterNames(); // Ideal
-                 // OR
-                 // List<String> allKeys = consulBusinessOperationsService.listKeys("pipeline-configs/clusters/");
-                 // clusterNames = allKeys.stream().map(key -> key.replaceFirst("^pipeline-configs/clusters/", "").split("/")[0]).distinct().collect(Collectors.toList());
-                
-                // Simulating for now:
-                if (consulBusinessOperationsService != null && System.getProperty("simulateRealConsulBehavior", "false").equals("true") ) { 
-                    // This condition allows for future testing if a mock or real service is injected
-                    // and we want to test its actual (potentially empty) return.
-                    // For now, this path will likely not be taken in typical unit tests unless simulateRealConsulBehavior is set.
-                    clusterNames = consulBusinessOperationsService.listAvailableClusterNames(); 
-                } else {
-                    LOG.warn("ConsulBusinessOperationsService.listAvailableClusterNames() or listKeys() is not yet fully implemented or available for BootstrapConfigService. Simulating with a hardcoded list.");
-                    clusterNames = Arrays.asList("simulatedCluster1", "simulatedCluster2_needs_setup");
-                }
-
-            } catch (Exception e) { // Catching generic exception as the actual method signature is unknown
-                LOG.error("Error calling ConsulBusinessOperationsService to list cluster names (or simulated call failed): {}. Returning empty list.", e.getMessage(), e);
-                clusterNames = Collections.emptyList();
-            }
-
-
-            ClusterList.Builder clusterListBuilder = ClusterList.newBuilder();
-            if (clusterNames != null) {
-                for (String name : clusterNames) {
-                    ClusterInfo info = ClusterInfo.newBuilder()
-                            .setClusterName(name)
-                            .setClusterId("pipeline-configs/clusters/" + name) // Example path
-                            .setStatus("NEEDS_VERIFICATION") // Placeholder status, actual status would require deeper check
-                            .build();
-                    clusterListBuilder.addClusters(info);
-                }
-            }
-            LOG.info("Found {} clusters: {}", clusterNames != null ? clusterNames.size() : 0, clusterNames);
-            responseObserver.onNext(clusterListBuilder.build());
-            responseObserver.onCompleted();
-        } catch (Exception e) {
-            LOG.error("Failed to list available clusters: {}", e.getMessage(), e);
-            responseObserver.onError(io.grpc.Status.INTERNAL
-                    .withDescription("Failed to list available clusters: " + e.getMessage())
                     .asRuntimeException());
         }
     }
@@ -310,6 +455,7 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
         }
     }
 
+    // In com.krickert.yappy.bootstrap.service.BootstrapConfigServiceImpl.java
     private PipelineClusterConfig createMinimalClusterConfig(NewClusterDetails details) {
         LOG.debug("Creating minimal cluster config for cluster name: {}", details.getClusterName());
         PipelineClusterConfig.PipelineClusterConfigBuilder clusterConfigBuilder = PipelineClusterConfig.builder();
@@ -324,95 +470,40 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
 
             PipelineConfig.PipelineConfigBuilder pipelineBuilder = PipelineConfig.builder();
             pipelineBuilder.name(firstPipelineName);
-            pipelineBuilder.pipelineSteps(new HashMap<>()); // Empty steps map
+            // Ensure pipelineSteps is initialized, even if empty, to satisfy the PipelineConfig record constructor
+            pipelineBuilder.pipelineSteps(Collections.emptyMap());
             Map<String, PipelineConfig> configs = new TreeMap<>();
             configs.put(firstPipelineName, pipelineBuilder.build());
             graphConfigBuilder.pipelines(configs);
         } else {
-            // No default pipeline if none specified
-            // graphConfigBuilder.putAllPipelines(new HashMap<>()); // Empty pipelines map
+            graphConfigBuilder.pipelines(Collections.emptyMap()); // Ensure pipelines map is initialized
         }
-        
+
         clusterConfigBuilder.pipelineGraphConfig(graphConfigBuilder.build());
 
+        // --- CORRECTED LOGIC FOR MODULES ---
+        Map<String, PipelineModuleConfiguration> availableModulesMap = new TreeMap<>(); // Declare map BEFORE the loop
         if (details.getInitialModulesForFirstPipelineList() != null && !details.getInitialModulesForFirstPipelineList().isEmpty()) {
             for (InitialModuleConfig initialModule : details.getInitialModulesForFirstPipelineList()) {
                 PipelineModuleConfiguration.PipelineModuleConfigurationBuilder moduleConfigBuilder = PipelineModuleConfiguration.builder();
                 moduleConfigBuilder.implementationId(initialModule.getImplementationId());
                 moduleConfigBuilder.implementationName("Module_" + initialModule.getImplementationId()); // Placeholder name
-                // moduleConfigBuilder.setCustomConfigSchemaReference(""); // Optional: can be empty or null
-                // moduleConfigBuilder.putAllDefaultConfig(new HashMap<>()); // Optional: empty default config
-                Map<String, PipelineModuleConfiguration> configurationMap = new TreeMap<>();
-                configurationMap.put(initialModule.getImplementationId(), moduleConfigBuilder.build());
-                moduleMapBuilder.availableModules(configurationMap);
+                // Ensure customConfig is initialized to an empty map if not otherwise specified
+                moduleConfigBuilder.customConfig(Collections.emptyMap());
+                availableModulesMap.put(initialModule.getImplementationId(), moduleConfigBuilder.build());
             }
-        } else {
-            // moduleMapBuilder.putAllAvailableModules(new HashMap<>()); // Empty modules map
         }
+        moduleMapBuilder.availableModules(availableModulesMap); // Set the builder's map AFTER the loop
+        // --- END CORRECTED LOGIC ---
+
         clusterConfigBuilder.pipelineModuleMap(moduleMapBuilder.build());
-        
-        // Set other fields to defaults or empty lists as per subtask
-        // clusterConfigBuilder.addAllAllowedKafkaTopics(new ArrayList<>());
-        // clusterConfigBuilder.addAllAllowedGrpcServices(new ArrayList<>());
-        // clusterConfigBuilder.setKafkaBootstrapServers("localhost:9092"); // Example default
-        // clusterConfigBuilder.setSchemaRegistryUrl("http://localhost:8081"); // Example default
+        clusterConfigBuilder.allowedKafkaTopics(Collections.emptySet());
+        clusterConfigBuilder.allowedGrpcServices(Collections.emptySet());
 
         return clusterConfigBuilder.build();
     }
 
 
-    @Override
-    public void createNewCluster(NewClusterDetails request, StreamObserver<ClusterCreationStatus> responseObserver) {
-        String clusterName = request.getClusterName();
-        LOG.info("createNewCluster called for: {}", clusterName);
-
-        if (clusterName == null || clusterName.trim().isEmpty()) {
-            LOG.warn("createNewCluster called with empty cluster name.");
-            responseObserver.onError(io.grpc.Status.INVALID_ARGUMENT
-                .withDescription("Cluster name cannot be empty for new cluster creation.")
-                .asRuntimeException());
-            return;
-        }
-
-        try {
-            PipelineClusterConfig minimalConfig = createMinimalClusterConfig(request);
-            LOG.debug("Generated minimal PipelineClusterConfig for {}: {}", clusterName, minimalConfig.toString()); // Using toString, consider JSON if too verbose
-
-            // Store in Consul
-            String consulPath = "pipeline-configs/clusters/" + clusterName;
-            // Assuming storeClusterConfiguration returns void or throws exception on failure.
-            // Adjust if it returns a boolean status.
-            consulBusinessOperationsService.storeClusterConfiguration(clusterName, minimalConfig);
-            LOG.info("Successfully stored minimal configuration for cluster '{}' at Consul path '{}'", clusterName, consulPath);
-
-            // Update bootstrap properties to select this new cluster
-            Properties props = loadProperties(resolvedBootstrapPath);
-            props.setProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME, clusterName);
-            saveProperties(resolvedBootstrapPath, props);
-            LOG.info("Set newly created cluster '{}' as selected in bootstrap properties file {}", clusterName, resolvedBootstrapPath);
-
-            ClusterCreationStatus response = ClusterCreationStatus.newBuilder()
-                    .setSuccess(true)
-                    .setMessage("Cluster '" + clusterName + "' created successfully and configuration stored in Consul.")
-                    .setClusterName(clusterName)
-                    .setSeededConfigPath(consulPath) 
-                    .build();
-            responseObserver.onNext(response);
-            responseObserver.onCompleted();
-
-        } catch (Exception e) { // Catching a broad exception, specific exceptions from storeClusterConfiguration should be handled if known
-            LOG.error("Failed to create or store new cluster configuration for '{}': {}", clusterName, e.getMessage(), e);
-            ClusterCreationStatus response = ClusterCreationStatus.newBuilder()
-                    .setSuccess(false)
-                    .setMessage("Failed to create new cluster '" + clusterName + "': " + e.getMessage())
-                    .setClusterName(clusterName)
-                    .build();
-            responseObserver.onNext(response);
-            responseObserver.onCompleted(); // For gRPC server-side, onCompleted must be called even after errors for some patterns, or use onError.
-                                            // Given we are sending a status object, onNext + onCompleted is appropriate.
-                                            // If we wanted to signal a gRPC level error, use responseObserver.onError()
-        }
-    }
 
     /**
      * @deprecated Replaced by {@link #createMinimalClusterConfig(NewClusterDetails)} which returns the actual object.
@@ -422,6 +513,6 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
     private String generateMinimalPipelineClusterConfig(NewClusterDetails details) {
         LOG.warn("DEPRECATED generateMinimalPipelineClusterConfig(NewClusterDetails) called. Should use createMinimalClusterConfig returning the object.");
         PipelineClusterConfig config = createMinimalClusterConfig(details);
-        return config.toString(); 
+        return config.toString();
     }
 }

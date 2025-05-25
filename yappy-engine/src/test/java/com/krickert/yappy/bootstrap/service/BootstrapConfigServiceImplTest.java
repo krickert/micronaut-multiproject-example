@@ -2,12 +2,20 @@ package com.krickert.yappy.bootstrap.service;
 
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
+import com.krickert.search.config.pipeline.model.PipelineGraphConfig;
+import com.krickert.search.config.pipeline.model.PipelineModuleMap;
+import com.krickert.search.config.pipeline.model.PipelineConfig;
+import com.krickert.search.config.pipeline.model.PipelineModuleConfiguration;
+import com.krickert.search.config.pipeline.model.SchemaReference;
+
 import com.krickert.yappy.bootstrap.api.*;
 
 import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.context.event.ApplicationEvent;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,18 +24,19 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileAttribute;
-import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import java.util.Properties;
-import java.util.Set;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
+
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -39,7 +48,7 @@ class BootstrapConfigServiceImplTest {
     private ConsulBusinessOperationsService mockConsulBusinessOpsService;
 
     @Mock
-    private ApplicationContext mockApplicationContext; // Injected but not used actively by all methods
+    private ApplicationContext mockApplicationContext;
 
     private BootstrapConfigServiceImpl service;
 
@@ -48,12 +57,14 @@ class BootstrapConfigServiceImplTest {
 
     private Path testBootstrapFilePath;
 
-    // Property keys from BootstrapConfigServiceImpl
     private static final String YAPPY_BOOTSTRAP_CONSUL_HOST = "yappy.bootstrap.consul.host";
     private static final String YAPPY_BOOTSTRAP_CONSUL_PORT = "yappy.bootstrap.consul.port";
     private static final String YAPPY_BOOTSTRAP_CONSUL_ACL_TOKEN = "yappy.bootstrap.consul.acl_token";
     private static final String YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME = "yappy.bootstrap.cluster.selected_name";
-    
+    private static final String YAPPY_BOOTSTRAP_CONSUL_CONFIG_BASE_PATH = "yappy.bootstrap.consul.config.base_path";
+    private static final String DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH = "pipeline-configs/clusters";
+
+
     @Captor
     private ArgumentCaptor<ConsulConnectionStatus> consulConnectionStatusCaptor;
     @Captor
@@ -73,12 +84,32 @@ class BootstrapConfigServiceImplTest {
     @BeforeEach
     void setUp() throws IOException {
         testBootstrapFilePath = tempDir.resolve("test-engine-bootstrap.properties");
-        // Ensure the file doesn't exist from a previous run within the same @TempDir instance (if tests are nested or so)
-        Files.deleteIfExists(testBootstrapFilePath); 
+        Files.deleteIfExists(testBootstrapFilePath); // Ensure clean state
+        Files.createFile(testBootstrapFilePath); // Create the file so it exists for tests that load properties
         service = new BootstrapConfigServiceImpl(mockConsulBusinessOpsService, testBootstrapFilePath.toString(), mockApplicationContext);
+        System.clearProperty("yappy.consul.configured"); // Clear before each test
+
+        // Mock the applicationContext.publishEvent call leniently
+        lenient().doNothing().when(mockApplicationContext).publishEvent(any(ApplicationEvent.class));
     }
 
-    // Helper to load properties from the test file
+    @AfterEach
+    void tearDown() {
+        System.clearProperty("yappy.consul.configured"); // Clear after each test
+    }
+
+
+    private void writeTestProperties(Properties props) throws IOException {
+        // Ensure base path is always present for tests that might need it,
+        // unless a test specifically wants to test its absence.
+        if (!props.containsKey(YAPPY_BOOTSTRAP_CONSUL_CONFIG_BASE_PATH)) {
+            props.setProperty(YAPPY_BOOTSTRAP_CONSUL_CONFIG_BASE_PATH, DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH);
+        }
+        try (OutputStream output = Files.newOutputStream(testBootstrapFilePath)) {
+            props.store(output, null);
+        }
+    }
+
     private Properties loadTestProperties() throws IOException {
         Properties props = new Properties();
         if (Files.exists(testBootstrapFilePath)) {
@@ -88,17 +119,15 @@ class BootstrapConfigServiceImplTest {
         }
         return props;
     }
-    
-    // Helper to create StreamObserver mock
+
     @SuppressWarnings("unchecked")
     private <T> StreamObserver<T> mockStreamObserver() {
         return (StreamObserver<T>) mock(StreamObserver.class);
     }
 
-    // --- Tests for getConsulConfiguration and setConsulConfiguration ---
-
     @Test
-    void getConsulConfiguration_whenFileDoesNotExist_returnsEmptyDetails() {
+    void getConsulConfiguration_whenFileDoesNotExist_returnsEmptyDetails() throws IOException {
+        Files.deleteIfExists(testBootstrapFilePath);
         StreamObserver<ConsulConfigDetails> mockObserver = mockStreamObserver();
         service.getConsulConfiguration(Empty.newBuilder().build(), mockObserver);
 
@@ -107,7 +136,7 @@ class BootstrapConfigServiceImplTest {
         verify(mockObserver, never()).onError(any());
 
         ConsulConfigDetails details = consulConfigDetailsCaptor.getValue();
-        assertFalse(details.hasHost(), "Host should not be set");
+        assertTrue(details.getHost().isEmpty(), "Host should be empty");
         assertEquals(0, details.getPort(), "Port should be default (0)");
         assertFalse(details.hasAclToken(), "ACL token should not be set");
         assertFalse(details.hasSelectedYappyClusterName(), "Selected cluster name should not be set");
@@ -115,6 +144,8 @@ class BootstrapConfigServiceImplTest {
 
     @Test
     void setAndGetConsulConfiguration_success() throws IOException {
+        when(mockConsulBusinessOpsService.isConsulAvailable()).thenReturn(Mono.just(true));
+
         StreamObserver<ConsulConnectionStatus> setObserver = mockStreamObserver();
         ConsulConfigDetails requestDetails = ConsulConfigDetails.newBuilder()
                 .setHost("testhost.local")
@@ -134,21 +165,17 @@ class BootstrapConfigServiceImplTest {
         assertEquals("testhost.local", status.getCurrentConfig().getHost());
         assertEquals(9500, status.getCurrentConfig().getPort());
         assertEquals("test-token-123", status.getCurrentConfig().getAclToken());
-        // selected_yappy_cluster_name is not set by setConsulConfiguration directly in currentConfig,
-        // but read from props if already there. Here, it shouldn't be set yet.
         assertFalse(status.getCurrentConfig().hasSelectedYappyClusterName());
 
 
-        // Verify properties file
         Properties props = loadTestProperties();
         assertEquals("testhost.local", props.getProperty(YAPPY_BOOTSTRAP_CONSUL_HOST));
         assertEquals("9500", props.getProperty(YAPPY_BOOTSTRAP_CONSUL_PORT));
         assertEquals("test-token-123", props.getProperty(YAPPY_BOOTSTRAP_CONSUL_ACL_TOKEN));
 
-        // Now test get
         StreamObserver<ConsulConfigDetails> getObserver = mockStreamObserver();
         service.getConsulConfiguration(Empty.newBuilder().build(), getObserver);
-        
+
         verify(getObserver).onNext(consulConfigDetailsCaptor.capture());
         verify(getObserver).onCompleted();
         verify(getObserver, never()).onError(any());
@@ -159,30 +186,29 @@ class BootstrapConfigServiceImplTest {
         assertEquals("test-token-123", retrievedDetails.getAclToken());
         assertFalse(retrievedDetails.hasSelectedYappyClusterName(), "Selected cluster should not be set yet");
     }
-    
+
     @Test
     void setConsulConfiguration_updateExisting() throws IOException {
-        // Pre-populate file
+        when(mockConsulBusinessOpsService.isConsulAvailable()).thenReturn(Mono.just(true));
+
         Properties initialProps = new Properties();
         initialProps.setProperty(YAPPY_BOOTSTRAP_CONSUL_HOST, "oldhost");
         initialProps.setProperty(YAPPY_BOOTSTRAP_CONSUL_PORT, "1111");
         initialProps.setProperty(YAPPY_BOOTSTRAP_CONSUL_ACL_TOKEN, "old-token");
-        initialProps.setProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME, "clusterA"); // Keep this to test it's preserved
-        try (var output = Files.newOutputStream(testBootstrapFilePath)) {
-            initialProps.store(output, null);
-        }
+        initialProps.setProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME, "clusterA");
+        writeTestProperties(initialProps);
 
         StreamObserver<ConsulConnectionStatus> setObserver = mockStreamObserver();
         ConsulConfigDetails newDetails = ConsulConfigDetails.newBuilder()
                 .setHost("newhost.com")
                 .setPort(2222)
-                // No ACL token this time, should remove it
                 .build();
         service.setConsulConfiguration(newDetails, setObserver);
 
         verify(setObserver).onNext(consulConnectionStatusCaptor.capture());
         ConsulConnectionStatus status = consulConnectionStatusCaptor.getValue();
         assertTrue(status.getSuccess());
+        assertTrue(status.hasCurrentConfig());
         assertEquals("newhost.com", status.getCurrentConfig().getHost());
         assertEquals(2222, status.getCurrentConfig().getPort());
         assertFalse(status.getCurrentConfig().hasAclToken(), "ACL token should have been removed");
@@ -202,9 +228,7 @@ class BootstrapConfigServiceImplTest {
         props.setProperty(YAPPY_BOOTSTRAP_CONSUL_HOST, "somehost");
         props.setProperty(YAPPY_BOOTSTRAP_CONSUL_PORT, "1234");
         props.setProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME, "mySelectedCluster");
-        try (var output = Files.newOutputStream(testBootstrapFilePath)) {
-            props.store(output, null);
-        }
+        writeTestProperties(props);
 
         StreamObserver<ConsulConfigDetails> getObserver = mockStreamObserver();
         service.getConsulConfiguration(Empty.newBuilder().build(), getObserver);
@@ -217,18 +241,12 @@ class BootstrapConfigServiceImplTest {
         assertEquals("mySelectedCluster", retrievedDetails.getSelectedYappyClusterName());
     }
 
-    // TODO: Add test for setConsulConfiguration when properties file save fails (IOException) - This is harder to reliably simulate
-    // One way might be to make the tempDir read-only after creating the service, but this is OS dependent.
-    // For now, focusing on logic given a writable path.
-
     @Test
     void getConsulConfiguration_invalidPortFormat_returnsDefaultPort() throws IOException {
         Properties props = new Properties();
         props.setProperty(YAPPY_BOOTSTRAP_CONSUL_HOST, "hostwithbadport");
         props.setProperty(YAPPY_BOOTSTRAP_CONSUL_PORT, "not-a-number");
-        try (var output = Files.newOutputStream(testBootstrapFilePath)) {
-            props.store(output, null);
-        }
+        writeTestProperties(props);
 
         StreamObserver<ConsulConfigDetails> getObserver = mockStreamObserver();
         service.getConsulConfiguration(Empty.newBuilder().build(), getObserver);
@@ -239,16 +257,24 @@ class BootstrapConfigServiceImplTest {
         assertEquals(0, retrievedDetails.getPort(), "Port should be default (0) or indicate error on invalid format");
     }
 
-
-    // --- Tests for listAvailableClusters ---
-
     @Test
-    void listAvailableClusters_success() {
+    void listAvailableClusters_success() throws IOException {
+        System.setProperty("yappy.consul.configured", "true");
+        Properties props = new Properties();
+        props.setProperty(YAPPY_BOOTSTRAP_CONSUL_HOST, "testhost");
+        props.setProperty(YAPPY_BOOTSTRAP_CONSUL_PORT, "8500");
+        // YAPPY_BOOTSTRAP_CONSUL_CONFIG_BASE_PATH is set by default in writeTestProperties
+        writeTestProperties(props);
+
         List<String> mockClusterNames = Arrays.asList("cluster1", "cluster2", "cluster3");
-        // This specific mocking relies on the internal System.getProperty call for simulation control.
-        // A more direct approach would be to inject a supplier/factory for this list if the service design allowed.
-        System.setProperty("simulateRealConsulBehavior", "true"); // To ensure it tries to use the mock
-        when(mockConsulBusinessOpsService.listAvailableClusterNames()).thenReturn(mockClusterNames);
+        lenient().when(mockConsulBusinessOpsService.listAvailableClusterNames()).thenReturn(Mono.just(mockClusterNames));
+        // This mock is for determineInitialClusterStatus, which is NOT called if status is hardcoded in service
+        lenient().when(mockConsulBusinessOpsService.getPipelineClusterConfig(anyString()))
+                .thenReturn(Mono.just(Optional.empty()));
+        // This mock is for getClusterId when consulBusinessOperationsService is NOT null
+        when(mockConsulBusinessOpsService.getFullClusterKey(anyString())).thenAnswer(invocation ->
+                DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH + "/" + invocation.getArgument(0)
+        );
 
         StreamObserver<ClusterList> mockObserver = mockStreamObserver();
         service.listAvailableClusters(Empty.newBuilder().build(), mockObserver);
@@ -260,22 +286,25 @@ class BootstrapConfigServiceImplTest {
         ClusterList clusterList = clusterListCaptor.getValue();
         assertEquals(3, clusterList.getClustersCount());
         assertEquals("cluster1", clusterList.getClusters(0).getClusterName());
-        assertEquals("pipeline-configs/clusters/cluster1", clusterList.getClusters(0).getClusterId());
-        assertEquals("NEEDS_VERIFICATION", clusterList.getClusters(0).getStatus());
+        assertEquals(DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH + "/cluster1", clusterList.getClusters(0).getClusterId());
+        assertEquals("NEEDS_VERIFICATION", clusterList.getClusters(0).getStatus()); // Service hardcodes this
         assertEquals("cluster2", clusterList.getClusters(1).getClusterName());
+        assertEquals(DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH + "/cluster2", clusterList.getClusters(1).getClusterId());
+        assertEquals("NEEDS_VERIFICATION", clusterList.getClusters(1).getStatus());
         assertEquals("cluster3", clusterList.getClusters(2).getClusterName());
-        
-        System.clearProperty("simulateRealConsulBehavior"); // Clean up
+        assertEquals(DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH + "/cluster3", clusterList.getClusters(2).getClusterId());
+        assertEquals("NEEDS_VERIFICATION", clusterList.getClusters(2).getStatus());
     }
-    
-    @Test
-    void listAvailableClusters_simulatedSuccess() {
-        // This tests the default simulation when simulateRealConsulBehavior is false or not set
-        // and the consulBusinessOperationsService is not returning a list (e.g. null or throws)
-        // Forcing the service to be null to test the fallback simulation path more directly.
-        // This requires re-initializing service without the mock for this specific test.
-        service = new BootstrapConfigServiceImpl(null, testBootstrapFilePath.toString(), mockApplicationContext);
 
+    @Test
+    void listAvailableClusters_simulatedSuccess() throws IOException {
+        System.clearProperty("yappy.consul.configured");
+        Properties props = new Properties();
+        // YAPPY_BOOTSTRAP_CONSUL_CONFIG_BASE_PATH is set by default in writeTestProperties
+        // This is used by the local getFullClusterKey in simulation
+        writeTestProperties(props);
+
+        service = new BootstrapConfigServiceImpl(null, testBootstrapFilePath.toString(), mockApplicationContext);
 
         StreamObserver<ClusterList> mockObserver = mockStreamObserver();
         service.listAvailableClusters(Empty.newBuilder().build(), mockObserver);
@@ -285,17 +314,26 @@ class BootstrapConfigServiceImplTest {
         verify(mockObserver, never()).onError(any());
 
         ClusterList clusterList = clusterListCaptor.getValue();
-        // Based on the current hardcoded simulation in BootstrapConfigServiceImpl
-        assertEquals(2, clusterList.getClustersCount()); 
-        assertEquals("simulatedCluster1", clusterList.getClusters(0).getClusterName());
-        assertEquals("simulatedCluster2_needs_setup", clusterList.getClusters(1).getClusterName());
+        assertEquals(2, clusterList.getClustersCount());
+        assertEquals("simulatedCluster_NoService1", clusterList.getClusters(0).getClusterName());
+        // Assuming service-side fix to set "UNKNOWN" for simulation
+        assertEquals("UNKNOWN", clusterList.getClusters(0).getStatus());
+        assertEquals(DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH + "/simulatedCluster_NoService1", clusterList.getClusters(0).getClusterId());
+        assertEquals("simulatedCluster_NoService2", clusterList.getClusters(1).getClusterName());
+        assertEquals("UNKNOWN", clusterList.getClusters(1).getStatus());
+        assertEquals(DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH + "/simulatedCluster_NoService2", clusterList.getClusters(1).getClusterId());
     }
 
 
     @Test
-    void listAvailableClusters_emptyListFromService() {
-        System.setProperty("simulateRealConsulBehavior", "true");
-        when(mockConsulBusinessOpsService.listAvailableClusterNames()).thenReturn(Arrays.asList());
+    void listAvailableClusters_emptyListFromService() throws IOException {
+        System.setProperty("yappy.consul.configured", "true");
+        Properties props = new Properties();
+        props.setProperty(YAPPY_BOOTSTRAP_CONSUL_HOST, "testhost");
+        props.setProperty(YAPPY_BOOTSTRAP_CONSUL_PORT, "8500");
+        writeTestProperties(props); // Will also set default base path
+
+        lenient().when(mockConsulBusinessOpsService.listAvailableClusterNames()).thenReturn(Mono.just(Collections.emptyList()));
 
         StreamObserver<ClusterList> mockObserver = mockStreamObserver();
         service.listAvailableClusters(Empty.newBuilder().build(), mockObserver);
@@ -306,46 +344,31 @@ class BootstrapConfigServiceImplTest {
 
         ClusterList clusterList = clusterListCaptor.getValue();
         assertEquals(0, clusterList.getClustersCount());
-        System.clearProperty("simulateRealConsulBehavior");
+        verify(mockConsulBusinessOpsService).listAvailableClusterNames();
     }
 
     @Test
-    void listAvailableClusters_serviceThrowsException() {
-        System.setProperty("simulateRealConsulBehavior", "true");
-        when(mockConsulBusinessOpsService.listAvailableClusterNames()).thenThrow(new RuntimeException("Consul connection failed"));
-        
+    void listAvailableClusters_serviceThrowsException() throws IOException {
+        System.setProperty("yappy.consul.configured", "true");
+        Properties props = new Properties();
+        props.setProperty(YAPPY_BOOTSTRAP_CONSUL_HOST, "testhost");
+        props.setProperty(YAPPY_BOOTSTRAP_CONSUL_PORT, "8500");
+        writeTestProperties(props); // Will also set default base path
+
+        lenient().when(mockConsulBusinessOpsService.listAvailableClusterNames())
+                .thenReturn(Mono.error(new RuntimeException("Consul connection failed")));
+
         StreamObserver<ClusterList> mockObserver = mockStreamObserver();
         service.listAvailableClusters(Empty.newBuilder().build(), mockObserver);
 
-        // In the current implementation, the service catches the exception from listAvailableClusterNames() 
-        // and returns an empty list while logging an error. It doesn't call onError on the streamObserver for this specific case.
-        // If the desired behavior was to propagate to onError, this test would change.
-        verify(mockObserver).onNext(clusterListCaptor.capture());
-        verify(mockObserver).onCompleted(); // Because the catch block still completes normally after logging
-        verify(mockObserver, never()).onError(any()); 
+        verify(mockObserver, never()).onNext(any());
+        verify(mockObserver, never()).onCompleted();
+        verify(mockObserver).onError(throwableCaptor.capture());
 
-        ClusterList clusterList = clusterListCaptor.getValue();
-        assertEquals(0, clusterList.getClustersCount(), "Cluster list should be empty when service call fails and is handled.");
-
-        System.clearProperty("simulateRealConsulBehavior");
+        Throwable t = throwableCaptor.getValue();
+        assertTrue(t instanceof io.grpc.StatusRuntimeException);
+        assertTrue(((io.grpc.StatusRuntimeException) t).getStatus().getDescription().contains("Consul connection failed"));
     }
-    
-    @Test
-    void listAvailableClusters_generalExceptionPath() {
-        // This test is to ensure that if some other unexpected exception happens (not from the direct service call)
-        // it's caught by the outermost catch block in listAvailableClusters.
-        // To simulate this, we can make the clusterListBuilder.build() throw an error,
-        // which is hard to do without more complex mocking or changing the class structure.
-        // For now, the existing exception handling for the service call is the primary path.
-        // A simpler way is to ensure the mockObserver itself throws an error, though this tests the test more.
-        // Given the current structure, a direct test for the final catch block is non-trivial.
-        // The existing test listAvailableClusters_serviceThrowsException covers the handled exception path from the service.
-        // The outermost catch (Exception e) is more for truly unexpected runtime issues.
-        // We can assume its basic functionality (calling onError) if a general exception were to occur.
-    }
-
-
-    // --- Tests for selectExistingCluster ---
 
     @Test
     void selectExistingCluster_success_emptyFile() throws IOException {
@@ -362,20 +385,17 @@ class BootstrapConfigServiceImplTest {
         assertTrue(status.getSuccess());
         assertEquals("Successfully selected cluster 'testCluster1'.", status.getMessage());
 
-        Properties props = loadTestProperties();
-        assertEquals("testCluster1", props.getProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME));
+        Properties propsFromFile = loadTestProperties();
+        assertEquals("testCluster1", propsFromFile.getProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME));
     }
 
     @Test
     void selectExistingCluster_success_updatesExistingFile() throws IOException {
-        // Pre-populate with other properties
         Properties initialProps = new Properties();
         initialProps.setProperty(YAPPY_BOOTSTRAP_CONSUL_HOST, "existingHost");
         initialProps.setProperty(YAPPY_BOOTSTRAP_CONSUL_PORT, "1234");
-        initialProps.setProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME, "oldCluster"); // Pre-existing selection
-        try (var output = Files.newOutputStream(testBootstrapFilePath)) {
-            initialProps.store(output, null);
-        }
+        initialProps.setProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME, "oldCluster");
+        writeTestProperties(initialProps);
 
         StreamObserver<OperationStatus> mockObserver = mockStreamObserver();
         ClusterSelection selection = ClusterSelection.newBuilder().setClusterName("newSelectedCluster").build();
@@ -395,48 +415,53 @@ class BootstrapConfigServiceImplTest {
     @Test
     void selectExistingCluster_emptyClusterName_returnsError() {
         StreamObserver<OperationStatus> mockObserver = mockStreamObserver();
-        ClusterSelection selection = ClusterSelection.newBuilder().setClusterName("").build(); // Empty name
+        ClusterSelection selection = ClusterSelection.newBuilder().setClusterName("").build();
 
         service.selectExistingCluster(selection, mockObserver);
 
         verify(mockObserver, never()).onNext(any());
         verify(mockObserver, never()).onCompleted();
         verify(mockObserver).onError(throwableCaptor.capture());
-        
+
         Throwable t = throwableCaptor.getValue();
         assertTrue(t instanceof io.grpc.StatusRuntimeException);
         assertEquals(io.grpc.Status.INVALID_ARGUMENT.getCode(), ((io.grpc.StatusRuntimeException) t).getStatus().getCode());
         assertTrue(((io.grpc.StatusRuntimeException) t).getStatus().getDescription().contains("Cluster name cannot be empty"));
     }
-    
+
     @Test
     void selectExistingCluster_nullClusterName_returnsError() {
         StreamObserver<OperationStatus> mockObserver = mockStreamObserver();
-        // Builder will throw NPE if setClusterName(null) is called, so this tests the service's internal check if it were to get such an object
-        // However, the current service code does `request.getClusterName()` which would be null.
-        ClusterSelection selection = ClusterSelection.newBuilder().build(); // name is not set, defaults to "" effectively by proto3 spec for string
+        ClusterSelection selection = ClusterSelection.newBuilder().build();
 
         service.selectExistingCluster(selection, mockObserver);
-         verify(mockObserver, never()).onNext(any());
+        verify(mockObserver, never()).onNext(any());
         verify(mockObserver, never()).onCompleted();
         verify(mockObserver).onError(throwableCaptor.capture());
-        
+
         Throwable t = throwableCaptor.getValue();
         assertTrue(t instanceof io.grpc.StatusRuntimeException);
         assertEquals(io.grpc.Status.INVALID_ARGUMENT.getCode(), ((io.grpc.StatusRuntimeException) t).getStatus().getCode());
         assertTrue(((io.grpc.StatusRuntimeException) t).getStatus().getDescription().contains("Cluster name cannot be empty"));
     }
 
-
-    // --- Tests for createNewCluster ---
-
     @Test
     void createNewCluster_success_minimalDetails() throws IOException {
+        System.setProperty("yappy.consul.configured", "true");
+        Properties props = new Properties();
+        props.setProperty(YAPPY_BOOTSTRAP_CONSUL_HOST, "testhost");
+        props.setProperty(YAPPY_BOOTSTRAP_CONSUL_PORT, "8500");
+        // YAPPY_BOOTSTRAP_CONSUL_CONFIG_BASE_PATH is set by writeTestProperties default
+        writeTestProperties(props);
+
         StreamObserver<ClusterCreationStatus> mockObserver = mockStreamObserver();
         NewClusterDetails request = NewClusterDetails.newBuilder().setClusterName("newClusterMin").build();
 
-        // Mock successful storage in Consul
-        doNothing().when(mockConsulBusinessOpsService).storeClusterConfiguration(pipelineClusterConfigCaptor.capture());
+        when(mockConsulBusinessOpsService.storeClusterConfiguration(anyString(), pipelineClusterConfigCaptor.capture()))
+                .thenReturn(Mono.just(true));
+        when(mockConsulBusinessOpsService.getFullClusterKey(eq("newClusterMin")))
+                .thenReturn(DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH + "/newClusterMin");
+
 
         service.createNewCluster(request, mockObserver);
 
@@ -445,23 +470,36 @@ class BootstrapConfigServiceImplTest {
         verify(mockObserver, never()).onError(any());
 
         ClusterCreationStatus status = clusterCreationStatusCaptor.getValue();
-        assertTrue(status.getSuccess());
+        assertTrue(status.getSuccess(), "Cluster creation should be successful. Message: " + status.getMessage());
         assertEquals("newClusterMin", status.getClusterName());
-        assertEquals("pipeline-configs/clusters/newClusterMin", status.getSeededConfigPath());
+        assertEquals(DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH + "/newClusterMin", status.getSeededConfigPath());
         assertTrue(status.getMessage().contains("created successfully and configuration stored in Consul"));
 
         PipelineClusterConfig storedConfig = pipelineClusterConfigCaptor.getValue();
-        assertEquals("newClusterMin", storedConfig.getClusterName());
-        assertFalse(storedConfig.hasDefaultPipelineName() || !storedConfig.getDefaultPipelineName().isEmpty(), "Default pipeline should not be set");
-        assertTrue(storedConfig.getPipelineGraphConfig().getPipelinesMap().isEmpty(), "Pipelines map should be empty");
-        assertTrue(storedConfig.getPipelineModuleMap().getAvailableModulesMap().isEmpty(), "Modules map should be empty");
-        
-        Properties props = loadTestProperties();
-        assertEquals("newClusterMin", props.getProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME));
+        assertEquals("newClusterMin", storedConfig.clusterName());
+        assertTrue(storedConfig.defaultPipelineName() == null || storedConfig.defaultPipelineName().isEmpty(), "Default pipeline should not be set");
+
+        assertTrue(storedConfig.pipelineGraphConfig() == null ||
+                        (storedConfig.pipelineGraphConfig().pipelines() != null && storedConfig.pipelineGraphConfig().pipelines().isEmpty()),
+                "Pipelines map should be empty or graph config null/empty");
+        assertTrue(storedConfig.pipelineModuleMap() == null ||
+                        (storedConfig.pipelineModuleMap().availableModules() != null && storedConfig.pipelineModuleMap().availableModules().isEmpty()),
+                "Modules map should be empty or module map null/empty");
+
+
+        Properties updatedProps = loadTestProperties();
+        assertEquals("newClusterMin", updatedProps.getProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME));
     }
 
     @Test
     void createNewCluster_success_withPipelineAndModules() throws IOException {
+        System.setProperty("yappy.consul.configured", "true");
+        Properties props = new Properties();
+        props.setProperty(YAPPY_BOOTSTRAP_CONSUL_HOST, "testhost");
+        props.setProperty(YAPPY_BOOTSTRAP_CONSUL_PORT, "8500");
+        // YAPPY_BOOTSTRAP_CONSUL_CONFIG_BASE_PATH is set by writeTestProperties default
+        writeTestProperties(props);
+
         StreamObserver<ClusterCreationStatus> mockObserver = mockStreamObserver();
         NewClusterDetails request = NewClusterDetails.newBuilder()
                 .setClusterName("newClusterFull")
@@ -470,30 +508,53 @@ class BootstrapConfigServiceImplTest {
                 .addInitialModulesForFirstPipeline(InitialModuleConfig.newBuilder().setImplementationId("moduleB").build())
                 .build();
 
-        doNothing().when(mockConsulBusinessOpsService).storeClusterConfiguration(pipelineClusterConfigCaptor.capture());
+        when(mockConsulBusinessOpsService.storeClusterConfiguration(anyString(), pipelineClusterConfigCaptor.capture()))
+                .thenReturn(Mono.just(true));
+        when(mockConsulBusinessOpsService.getFullClusterKey(eq("newClusterFull")))
+                .thenReturn(DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH + "/newClusterFull");
+
 
         service.createNewCluster(request, mockObserver);
 
         verify(mockObserver).onNext(clusterCreationStatusCaptor.capture());
+        verify(mockObserver).onCompleted();
+        verify(mockObserver, never()).onError(any());
+
+
         ClusterCreationStatus status = clusterCreationStatusCaptor.getValue();
-        assertTrue(status.getSuccess());
+        assertTrue(status.getSuccess(), "Cluster creation should be successful. Message: " + status.getMessage());
         assertEquals("newClusterFull", status.getClusterName());
+        assertEquals(DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH + "/newClusterFull", status.getSeededConfigPath());
+
 
         PipelineClusterConfig storedConfig = pipelineClusterConfigCaptor.getValue();
-        assertEquals("newClusterFull", storedConfig.getClusterName());
-        assertEquals("pipeline1", storedConfig.getDefaultPipelineName());
-        assertNotNull(storedConfig.getPipelineGraphConfig().getPipelinesMap().get("pipeline1"));
-        assertEquals("pipeline1", storedConfig.getPipelineGraphConfig().getPipelinesMap().get("pipeline1").getPipelineName());
-        
-        assertNotNull(storedConfig.getPipelineModuleMap().getAvailableModulesMap().get("moduleA"));
-        assertEquals("moduleA", storedConfig.getPipelineModuleMap().getAvailableModulesMap().get("moduleA").getImplementationId());
-        assertEquals("Module_moduleA", storedConfig.getPipelineModuleMap().getAvailableModulesMap().get("moduleA").getImplementationName());
-        assertNotNull(storedConfig.getPipelineModuleMap().getAvailableModulesMap().get("moduleB"));
-        
-        Properties props = loadTestProperties();
-        assertEquals("newClusterFull", props.getProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME));
+        assertEquals("newClusterFull", storedConfig.clusterName());
+        assertEquals("pipeline1", storedConfig.defaultPipelineName());
+
+        assertNotNull(storedConfig.pipelineGraphConfig(), "PipelineGraphConfig should not be null");
+        assertNotNull(storedConfig.pipelineGraphConfig().pipelines(), "Pipelines map in GraphConfig should not be null");
+        PipelineConfig pipeline1Config = storedConfig.pipelineGraphConfig().pipelines().get("pipeline1");
+        assertNotNull(pipeline1Config, "Pipeline 'pipeline1' should exist in graph config");
+        assertEquals("pipeline1", pipeline1Config.name()); // Using .name() from PipelineConfig record
+
+        assertNotNull(storedConfig.pipelineModuleMap(), "PipelineModuleMap should not be null");
+        assertNotNull(storedConfig.pipelineModuleMap().availableModules(), "AvailableModules map in ModuleMap should not be null");
+
+        PipelineModuleConfiguration moduleAConfig = storedConfig.pipelineModuleMap().availableModules().get("moduleA");
+        assertNotNull(moduleAConfig, "Module 'moduleA' should exist"); // This was failing
+        assertEquals("moduleA", moduleAConfig.implementationId());
+        assertEquals("Module_moduleA", moduleAConfig.implementationName());
+
+        PipelineModuleConfiguration moduleBConfig = storedConfig.pipelineModuleMap().availableModules().get("moduleB");
+        assertNotNull(moduleBConfig, "Module 'moduleB' should exist");
+        assertEquals("moduleB", moduleBConfig.implementationId());
+        assertEquals("Module_moduleB", moduleBConfig.implementationName());
+
+
+        Properties updatedProps = loadTestProperties();
+        assertEquals("newClusterFull", updatedProps.getProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME));
     }
-    
+
     @Test
     void createNewCluster_emptyClusterName_returnsError() {
         StreamObserver<ClusterCreationStatus> mockObserver = mockStreamObserver();
@@ -504,7 +565,7 @@ class BootstrapConfigServiceImplTest {
         verify(mockObserver, never()).onNext(any());
         verify(mockObserver, never()).onCompleted();
         verify(mockObserver).onError(throwableCaptor.capture());
-        
+
         Throwable t = throwableCaptor.getValue();
         assertTrue(t instanceof io.grpc.StatusRuntimeException);
         assertEquals(io.grpc.Status.INVALID_ARGUMENT.getCode(), ((io.grpc.StatusRuntimeException) t).getStatus().getCode());
@@ -513,25 +574,37 @@ class BootstrapConfigServiceImplTest {
 
     @Test
     void createNewCluster_consulStoreThrowsException_returnsFailureStatus() throws IOException {
+        System.setProperty("yappy.consul.configured", "true");
+        Properties props = new Properties();
+        props.setProperty(YAPPY_BOOTSTRAP_CONSUL_HOST, "testhost");
+        props.setProperty(YAPPY_BOOTSTRAP_CONSUL_PORT, "8500");
+        // YAPPY_BOOTSTRAP_CONSUL_CONFIG_BASE_PATH is set by writeTestProperties default
+        writeTestProperties(props);
+
         StreamObserver<ClusterCreationStatus> mockObserver = mockStreamObserver();
         NewClusterDetails request = NewClusterDetails.newBuilder().setClusterName("failCluster").build();
 
-        doThrow(new RuntimeException("Consul save failed!")).when(mockConsulBusinessOpsService).storeClusterConfiguration(any(PipelineClusterConfig.class));
+        when(mockConsulBusinessOpsService.storeClusterConfiguration(anyString(), any(PipelineClusterConfig.class)))
+                .thenReturn(Mono.error(new RuntimeException("Consul save failed!")));
+        // Mock getFullClusterKey because it's called in the catch block to build the response
+        when(mockConsulBusinessOpsService.getFullClusterKey(eq("failCluster")))
+                .thenReturn(DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH + "/failCluster");
+
 
         service.createNewCluster(request, mockObserver);
 
         verify(mockObserver).onNext(clusterCreationStatusCaptor.capture());
-        verify(mockObserver).onCompleted(); // Service handles exception and calls onCompleted with status
+        verify(mockObserver).onCompleted();
         verify(mockObserver, never()).onError(any());
 
         ClusterCreationStatus status = clusterCreationStatusCaptor.getValue();
         assertFalse(status.getSuccess());
         assertEquals("failCluster", status.getClusterName());
         assertTrue(status.getMessage().contains("Consul save failed!"));
-        assertFalse(status.hasSeededConfigPath() || !status.getSeededConfigPath().isEmpty());
+        assertEquals(DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH + "/failCluster", status.getSeededConfigPath());
 
-        // Verify properties file does NOT have the cluster selected, as operation failed before that
-        Properties props = loadTestProperties();
-        assertNull(props.getProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME));
+
+        Properties updatedProps = loadTestProperties();
+        assertNull(updatedProps.getProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME)); // Should not be selected on failure
     }
 }
