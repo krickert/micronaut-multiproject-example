@@ -260,7 +260,7 @@ erDiagram
   SchemaVersionData }o--|| SchemaCompatibility : uses
 ```
 
-## 4\. Workflow: JSON Schema Registration, Referencing, and Runtime Validation
+## 4. Workflow: JSON Schema Registration, Referencing, and Runtime Validation
 
 1. **Schema Definition & Registration:**
 
@@ -293,7 +293,7 @@ erDiagram
         4. If no `SchemaReference`, validation may be skipped or a default (e.g., empty Struct) is used.
         5. The `google.protobuf.Struct` is passed to the Pipeline Module Processor in `ProcessRequest.config.custom_json_config`.
 
-## 5\. Designing Effective JSON Schemas for `custom_json_config`
+## 5. Designing Effective JSON Schemas for `custom_json_config`
 
 To create effective JSON schemas for module configurations:
 
@@ -340,7 +340,7 @@ To create effective JSON schemas for module configurations:
   }
   ```
 
-## 6\. Interaction with `SchemaRegistryService.proto`
+## 6. Interaction with `SchemaRegistryService.proto`
 
 The Custom JSON Schema Registry is a gRPC service defined by `SchemaRegistryService.proto`. Key interactions:
 
@@ -352,7 +352,7 @@ The Custom JSON Schema Registry is a gRPC service defined by `SchemaRegistryServ
 
 *(Refer to the **YAPPY gRPC API Manual** for full RPC details.)*
 
-## 7\. Future Considerations
+## 7. Future Considerations
 
 * **Unified Schema Registry:** While distinct now, exploring a single system (like Apicurio) for both Protobuf `PipeStream` schemas and JSON
   `custom_json_config` schemas remains a possibility if functional and operational needs align.
