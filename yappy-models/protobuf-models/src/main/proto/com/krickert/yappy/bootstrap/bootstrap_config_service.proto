@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package com.krickert.yappy.bootstrap.api;
+
+import "google/protobuf/empty.proto";
+
+option java_multiple_files = true;
+option java_package = "com.krickert.yappy.bootstrap.api";
+option java_outer_classname = "BootstrapConfigServiceProto";
+
+message ConsulConfigDetails {
+    string host = 1;
+    int32 port = 2;
+    optional string acl_token = 3;
+    optional string selected_yappy_cluster_name = 4;
+}
+
+message ConsulConnectionStatus {
+    bool success = 1;
+    string message = 2;
+    optional ConsulConfigDetails current_config = 3;
+}
+
+message ClusterInfo {
+    string cluster_name = 1;
+    string cluster_id = 2; // could be the same as name or a consul key path
+    string status = 3; // e.g., "OPERATIONAL", "NEEDS_SETUP"
+}
+
+message ClusterList {
+    repeated ClusterInfo clusters = 1;
+}
+
+message ClusterSelection {
+    string cluster_name = 1;
+}
+
+message InitialModuleConfig {
+    string implementation_id = 1;
+    // Potentially add a field for initial custom config for the module instance if needed at this stage.
+    // For now, keeping it simple with just the ID.
+}
+
+message NewClusterDetails {
+    string cluster_name = 1;
+    optional string first_pipeline_name = 2;
+    repeated InitialModuleConfig initial_modules_for_first_pipeline = 3; // Links to PipelineModuleConfiguration.implementationId
+}
+
+message ClusterCreationStatus {
+    bool success = 1;
+    string message = 2;
+    string cluster_name = 3;
+    string seeded_config_path = 4; // e.g., the Consul path where the minimal config was written
+}
+
+message OperationStatus {
+    bool success = 1;
+    string message = 2;
+}
+
+service BootstrapConfigService {
+    rpc SetConsulConfiguration (ConsulConfigDetails) returns (ConsulConnectionStatus);
+    rpc GetConsulConfiguration (google.protobuf.Empty) returns (ConsulConfigDetails); // Assuming Empty can be used if no specific request params
+    rpc ListAvailableClusters (google.protobuf.Empty) returns (ClusterList);
+    rpc SelectExistingCluster (ClusterSelection) returns (OperationStatus);
+    rpc CreateNewCluster (NewClusterDetails) returns (ClusterCreationStatus);
+}
