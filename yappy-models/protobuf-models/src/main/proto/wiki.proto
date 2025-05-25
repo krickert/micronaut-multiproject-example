@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+// Per your feedback, this package directive might need to be simpler if all protos are in one dir,
+// e.g., "com.krickert.search.model" or similar, to match other protos in that directory.
+// Please adjust this line if necessary to fit the project's convention.
+package com.krickert.search.model.wiki;
+
+import "google/protobuf/timestamp.proto";
+
+// The java_package will determine the Java output directory structure and should be kept as is.
+option java_multiple_files = true;
+option java_package = "com.krickert.search.model.wiki";
+option java_outer_classname = "WikiProto";
+
+enum ErrorCheckType {
+  MD5 = 0;
+  SHA1 = 1;
+  SHA256 = 2;
+}
+
+message ErrorCheck {
+  string error_check = 1;
+  ErrorCheckType error_check_type = 2;
+}
+
+message DownloadFileRequest {
+  string url = 1;
+  string file_name = 2;
+  string file_dump_date = 3; // Date of the dump file, e.g., "20230101"
+  ErrorCheck error_check = 4;
+}
+
+message DownloadedFile {
+  string file_name = 1;
+  string full_file_path = 2; // This will be the path *after* validation and removal of .incomplete
+  ErrorCheck error_check = 3;
+  string file_dump_date = 4;
+  string server_name = 5;     // Server where it was downloaded from, or local if applicable
+  google.protobuf.Timestamp download_start = 6;
+  google.protobuf.Timestamp download_end = 7;
+  // The actual path during download (with .incomplete) will be handled by the implementing code
+}
+
+message WikiSiteInfo {
+  string site_name = 1;       // e.g., "Wikipedia"
+  string base = 2;            // e.g., "en.wikipedia.org"
+  string generator = 3;       // e.g., "MediaWiki 1.42.0-wmf.20"
+  string character_case = 4;  // e.g., "first-letter"
+}
+
+message Link {
+  string url = 1;
+  string description = 2;
+}
+
+enum WikiType {
+  ARTICLE = 0;
+  CATEGORY = 1;
+  LIST = 2;           // e.g., "List of..."
+  DRAFT = 3;
+  WIKIPEDIA = 4;      // Namespace for Wikipedia's own project pages, e.g., "Wikipedia:About"
+  TEMPLATE = 5;
+  FILE = 6;           // Links to File/Image pages
+  REDIRECT = 7;
+}
+
+message WikiArticle {
+  string id = 1;              // Page ID or unique identifier if available
+  string title = 2;
+  string text = 3;            // Cleaned plain text content
+  string wiki_text = 4;       // Raw wikitext/markup
+  int32 namespace_code = 5;   // e.g., 0 for main, 14 for Category
+  string namespace = 6;       // e.g., "Main", "Category"
+  string dump_timestamp = 7;  // Timestamp from the dump file itself (when the dump was created)
+  string revision_id = 8;
+  WikiSiteInfo site_info = 9;
+  repeated Link url_references = 10; // Links found in the article
+  WikiType wiki_type = 11;
+  google.protobuf.Timestamp date_parsed = 12;    // When Yappy processed this article
+  google.protobuf.Timestamp timestamp = 13;      // Timestamp of the article's last revision/edit from the dump
+}
