@@ -1,9 +1,6 @@
-import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
-
 plugins {
     id("io.micronaut.minimal.application") version "4.5.3"
     id("io.micronaut.test-resources") version "4.5.3"
-    id("com.gradleup.shadow") version "8.3.6"
 }
 
 group = "com.krickert.yappy.modules.wikicrawlerconnector"
@@ -91,13 +88,3 @@ sourceSets {
     }
 }
 
-tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
-    archiveClassifier.set("shaded")
-
-    relocate("info.bliki", "com.krickert.shaded.info.bliki")
-    relocate("org.xml.sax", "com.krickert.shaded.org.xml.sax")
-
-    exclude("META-INF/LICENSE*")
-    exclude("META-INF/NOTICE*")
-    exclude("META-INF/DEPENDENCIES*")
-}
