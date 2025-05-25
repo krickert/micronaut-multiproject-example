@@ -19,6 +19,7 @@ amazonGlueSerde = "1.1.23"
 amazonMskIamAuth = "2.2.0"
 amazonConnection = "2.30.31"
 apicurioSerde = "3.0.6"
+micronautOpenapi = "5.0.0" # For Micronaut OpenAPI
 
 [libraries]
 # Protobuf / gRPC
@@ -49,6 +50,10 @@ apicurio-serde = { module = "io.apicurio:apicurio-registry-protobuf-serde-kafka"
 micronaut-inject-java = { module = "io.micronaut:micronaut-inject-java", version.ref = "micronautPlatform" }
 lombok = { module = "org.projectlombok:lombok", version = "1.18.30" }
 micronaut-validation-processor = { module = "io.micronaut.validation:micronaut-validation-processor", version.ref = "micronautPlatform" }
+# Micronaut OpenAPI
+micronaut-openapi-visitor = { module = "io.micronaut.openapi:micronaut-openapi-visitor", version.ref = "micronautOpenapi" }
+micronaut-openapi-ui = { module = "io.micronaut.openapi:micronaut-openapi-ui", version.ref = "micronautOpenapi" }
+
 
 [bundles]
 testing-jvm = ["junit-jupiter-api", "junit-jupiter-engine"]

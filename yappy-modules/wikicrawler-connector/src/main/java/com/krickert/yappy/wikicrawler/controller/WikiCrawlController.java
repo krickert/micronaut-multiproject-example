@@ -1,0 +1,125 @@
+package com.krickert.yappy.wikicrawler.controller;
+
+import com.krickert.search.model.wiki.DownloadFileRequest;
+import com.krickert.search.model.wiki.ErrorCheck;
+import com.krickert.search.model.wiki.ErrorCheckType;
+import com.krickert.yappy.wikicrawler.controller.model.InitiateCrawlRequest;
+import com.krickert.yappy.wikicrawler.service.FileDownloaderService;
+import com.krickert.yappy.wikicrawler.service.WikiProcessingOrchestrator;
+import com.krickert.yappy.wikicrawler.connector.YappyIngestionService;
+
+import io.micronaut.core.annotation.Introspected;
+import io.micronaut.http.HttpResponse;
+import io.micronaut.http.MediaType;
+import io.micronaut.http.annotation.Body;
+import io.micronaut.http.annotation.Controller;
+import io.micronaut.http.annotation.Post;
+import io.micronaut.scheduling.TaskExecutors;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.micronaut.scheduling.annotation.ExecuteOn;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Controller("/wikicrawler") // Base path for this controller
+@Tag(name = "Wikipedia Crawler", description = "Endpoints for managing Wikipedia dump crawling and ingestion.")
+public class WikiCrawlController {
+
+    private static final Logger LOG = LoggerFactory.getLogger(WikiCrawlController.class);
+
+    private final FileDownloaderService fileDownloaderService;
+    private final WikiProcessingOrchestrator processingOrchestrator;
+    private final YappyIngestionService yappyIngestionService;
+
+    public WikiCrawlController(
+            FileDownloaderService fileDownloaderService,
+            WikiProcessingOrchestrator processingOrchestrator,
+            YappyIngestionService yappyIngestionService) {
+        this.fileDownloaderService = fileDownloaderService;
+        this.processingOrchestrator = processingOrchestrator;
+        this.yappyIngestionService = yappyIngestionService;
+    }
+
+    @Post(uri = "/initiate", consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
+    @ExecuteOn(TaskExecutors.IO) // Offload controller logic to I/O thread pool
+    @Operation(summary = "Initiate Wikipedia Dump Crawl",
+               description = "Downloads a Wikipedia XML dump file, processes its articles, and ingests them into the Yappy system.")
+    @ApiResponse(responseCode = "200", description = "Crawl process initiated and completed (or an error occurred during processing). Check 'documentsIngested' and 'message' for details.",
+                 content = @Content(schema = @Schema(implementation = CrawlResponse.class)))
+    @ApiResponse(responseCode = "400", description = "Bad Request - Invalid input parameters, e.g., invalid errorCheckType.",
+                 content = @Content(schema = @Schema(implementation = CrawlResponse.class)))
+    @ApiResponse(responseCode = "500", description = "Server Error - An unexpected error occurred during processing.",
+                 content = @Content(schema = @Schema(implementation = CrawlResponse.class)))
+    public Mono<HttpResponse<CrawlResponse>> initiateCrawl(
+            @RequestBody(description = "Details for the Wikipedia dump to crawl.", required = true,
+                         content = @Content(schema = @Schema(implementation = InitiateCrawlRequest.class)))
+            @Body InitiateCrawlRequest request) {
+        LOG.info("Received crawl initiation request for URL: {}", request.getUrl());
+
+        ErrorCheckType ecType;
+        try {
+            ecType = ErrorCheckType.valueOf(request.getErrorCheckType().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            LOG.error("Invalid error check type: {}", request.getErrorCheckType(), e);
+            return Mono.just(HttpResponse.badRequest(new CrawlResponse(false, "Invalid errorCheckType: " + request.getErrorCheckType(), 0, null)));
+        }
+
+        DownloadFileRequest downloadRequest = DownloadFileRequest.newBuilder()
+                .setUrl(request.getUrl())
+                .setFileName(request.getFileName())
+                .setFileDumpDate(request.getFileDumpDate())
+                .setErrorCheck(ErrorCheck.newBuilder()
+                        .setErrorCheckType(ecType)
+                        .setErrorCheck(request.getErrorCheckValue())
+                        .build())
+                .addAllExpectedFilesInDump(request.getExpectedFilesInDump() == null ? new ArrayList<>() : request.getExpectedFilesInDump())
+                .build();
+
+        return fileDownloaderService.downloadFile(downloadRequest)
+                .flatMapMany(processingOrchestrator::processDump)
+                .flatMap(yappyIngestionService::ingestPipeDoc)
+                .collectList() // Collect all ConnectorResponse objects
+                .map(responses -> {
+                    long successfulIngestions = responses.stream().filter(r -> r != null && r.getAccepted()).count();
+                    List<String> streamIds = responses.stream()
+                                                      .filter(r -> r != null && r.getAccepted())
+                                                      .map(com.krickert.search.engine.ConnectorResponse::getStreamId)
+                                                      .collect(Collectors.toList());
+                    LOG.info("Crawl for {} completed. {} documents ingested. Stream IDs: {}", request.getUrl(), successfulIngestions, streamIds);
+                    return HttpResponse.ok(new CrawlResponse(true, "Crawl processed. " + successfulIngestions + " documents ingested.", successfulIngestions, streamIds));
+                })
+                .onErrorResume(e -> {
+                    LOG.error("Error during crawl processing for URL {}: ", request.getUrl(), e);
+                    return Mono.just(HttpResponse.serverError(new CrawlResponse(false, "Failed to process crawl: " + e.getMessage(),0, null)));
+                });
+    }
+}
+
+// Simple response DTO
+@Introspected
+@io.swagger.v3.oas.annotations.media.Schema(description = "Response from the crawl initiation request.")
+class CrawlResponse {
+    @io.swagger.v3.oas.annotations.media.Schema(description = "Indicates if the overall crawl initiation and processing was accepted or started successfully.")
+    public boolean success;
+    @io.swagger.v3.oas.annotations.media.Schema(description = "A message detailing the outcome.")
+    public String message;
+    @io.swagger.v3.oas.annotations.media.Schema(description = "Number of documents successfully ingested into the Yappy engine.")
+    public long documentsIngested;
+    @io.swagger.v3.oas.annotations.media.Schema(description = "List of stream IDs generated by the Yappy engine for ingested documents.")
+    public List<String> streamIds;
+
+    public CrawlResponse(boolean success, String message, long documentsIngested, List<String> streamIds) {
+        this.success = success;
+        this.message = message;
+        this.documentsIngested = documentsIngested;
+        this.streamIds = streamIds;
+    }
+}
