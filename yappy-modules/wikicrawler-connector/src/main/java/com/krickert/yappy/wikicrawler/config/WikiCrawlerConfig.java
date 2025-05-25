@@ -2,6 +2,7 @@ package com.krickert.yappy.wikicrawler.config;
 
 import io.micronaut.context.annotation.ConfigurationProperties;
 
+@SuppressWarnings({"LombokGetterMayBeUsed", "LombokSetterMayBeUsed"})
 @ConfigurationProperties("wikicrawler")
 public class WikiCrawlerConfig {
 

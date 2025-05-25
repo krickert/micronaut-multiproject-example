@@ -60,4 +60,4 @@ public class YappyIngestionService {
     }
 }
 
-// Factory to provide the gRPC stub
+
