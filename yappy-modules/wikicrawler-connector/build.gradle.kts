@@ -21,6 +21,12 @@ micronaut {
         incremental(true)
         annotations("com.krickert.yappy.wikicrawler.*")
     }
+    testResources {
+        enabled.set(true)
+        inferClasspath.set(true)
+        clientTimeout.set(60)
+        sharedServer.set(true)
+    }
 }
 
 dependencies {
