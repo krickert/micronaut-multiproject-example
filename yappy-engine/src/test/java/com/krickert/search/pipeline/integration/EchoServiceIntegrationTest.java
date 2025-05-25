@@ -14,6 +14,7 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.stub.StreamObserver;
 import io.micronaut.context.annotation.Property;
+import io.micronaut.runtime.server.EmbeddedServer;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
@@ -33,23 +34,48 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Integration test for the Echo service.
  * This test verifies that the Echo service works correctly in an integration environment.
- * It uses a simple in-process gRPC server to handle the requests.
+ * It manually creates and manages its gRPC client channel to connect directly to the
+ * {@code EchoService} running within this test's own Micronaut application context.
+ * This approach enhances test isolation and avoids flakiness that can arise from
+ * shared service discovery mechanisms (like Consul) when running in a larger test suite.
  */
 @MicronautTest(environments = {"test-echo-grpc-working-standalone"}, startApplication = true)
 @TestInstance(TestInstance.Lifecycle.PER_METHOD)
 public class EchoServiceIntegrationTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(EchoServiceIntegrationTest.class);
-    @Inject
-    @Named("echoClientStub")
-    private PipeStepProcessorGrpc.PipeStepProcessorBlockingStub blockingClient;
 
     @Inject
     EchoService echoService;
 
+    @Inject
+    private EmbeddedServer embeddedServer;
+
+    private ManagedChannel channel;
+    private PipeStepProcessorGrpc.PipeStepProcessorBlockingStub localBlockingClient;
+
     @BeforeEach
     void setup() {
         checkNotNull(echoService, "echoService cannot be null");
+    }
+
+    @BeforeEach
+    void setUpClient() throws IOException {
+        int port = embeddedServer.getPort();
+        channel = ManagedChannelBuilder.forAddress("localhost", port).usePlaintext().build();
+        localBlockingClient = PipeStepProcessorGrpc.newBlockingStub(channel);
+    }
+
+    @AfterEach
+    void tearDownClient() {
+        if (channel != null) {
+            try {
+                channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOG.error("Interrupted while shutting down gRPC channel", e);
+            }
+        }
     }
 
     /**
@@ -76,7 +102,7 @@ public class EchoServiceIntegrationTest {
 
         // Send the request to the Echo service
         LOG.info("Sending request to Echo service: {}", request);
-        ProcessResponse response = blockingClient.processData(request);
+        ProcessResponse response = localBlockingClient.processData(request);
         LOG.info("Received response from Echo service: {}", response);
 
         // Verify the response

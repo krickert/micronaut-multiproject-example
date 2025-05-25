@@ -14,7 +14,7 @@ grpc:
   client:
     plaintext: true
     discovery:
-      enabled: true
+      enabled: false
 
 
 # Consul client configuration
@@ -30,7 +30,7 @@ consul:
         interval: 5s
         timeout: 3s
     discovery:
-      enabled: true
+      enabled: false
     config:
       enabled: true
       format: properties
