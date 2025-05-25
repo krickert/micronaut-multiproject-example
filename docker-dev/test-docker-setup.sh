@@ -78,6 +78,42 @@ else
     ALL_RUNNING=false
 fi
 
+# Test OpenSearch connection
+echo "Testing OpenSearch connection..."
+if curl -s "http://localhost:9200" | grep -q "version"; then
+    echo "OpenSearch is working correctly."
+else
+    echo "Error: Could not connect to OpenSearch."
+    ALL_RUNNING=false
+fi
+
+# Test OpenSearch Dashboards connection
+echo "Testing OpenSearch Dashboards connection..."
+if curl -s "http://localhost:5601" | grep -q "html"; then
+    echo "OpenSearch Dashboards is working correctly."
+else
+    echo "Error: Could not connect to OpenSearch Dashboards."
+    ALL_RUNNING=false
+fi
+
+# Test Consul connection
+echo "Testing Consul connection..."
+if curl -s "http://localhost:8500/v1/status/leader" | grep -q ":"; then
+    echo "Consul is working correctly."
+else
+    echo "Error: Could not connect to Consul."
+    ALL_RUNNING=false
+fi
+
+# Test Moto/Glue Mock connection
+echo "Testing Moto/Glue Mock connection..."
+if curl -s "http://localhost:5001" | grep -q "moto"; then
+    echo "Moto/Glue Mock is working correctly."
+else
+    echo "Error: Could not connect to Moto/Glue Mock."
+    ALL_RUNNING=false
+fi
+
 # Summary
 if [ "$ALL_RUNNING" = true ]; then
     echo "All containers are running correctly!"
@@ -86,6 +122,10 @@ if [ "$ALL_RUNNING" = true ]; then
     echo "- Solr: http://localhost:8983"
     echo "- Apicurio: http://localhost:8080"
     echo "- Kafka UI: http://localhost:8081"
+    echo "- OpenSearch: http://localhost:9200"
+    echo "- OpenSearch Dashboards: http://localhost:5601"
+    echo "- Consul: http://localhost:8500"
+    echo "- Moto/Glue Mock: http://localhost:5001"
 else
     echo "Some containers are not running correctly. Please check the logs above."
 fi

@@ -54,12 +54,27 @@ The system is designed with a modular architecture following these core principl
 - **docker-dev**: Docker development environment setup
 - **docs**: Project documentation
 - **util**: Utility code and shared functionality
+- **yappy-admin**: Administration interface for managing YAPPY
 - **yappy-consul-config**: Dynamic Configuration Management Service for loading, watching, validating, and providing live updates of
   pipeline and schema configurations stored in Consul
+- **yappy-engine**: Core engine that orchestrates pipeline execution and module management
 - **yappy-models**: Contains multiple submodules:
     - **pipeline-config-models**: Defines the structure of pipelines, steps, schema registration, and their configurations
     - **protobuf-models**: Protocol Buffer model definitions for gRPC communication
+    - **pipeline-config-models-test-utils**: Test utilities for pipeline configuration models
+    - **protobuf-models-test-data-resources**: Test resources for protobuf models
+- **yappy-modules**: Collection of pipeline processing modules:
+    - **chunker**: Text chunking module
+    - **echo**: Simple echo module for testing
+    - **embedder**: Text embedding generation module
+    - **opensearch-sink**: Module for indexing to OpenSearch
+    - **project-generator**: Scaffolding tool for new modules
+    - **s3-connector**: AWS S3 connector module
+    - **tika-parser**: Document parsing module
+    - **web-crawler-connector**: Web crawling module
+    - **wikipedia-connector**: Wikipedia content connector
 - **yappy-test-resources**: TestContainers configuration and test resources
+- **yappy-ui**: User interface for interacting with YAPPY
 
 ## Development Environment
 
@@ -69,8 +84,10 @@ A Docker-based development environment is available in the `docker-dev` director
 - **Apicurio Registry**: Schema registry (http://localhost:8080)
 - **Solr** (in cloud mode): Search platform (http://localhost:8983)
 - **Kafka UI**: Web UI for Kafka management (http://localhost:8081)
-- **Moto server/Glue Mock**: Mock server for AWS services including Glue Schema Registry
-- **Consul**: Service discovery and configuration storage
+- **Moto server/Glue Mock**: Mock server for AWS services including Glue Schema Registry (localhost:5001)
+- **OpenSearch**: Search and analytics engine (http://localhost:9200)
+- **OpenSearch Dashboards**: UI for OpenSearch (http://localhost:5601)
+- **Consul**: Service discovery and configuration storage (http://localhost:8500)
 
 To start the development environment:
 
@@ -178,3 +195,6 @@ When working with Junie on this project:
 - [Kafka Documentation](https://kafka.apache.org/documentation/)
 - [gRPC Documentation](https://grpc.io/docs/)
 - [Consul Documentation](https://developer.hashicorp.com/consul/docs)
+- [Solr Documentation](https://solr.apache.org/guide/)
+- [OpenSearch Documentation](https://opensearch.org/docs/latest/)
+- [OpenSearch Dashboards Documentation](https://opensearch.org/docs/latest/dashboards/index/)
