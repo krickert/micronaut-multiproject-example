@@ -1,12 +1,14 @@
 package com.krickert.yappy.wikicrawler.controller.model;
 
 import io.micronaut.core.annotation.Introspected;
+import io.micronaut.serde.annotation.Serdeable;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 
 // Using @Introspected for automatic serialization/deserialization by Micronaut
 @Introspected
 @Schema(description = "Request payload for initiating a Wikipedia dump crawl.")
+@Serdeable
 public class InitiateCrawlRequest {
     @Schema(description = "Full URL of the Wikipedia dump file (e.g., .xml.bz2).", required = true, example = "https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pages-articles.xml.bz2")
     private String url;

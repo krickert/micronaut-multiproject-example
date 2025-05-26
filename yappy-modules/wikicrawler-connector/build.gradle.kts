@@ -95,6 +95,8 @@ dependencies {
     implementation("commons-io:commons-io:2.19.0")
     // https://mvnrepository.com/artifact/org.apache.commons/commons-compress
     implementation("org.apache.commons:commons-compress:1.27.1")
+    // https://mvnrepository.com/artifact/org.fusesource.jansi/jansi
+    implementation("org.fusesource.jansi:jansi:2.4.2")
 }
 
 application {

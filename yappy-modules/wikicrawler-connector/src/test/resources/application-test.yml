@@ -6,8 +6,7 @@ micronaut:
 
 # Kafka Test Resources Configuration
 kafka:
-  bootstrap:
-    servers: ${kafka.bootstrap.servers} # Provided by Test Resources
+  enabled: true
   topic:
     wiki:
       article: test-wiki-articles # Specific topic name for testing
