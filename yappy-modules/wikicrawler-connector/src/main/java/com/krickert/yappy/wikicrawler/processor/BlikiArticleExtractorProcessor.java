@@ -10,6 +10,7 @@ import info.bliki.wiki.dump.Siteinfo;
 import info.bliki.wiki.dump.WikiXMLParser;
 import info.bliki.wiki.model.WikiModel;
 import jakarta.inject.Singleton;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,20 +39,24 @@ import java.time.format.DateTimeFormatter;
 import java.util.function.Consumer;
 import java.util.Locale;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 
 @Singleton
 public class BlikiArticleExtractorProcessor {
 
     private static final Logger LOG = LoggerFactory.getLogger(BlikiArticleExtractorProcessor.class);
     private final WikiModel wikiModel; // For rendering wikitext to plain text
-
-    public BlikiArticleExtractorProcessor() {
+    private static final WikiURLExtractor urlExtractor = new WikiURLExtractor();
+    private final WikiMarkupCleaner wikiClean;
+    public BlikiArticleExtractorProcessor(WikiMarkupCleaner wikiClean) {
         // Initialize WikiModel for converting wikitext to plain text.
         // The nulls are for image and link URL prefixes, adjust if needed.
         this.wikiModel = new WikiModel(null, null);
+        this.wikiClean = checkNotNull(wikiClean);
         // It might be necessary to configure the Namespace if Bliki doesn't default correctly
         // For English Wikipedia:
-        // Namespace.initialize(((org.xml.sax.Attributes) new Siteinfo()).getNamespaces());
+        //Namespace.initialize(((org.xml.sax.Attributes) new Siteinfo()).getNamespaces());
     }
 
     public void parseWikiDump(DownloadedFile downloadedFile, Consumer<WikiArticle> articleConsumer) throws IOException {
@@ -99,12 +104,12 @@ public class BlikiArticleExtractorProcessor {
         }
 
         @Override
-        public void process(info.bliki.wiki.dump.WikiArticle page, Siteinfo siteinfo) {
+        public void process(info.bliki.wiki.dump.WikiArticle page, Siteinfo siteinfo) throws IOException {
             if (page.isMain() || page.isCategory()) { // Process articles and categories, extend if needed
                 wikiModel.setUp(); // Important: Reset model for each page
                 String plainText = wikiModel.render(page.getText());
                 wikiModel.tearDown();
-
+                //TODO: debug this and see how this turned out...
                 Instant parsedAt = Instant.now();
                 
                 // Attempt to parse article timestamp
@@ -120,6 +125,7 @@ public class BlikiArticleExtractorProcessor {
                         .setNamespace(page.getNamespace())
                         .setDumpTimestamp(dumpTimestampStr) // From the dump file generation
                         .setRevisionId(page.getRevisionId())
+                        .addAllUrlReferences(urlExtractor.parseUrlEntries(page.getText()))
                         .setArticleVersion(page.getRevisionId()) // Using revisionId as article_version
                         .setDateParsed(Timestamp.newBuilder().setSeconds(parsedAt.getEpochSecond()).setNanos(parsedAt.getNano()).build());
                 
@@ -143,11 +149,14 @@ public class BlikiArticleExtractorProcessor {
                 }
                 articleBuilder.setSiteInfo(siteInfoBuilder.build());
 
+                String title = articleBuilder.getTitle();
+                String wikiBody = articleBuilder.getWikiText();
                 // Determine WikiType
-                String redirectTarget = page.getRedirectLink();
-                if (redirectTarget != null && !redirectTarget.isEmpty()) {
+                if (title.contains("REDIRECT")
+                        || (StringUtils.isNotEmpty(wikiBody) &&
+                        (wikiBody.startsWith("#REDIRECT")
+                                || wikiBody.startsWith("#redirect")))) {
                     articleBuilder.setWikiType(WikiType.REDIRECT);
-                    articleBuilder.setRedirectTargetTitle(redirectTarget);
                 } else if (page.isCategory()) {
                     articleBuilder.setWikiType(WikiType.CATEGORY);
                 } else if (page.isTemplate()) {
@@ -176,6 +185,29 @@ public class BlikiArticleExtractorProcessor {
                 LOG.warn("Could not parse article timestamp from Bliki: {}", blikiTimestamp, e);
                 return null;
             }
+        }
+    }
+
+    private WikiType findWikiCategory(String title, String wikiBody) {
+        if (title.contains("REDIRECT")
+                || (StringUtils.isNotEmpty(wikiBody) &&
+                (wikiBody.startsWith("#REDIRECT")
+                        || wikiBody.startsWith("#redirect")))) {
+            return WikiType.REDIRECT;
+        } else if (title.startsWith("Category:")) {
+            return WikiType.CATEGORY;
+        } else if (title.startsWith("List of")) {
+            return WikiType.LIST;
+        } else if (title.startsWith("Wikipedia:")) {
+            return WikiType.WIKIPEDIA;
+        } else if (title.startsWith("Draft:")) {
+            return WikiType.DRAFT;
+        } else if (title.startsWith("Template:")) {
+            return WikiType.TEMPLATE;
+        } else if (title.startsWith("File:")) {
+            return WikiType.FILE;
+        } else {
+            return WikiType.ARTICLE;
         }
     }
 }

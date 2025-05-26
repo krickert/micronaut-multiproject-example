@@ -7,7 +7,7 @@ import reactor.core.publisher.Flux;
 import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
 
-@Client("\${file.download.base-url}") // Base URL will be configured
+@Client("${file.download.base-url}") // Base URL will be configured
 public interface RawFileDownloaderClient extends StreamingHttpClient {
 
     /**

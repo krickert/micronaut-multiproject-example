@@ -82,8 +82,9 @@ public class WikiArticleToPipeDocProcessor {
         // customDataBuilder.putFields("wikipedia_raw_wikitext", Value.newBuilder().setStringValue(wikiArticle.getWikiText()).build());
 
         // Add redirect target title if the article is a redirect
-        if (wikiArticle.getWikiType() == com.krickert.search.model.wiki.WikiType.REDIRECT && wikiArticle.hasRedirectTargetTitle()) {
-            customDataBuilder.putFields("wikipedia_redirect_target_title", Value.newBuilder().setStringValue(wikiArticle.getRedirectTargetTitle()).build());
+        if (wikiArticle.getWikiType() == com.krickert.search.model.wiki.WikiType.REDIRECT) {
+            customDataBuilder.putFields("wikipedia_redirect_target_title",
+                    Value.newBuilder().setStringValue(wikiArticle.getTitle() + " " + wikiArticle.getText()).build());
             // Optionally, you might want to adjust the body for redirect pages if it's not already handled by plain text extraction
             // For example:
             // if (pipeDocBuilder.getBody().isEmpty() || !pipeDocBuilder.getBody().toLowerCase().contains("redirect")) {

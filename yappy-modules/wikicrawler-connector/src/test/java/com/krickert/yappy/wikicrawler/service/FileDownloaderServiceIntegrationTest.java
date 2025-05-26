@@ -1,20 +1,20 @@
 package com.krickert.yappy.wikicrawler.service;
 
-import com.github.tomakehurst.wiremock.WireMockServer;
-import com.github.tomakehurst.wiremock.client.WireMock;
 import com.krickert.search.model.wiki.DownloadFileRequest;
 import com.krickert.search.model.wiki.DownloadedFile;
 import com.krickert.search.model.wiki.ErrorCheck;
 import com.krickert.search.model.wiki.ErrorCheckType;
+import com.krickert.yappy.wikicrawler.component.MockFileDownloader;
 import com.krickert.yappy.wikicrawler.service.storage.LocalStorageService;
 import com.krickert.yappy.wikicrawler.service.storage.StorageService;
-import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -25,12 +25,11 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 @MicronautTest
-@Property(name = "micronaut.http.services.default.pool.enabled", value = "false") // Optional: simplify client for single test
 class FileDownloaderServiceIntegrationTest {
+    private static final Logger LOG = LoggerFactory.getLogger(FileDownloaderServiceIntegrationTest.class);
 
     @Inject
     FileDownloaderService fileDownloaderService;
@@ -38,7 +37,8 @@ class FileDownloaderServiceIntegrationTest {
     @Inject
     StorageService storageService; // Should be LocalStorageService instance
 
-    private WireMockServer wireMockServer;
+    @Inject
+    MockFileDownloader mockFileDownloader;
 
     @TempDir
     Path tempDir; // JUnit 5 temporary directory for base storage
@@ -47,7 +47,7 @@ class FileDownloaderServiceIntegrationTest {
 
     private static final String TEST_FILE_CONTENT = "This is a test file for download.";
     private static final String TEST_FILE_NAME = "test-dump.txt";
-    private static final String TEST_FILE_PATH_ON_SERVER = "/downloads/" + TEST_FILE_NAME;
+    private static final String TEST_FILE_PATH = "/downloads/" + TEST_FILE_NAME;
     private static final String TEST_DUMP_DATE = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
     private String expectedMd5Checksum;
 
@@ -64,11 +64,9 @@ class FileDownloaderServiceIntegrationTest {
         }
         Files.createDirectories(configuredBaseStoragePath);
 
-
-        wireMockServer = new WireMockServer(0); // Random port
-        wireMockServer.start();
-        WireMock.configureFor("localhost", wireMockServer.port());
-        System.setProperty("wiremock.server.port", String.valueOf(wireMockServer.port())); // For application-test.yml
+        // Create a test file in the test resources directory
+        Path testResourceFile = tempDir.resolve("test-resource.txt");
+        Files.writeString(testResourceFile, TEST_FILE_CONTENT);
 
         // Calculate MD5 checksum for test content
         MessageDigest md = MessageDigest.getInstance("MD5");
@@ -80,14 +78,9 @@ class FileDownloaderServiceIntegrationTest {
         }
         expectedMd5Checksum = hexString.toString();
 
-        // Stub WireMock
-        stubFor(get(urlEqualTo(TEST_FILE_PATH_ON_SERVER))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "text/plain")
-                        .withBody(TEST_FILE_CONTENT)));
+        LOG.info("Test setup complete. MD5 checksum: {}", expectedMd5Checksum);
     }
-    
+
     private void deleteDirectoryRecursively(Path path) throws IOException {
         if (Files.exists(path)) {
             Files.walk(path)
@@ -102,24 +95,23 @@ class FileDownloaderServiceIntegrationTest {
         }
     }
 
-
     @AfterEach
     void tearDown() {
-        if (wireMockServer != null) {
-            wireMockServer.stop();
+        // Clean up downloaded files if not using @TempDir effectively for LocalStorageService
+        try {
+            deleteDirectoryRecursively(configuredBaseStoragePath.resolve(TEST_DUMP_DATE));
+        } catch (IOException e) {
+            LOG.error("Error cleaning up test directory", e);
         }
-        // Optional: clean up downloaded files if not using @TempDir effectively for LocalStorageService
-        // try {
-        //     deleteDirectoryRecursively(configuredBaseStoragePath.resolve(TEST_DUMP_DATE));
-        // } catch (IOException e) {
-        //     // log
-        // }
     }
 
     @Test
     void testDownloadFile_Success_MD5Checksum() throws IOException {
+        // Create a test URL that will be handled by the MockFileDownloader
+        String testUrl = "http://test.example.com" + TEST_FILE_PATH;
+
         DownloadFileRequest request = DownloadFileRequest.newBuilder()
-                .setUrl(wireMockServer.baseUrl() + TEST_FILE_PATH_ON_SERVER)
+                .setUrl(testUrl)
                 .setFileName(TEST_FILE_NAME)
                 .setFileDumpDate(TEST_DUMP_DATE)
                 .setErrorCheck(ErrorCheck.newBuilder()
@@ -148,7 +140,7 @@ class FileDownloaderServiceIntegrationTest {
         String accessUri = downloadedFile.getAccessUris(0);
         assertTrue(accessUri.startsWith("file:/"), "Access URI should start with file:/");
         assertTrue(accessUri.endsWith(TEST_DUMP_DATE + "/" + TEST_FILE_NAME), "Access URI should end with date/filename part: " + accessUri);
-        
+
         // Verify .incomplete file was removed (i.e., does not exist)
         Path incompleteFilePath = configuredBaseStoragePath.resolve(TEST_DUMP_DATE).resolve(TEST_FILE_NAME + ".incomplete");
         assertFalse(Files.exists(incompleteFilePath), ".incomplete file should have been removed/renamed.");

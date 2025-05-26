@@ -50,8 +50,10 @@ dependencies {
     implementation("info.bliki.wiki:bliki-core:3.1.0")
     implementation(mn.micronaut.kafka)
     implementation(libs.apicurio.serde)
+    implementation("com.squareup.wire:wire-runtime:5.2.0")
+
     implementation(libs.slf4j.api)
-    runtimeOnly(libs.logback.classic)
+    runtimeOnly(mn.logback.classic)
 
     compileOnly(libs.lombok)
     annotationProcessor(libs.lombok)
@@ -61,16 +63,38 @@ dependencies {
     testRuntimeOnly(libs.junit.jupiter.engine)
     testImplementation(mn.mockito.core)
     testImplementation(mn.assertj.core)
-    testImplementation("com.github.tomakehurst:wiremock-jre8-standalone:2.35.0")
 
     testImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     testImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
 
+    // Add dependency on the connector test server for testing
+    testImplementation(project(":yappy-modules:yappy-connector-test-server"))
+
     implementation("io.micronaut.reactor:micronaut-reactor") // User provided
     implementation("io.micronaut.reactor:micronaut-reactor-http-client") // User provided
     runtimeOnly("io.micronaut.openapi:micronaut-openapi:6.15.0") // User provided
+    // https://mvnrepository.com/artifact/org.wikiclean/wikiclean
+    implementation("org.wikiclean:wikiclean:1.2") {
+        exclude("org.apache.commons", "commons-compress")
+        exclude("org.apache.httpcomponents", "httpclient")
+        exclude("org.apache.lucene", "lucene-queryparser")
+        exclude("org.apache.lucene", "lucene-analyzers-common")
+        exclude("org.apache.lucene", "lucene-core")
+    }
+    implementation("org.apache.httpcomponents:httpclient:4.5.13")
+    // https://mvnrepository.com/artifact/edu.stanford.nlp/stanford-corenlp
+    implementation("edu.stanford.nlp:stanford-corenlp:4.5.9") {
+        exclude("org.apache.lucene", "lucene-queryparser")
+        exclude("org.apache.lucene", "lucene-analyzers-common")
+        exclude("org.apache.lucene", "lucene-core")
+    }
+    //TRANSITIVE DEPENDENCIES
+    // https://mvnrepository.com/artifact/commons-io/commons-io
+    implementation("commons-io:commons-io:2.19.0")
+    // https://mvnrepository.com/artifact/org.apache.commons/commons-compress
+    implementation("org.apache.commons:commons-compress:1.27.1")
 }
 
 application {

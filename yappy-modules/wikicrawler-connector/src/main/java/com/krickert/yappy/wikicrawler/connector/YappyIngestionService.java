@@ -50,7 +50,7 @@ public class YappyIngestionService {
         com.google.common.util.concurrent.ListenableFuture<ConnectorResponse> listenableFuture =
             futureStub.processConnectorDoc(connectorRequest);
 
-        return Mono.create(sink -> {
+        return Mono.<ConnectorResponse>create(sink -> {
             listenableFuture.addListener(() -> {
                 try {
                     ConnectorResponse response = listenableFuture.get();
@@ -67,7 +67,8 @@ public class YappyIngestionService {
                 }
             }, Runnable::run); // Or use a specific executor if needed, Runnable::run executes inline on Guava's thread
         })
-            .doOnSuccess(response -> {
+            .doOnSuccess(obj -> {
+                ConnectorResponse response = (ConnectorResponse) obj;
                 if (response.getAccepted()) {
                     LOG.info("PipeDoc ID: {} successfully ingested. Stream ID: {}", pipeDoc.getId(), response.getStreamId());
                 } else {
@@ -78,4 +79,3 @@ public class YappyIngestionService {
     }
 }
 
-// Factory to provide the gRPC stub

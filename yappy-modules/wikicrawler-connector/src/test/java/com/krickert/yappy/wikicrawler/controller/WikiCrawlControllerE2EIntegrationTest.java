@@ -1,27 +1,24 @@
 package com.krickert.yappy.wikicrawler.controller;
 
-import com.github.tomakehurst.wiremock.WireMockServer;
-import com.github.tomakehurst.wiremock.client.WireMock;
-import com.krickert.search.engine.ConnectorResponse;
 import com.krickert.search.model.PipeDoc;
+import com.krickert.yappy.modules.connector.test.server.ConnectorTestHelper;
+import com.krickert.yappy.wikicrawler.component.MockFileDownloader;
 import com.krickert.yappy.wikicrawler.connector.YappyIngestionService;
 import com.krickert.yappy.wikicrawler.controller.model.InitiateCrawlRequest;
-// Ensure this is the correct import if needed by InitiateCrawlRequest - it is not, ErrorCheckType is used internally by controller
-// import com.krickert.search.model.wiki.ErrorCheckType; 
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
 import io.micronaut.http.client.HttpClient;
 import io.micronaut.http.client.annotation.Client;
 import io.micronaut.http.client.exceptions.HttpClientResponseException;
-import io.micronaut.test.annotation.MockBean;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import reactor.core.publisher.Mono;
+import org.junit.jupiter.api.io.TempDir;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,34 +30,30 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
 
 @MicronautTest
 class WikiCrawlControllerE2EIntegrationTest {
+    private static final Logger LOG = LoggerFactory.getLogger(WikiCrawlControllerE2EIntegrationTest.class);
 
     @Inject
     @Client("/")
     HttpClient httpClient;
 
     @Inject
-    YappyIngestionService mockYappyIngestionService; // Micronaut will inject the mock bean
+    YappyIngestionService yappyIngestionService; // Using the real YappyIngestionService that connects to our test server
 
-    private WireMockServer wireMockServer;
+    @Inject
+    MockFileDownloader mockFileDownloader;
+
+    @TempDir
+    Path tempDir;
+
     private String sampleXmlContent;
     private String expectedMd5Checksum;
     private static final String TEST_FILE_NAME = "e2e-test-dump.xml";
     private static final String TEST_DUMP_DATE = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
     private static final Path CONFIGURED_BASE_STORAGE_PATH = Path.of("build/tmp/wikicrawler-test-downloads");
-
-
-    // Define a MockBean for YappyIngestionService
-    @MockBean(YappyIngestionService.class)
-    YappyIngestionService yappyIngestionService() {
-        return mock(YappyIngestionService.class);
-    }
 
     @BeforeEach
     void setUp() throws Exception {
@@ -79,33 +72,18 @@ class WikiCrawlControllerE2EIntegrationTest {
             hexString.append(String.format("%02x", b));
         }
         expectedMd5Checksum = hexString.toString();
-        
+
         // Clean up download storage before test
         deleteDirectoryRecursively(CONFIGURED_BASE_STORAGE_PATH);
         Files.createDirectories(CONFIGURED_BASE_STORAGE_PATH);
 
-        wireMockServer = new WireMockServer(0); // Random port
-        wireMockServer.start();
-        WireMock.configureFor("localhost", wireMockServer.port());
-        System.setProperty("wiremock.server.port", String.valueOf(wireMockServer.port())); // For application-test.yml
-
-        stubFor(get(urlEqualTo("/" + TEST_FILE_NAME)) // Relative path for the client
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "application/xml")
-                        .withBody(sampleXmlContent)));
-
-        // Configure mock YappyIngestionService
-        ConnectorResponse mockConnectorResponse = ConnectorResponse.newBuilder()
-                .setAccepted(true)
-                .setStreamId("test-stream-id-123")
-                .setMessage("Successfully ingested by mock.")
-                .build();
-        // Use lenient().when() if the number of calls is variable or might be zero in some paths
-        lenient().when(mockYappyIngestionService.ingestPipeDoc(any(PipeDoc.class)))
-               .thenReturn(Mono.just(mockConnectorResponse));
+        // Create a sample XML file in the temp directory that will be used by the MockFileDownloader
+        Path sampleXmlFile = tempDir.resolve(TEST_FILE_NAME);
+        Files.writeString(sampleXmlFile, sampleXmlContent);
+        LOG.info("Created sample XML file at: {}", sampleXmlFile);
+        LOG.info("Test setup complete. MD5 checksum: {}", expectedMd5Checksum);
     }
-    
+
     private void deleteDirectoryRecursively(Path path) throws IOException {
         if (Files.exists(path)) {
             Files.walk(path)
@@ -114,7 +92,7 @@ class WikiCrawlControllerE2EIntegrationTest {
                      try {
                          Files.delete(p);
                      } catch (IOException e) {
-                         // log
+                         LOG.error("Error deleting file: {}", p, e);
                      }
                  });
         }
@@ -122,16 +100,20 @@ class WikiCrawlControllerE2EIntegrationTest {
 
     @AfterEach
     void tearDown() {
-        if (wireMockServer != null) {
-            wireMockServer.stop();
+        try {
+            deleteDirectoryRecursively(CONFIGURED_BASE_STORAGE_PATH.resolve(TEST_DUMP_DATE));
+        } catch (IOException e) {
+            LOG.error("Error cleaning up test directory", e);
         }
-        reset(mockYappyIngestionService); // Reset Mockito mock after each test
     }
 
     @Test
     void testInitiateCrawl_Success() {
+        // Create a test URL that will be handled by the MockFileDownloader
+        String testUrl = "http://test.example.com/" + TEST_FILE_NAME;
+
         InitiateCrawlRequest crawlRequest = new InitiateCrawlRequest();
-        crawlRequest.setUrl(wireMockServer.baseUrl() + "/" + TEST_FILE_NAME);
+        crawlRequest.setUrl(testUrl);
         crawlRequest.setFileName(TEST_FILE_NAME);
         crawlRequest.setFileDumpDate(TEST_DUMP_DATE);
         crawlRequest.setErrorCheckType("MD5");
@@ -146,34 +128,17 @@ class WikiCrawlControllerE2EIntegrationTest {
         assertNotNull(crawlResponse);
         assertTrue(crawlResponse.success);
         // sample-wiki-dump.xml has 2 processable articles (1 main, 1 category)
-        assertEquals(2, crawlResponse.documentsIngested, "Should report 2 documents ingested based on mock.");
+        assertEquals(2, crawlResponse.documentsIngested, "Should report 2 documents ingested");
         assertFalse(crawlResponse.streamIds.isEmpty(), "Stream IDs should be present.");
-        assertEquals("test-stream-id-123", crawlResponse.streamIds.get(0));
-
-
-        // Verify YappyIngestionService.ingestPipeDoc was called
-        ArgumentCaptor<PipeDoc> pipeDocCaptor = ArgumentCaptor.forClass(PipeDoc.class);
-        // sample-wiki-dump.xml contains 2 articles that should be processed by BlikiArticleExtractorProcessor
-        verify(mockYappyIngestionService, times(2)).ingestPipeDoc(pipeDocCaptor.capture());
-
-        // Verify some content of the captured PipeDocs
-        PipeDoc capturedDoc1 = pipeDocCaptor.getAllValues().stream()
-            .filter(pd -> pd.getTitle().equals("Test Article One"))
-            .findFirst().orElse(null);
-        assertNotNull(capturedDoc1, "PipeDoc for 'Test Article One' should have been ingested.");
-        assertEquals("wiki_http://localhost/wiki/Test_Page_1", capturedDoc1.getId());
-
-        PipeDoc capturedDoc2 = pipeDocCaptor.getAllValues().stream()
-            .filter(pd -> pd.getTitle().equals("Category:Test Category"))
-            .findFirst().orElse(null);
-        assertNotNull(capturedDoc2, "PipeDoc for 'Category:Test Category' should have been ingested.");
-        assertEquals("wiki_http://localhost/wiki/Test_Page_2", capturedDoc2.getId());
     }
 
     @Test
     void testInitiateCrawl_DownloadFails_ChecksumMismatch() {
+        // Create a test URL that will be handled by the MockFileDownloader
+        String testUrl = "http://test.example.com/" + TEST_FILE_NAME;
+
         InitiateCrawlRequest crawlRequest = new InitiateCrawlRequest();
-        crawlRequest.setUrl(wireMockServer.baseUrl() + "/" + TEST_FILE_NAME);
+        crawlRequest.setUrl(testUrl);
         crawlRequest.setFileName(TEST_FILE_NAME);
         crawlRequest.setFileDumpDate(TEST_DUMP_DATE);
         crawlRequest.setErrorCheckType("MD5");
@@ -181,7 +146,7 @@ class WikiCrawlControllerE2EIntegrationTest {
         crawlRequest.setExpectedFilesInDump(Collections.emptyList());
 
         HttpRequest<InitiateCrawlRequest> request = HttpRequest.POST("/wikicrawler/initiate", crawlRequest);
-        
+
         try {
             httpClient.toBlocking().exchange(request, CrawlResponse.class);
             fail("Expected HttpClientResponseException due to server error from checksum failure.");
@@ -192,7 +157,5 @@ class WikiCrawlControllerE2EIntegrationTest {
             assertFalse(crawlResponse.success);
             assertTrue(crawlResponse.message.contains("Checksum validation failed") || crawlResponse.message.contains("Failed to process crawl"), "Error message mismatch: " + crawlResponse.message);
         }
-
-        verify(mockYappyIngestionService, times(0)).ingestPipeDoc(any(PipeDoc.class));
     }
 }

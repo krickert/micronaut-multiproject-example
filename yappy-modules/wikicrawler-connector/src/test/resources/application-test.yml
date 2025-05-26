@@ -22,15 +22,24 @@ kafka:
 # WikiCrawler specific configurations for tests
 wikicrawler:
   base-storage-path: "build/tmp/wikicrawler-test-downloads" # Temporary storage for test downloads
-  kafka-produce-articles: true # Enable Kafka production for relevant tests
+
+  # Kafka configuration for each step in the pipeline
+  kafka-produce-download-requests: false # Whether to send download requests to Kafka
+  download-request-topic: "test-wiki-download-requests" # Topic for download requests
+
+  kafka-produce-downloaded-files: false # Whether to send downloaded files to Kafka
+  downloaded-file-topic: "test-wiki-downloaded-files" # Topic for downloaded files
+
+  kafka-produce-articles: true # Whether to send articles to Kafka
+  article-output-topic: "test-wiki-articles" # Topic for articles
 
 # gRPC client configuration for YappyIngestionService (points to a dummy/test service)
 # This might be overridden by specific tests if a mock is used.
 grpc:
   channels:
     connector-engine-service:
-      address: "static://localhost:9090" # Placeholder, actual test might use a mock gRPC server or TestResources gRPC server
-      plaintext: true # Assuming no TLS for test/mock service
+      address: "static://localhost:50051" # Points to the yappy-connector-test-server
+      plaintext: true # No TLS for test server
 
 # HTTP Client configuration for RawFileDownloaderClient (for tests that might use WireMock or similar)
 file:

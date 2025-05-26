@@ -3,6 +3,7 @@ package com.krickert.yappy.wikicrawler.service;
 import com.krickert.search.model.wiki.DownloadedFile;
 import com.krickert.search.model.wiki.WikiArticle;
 import com.krickert.yappy.wikicrawler.config.WikiCrawlerConfig;
+import com.krickert.yappy.wikicrawler.kafka.DownloadedFileProducer;
 import com.krickert.yappy.wikicrawler.kafka.WikiArticleProducer;
 import com.krickert.yappy.wikicrawler.processor.BlikiArticleExtractorProcessor;
 import com.krickert.yappy.wikicrawler.processor.WikiArticleToPipeDocProcessor;
@@ -19,6 +20,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+/**
+ * Orchestrates the processing of Wikipedia dump files.
+ * Each step in the pipeline can optionally use Kafka or internal processing.
+ */
 @Singleton
 public class WikiProcessingOrchestrator {
 
@@ -26,22 +31,26 @@ public class WikiProcessingOrchestrator {
 
     private final BlikiArticleExtractorProcessor articleExtractor;
     private final WikiArticleProducer kafkaArticleProducer;
+    private final DownloadedFileProducer downloadedFileProducer;
     private final WikiArticleToPipeDocProcessor toPipeDocProcessor;
     private final WikiCrawlerConfig config;
 
     public WikiProcessingOrchestrator(
             BlikiArticleExtractorProcessor articleExtractor,
-            WikiArticleProducer kafkaArticleProducer, // Optional injection if only used when enabled
+            WikiArticleProducer kafkaArticleProducer,
+            DownloadedFileProducer downloadedFileProducer,
             WikiArticleToPipeDocProcessor toPipeDocProcessor,
             WikiCrawlerConfig config) {
         this.articleExtractor = articleExtractor;
         this.kafkaArticleProducer = kafkaArticleProducer;
+        this.downloadedFileProducer = downloadedFileProducer;
         this.toPipeDocProcessor = toPipeDocProcessor;
         this.config = config;
     }
 
     /**
      * Processes a downloaded Wikipedia dump file.
+     * If configured, the downloaded file is sent to Kafka.
      * Articles are extracted, optionally sent to Kafka, and then transformed into PipeDocs.
      *
      * @param downloadedFile The file to process.
@@ -50,19 +59,27 @@ public class WikiProcessingOrchestrator {
     public Flux<PipeDoc> processDump(DownloadedFile downloadedFile) {
         LOG.info("Starting processing for dump: {}", downloadedFile.getFileName());
 
+        // Optionally send the downloaded file to Kafka
+        if (config.isKafkaProduceDownloadedFiles()) {
+            LOG.debug("Sending DownloadedFile {} to Kafka topic {}", 
+                    downloadedFile.getFileName(), config.getDownloadedFileTopic());
+            downloadedFileProducer.sendDownloadedFile(downloadedFile.getFileName(), downloadedFile);
+        }
+
         return Flux.create(emitter -> {
             Consumer<WikiArticle> articleConsumer = article -> {
                 try {
                     if (config.isKafkaProduceArticles()) {
-                        LOG.debug("Sending WikiArticle ID {} to Kafka topic {}", article.getId(), config.getArticleOutputTopic());
-                        // Ensure the topic used by producer matches config if dynamic topic configuration is intended for producer itself
+                        LOG.debug("Sending WikiArticle ID {} to Kafka topic {}", 
+                                article.getId(), config.getArticleOutputTopic());
                         kafkaArticleProducer.sendWikiArticle(article.getId(), article);
                     }
                     // Regardless of Kafka, transform to PipeDoc for further in-process flow
                     PipeDoc pipeDoc = toPipeDocProcessor.transform(article);
                     emitter.next(pipeDoc);
                 } catch (Exception e) {
-                    LOG.error("Error processing article ID {} or sending to Kafka/transforming: ", article.getId(), e);
+                    LOG.error("Error processing article ID {} or sending to Kafka/transforming: ", 
+                            article.getId(), e);
                     emitter.error(e); // Propagate error to the Flux stream
                 }
             };
