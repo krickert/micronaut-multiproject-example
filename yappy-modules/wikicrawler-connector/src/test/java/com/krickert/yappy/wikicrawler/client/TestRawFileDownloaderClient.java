@@ -2,16 +2,17 @@ package com.krickert.yappy.wikicrawler.client;
 
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.env.Environment;
-import io.micronaut.http.annotation.Get;
-import io.micronaut.http.client.annotation.Client;
-import io.micronaut.http.client.StreamingHttpClient;
-import reactor.core.publisher.Flux;
-import java.nio.ByteBuffer;
 import org.reactivestreams.Publisher;
 
-@Client("${file.download.base-url}") // Base URL will be configured
-@Requires(notEnv = Environment.TEST) // Not used in test environment
-public interface RawFileDownloaderClient extends StreamingHttpClient {
+import java.nio.ByteBuffer;
+
+/**
+ * Test-specific interface for RawFileDownloaderClient.
+ * This interface is used in test environments and doesn't extend StreamingHttpClient
+ * to avoid having to implement all its methods.
+ */
+@Requires(env = Environment.TEST)
+public interface TestRawFileDownloaderClient {
 
     /**
      * Downloads a file from the given relative URL.
@@ -19,6 +20,5 @@ public interface RawFileDownloaderClient extends StreamingHttpClient {
      * @param url The relative path/URL of the file to download.
      * @return A Publisher of ByteBuffer chunks.
      */
-    @Get("/{+url}")
     Publisher<ByteBuffer> downloadFile(String url);
 }

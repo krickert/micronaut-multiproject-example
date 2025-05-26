@@ -24,7 +24,7 @@ import java.util.Optional;
 @Singleton
 @Primary
 @Requires(env = Environment.TEST)
-public class MockRawFileDownloaderClient implements RawFileDownloaderClient {
+public class MockRawFileDownloaderClient implements TestRawFileDownloaderClient {
     private static final Logger LOG = LoggerFactory.getLogger(MockRawFileDownloaderClient.class);
     private static final int BUFFER_SIZE = 8192; // 8KB chunks
 
