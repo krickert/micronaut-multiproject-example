@@ -1,4 +1,0 @@
-grpc:
-  port: ${random.port}
-  server:
-    enabled: true

@@ -37,10 +37,15 @@ This part focuses on getting a YAPPY Engine instance minimally operational and c
 
 *(This phase executes once the engine has successfully connected to Consul via Phase A.1)*
 
+**Note on Cluster Names:** There is no default "yappy-default" cluster name in the system. The cluster name must be explicitly configured through one of these methods:
+* The `app.config.cluster-name` property in application.yml
+* During the bootstrap process when selecting or creating a cluster
+* The `YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME` property in the bootstrap file
+
 1.  **Cluster Choice Time: API & (Optional) UI**
     *   Expose API endpoints for cluster management:
         *   **gRPC Option:** `BootstrapConfigService`
-            *   `ListAvailableClusters(Empty) returns (ClusterList)`: Queries Consul (e.g., lists keys under `pipeline-configs/clusters/`) for existing Yappy clusters.
+            *   `ListAvailableClusters(Empty) returns (ClusterList)`: Queries Consul (e.g., lists keys under `pipeline-configs/clusters/`) for existing Yappy clusters. Note: This path will be changed to `/yappy-clusters` in future updates.
             *   `SelectExistingCluster(ClusterSelection) returns (OperationStatus)`: Engine records the selected cluster (e.g., in its local bootstrap config or an instance-specific Consul key) and associates itself with it.
             *   `CreateNewCluster(NewClusterDetails) returns (ClusterCreationStatus)`: For initializing a new Yappy cluster.
         *   **HTTP Option:** Endpoints like `GET /setup/clusters`, `POST /setup/cluster/select`, `POST /setup/cluster/create`.
@@ -48,7 +53,7 @@ This part focuses on getting a YAPPY Engine instance minimally operational and c
 
 2.  **Planting the Seed for a New Cluster**
     *   If `CreateNewCluster` is invoked:
-        *   The engine uses `ConsulBusinessOperationsService` to write a default, minimal, but valid `PipelineClusterConfig` to the new cluster's path in Consul (e.g., `pipeline-configs/clusters/<new-cluster-name>`).
+        *   The engine uses `ConsulBusinessOperationsService` to write a default, minimal, but valid `PipelineClusterConfig` to the new cluster's path in Consul (e.g., `pipeline-configs/clusters/<new-cluster-name>`). Note: This path will be changed to `/yappy-clusters/<new-cluster-name>` in future updates.
         *   **Seed Configuration Details:**
             *   `pipelineGraphConfig`: Empty or a very simple "hello world" example.
             *   `pipelineModuleMap`: Empty.
@@ -100,9 +105,11 @@ This part focuses on getting a YAPPY Engine instance minimally operational and c
     *   On startup, if the engine is configured for a specific cluster (post-Phase A.2) but `ConsulBusinessOperationsService.getPipelineClusterConfig()` returns an empty or non-existent configuration for that cluster key in Consul:
         *   Create a default/minimal `PipelineClusterConfig` in memory (similar to the seed in Phase A.2.2).
         *   Store this minimal config in Consul KV at the expected cluster path using `ConsulBusinessOperationsService.storeClusterConfiguration()`. This ensures the engine can operate even if its designated cluster config was accidentally wiped from Consul.
-2.  **Implement Engine-Managed Module Registration (for co-located/engine-launched modules):**
-    *   If the engine is responsible for starting and registering certain modules:
+2.  **Implement Engine-Managed Module Registration:**
+    *   **Important Note:** Modules do NOT register themselves - the engine handles registration on behalf of modules. This simplifies the architecture and reduces the burden on module developers.
+    *   The engine is responsible for registering modules:
         *   **Pre-registration Health Check:** Directly ping the module's health endpoint before attempting Consul registration.
+        *   **Authentication:** Implement a stub that always returns true as a placeholder for future security enhancements.
         *   **Construct `Registration` Object:** Populate ID, name, address, port, tags (including `yappy-service-name`, `yappy-version`, `yappy-config-digest`), and detailed health check information (`Registration.RegCheck`).
         *   **Register:** Call `ConsulBusinessOperationsService.registerService()`.
         *   **Verify:** After a short delay, use `ConsulBusinessOperationsService.getHealthyServiceInstances()` to confirm successful registration and health status in Consul.
@@ -719,6 +726,8 @@ This record is used to represent routing information for both gRPC and Kafka tra
 
 **Location**: `com.krickert.search.pipeline.engine.common.RouteData`
 
+**TODO: Note that there are actually two RouteData records in the codebase: one in com.krickert.search.pipeline.engine.common.RouteData and another in com.krickert.search.pipeline.engine.grpc.PipeStreamGrpcForwarder. The implementation below is for the common one, but the PipeStreamGrpcForwarder also has its own RouteData record with similar fields.**
+
 **Definition**:
 ```java
 /**
@@ -941,6 +950,8 @@ This is the central component that implements the PipeStreamEngine gRPC service.
 
 **Location**: `com.krickert.search.pipeline.engine.grpc.PipeStreamEngineImpl`
 
+**TODO: Note that the processConnectorDoc method is actually implemented in ConnectorEngineImpl, not in PipeStreamEngineImpl as shown below. The ConnectorEngine service is defined in connector_service.proto and implemented in ConnectorEngineImpl.**
+
 **Implementation**:
 ```java
 /**
@@ -1078,110 +1089,7 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
         }
     }
 
-    @Override
-    public void processConnectorDoc(ConnectorRequest request, StreamObserver<ConnectorResponse> responseObserver) {
-        try {
-            // Get the pipeline configuration for the source identifier
-            // This would involve looking up the appropriate pipeline based on the source identifier
-            // For now, we'll use a simple approach
-
-            Optional<PipelineClusterConfig> clusterConfig = configManager.getCurrentPipelineClusterConfig();
-            if (clusterConfig.isEmpty()) {
-                throw new RuntimeException("No cluster configuration found");
-            }
-
-            // Use the default pipeline if available, otherwise use the first one
-            String pipelineName = clusterConfig.get().defaultPipelineName();
-            if (pipelineName == null && !clusterConfig.get().pipelineGraphConfig().pipelines().isEmpty()) {
-                pipelineName = clusterConfig.get().pipelineGraphConfig().pipelines().keySet().iterator().next();
-            }
-
-            if (pipelineName == null) {
-                throw new RuntimeException("No pipeline found for connector");
-            }
-
-            // Create a new PipeStream
-            String streamId = request.getSuggestedStreamId().isEmpty() ? 
-                UUID.randomUUID().toString() : request.getSuggestedStreamId();
-
-            PipeStream.Builder pipeStreamBuilder = PipeStream.newBuilder()
-                .setStreamId(streamId)
-                .setDocument(request.getDocument())
-                .setCurrentPipelineName(pipelineName)
-                .setCurrentHopNumber(0)
-                .putAllContextParams(request.getInitialContextParamsMap());
-
-            // Get the first step in the pipeline
-            Optional<PipelineConfig> pipelineConfig = configManager.getPipelineConfig(pipelineName);
-            if (pipelineConfig.isEmpty()) {
-                throw new RuntimeException("Pipeline not found: " + pipelineName);
-            }
-
-            // Find the first step in the pipeline
-            // In a real implementation, we would have a way to determine the entry point
-            // For now, we'll just use the first step in the pipeline
-            if (pipelineConfig.get().pipelineSteps().isEmpty()) {
-                throw new RuntimeException("Pipeline has no steps: " + pipelineName);
-            }
-
-            String firstStepName = pipelineConfig.get().pipelineSteps().keySet().iterator().next();
-            pipeStreamBuilder.setTargetStepName(firstStepName);
-
-            // Create the response
-            ConnectorResponse response = ConnectorResponse.newBuilder()
-                .setStreamId(streamId)
-                .setAccepted(true)
-                .setMessage("Ingestion accepted for stream ID " + streamId + ", targeting pipeline " + pipelineName)
-                .build();
-
-            // Send the response
-            responseObserver.onNext(response);
-            responseObserver.onCompleted();
-
-            // Process the document asynchronously
-            PipeStream pipeStream = pipeStreamBuilder.build();
-
-            // Get executor for the target step
-            PipeStepExecutor executor = executorFactory.getExecutor(
-                pipeStream.getCurrentPipelineName(), 
-                pipeStream.getTargetStepName());
-
-            // Execute the step
-            PipeStream processedStream = executor.execute(pipeStream);
-
-            // Create state builder for routing
-            PipeStreamStateBuilder stateBuilder = new PipeStreamStateBuilderImpl(processedStream, configManager);
-
-            // Calculate next routes
-            List<RouteData> routes = stateBuilder.calculateNextRoutes();
-
-            // Forward to next steps - both gRPC and Kafka are handled similarly
-            // Both take PipeStream requests and both run asynchronously
-            for (RouteData route : routes) {
-                // Create a new PipeStream for each destination with the correct target step
-                PipeStream.Builder destinationPipeBuilder = processedStream.toBuilder()
-                    .setTargetStepName(route.nextTargetStep());
-
-                if (route.transportType() == TransportType.KAFKA) {
-                    // Forward to Kafka - this is asynchronous by default in Micronaut
-                    // We need to set the target step for each Kafka destination
-                    kafkaForwarder.forwardToKafka(destinationPipeBuilder.build(), route.destination());
-                } else {
-                    // Forward to gRPC
-                    grpcForwarder.forwardToGrpc(destinationPipeBuilder, route);
-                }
-            }
-        } catch (Exception e) {
-            // Create error response
-            ConnectorResponse response = ConnectorResponse.newBuilder()
-                .setAccepted(false)
-                .setMessage("Error processing connector document: " + e.getMessage())
-                .build();
-
-            responseObserver.onNext(response);
-            responseObserver.onCompleted();
-        }
-    }
+    // The processConnectorDoc method is actually implemented in ConnectorEngineImpl, not here
 }
 ```
 
@@ -1297,6 +1205,147 @@ The unit tests must me methodical: a full integration test is the goal.
 3. Implement error handling and retry logic
 4. Add metrics and monitoring
 5. Implement configuration-driven setup for pipeline steps
+
+## Using the ConnectorEngine Service for Document Ingestion
+
+The ConnectorEngine service provides a clean, dedicated interface for external systems to ingest documents into the YAPPY pipeline system. This service is intentionally separated from the core PipeStreamEngine to provide a clear boundary between external connectors and the internal pipeline processing.
+
+### Understanding the Connector Interface
+
+The ConnectorEngine service is defined in `connector_service.proto` and implemented in `ConnectorEngineImpl.java`. It provides a single RPC method:
+
+```protobuf
+service ConnectorEngine {
+  // Ingests new data (as a PipeDoc identified by a source_identifier) into the system
+  // to start a pipeline asynchronously. The engine will:
+  // 1. Use source_identifier to look up the configured target pipeline and initial step.
+  // 2. Create the PipeStream, generate a stream_id.
+  // 3. Initiate the pipeline.
+  rpc processConnectorDoc(ConnectorRequest) returns (ConnectorResponse);
+}
+```
+
+The key components of this interface are:
+
+1. **ConnectorRequest**: Contains the document to be processed, a source identifier, and optional context parameters.
+   ```protobuf
+   message ConnectorRequest {
+     // REQUIRED. An identifier for the connector or data source submitting this data.
+     // The engine will use this ID to look up the pre-configured target pipeline and initial step.
+     // Example: "s3-landing-bucket-connector", "customer-api-ingest-v1".
+     string source_identifier = 1;
+
+     // REQUIRED. The initial document data to be processed.
+     com.krickert.search.model.PipeDoc document = 2;
+
+     // Optional. Key-value parameters to be included in the PipeStream's context_params.
+     // Useful for passing global run context like tenant_id, user_id, correlation_id from the connector.
+     map<string, string> initial_context_params = 3;
+
+     // Optional. If the connector wants to suggest a stream_id.
+     // If empty, the engine MUST generate a unique one.
+     // If provided, the engine MAY use it or generate its own if there's a conflict or policy.
+     optional string suggested_stream_id = 4;
+   }
+   ```
+
+2. **ConnectorResponse**: Provides feedback about the ingestion request.
+   ```protobuf
+   message ConnectorResponse {
+     // The unique stream_id assigned by the engine to this ingestion flow.
+     // This allows the connector to correlate this ingestion with the pipeline execution.
+     string stream_id = 1;
+
+     // Indicates if the ingestion request was successfully accepted and queued by the engine.
+     // This does not guarantee the pipeline itself will succeed, only that ingestion was accepted.
+     bool accepted = 2;
+
+     // Optional message, e.g., "Ingestion accepted for stream ID [stream_id], targeting configured pipeline."
+     string message = 3;
+   }
+   ```
+
+### Proper Use of processConnectorDoc
+
+The `processConnectorDoc` method is designed to be the entry point for external systems to submit documents to the YAPPY pipeline system. Here's how to use it correctly:
+
+1. **Source Identifier**: The `source_identifier` in the ConnectorRequest must match the name of a PipelineStepConfig in one of the pipelines in the cluster. This step will be the entry point for the document.
+
+2. **Document Creation**: Create a PipeDoc with the necessary fields (id, content, metadata) that your pipeline expects.
+
+3. **Context Parameters**: Use the `initial_context_params` to provide any contextual information that should be available throughout the pipeline processing.
+
+4. **Asynchronous Processing**: The method returns quickly with a ConnectorResponse, but the actual document processing happens asynchronously. The response only indicates that the request was accepted, not that processing was successful.
+
+5. **Stream ID Tracking**: Use the returned `stream_id` to track the document's progress through the pipeline if needed.
+
+### Example Usage
+
+Here's an example of how to use the ConnectorEngine service from a client:
+
+```java
+// Create a gRPC client for the ConnectorEngine service
+ManagedChannel channel = ManagedChannelBuilder.forAddress("localhost", 50051)
+    .usePlaintext()
+    .build();
+ConnectorEngineGrpc.ConnectorEngineBlockingStub client = ConnectorEngineGrpc.newBlockingStub(channel);
+
+// Create a PipeDoc with the document data
+PipeDoc document = PipeDoc.newBuilder()
+    .setId("doc-123")
+    .setTitle("Sample Document")
+    .setBody("This is a sample document for processing.")
+    .build();
+
+// Create a ConnectorRequest
+ConnectorRequest request = ConnectorRequest.newBuilder()
+    .setSourceIdentifier("s3-connector") // Must match a step name in the pipeline configuration
+    .setDocument(document)
+    .putInitialContextParams("tenant_id", "tenant-456")
+    .putInitialContextParams("source", "api-upload")
+    .build();
+
+// Call the processConnectorDoc method
+ConnectorResponse response = client.processConnectorDoc(request);
+
+// Check the response
+if (response.getAccepted()) {
+    System.out.println("Document accepted with stream ID: " + response.getStreamId());
+    System.out.println("Message: " + response.getMessage());
+} else {
+    System.err.println("Document rejected: " + response.getMessage());
+}
+```
+
+### Relationship with PipeStreamEngine
+
+The ConnectorEngine and PipeStreamEngine services are separate interfaces with different responsibilities:
+
+1. **ConnectorEngine**: Provides an entry point for external systems to submit documents to the pipeline system. It's focused on document ingestion and initial routing.
+
+2. **PipeStreamEngine**: Handles the internal pipeline processing, including step execution, routing between steps, and error handling. It's not intended to be called directly by external systems.
+
+The separation of these interfaces provides several benefits:
+
+1. **Clear Boundaries**: External systems only need to understand the simpler ConnectorEngine interface, not the more complex internal pipeline processing.
+
+2. **Security**: By limiting external access to the ConnectorEngine, you can better control what external systems can do with your pipeline system.
+
+3. **Abstraction**: The ConnectorEngine abstracts away the details of how documents are processed, allowing the internal implementation to change without affecting external systems.
+
+4. **Validation**: The ConnectorEngine can validate incoming requests before they enter the pipeline system, ensuring that only valid documents are processed.
+
+### Implementation Details
+
+The ConnectorEngineImpl implementation:
+
+1. Validates the incoming request, ensuring that the source_identifier is provided.
+2. Looks up the pipeline step configuration corresponding to the source_identifier.
+3. Creates a PipeStream with the document and sets the target step to the connector's step.
+4. Returns a ConnectorResponse immediately, indicating that the request was accepted.
+5. Asynchronously processes the document through the pipeline, handling errors and retries as needed.
+
+This implementation ensures that external systems get quick feedback about their requests while allowing the pipeline system to process documents asynchronously.
 
 ## Using Consul Configuration for Routing (90% complete)
 
