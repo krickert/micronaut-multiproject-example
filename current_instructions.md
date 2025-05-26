@@ -429,6 +429,208 @@ specific piece of business logic encapsulated in a module.
    * This entire discovery and invocation process is abstracted away from the **Module Processor** itself, allowing the module to _focus solely on its business logic_. 
    * The `Engine` handles the complexities of configuration, discovery, and communication.
 
+#### **Registration Process Workflow**
+The registration process for a new service follows these steps:
+
+1. **Service Startup**:
+   * When a new service (module) starts, it reads its configuration from standard Micronaut configuration sources (environment variables, application.yml, etc.).
+   * The configuration includes Consul connection details (host, port, ACL token) and service registration details (name, ID, tags, health check).
+
+2. **Consul Registration**:
+   * The service uses Micronaut's built-in Consul client to register itself with Consul.
+   * The registration includes:
+     * Service name (e.g., "validator-module-v1")
+     * Service ID (unique identifier for this instance)
+     * Host and port where the service is running
+     * Tags (including "yappy-service-name", "yappy-version", "yappy-config-digest")
+     * Health check information (URL, interval, timeout)
+
+3. **Health Check Setup**:
+   * The service exposes a health check endpoint (HTTP or gRPC Health Checking Protocol).
+   * The health check includes validation of the service's configuration against its schema.
+   * If the configuration is invalid, the health check fails, and the service reports itself as unhealthy.
+
+4. **Service Discovery**:
+   * Other services (like the YAPPY Engine) use Micronaut's DiscoveryClient to find instances of the service.
+   * The DiscoveryClient queries Consul for services with the specified name and returns their host and port.
+
+5. **Service Deregistration**:
+   * When the service shuts down gracefully, it deregisters itself from Consul.
+   * If the service crashes or becomes unresponsive, Consul's health check will mark it as unhealthy and eventually deregister it.
+
+This registration process is handled automatically by Micronaut's Consul integration, requiring minimal configuration from the service developer. The service developer only needs to:
+
+1. Include the Micronaut Consul Discovery dependency
+2. Configure Consul connection details
+3. Configure service registration details
+4. Implement a health check endpoint
+
+The YAPPY Engine then uses this registration information to discover and communicate with the service as needed.
+
+#### **Additional Implementation Considerations**
+
+1. **Error Handling and Retries**:
+   * If Consul is unavailable during service startup, the service should implement a retry mechanism with exponential backoff.
+   * The service should log registration failures with appropriate error messages.
+   * The service should continue to attempt registration until successful or a maximum number of retries is reached.
+   * Example implementation:
+     ```java
+     @Singleton
+     public class ConsulRegistrationRetryHandler {
+         private static final Logger LOG = LoggerFactory.getLogger(ConsulRegistrationRetryHandler.class);
+         private final ConsulClient consulClient;
+         private final Registration registration;
+         private final int maxRetries;
+         private final long initialBackoffMillis;
+
+         @Inject
+         public ConsulRegistrationRetryHandler(ConsulClient consulClient, 
+                                              Registration registration,
+                                              @Value("${consul.registration.max-retries:10}") int maxRetries,
+                                              @Value("${consul.registration.initial-backoff:1000}") long initialBackoffMillis) {
+             this.consulClient = consulClient;
+             this.registration = registration;
+             this.maxRetries = maxRetries;
+             this.initialBackoffMillis = initialBackoffMillis;
+         }
+
+         public void registerWithRetry() {
+             int attempts = 0;
+             long backoffMillis = initialBackoffMillis;
+
+             while (attempts < maxRetries) {
+                 try {
+                     consulClient.register(registration);
+                     LOG.info("Successfully registered service with Consul: {}", registration.getName());
+                     return;
+                 } catch (Exception e) {
+                     attempts++;
+                     LOG.warn("Failed to register with Consul (attempt {}/{}): {}", 
+                             attempts, maxRetries, e.getMessage());
+
+                     if (attempts < maxRetries) {
+                         try {
+                             LOG.info("Retrying in {} ms", backoffMillis);
+                             Thread.sleep(backoffMillis);
+                             backoffMillis = Math.min(backoffMillis * 2, 60000); // Max 1 minute
+                         } catch (InterruptedException ie) {
+                             Thread.currentThread().interrupt();
+                             LOG.error("Interrupted during backoff", ie);
+                         }
+                     }
+                 }
+             }
+
+             LOG.error("Failed to register with Consul after {} attempts", maxRetries);
+         }
+     }
+     ```
+
+2. **Service ID Generation**:
+   * Service IDs should be unique for each instance of a service.
+   * A good practice is to use a combination of service name, host, port, and a random UUID.
+   * Example:
+     ```java
+     String serviceId = serviceName + "-" + InetAddress.getLocalHost().getHostName() + "-" + port + "-" + UUID.randomUUID().toString();
+     ```
+
+3. **Custom Tags**:
+   * Tags should include information that helps identify and categorize the service.
+   * For YAPPY services, include at least:
+     * `yappy-service-name`: The logical name of the service in the YAPPY ecosystem
+     * `yappy-version`: The version of the service
+     * `yappy-config-digest`: A digest of the service's configuration for tracking changes
+   * Example configuration in application.yml:
+     ```yaml
+     micronaut:
+       application:
+         name: chunker-service
+       consul:
+         client:
+           registration:
+             tags:
+               - yappy-service-name=chunker
+               - yappy-version=1.0.0
+               - yappy-config-digest=${config.digest}
+     ```
+
+4. **Configuration Validation**:
+   * Validate the service's configuration before attempting registration.
+   * If the configuration is invalid, log an error and fail fast.
+   * Example:
+     ```java
+     @Singleton
+     public class ConfigurationValidator {
+         private static final Logger LOG = LoggerFactory.getLogger(ConfigurationValidator.class);
+         private final ChunkerConfig config;
+
+         @Inject
+         public ConfigurationValidator(ChunkerConfig config) {
+             this.config = config;
+         }
+
+         public boolean validate() {
+             if (config.getChunkSize() <= 0) {
+                 LOG.error("Invalid chunk size: {}", config.getChunkSize());
+                 return false;
+             }
+
+             if (config.getOverlap() < 0 || config.getOverlap() >= config.getChunkSize()) {
+                 LOG.error("Invalid overlap: {}", config.getOverlap());
+                 return false;
+             }
+
+             return true;
+         }
+     }
+     ```
+
+5. **Multiple Instances and Load Balancing**:
+   * When multiple instances of the same service are registered, the DiscoveryClient will automatically load balance between them.
+   * The default load balancing strategy is round-robin, but this can be configured.
+   * Example configuration in application.yml:
+     ```yaml
+     micronaut:
+       http:
+         client:
+           load-balance:
+             enabled: true
+             strategy: random # or round-robin
+     ```
+
+6. **Version Management**:
+   * Include the service version in the tags for tracking and compatibility checking.
+   * Consider implementing a version compatibility check in the service discovery process.
+   * Example:
+     ```java
+     @Singleton
+     public class VersionCompatibilityChecker {
+         private static final Logger LOG = LoggerFactory.getLogger(VersionCompatibilityChecker.class);
+
+         public boolean isCompatible(String requiredVersion, String actualVersion) {
+             // Simple semantic version compatibility check
+             String[] required = requiredVersion.split("\\.");
+             String[] actual = actualVersion.split("\\.");
+
+             // Major version must match
+             if (!required[0].equals(actual[0])) {
+                 LOG.warn("Major version mismatch: required {}, actual {}", requiredVersion, actualVersion);
+                 return false;
+             }
+
+             // Minor version in actual must be >= minor version in required
+             if (Integer.parseInt(actual[1]) < Integer.parseInt(required[1])) {
+                 LOG.warn("Minor version too old: required {}, actual {}", requiredVersion, actualVersion);
+                 return false;
+             }
+
+             return true;
+         }
+     }
+     ```
+
+These additional considerations will help ensure a robust and reliable registration process for YAPPY services.
+
 
 ## Component Details and Implementation Plan
 
