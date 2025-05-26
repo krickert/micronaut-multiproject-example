@@ -1,0 +1,22 @@
+{
+  "id": "OpenSearchSink",
+  "name": "OpenSearch Sink",
+  "description": "Sends data to an OpenSearch index.",
+  "type": "sink",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "indexName": {
+        "type": "string",
+        "title": "Index Name",
+        "description": "The OpenSearch index to send data to."
+      },
+      "connectionUrl": {
+        "type": "string",
+        "title": "Connection URL",
+        "description": "URL of the OpenSearch cluster."
+      }
+    },
+    "required": ["indexName", "connectionUrl"]
+  }
+}

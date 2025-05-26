@@ -490,3 +490,45 @@ graph LR
 
 This decentralized engine model emphasizes the role of Kafka as the backbone for inter-step communication and relies on each step's
 framework to correctly interpret its role and route the `PipeStream` based on the dynamic configuration fetched from Consul.
+
+## Running the Yappy Admin UI and Backend
+
+This section describes how to run the `yappy-engine` backend and the `admin-ui` frontend for development.
+
+### Backend (`yappy-engine`)
+
+1.  **Prerequisites:**
+    *   Java JDK (version 21 or higher is recommended, as used in the project).
+2.  **Running the application:**
+    Open a terminal at the root of the repository and run:
+    ```bash
+    ./gradlew :yappy-engine:run
+    ```
+    The backend will typically start on port `8080`. The `PipelineController` and `SchemaController` will be available under `/api/pipelines` and `/api/schemas` respectively. These controllers currently use in-memory data.
+
+### Frontend (`admin-ui`)
+
+1.  **Prerequisites:**
+    *   Node.js (e.g., LTS version like 18.x, 20.x or higher) and npm.
+2.  **Setup and Running:**
+    Open a separate terminal:
+    ```bash
+    cd admin-ui
+    npm install
+    npm run dev
+    ```
+    The frontend development server will typically start on port `5173` (Vite default). Check your terminal output for the exact URL. Open this URL in your browser (e.g., `http://localhost:5173`). The UI will allow you to view and interact with the pipelines served by the `yappy-engine`.
+
+3.  **Running Frontend Unit Tests:**
+    The `admin-ui` project includes unit tests for its React components using Vitest and React Testing Library. To run them:
+    ```bash
+    cd admin-ui
+    npm install # If you haven't already
+    npm test
+    ```
+    This will execute the tests and show the results in your terminal. Note: Test execution might require a correctly configured environment that can find and execute `vitest`. If you encounter issues like "`vitest`: not found", ensure your Node.js environment is set up correctly and `vitest` is accessible from your project's `node_modules/.bin` directory, or try `npx vitest --run`.
+
+### General Notes
+*   It's generally recommended to start the backend (`yappy-engine`) before the frontend (`admin-ui`), as the frontend may attempt to fetch data from the backend on load.
+*   The `yappy-engine` uses in-memory data stores for pipelines and schemas, so any changes made via API (if PUT/POST/DELETE were fully implemented beyond the current GET) would be lost on restart.
+*   The `admin-ui` fetches pipeline and schema data from the `yappy-engine` running on `http://localhost:8080`.

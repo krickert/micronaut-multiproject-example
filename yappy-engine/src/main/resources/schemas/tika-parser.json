@@ -1,0 +1,24 @@
+{
+  "id": "TikaParser",
+  "name": "Tika Parser",
+  "description": "Parses documents using Apache Tika.",
+  "type": "processor",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "outputField": {
+        "type": "string",
+        "title": "Output Field",
+        "description": "The field where the parsed text content will be stored.",
+        "default": "parsed_content"
+      },
+      "metadataPrefix": {
+        "type": "string",
+        "title": "Metadata Prefix",
+        "description": "Prefix for metadata fields extracted by Tika.",
+        "default": "meta_"
+      }
+    },
+    "required": ["outputField"]
+  }
+}

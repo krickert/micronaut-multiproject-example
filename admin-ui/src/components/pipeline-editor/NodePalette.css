@@ -1,0 +1,18 @@
+.node-palette-item {
+  padding: 12px 10px;
+  border: 1px solid #dee2e6; /* Consistent border */
+  border-radius: 4px;
+  margin-bottom: 10px;
+  cursor: grab;
+  background-color: #fff; /* White background for items */
+  text-align: center;
+  font-size: 0.9em;
+  color: #343a40; /* Darker text for better readability */
+  transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); /* Subtle shadow */
+}
+
+.node-palette-item:hover {
+  background-color: #f1f3f5; /* Lighter grey on hover */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08); /* Slightly more pronounced shadow on hover */
+}

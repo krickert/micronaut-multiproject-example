@@ -1,0 +1,43 @@
+.config-panel-placeholder,
+.config-message {
+  padding: 10px;
+  color: #6c757d;
+  font-style: italic;
+  font-size: 0.9em;
+}
+
+.config-panel-content {
+  font-size: 0.9em;
+}
+
+.config-section {
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee; /* Separator for sections within the panel */
+}
+
+.config-section:last-child {
+  border-bottom: none;
+}
+
+.config-section p {
+  margin: 5px 0;
+  color: #343a40;
+}
+
+.config-section strong {
+  color: #212529;
+}
+
+.config-pre {
+  background-color: #e9ecef; /* Light background for preformatted text */
+  border: 1px solid #ced4da; /* Consistent border */
+  padding: 10px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 350px; /* Increased max height */
+  overflow-y: auto;
+  font-size: 0.85em; /* Slightly smaller font for config */
+  color: #212529;
+}
