@@ -1,0 +1,19 @@
+micronaut:
+  application:
+    name: yappy-connector-test-server
+  server:
+    port: 8080
+  grpc:
+    server:
+      port: 50051
+      keep-alive-time: 3h
+      max-inbound-message-size: 10485760  # 10MB
+    services:
+      connector-test:
+        enabled: true
+
+logger:
+  levels:
+    com.krickert.yappy.modules.connector.test.server: INFO
+    io.grpc: INFO
+    io.micronaut.grpc: INFO
