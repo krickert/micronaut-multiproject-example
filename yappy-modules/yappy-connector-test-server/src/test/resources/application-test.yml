@@ -1,0 +1,17 @@
+micronaut:
+  application:
+    name: yappy-connector-test-server-test
+  server:
+    port: -1  # Random port for tests
+  grpc:
+    server:
+      port: -1  # Random port for tests
+    services:
+      connector-test:
+        enabled: true
+
+logger:
+  levels:
+    com.krickert.yappy.modules.connector.test.server: DEBUG
+    io.grpc: INFO
+    io.micronaut.grpc: INFO

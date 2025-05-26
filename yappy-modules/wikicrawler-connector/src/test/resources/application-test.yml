@@ -1,0 +1,49 @@
+micronaut:
+  application:
+    name: wikicrawler-connector-test
+  server:
+    port: -1 # Random port for tests
+
+# Kafka Test Resources Configuration
+kafka:
+  enabled: true
+  topic:
+    wiki:
+      article: test-wiki-articles # Specific topic name for testing
+
+# Apicurio Test Resources Configuration (usually picked up automatically if on classpath)
+# For explicit configuration if needed:
+# apicurio:
+#   registry:
+#     url: ${apicurio.registry.url} # Provided by Test Resources
+#     avro-to-protobuf: true # Example, if needed
+
+# WikiCrawler specific configurations for tests
+wikicrawler:
+  base-storage-path: "build/tmp/wikicrawler-test-downloads" # Temporary storage for test downloads
+
+  # Kafka configuration for each step in the pipeline
+  kafka-produce-download-requests: false # Whether to send download requests to Kafka
+  download-request-topic: "test-wiki-download-requests" # Topic for download requests
+
+  kafka-produce-downloaded-files: false # Whether to send downloaded files to Kafka
+  downloaded-file-topic: "test-wiki-downloaded-files" # Topic for downloaded files
+
+  kafka-produce-articles: true # Whether to send articles to Kafka
+  article-output-topic: "test-wiki-articles" # Topic for articles
+
+# gRPC client configuration for YappyIngestionService (points to a dummy/test service)
+# This might be overridden by specific tests if a mock is used.
+grpc:
+  channels:
+    connector-engine-service:
+      address: "static://localhost:50051" # Points to the yappy-connector-test-server
+      plaintext: true # No TLS for test server
+
+# HTTP Client configuration for RawFileDownloaderClient (for tests that might use WireMock or similar)
+file:
+  download:
+    base-url: "http://localhost:${wiremock.server.port}" # Placeholder for WireMock integration
+
+# Ensure Test Resources are enabled (usually default in Micronaut Test)
+micronaut.test.resources.enabled: true
