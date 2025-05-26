@@ -1,6 +1,7 @@
 package com.krickert.yappy.modules.embedder;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.protobuf.Empty;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.JsonFormat;
@@ -8,6 +9,7 @@ import com.krickert.search.model.*;
 import com.krickert.search.sdk.*;
 import io.grpc.stub.StreamObserver;
 import io.micronaut.context.annotation.Requires;
+import io.micronaut.core.io.ResourceLoader;
 import io.micronaut.grpc.annotation.GrpcService;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -15,6 +17,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -32,12 +38,14 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
 
     private final ObjectMapper objectMapper;
     private final Map<String, Vectorizer> vectorizers;
+    private final ResourceLoader resourceLoader;
 
     @Inject
-    public EmbedderServiceGrpc(ObjectMapper objectMapper, List<Vectorizer> vectorizers) {
+    public EmbedderServiceGrpc(ObjectMapper objectMapper, List<Vectorizer> vectorizers, ResourceLoader resourceLoader) {
         this.objectMapper = objectMapper;
         this.vectorizers = vectorizers.stream()
                 .collect(Collectors.toMap(Vectorizer::getModelId, v -> v));
+        this.resourceLoader = resourceLoader;
         log.info("Initialized EmbedderServiceGrpc with {} vectorizers: {}", 
                 vectorizers.size(), 
                 vectorizers.stream().map(Vectorizer::getModelId).collect(Collectors.joining(", ")));
@@ -125,6 +133,41 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
             log.error(errorMessage, e);
             setErrorResponseAndComplete(responseBuilder, errorMessage, e, responseObserver);
         }
+    }
+
+    @Override
+    public void getServiceRegistration(Empty request, StreamObserver<ServiceMetadata> responseObserver) {
+        log.info("Received GetServiceRegistration request");
+
+        ServiceMetadata.Builder metadataBuilder = ServiceMetadata.newBuilder();
+
+        // Set the step name to "embedder" as specified in the issue description
+        metadataBuilder.setPipeStepName("embedder");
+
+        // Read the schema file
+        try {
+            Optional<InputStream> schemaStream = resourceLoader.getResourceAsStream("classpath:schemas/embedder-config-schema.json");
+            if (schemaStream.isPresent()) {
+                String jsonSchema = new BufferedReader(new InputStreamReader(schemaStream.get()))
+                        .lines().collect(Collectors.joining("\n"));
+
+                // Add the schema to the context_params map
+                metadataBuilder.putContextParams("json_config_schema", jsonSchema);
+
+                log.info("Successfully loaded embedder schema");
+            } else {
+                log.warn("Could not find embedder schema file");
+            }
+        } catch (Exception e) {
+            log.error("Error reading embedder schema file", e);
+        }
+
+        // Build and send the response
+        ServiceMetadata response = metadataBuilder.build();
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
+
+        log.info("Sent GetServiceRegistration response for embedder service");
     }
 
     /**
@@ -415,14 +458,6 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
         return ngrams;
     }
 
-    /**
-     * Sets an error response and completes the response observer.
-     * 
-     * @param responseBuilder the response builder
-     * @param errorMessage the error message
-     * @param e the exception, or null if none
-     * @param responseObserver the response observer
-     */
     private void setErrorResponseAndComplete(
             ProcessResponse.Builder responseBuilder,
             String errorMessage,

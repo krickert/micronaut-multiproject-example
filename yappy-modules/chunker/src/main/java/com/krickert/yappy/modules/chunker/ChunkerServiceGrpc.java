@@ -1,6 +1,7 @@
 package com.krickert.yappy.modules.chunker;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.protobuf.Empty;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.JsonFormat;
@@ -145,6 +146,29 @@ public class ChunkerServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessorI
             log.error(errorMessage, e);
             setErrorResponseAndComplete(responseBuilder, errorMessage, e, responseObserver);
         }
+    }
+
+    @Override
+    public void getServiceRegistration(Empty request, StreamObserver<ServiceMetadata> responseObserver) {
+        log.info("Received GetServiceRegistration request");
+
+        ServiceMetadata.Builder metadataBuilder = ServiceMetadata.newBuilder();
+
+        // Set the step name to "chunker" as specified in the issue description
+        metadataBuilder.setPipeStepName("chunker");
+
+        // Get the JSON schema from ChunkerOptions
+        String jsonSchema = ChunkerOptions.getJsonV7Schema();
+
+        // Add the schema to the context_params map
+        metadataBuilder.putContextParams("json_config_schema", jsonSchema);
+
+        // Build and send the response
+        ServiceMetadata response = metadataBuilder.build();
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
+
+        log.info("Sent GetServiceRegistration response for chunker service");
     }
 
     private void setErrorResponseAndComplete(

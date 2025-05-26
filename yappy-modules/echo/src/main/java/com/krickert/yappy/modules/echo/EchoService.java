@@ -1,5 +1,6 @@
 package com.krickert.yappy.modules.echo;
 
+import com.google.protobuf.Empty;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.krickert.search.model.PipeDoc;
@@ -70,5 +71,24 @@ public class EchoService extends PipeStepProcessorGrpc.PipeStepProcessorImplBase
 
         responseObserver.onNext(responseBuilder.build());
         responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getServiceRegistration(Empty request, StreamObserver<ServiceMetadata> responseObserver) {
+        LOG.info("Received GetServiceRegistration request");
+
+        ServiceMetadata.Builder metadataBuilder = ServiceMetadata.newBuilder();
+
+        // Set the step name to "echo" as specified in the issue description
+        metadataBuilder.setPipeStepName("echo");
+
+        // Echo service doesn't have a custom schema, so we don't add one to the context_params
+
+        // Build and send the response
+        ServiceMetadata response = metadataBuilder.build();
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
+
+        LOG.info("Sent GetServiceRegistration response for echo service");
     }
 }

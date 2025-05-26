@@ -1,5 +1,6 @@
 package com.krickert.yappy.modules.tikaparser;
 
+import com.google.protobuf.Empty;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 
@@ -22,16 +23,23 @@ import com.krickert.search.sdk.ServiceMetadata;
 import io.grpc.stub.StreamObserver;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.context.annotation.Requires;
+import io.micronaut.core.io.ResourceLoader;
 import io.micronaut.grpc.annotation.GrpcService;
 import jakarta.annotation.PreDestroy;
+import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.apache.tika.exception.TikaException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.SAXException;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.HashMap;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Singleton
 @GrpcService
@@ -47,9 +55,12 @@ public class TikaParserService extends PipeStepProcessorGrpc.PipeStepProcessorIm
     private int dataBufferPrecision;
 
     private final ProcessingBuffer<PipeDoc> pipeDocBuffer;
+    private final ResourceLoader resourceLoader;
 
-    public TikaParserService() {
+    @Inject
+    public TikaParserService(ResourceLoader resourceLoader) {
         this.pipeDocBuffer = ProcessingBufferFactory.createBuffer(dataBufferEnabled, dataBufferPrecision, PipeDoc.class);
+        this.resourceLoader = resourceLoader;
         LOG.info("TikaParserService initialized with test data buffer enabled: {}, precision: {}", dataBufferEnabled, dataBufferPrecision);
     }
 
@@ -430,10 +441,47 @@ public class TikaParserService extends PipeStepProcessorGrpc.PipeStepProcessorIm
     }
 
     /**
-     * Saves the buffered data to disk when the service is destroyed.
-     * This method is called automatically by the container when the service is shut down.
-     * It saves the buffered PipeDoc and PipeStream objects to disk and copies them to the test resources directory.
+     * Implements the GetServiceRegistration RPC method.
+     * This method returns metadata about the service, including its ID and schema.
+     *
+     * @param request the request (empty)
+     * @param responseObserver the response observer
      */
+    @Override
+    public void getServiceRegistration(Empty request, StreamObserver<ServiceMetadata> responseObserver) {
+        LOG.info("Received GetServiceRegistration request");
+
+        ServiceMetadata.Builder metadataBuilder = ServiceMetadata.newBuilder();
+
+        // Set the step name to "tika-parser" as specified in the issue description
+        metadataBuilder.setPipeStepName("tika-parser");
+
+        // Read the schema file
+        try {
+            Optional<InputStream> schemaStream = resourceLoader.getResourceAsStream("classpath:schemas/tika-parser-config-schema.json");
+            if (schemaStream.isPresent()) {
+                String jsonSchema = new BufferedReader(new InputStreamReader(schemaStream.get()))
+                        .lines().collect(Collectors.joining("\n"));
+
+                // Add the schema to the context_params map
+                metadataBuilder.putContextParams("json_config_schema", jsonSchema);
+
+                LOG.info("Successfully loaded tika-parser schema");
+            } else {
+                LOG.warn("Could not find tika-parser schema file");
+            }
+        } catch (Exception e) {
+            LOG.error("Error reading tika-parser schema file", e);
+        }
+
+        // Build and send the response
+        ServiceMetadata response = metadataBuilder.build();
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
+
+        LOG.info("Sent GetServiceRegistration response for tika-parser service");
+    }
+
     @PreDestroy
     public void saveBufferedData() {
         if (!dataBufferEnabled) {
