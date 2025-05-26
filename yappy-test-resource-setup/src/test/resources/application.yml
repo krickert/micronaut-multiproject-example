@@ -1,0 +1,30 @@
+micronaut:
+  application:
+    name: yappy-test-resource-setup
+  test:
+    resources:
+      enabled: true
+      shared-server: false
+      client-timeout: 120s
+
+
+# Enable all test resources
+kafka:
+  enabled: true
+  schema:
+    registry:
+      type: apicurio
+
+apicurio:
+  enabled: true
+
+opensearch:
+  enabled: true
+  security:
+    enabled: false
+
+consul:
+  enabled: true
+
+glue:
+  enabled: true
