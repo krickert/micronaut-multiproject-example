@@ -43,13 +43,13 @@ public class OpenSearchClientTest {
 
         // Step 1: Create an index
         boolean indexExists = openSearchClientTest.indices().exists(
-            new ExistsRequest.Builder().index(TEST_INDEX).build()
+                new ExistsRequest.Builder().index(TEST_INDEX).build()
         ).value();
 
         if (!indexExists) {
             LOG.info("[DEBUG_LOG] Creating index: {}", TEST_INDEX);
             CreateIndexResponse createIndexResponse = openSearchClientTest.indices().create(
-                new CreateIndexRequest.Builder().index(TEST_INDEX).build()
+                    new CreateIndexRequest.Builder().index(TEST_INDEX).build()
             );
             assertTrue(createIndexResponse.acknowledged(), "Index creation should be acknowledged");
             LOG.info("[DEBUG_LOG] Index created: {}", createIndexResponse.acknowledged());
@@ -65,11 +65,11 @@ public class OpenSearchClientTest {
 
         LOG.info("[DEBUG_LOG] Indexing document: {}", document);
         IndexResponse indexResponse = openSearchClientTest.index(
-            new IndexRequest.Builder<>()
-                .index(TEST_INDEX)
-                .id("1")
-                .document(document)
-                .build()
+                new IndexRequest.Builder<>()
+                        .index(TEST_INDEX)
+                        .id("1")
+                        .document(document)
+                        .build()
         );
 
         assertEquals("1", indexResponse.id(), "Document ID should match");
@@ -82,11 +82,11 @@ public class OpenSearchClientTest {
         // Step 3: Search for the data
         LOG.info("[DEBUG_LOG] Searching for documents");
         SearchResponse<Map> searchResponse = openSearchClientTest.search(
-            new SearchRequest.Builder()
-                .index(TEST_INDEX)
-                .query(q -> q.match(m -> m.field("title").query(v -> v.stringValue("Test"))))
-                .build(),
-            Map.class
+                new SearchRequest.Builder()
+                        .index(TEST_INDEX)
+                        .query(q -> q.match(m -> m.field("title").query(v -> v.stringValue("Test"))))
+                        .build(),
+                Map.class
         );
 
         assertEquals(1, searchResponse.hits().total().value(), "Should find one document");
@@ -96,10 +96,10 @@ public class OpenSearchClientTest {
         // Step 4: Delete the data
         LOG.info("[DEBUG_LOG] Deleting document with ID: 1");
         DeleteResponse deleteResponse = openSearchClientTest.delete(
-            new DeleteRequest.Builder()
-                .index(TEST_INDEX)
-                .id("1")
-                .build()
+                new DeleteRequest.Builder()
+                        .index(TEST_INDEX)
+                        .id("1")
+                        .build()
         );
 
         assertEquals("1", deleteResponse.id(), "Deleted document ID should match");
@@ -110,11 +110,11 @@ public class OpenSearchClientTest {
 
         // Verify the document is deleted
         searchResponse = openSearchClientTest.search(
-            new SearchRequest.Builder()
-                .index(TEST_INDEX)
-                .query(q -> q.match(m -> m.field("title").query(v -> v.stringValue("Test"))))
-                .build(),
-            Map.class
+                new SearchRequest.Builder()
+                        .index(TEST_INDEX)
+                        .query(q -> q.match(m -> m.field("title").query(v -> v.stringValue("Test"))))
+                        .build(),
+                Map.class
         );
 
         assertEquals(0, searchResponse.hits().total().value(), "Should find no documents after deletion");
@@ -123,9 +123,9 @@ public class OpenSearchClientTest {
         // Step 5: Delete the index
         LOG.info("[DEBUG_LOG] Deleting index: {}", TEST_INDEX);
         DeleteIndexResponse deleteIndexResponse = openSearchClientTest.indices().delete(
-            new DeleteIndexRequest.Builder()
-                .index(TEST_INDEX)
-                .build()
+                new DeleteIndexRequest.Builder()
+                        .index(TEST_INDEX)
+                        .build()
         );
 
         assertTrue(deleteIndexResponse.acknowledged(), "Index deletion should be acknowledged");
@@ -133,7 +133,7 @@ public class OpenSearchClientTest {
 
         // Verify the index is deleted
         indexExists = openSearchClientTest.indices().exists(
-            new ExistsRequest.Builder().index(TEST_INDEX).build()
+                new ExistsRequest.Builder().index(TEST_INDEX).build()
         ).value();
 
         assertFalse(indexExists, "Index should not exist after deletion");

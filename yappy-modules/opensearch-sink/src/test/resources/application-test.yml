@@ -5,12 +5,7 @@ micronaut:
     port: -1 # Random port for testing
   test-resources:
     enabled: true
-    modules:
-      opensearch:
-        enabled: true
 
-opesearch:
-  hostname: ${opensearch.host}
 # Kafka configuration
 kafka:
   enabled: true
@@ -24,3 +19,7 @@ logger:
     io.micronaut.context.condition: INFO
     io.micronaut.testresources: TRACE
     io.micronaut.testresources.testcontainers: TRACE
+grpc:
+  services:
+    opensearch-sink:
+      enabled: true
