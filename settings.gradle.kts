@@ -44,5 +44,6 @@ include(
     "yappy-modules:wikicrawler-connector",
     //"yappy-modules:wikipedia-connector",
     //"yappy-modules:web-crawler-connector"
-    "yappy-modules:opensearch-sink"
+    "yappy-modules:opensearch-sink",
+    "yappy-modules:yappy-connector-test-server"
 )

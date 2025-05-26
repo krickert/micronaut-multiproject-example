@@ -18,7 +18,7 @@ commonsLang3 = "3.14.0"
 amazonGlueSerde = "1.1.23"
 amazonMskIamAuth = "2.2.0"
 amazonConnection = "2.30.31"
-apicurioSerde = "3.0.6"
+apicurioSerde = "3.0.7"
 micronautOpenapi = "5.0.0" # For Micronaut OpenAPI
 
 [libraries]

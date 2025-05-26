@@ -82,3 +82,4 @@ message WikiArticle {
   string article_version = 14;
   optional string redirect_target_title = 15; // New field
 }
+
