@@ -90,6 +90,6 @@ micronaut {
         enabled.set(true)
         inferClasspath.set(true)
         clientTimeout.set(60)
-        sharedServer.set(true)
+        sharedServer.set(false)
     }
 }
