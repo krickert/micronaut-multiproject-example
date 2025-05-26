@@ -39,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Property(name = "testcontainers.consul.enabled", value = "true")
 @Property(name = "app.config.cluster-name", value = DynamicConfigurationManagerImplMicronautTest.DEFAULT_PROPERTY_CLUSTER)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@Property(name = "yappy.consul.configured", value = "true")
 class DynamicConfigurationManagerImplMicronautTest {
 
     static final String DEFAULT_PROPERTY_CLUSTER = "propertyClusterDefault";

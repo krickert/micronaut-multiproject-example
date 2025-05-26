@@ -9,6 +9,7 @@ import com.krickert.search.config.consul.exception.ConfigurationManagerInitializ
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
 import com.krickert.search.config.pipeline.model.*;
 import com.krickert.search.config.schema.model.SchemaVersionData;
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.event.ApplicationEventPublisher;
 import jakarta.annotation.PostConstruct;
@@ -51,13 +52,14 @@ public class DynamicConfigurationManagerImpl implements DynamicConfigurationMana
     private final AtomicReference<String> currentConfigVersionIdentifier = new AtomicReference<>(null);
 
     public DynamicConfigurationManagerImpl(
-            @Value("${app.config.cluster-name}") String clusterName,
+            @Value("${app.config.cluster-name}") String clusterName, // This should be yappy-cluster
             ConsulConfigFetcher consulConfigFetcher,
             ConfigurationValidator configurationValidator,
             CachedConfigHolder cachedConfigHolder,
-            ApplicationEventPublisher<PipelineClusterConfigChangeEvent> eventPublisher, // Correct event type
-            ConsulBusinessOperationsService consulBusinessOperationsService,
-            ObjectMapper objectMapper
+            ApplicationEventPublisher<PipelineClusterConfigChangeEvent> eventPublisher,
+            ConsulBusinessOperationsService consulBusinessOperationsService, // Keep this if DCM uses it directly for other ops
+            ObjectMapper objectMapper,
+            DefaultConfigurationSeeder seeder //  👈👈 ADD THIS DEPENDENCY
     ) {
         this.defaultClusterName = clusterName;
         this.effectiveClusterName = clusterName;

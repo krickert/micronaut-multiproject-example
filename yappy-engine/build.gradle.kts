@@ -33,6 +33,21 @@ micronaut {
     }
 }
 
+// Helper function to check if DEV environment is enabled
+fun isDevEnvironmentEnabled(): Boolean {
+    // Check system property
+    val devFromSysProp = System.getProperty("micronaut.environments")?.contains("dev") ?: false
+    // Check environment variable (as fallback)
+    val devFromEnv = System.getenv("MICRONAUT_ENVIRONMENTS")?.contains("dev") ?: false
+    // Check Gradle project property if set
+    val devFromProject = project.findProperty("micronautEnv")?.toString()?.contains("dev") ?: false
+
+    return devFromSysProp || devFromEnv || devFromProject
+}
+
+
+configurations.create("developmentOnly")
+
 dependencies {
     // Apply BOM/platform dependencies
     implementation(platform(project(":bom")))

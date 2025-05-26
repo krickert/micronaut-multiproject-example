@@ -1,10 +1,7 @@
 package com.krickert.search.config.consul.factory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.krickert.search.config.consul.CachedConfigHolder;
-import com.krickert.search.config.consul.ConfigurationValidator;
-import com.krickert.search.config.consul.ConsulConfigFetcher;
-import com.krickert.search.config.consul.DynamicConfigurationManagerImpl;
+import com.krickert.search.config.consul.*;
 // import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent; // Old event
 import com.krickert.search.config.pipeline.event.PipelineClusterConfigChangeEvent; // Import the new event
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
@@ -51,7 +48,8 @@ public class TestDynamicConfigurationManagerFactory {
                 cachedConfigHolder,
                 eventPublisher, // This will now correctly pass the ApplicationEventPublisher<PipelineClusterConfigChangeEvent>
                 consulBusinessOperationsService,
-                objectMapper
+                objectMapper,
+                new DefaultConfigurationSeeder(consulBusinessOperationsService)
         );
     }
 }

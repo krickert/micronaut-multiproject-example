@@ -6,6 +6,7 @@ consul:
       enabled: true
       format: properties
       path: config/pipeline
+    defaultZone: ${consul.client.host}:${consul.client.port}
 
 # Disable Micronaut's config client to avoid conflicts
 micronaut:

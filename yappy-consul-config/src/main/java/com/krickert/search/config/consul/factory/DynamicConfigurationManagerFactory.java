@@ -24,6 +24,7 @@ public class DynamicConfigurationManagerFactory {
     private final ApplicationEventPublisher<PipelineClusterConfigChangeEvent> eventPublisher;
     private final ConsulBusinessOperationsService consulBusinessOperationsService;
     private final ObjectMapper objectMapper;
+    private final DefaultConfigurationSeeder defaultConfigurationSeeder;
 
     /**
      * Creates a new DynamicConfigurationManagerFactory with the specified dependencies.
@@ -41,14 +42,15 @@ public class DynamicConfigurationManagerFactory {
             CachedConfigHolder cachedConfigHolder,
             ApplicationEventPublisher<PipelineClusterConfigChangeEvent> eventPublisher, // Updated type
             ConsulBusinessOperationsService consulBusinessOperationsService,
-            ObjectMapper objectMapper
-    ) {
+            ObjectMapper objectMapper,
+            DefaultConfigurationSeeder defaultConfigurationSeeder) {
         this.consulConfigFetcher = consulConfigFetcher;
         this.configurationValidator = configurationValidator;
         this.cachedConfigHolder = cachedConfigHolder;
         this.eventPublisher = eventPublisher; // Assign the correctly typed publisher
         this.consulBusinessOperationsService = consulBusinessOperationsService;
         this.objectMapper = objectMapper;
+        this.defaultConfigurationSeeder = defaultConfigurationSeeder;
     }
 
     /**
@@ -65,7 +67,8 @@ public class DynamicConfigurationManagerFactory {
                 cachedConfigHolder,
                 eventPublisher, // This will now correctly pass the ApplicationEventPublisher<PipelineClusterConfigChangeEvent>
                 consulBusinessOperationsService,
-                objectMapper
+                objectMapper,
+                defaultConfigurationSeeder
         );
     }
 }

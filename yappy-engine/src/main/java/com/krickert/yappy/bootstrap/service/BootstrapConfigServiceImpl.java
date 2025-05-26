@@ -505,14 +505,5 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
 
 
 
-    /**
-     * @deprecated Replaced by {@link #createMinimalClusterConfig(NewClusterDetails)} which returns the actual object.
-     * This method is kept for potential backward compatibility during transition but should be removed.
-     */
-    @Deprecated
-    private String generateMinimalPipelineClusterConfig(NewClusterDetails details) {
-        LOG.warn("DEPRECATED generateMinimalPipelineClusterConfig(NewClusterDetails) called. Should use createMinimalClusterConfig returning the object.");
-        PipelineClusterConfig config = createMinimalClusterConfig(details);
-        return config.toString();
-    }
+
 }

@@ -1,0 +1,5 @@
+consul:
+  client:
+    defaultZone: localhost:8500 # DEV default, overridden by test resources to 58629
+    host: localhost
+    port: 8500

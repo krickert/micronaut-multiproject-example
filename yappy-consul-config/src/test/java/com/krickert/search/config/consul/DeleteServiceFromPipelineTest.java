@@ -43,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Property(name = "consul.client.enabled", value = "true")
 @Property(name = "testcontainers.consul.enabled", value = "true")
 @Property(name = "app.config.cluster-name", value = DeleteServiceFromPipelineTest.TEST_EXECUTION_CLUSTER)
+@Property(name = "yappy.consul.configured", value = "true")
 class DeleteServiceFromPipelineTest {
 
     static final String DEFAULT_PROPERTY_CLUSTER = "propertyClusterDeleteServiceDefault";

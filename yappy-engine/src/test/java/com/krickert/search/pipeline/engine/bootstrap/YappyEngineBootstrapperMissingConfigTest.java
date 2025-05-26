@@ -96,7 +96,7 @@ public class YappyEngineBootstrapperMissingConfigTest {
 
             // ... rest of your test logic
         } catch (Exception e) {
-            System.err.println("Application startup failed as potentially expected: " + e.getMessage());
+            System.err.println("YappyEngineApplication startup failed as potentially expected: " + e.getMessage());
             e.printStackTrace(); // Print stack trace for startup failures
         } finally {
             if (context != null && context.isRunning()) {

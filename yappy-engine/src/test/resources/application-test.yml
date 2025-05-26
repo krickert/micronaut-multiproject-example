@@ -17,15 +17,16 @@ app:
         schema-versions: pipeline-configs/schemas/versions
       watch-seconds: 5
 
+
 consul:
-  consul:
-    client:
-      enabled: true
-      registration:
-        enabled: false # The test runner doesn't register itself as a service
-      discovery:
-        enabled: true # The test runner might need to discover services for verification
-        shared-instance: true
+  client:
+    enabled: true
+    registration:
+      enabled: false # The test runner doesn't register itself as a service
+    discovery:
+      enabled: true # The test runner might need to discover services for verification
+      shared-instance: true
+    defaultZone: ${consul.client.host}:${consul.client.port}
 
 local:
   services:
@@ -35,6 +36,8 @@ local:
       chunker: 50051
       echo: 50052
       # another-service-local: 50053 # If you use the "-local" suffix convention
+
+yappy.consul.configured: true
 
 kafka:
   enabled: true

@@ -12,7 +12,7 @@ micronaut:
   config-client:
     enabled: false
 
-# Application-specific Consul configuration
+# YappyEngineApplication-specific Consul configuration
 app:
   config:
     cluster-name: comprehensive-cluster
