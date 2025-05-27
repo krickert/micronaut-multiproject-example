@@ -17,7 +17,7 @@ import java.util.Map;
  *                      If provided, keys and values cannot be null.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@Builder
+@Builder(toBuilder = true)
 public record PipelineConfig(
         @JsonProperty("name") String name,
         @JsonProperty("pipelineSteps") Map<String, PipelineStepConfig> pipelineSteps

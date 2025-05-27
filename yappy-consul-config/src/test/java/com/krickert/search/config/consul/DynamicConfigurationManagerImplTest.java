@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -58,6 +59,8 @@ class DynamicConfigurationManagerImplTest {
     private ConsulBusinessOperationsService mockConsulBusinessOperationsService;
     @Mock
     private ObjectMapper mockObjectMapper; // Kept for now, though not directly used by SUT constructor
+    @Mock private DefaultConfigurationSeeder mockDefaultConfigurationSeeder;
+    @Mock private ExecutorService mockEventPublishingExecutor;
 
     // REMOVED @Inject - This test does not run in a Micronaut context
     private ObjectMapper realObjectMapper = new ObjectMapper(); // Instantiate directly for use in helper
@@ -79,13 +82,28 @@ class DynamicConfigurationManagerImplTest {
                 mockConfigurationValidator,
                 mockCachedConfigHolder,
                 mockEventPublisher,
-                mockConsulKvService,
                 mockConsulBusinessOperationsService,
-                new ObjectMapper() // SUT uses its own injected ObjectMapper
+                new ObjectMapper(),
+                mockDefaultConfigurationSeeder,
+                mockEventPublishingExecutor // Pass the mock executor
         );
+
+        // Tell Mockito what to do when mockEventPublishingExecutor.execute() is called:
+        // Capture the Runnable and run it immediately.
+        doAnswer(invocation -> {
+            Runnable task = invocation.getArgument(0);
+            if (task != null) {
+                task.run(); // Execute the task (which calls publishMicronautEvent on mockEventPublisher)
+            }
+            return null; // execute(Runnable) is void
+        }).when(mockEventPublishingExecutor).execute(any(Runnable.class));
+
+        // Your general lenient stubs
+        lenient().when(mockConsulConfigFetcher.fetchPipelineClusterConfig(anyString())).thenReturn(Optional.empty());
+        lenient().when(mockConfigurationValidator.validate(any(), any())).thenReturn(ValidationResult.valid());
     }
 
-    private PipelineClusterConfig createTestClusterConfig(String name, PipelineModuleMap moduleMap) {
+        private PipelineClusterConfig createTestClusterConfig(String name, PipelineModuleMap moduleMap) {
         return PipelineClusterConfig.builder()
                 .clusterName(name)
                 .pipelineModuleMap(moduleMap)
@@ -117,6 +135,7 @@ class DynamicConfigurationManagerImplTest {
 
     @Test
     void initialize_successfulInitialLoad_validatesAndCachesConfigAndStartsWatch() {
+        // ... (your Arrange section: mockClusterConfig, schemaVersionData1, etc.) ...
         SchemaReference schemaRef1 = new SchemaReference("moduleA-schema", 1);
         PipelineModuleConfiguration moduleAConfig = new PipelineModuleConfiguration("ModuleA", "moduleA_impl_id", schemaRef1);
         PipelineModuleMap moduleMap = new PipelineModuleMap(Map.of("moduleA_impl_id", moduleAConfig));
@@ -133,26 +152,30 @@ class DynamicConfigurationManagerImplTest {
         when(mockConfigurationValidator.validate(eq(mockClusterConfig), any()))
                 .thenReturn(ValidationResult.valid());
 
+        // Act
         dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
 
+        // Assert
         verify(mockConsulConfigFetcher).connect();
         verify(mockConsulConfigFetcher).fetchPipelineClusterConfig(TEST_CLUSTER_NAME);
         verify(mockConsulConfigFetcher).fetchSchemaVersionData(schemaRef1.subject(), schemaRef1.version());
         verify(mockConfigurationValidator).validate(eq(mockClusterConfig), any());
         verify(mockCachedConfigHolder).updateConfiguration(eq(mockClusterConfig), schemaCacheCaptor.capture());
+        // ... (your assertions for schemaCacheCaptor.getValue()) ...
         Map<SchemaReference, String> capturedSchemaMap = schemaCacheCaptor.getValue();
         assertEquals(1, capturedSchemaMap.size());
         assertEquals(schemaVersionData1.schemaContent(), capturedSchemaMap.get(schemaRef1));
 
+
+        // This verification should now pass!
         verify(mockEventPublisher).publishEvent(eventCaptor.capture());
-        PipelineClusterConfigChangeEvent publishedEvent = eventCaptor.getValue(); // Type is correct
+        PipelineClusterConfigChangeEvent publishedEvent = eventCaptor.getValue();
         assertFalse(publishedEvent.isDeletion());
         assertEquals(mockClusterConfig, publishedEvent.newConfig());
         assertEquals(TEST_CLUSTER_NAME, publishedEvent.clusterName());
 
         verify(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), any(Consumer.class));
     }
-
     @Test
     void initialize_consulReturnsEmptyConfig_logsWarningAndStartsWatch() {
         when(mockConsulConfigFetcher.fetchPipelineClusterConfig(TEST_CLUSTER_NAME))

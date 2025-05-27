@@ -12,9 +12,9 @@ app:
       watch-seconds: 5 # Used by KiwiprojectConsulConfigFetcher
 
 # For ConsulBusinessOperationsService (and general Consul client)
-consul:
-  client:
-    defaultZone: "${CONSUL_HOST:localhost}:${CONSUL_PORT:8500}" # DEV default, overridden by test resources to 58629
+#consul:
+#  client:
+#    #defaultZone: "${CONSUL_HOST:localhost}:${CONSUL_PORT:8500}" # DEV default, overridden by test resources to 58629
     # registration.enabled: true # If this service needs to register itself with Consul
     # config.enabled: true       # If you use Micronaut's distributed config client for other properties
     # acl-token: "your-token"    # If needed

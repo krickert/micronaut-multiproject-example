@@ -26,7 +26,9 @@ public class KafkaForwarder {
 
     @Inject // Good practice to use @Inject on constructor
     public KafkaForwarder(KafkaForwarderClient kafkaForwarderClient) {
+        log.info("Creating KafkaForwarder instance");
         this.kafkaForwarderClient = checkNotNull(kafkaForwarderClient, "kafkaForwarderClient cannot be null");
+        log.info("KafkaForwarder instance created successfully");
     }
 
     /**

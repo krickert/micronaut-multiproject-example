@@ -46,18 +46,15 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
     private final ConsulBusinessOperationsService consulBusinessOperationsService;
     private final String bootstrapFilePath;
     private final Path resolvedBootstrapPath;
-    private final ApplicationContext applicationContext;
 
 
     @Inject
     public BootstrapConfigServiceImpl(
             ConsulBusinessOperationsService consulBusinessOperationsService,
-            @Value("${yappy.engine.bootstrap-file.path:~/.yappy/engine-bootstrap.properties}") String bootstrapFilePath,
-            ApplicationContext applicationContext) {
+            @Value("${yappy.engine.bootstrap-file.path:~/.yappy/engine-bootstrap.properties}") String bootstrapFilePath) {
         this.consulBusinessOperationsService = consulBusinessOperationsService;
         this.bootstrapFilePath = bootstrapFilePath;
         this.resolvedBootstrapPath = Paths.get(this.bootstrapFilePath.replace("~", System.getProperty("user.home")));
-        this.applicationContext = applicationContext;
         LOG.info("BootstrapConfigServiceImpl instantiated. ConsulBusinessOperationsService is {}", (this.consulBusinessOperationsService == null ? "null" : "available"));
         LOG.info("Bootstrap file path configured to: {}, resolved to: {}", this.bootstrapFilePath, this.resolvedBootstrapPath);
     }
