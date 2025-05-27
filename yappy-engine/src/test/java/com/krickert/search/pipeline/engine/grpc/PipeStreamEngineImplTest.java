@@ -1,11 +1,13 @@
-package com.krickert.search.pipeline.engine.grpc;
+package com.krickert.search.pipeline.engine.grpc;// In PipeStreamEngineImplTest.java
 
 import com.google.protobuf.Empty;
 import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.engine.PipeStreamEngine; // Your core engine interface
+import com.krickert.search.pipeline.engine.grpc.PipeStreamEngineImpl;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
+import jakarta.inject.Provider; // 👈 Make sure this import is present
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,59 +28,57 @@ import static org.mockito.Mockito.*;
 class PipeStreamEngineImplTest {
 
     @Mock
-    private PipeStreamEngine mockCoreEngine; // Mock the core engine logic
+    private PipeStreamEngine mockCoreEngine; // This remains your mock for the core logic
 
     @Mock
     private StreamObserver<Empty> mockProcessPipeAsyncResponseObserver;
-
     @Mock
     private StreamObserver<PipeStream> mockTestPipeStreamResponseObserver;
 
     @Captor
     private ArgumentCaptor<PipeStream> pipeStreamCaptor;
-
-    // Change the captor type to IllegalArgumentException for the specific test case
     @Captor
     private ArgumentCaptor<IllegalArgumentException> illegalArgumentExceptionCaptor;
-
-    // Keep the StatusRuntimeException captor for other tests if they expect it
     @Captor
     private ArgumentCaptor<StatusRuntimeException> statusRuntimeExceptionCaptor;
 
-
-    private PipeStreamEngineImpl grpcService; // SUT: The gRPC service implementation
+    private PipeStreamEngineImpl grpcService; // SUT
 
     @BeforeEach
     void setUp() {
-        grpcService = new PipeStreamEngineImpl(mockCoreEngine);
+        // Create a Provider that returns your mockCoreEngine
+        // The lambda () -> mockCoreEngine is a concise way to implement Provider.get()
+        Provider<PipeStreamEngine> mockCoreEngineProvider = () -> mockCoreEngine;
+
+        // Instantiate the SUT (grpcService) with the Provider
+        grpcService = new PipeStreamEngineImpl(mockCoreEngineProvider);
     }
 
+    // ... createBasicPipeStream method remains the same ...
     private PipeStream createBasicPipeStream(String targetStepName) {
         PipeStream.Builder builder = PipeStream.newBuilder()
                 .setStreamId("test-stream-" + UUID.randomUUID().toString().substring(0, 8))
                 .setCurrentPipelineName("test-pipeline")
                 .setCurrentHopNumber(0);
-        // Protobuf builder throws NPE if null is passed to string setters.
-        // The service should handle empty string as invalid.
         if (targetStepName != null) {
             builder.setTargetStepName(targetStepName);
         } else {
-            // If you truly need to test a builder that hasn't had targetStepName set,
-            // you'd build it without calling setTargetStepName, but the default is empty string.
-            // For this test's purpose, passing an empty string to createBasicPipeStream is better.
-            builder.setTargetStepName(""); // Default to empty if null, or ensure service handles default proto value
+            builder.setTargetStepName("");
         }
         return builder.build();
     }
+
 
     @Test
     @DisplayName("processPipeAsync should delegate to coreEngine and complete successfully")
     void processPipeAsync_delegatesToCoreEngine_andCompletes() {
         PipeStream request = createBasicPipeStream("someStep");
+        // mockCoreEngine is what coreEngineProvider.get() will return in the SUT
         doNothing().when(mockCoreEngine).processStream(any(PipeStream.class));
 
         grpcService.processPipeAsync(request, mockProcessPipeAsyncResponseObserver);
 
+        // Verify interactions on mockCoreEngine
         verify(mockCoreEngine).processStream(pipeStreamCaptor.capture());
         assertEquals(request.getStreamId(), pipeStreamCaptor.getValue().getStreamId());
         assertEquals("someStep", pipeStreamCaptor.getValue().getTargetStepName());
@@ -91,16 +91,14 @@ class PipeStreamEngineImplTest {
     @Test
     @DisplayName("processPipeAsync should handle empty targetStepName and call onError")
     void processPipeAsync_emptyTargetStep_callsOnError() {
-        // Pass an empty string for targetStepName.
         PipeStream request = createBasicPipeStream("");
 
         grpcService.processPipeAsync(request, mockProcessPipeAsyncResponseObserver);
 
-        verify(mockCoreEngine, never()).processStream(any()); // Core engine should not be called
+        verify(mockCoreEngine, never()).processStream(any());
 
         verify(mockProcessPipeAsyncResponseObserver, never()).onNext(any());
         verify(mockProcessPipeAsyncResponseObserver, never()).onCompleted();
-        // Capture IllegalArgumentException instead of StatusRuntimeException
         verify(mockProcessPipeAsyncResponseObserver).onError(illegalArgumentExceptionCaptor.capture());
 
         IllegalArgumentException exception = illegalArgumentExceptionCaptor.getValue();
@@ -113,22 +111,22 @@ class PipeStreamEngineImplTest {
     void processPipeAsync_coreEngineThrowsException_callsOnError() {
         PipeStream request = createBasicPipeStream("someStep");
         RuntimeException coreException = new RuntimeException("Core engine failure");
+        // mockCoreEngine is what coreEngineProvider.get() will return in the SUT
         doThrow(coreException).when(mockCoreEngine).processStream(any(PipeStream.class));
 
         grpcService.processPipeAsync(request, mockProcessPipeAsyncResponseObserver);
 
-        verify(mockCoreEngine).processStream(request); // Verify it was called
+        verify(mockCoreEngine).processStream(request);
 
         verify(mockProcessPipeAsyncResponseObserver, never()).onNext(any());
         verify(mockProcessPipeAsyncResponseObserver, never()).onCompleted();
-        verify(mockProcessPipeAsyncResponseObserver).onError(statusRuntimeExceptionCaptor.capture()); // Assuming this part of SUT *does* throw StatusRuntimeException
+        verify(mockProcessPipeAsyncResponseObserver).onError(statusRuntimeExceptionCaptor.capture());
 
         StatusRuntimeException exception = statusRuntimeExceptionCaptor.getValue();
         assertEquals(Status.Code.INTERNAL, exception.getStatus().getCode());
         assertNotNull(exception.getStatus().getDescription());
         assertEquals("Failed to process pipe: Core engine failure",exception.getStatus().getDescription());
-        // If the service wraps the coreException as a cause for StatusRuntimeException
-        // assertEquals(coreException, exception.getStatus().getCause());
+        // assertEquals(coreException, exception.getStatus().getCause()); // This assertion is good too
     }
 
     @Test
@@ -140,7 +138,7 @@ class PipeStreamEngineImplTest {
 
         verify(mockTestPipeStreamResponseObserver, never()).onNext(any());
         verify(mockTestPipeStreamResponseObserver, never()).onCompleted();
-        verify(mockTestPipeStreamResponseObserver).onError(statusRuntimeExceptionCaptor.capture()); // Assuming this throws StatusRuntimeException
+        verify(mockTestPipeStreamResponseObserver).onError(statusRuntimeExceptionCaptor.capture());
 
         StatusRuntimeException exception = statusRuntimeExceptionCaptor.getValue();
         assertEquals(Status.Code.UNIMPLEMENTED, exception.getStatus().getCode());

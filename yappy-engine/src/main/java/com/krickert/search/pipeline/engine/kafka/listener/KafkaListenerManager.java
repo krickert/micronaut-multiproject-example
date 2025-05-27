@@ -20,6 +20,7 @@ import io.micronaut.core.annotation.NonNull;
 import io.micronaut.scheduling.annotation.Async; // For async event listener
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Getter;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +41,7 @@ public class KafkaListenerManager implements ApplicationEventListener<PipelineCl
     private final KafkaAdminService kafkaAdminService;
     private final PipeStreamEngine pipeStreamEngine;
     private final ApplicationContext applicationContext;
+    @Getter
     private final String configuredSchemaRegistryType;
     private final String appClusterName;
 
