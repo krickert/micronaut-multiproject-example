@@ -75,7 +75,7 @@ class KafkaListenerManagerIntegrationTest {
     DefaultKafkaListenerPool testListenerPool() {
         return Mockito.mock(DefaultKafkaListenerPool.class);
     }
-    
+
     // Mock PipeStreamEngine for KafkaListenerManager dependency
     @Requires(env = {"test-integration"})
     @Singleton
@@ -93,7 +93,7 @@ class KafkaListenerManagerIntegrationTest {
         // Deleting the key ensures DCM's watch will see a "new" config when we add it.
         LOG.info("Setting up test: Deleting existing config for cluster {}", TEST_CLUSTER_NAME);
         consulOpsService.deleteClusterConfiguration(TEST_CLUSTER_NAME).block(Duration.ofSeconds(5));
-        
+
         // Initialize DCM for the test cluster name.
         // DCM's @PostConstruct will call initialize with app.config.cluster-name from properties.
         // If this test needs to control *which* cluster DCM manages, we might need a way
@@ -102,7 +102,7 @@ class KafkaListenerManagerIntegrationTest {
         // The initial event from DCM might try to sync listeners with no config or a deletion.
         // We wait for our explicit seeding to trigger the main event we want to test.
     }
-    
+
     @AfterEach
     void tearDown() {
         // Clean up the config from Consul
@@ -137,10 +137,19 @@ class KafkaListenerManagerIntegrationTest {
                 .pipelines(Map.of(TEST_PIPELINE_NAME, pipelineConfig))
                 .build();
 
+        // Create a module configuration for the processor bean used in the test
+        PipelineModuleConfiguration processorModule = PipelineModuleConfiguration.builder()
+                .implementationName("Test Internal Processor")
+                .implementationId("someInternalProcessorBean")
+                .build();
+
+        Map<String, PipelineModuleConfiguration> moduleMap = Collections.singletonMap(
+                "someInternalProcessorBean", processorModule);
+
         PipelineClusterConfig clusterConfig = PipelineClusterConfig.builder()
                 .clusterName(TEST_CLUSTER_NAME)
                 .pipelineGraphConfig(graphConfig)
-                .pipelineModuleMap(new PipelineModuleMap(Collections.emptyMap()))
+                .pipelineModuleMap(new PipelineModuleMap(moduleMap))
                 .defaultPipelineName(TEST_PIPELINE_NAME)
                 .allowedKafkaTopics(Collections.singleton(TEST_TOPIC_1))
                 .allowedGrpcServices(Collections.emptySet())
@@ -193,14 +202,14 @@ class KafkaListenerManagerIntegrationTest {
         assertEquals("io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer",
                 capturedConsumerConfig.get(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG),
                 "Value deserializer should be Apicurio Protobuf for 'apicurio' type.");
-        
+
         assertNotNull(capturedConsumerConfig.get(SerdeConfig.REGISTRY_URL), "Apicurio registry URL should be set.");
         // You might want to assert the actual URL if it's predictable in your test environment
         // e.g., assertEquals("http://localhost:8081/apis/registry/v2", capturedConsumerConfig.get(SerdeConfig.REGISTRY_URL));
 
         // Verify that the original "auto.offset.reset" property from the step definition was included
         assertEquals("earliest", capturedConsumerConfig.get("auto.offset.reset"));
-        
+
         // Verify that the original properties map was passed through for comparison/reference
         assertEquals(Map.of("auto.offset.reset", "earliest"), originalPropsCaptor.getValue());
 
