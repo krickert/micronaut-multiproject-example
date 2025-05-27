@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@Builder
+@Builder(toBuilder = true)
 public record PipelineStepConfig(
         @JsonProperty("stepName") @NotBlank String stepName,
         @JsonProperty("stepType") @NotNull StepType stepType,

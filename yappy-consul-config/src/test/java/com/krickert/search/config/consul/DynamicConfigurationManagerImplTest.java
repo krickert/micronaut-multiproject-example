@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -58,6 +59,8 @@ class DynamicConfigurationManagerImplTest {
     private ConsulBusinessOperationsService mockConsulBusinessOperationsService;
     @Mock
     private ObjectMapper mockObjectMapper; // Kept for now, though not directly used by SUT constructor
+    @Mock private DefaultConfigurationSeeder mockDefaultConfigurationSeeder;
+    @Mock private ExecutorService mockEventPublishingExecutor;
 
     // REMOVED @Inject - This test does not run in a Micronaut context
     private ObjectMapper realObjectMapper = new ObjectMapper(); // Instantiate directly for use in helper
@@ -79,13 +82,29 @@ class DynamicConfigurationManagerImplTest {
                 mockConfigurationValidator,
                 mockCachedConfigHolder,
                 mockEventPublisher,
-                mockConsulKvService,
                 mockConsulBusinessOperationsService,
-                new ObjectMapper() // SUT uses its own injected ObjectMapper
+                new ObjectMapper(),
+                mockDefaultConfigurationSeeder,
+                mockEventPublishingExecutor // Pass the mock executor
         );
+
+        // Tell Mockito what to do when mockEventPublishingExecutor.execute() is called:
+        // Capture the Runnable and run it immediately.
+        // Use lenient() to avoid "unnecessary stubbing" errors when this stubbing is not used in all tests
+        lenient().doAnswer(invocation -> {
+            Runnable task = invocation.getArgument(0);
+            if (task != null) {
+                task.run(); // Execute the task (which calls publishMicronautEvent on mockEventPublisher)
+            }
+            return null; // execute(Runnable) is void
+        }).when(mockEventPublishingExecutor).execute(any(Runnable.class));
+
+        // Your general lenient stubs
+        lenient().when(mockConsulConfigFetcher.fetchPipelineClusterConfig(anyString())).thenReturn(Optional.empty());
+        lenient().when(mockConfigurationValidator.validate(any(), any())).thenReturn(ValidationResult.valid());
     }
 
-    private PipelineClusterConfig createTestClusterConfig(String name, PipelineModuleMap moduleMap) {
+        private PipelineClusterConfig createTestClusterConfig(String name, PipelineModuleMap moduleMap) {
         return PipelineClusterConfig.builder()
                 .clusterName(name)
                 .pipelineModuleMap(moduleMap)
@@ -117,6 +136,7 @@ class DynamicConfigurationManagerImplTest {
 
     @Test
     void initialize_successfulInitialLoad_validatesAndCachesConfigAndStartsWatch() {
+        // ... (your Arrange section: mockClusterConfig, schemaVersionData1, etc.) ...
         SchemaReference schemaRef1 = new SchemaReference("moduleA-schema", 1);
         PipelineModuleConfiguration moduleAConfig = new PipelineModuleConfiguration("ModuleA", "moduleA_impl_id", schemaRef1);
         PipelineModuleMap moduleMap = new PipelineModuleMap(Map.of("moduleA_impl_id", moduleAConfig));
@@ -126,6 +146,7 @@ class DynamicConfigurationManagerImplTest {
                 SchemaType.JSON_SCHEMA, SchemaCompatibility.NONE, Instant.now(), "Test Schema"
         );
 
+        doNothing().when(mockConsulConfigFetcher).connect();
         when(mockConsulConfigFetcher.fetchPipelineClusterConfig(TEST_CLUSTER_NAME))
                 .thenReturn(Optional.of(mockClusterConfig));
         when(mockConsulConfigFetcher.fetchSchemaVersionData(schemaRef1.subject(), schemaRef1.version()))
@@ -133,26 +154,58 @@ class DynamicConfigurationManagerImplTest {
         when(mockConfigurationValidator.validate(eq(mockClusterConfig), any()))
                 .thenReturn(ValidationResult.valid());
 
-        dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
+        // Act
+       dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
 
+        // Assert
         verify(mockConsulConfigFetcher).connect();
         verify(mockConsulConfigFetcher).fetchPipelineClusterConfig(TEST_CLUSTER_NAME);
         verify(mockConsulConfigFetcher).fetchSchemaVersionData(schemaRef1.subject(), schemaRef1.version());
         verify(mockConfigurationValidator).validate(eq(mockClusterConfig), any());
         verify(mockCachedConfigHolder).updateConfiguration(eq(mockClusterConfig), schemaCacheCaptor.capture());
+        // ... (your assertions for schemaCacheCaptor.getValue()) ...
         Map<SchemaReference, String> capturedSchemaMap = schemaCacheCaptor.getValue();
         assertEquals(1, capturedSchemaMap.size());
         assertEquals(schemaVersionData1.schemaContent(), capturedSchemaMap.get(schemaRef1));
 
+        // Instead of verifying that the event was published, we'll verify that it was queued for publication
+        // This is because the event is published in the postConstructInitialize method, which we don't want to call
+        // in the test because it would call initialize again
+
+        // Use reflection to access the private initialLoadEventToPublish field
+        PipelineClusterConfigChangeEvent queuedEvent = null;
+        try {
+            java.lang.reflect.Field field = DynamicConfigurationManagerImpl.class.getDeclaredField("initialLoadEventToPublish");
+            field.setAccessible(true);
+            queuedEvent = (PipelineClusterConfigChangeEvent) field.get(dynamicConfigurationManager);
+
+            // Verify that the event was queued
+            assertNotNull(queuedEvent, "Event should be queued for publication");
+            assertFalse(queuedEvent.isDeletion(), "Event should not be a deletion event");
+            assertEquals(mockClusterConfig, queuedEvent.newConfig(), "Event should have the correct config");
+            assertEquals(TEST_CLUSTER_NAME, queuedEvent.clusterName(), "Event should have the correct cluster name");
+
+            // Manually publish the event to verify that the executor and event publisher work correctly
+            // This simulates what would happen in the postConstructInitialize method
+            // Note: The stubbing for mockEventPublishingExecutor.execute() is already done in setUp()
+
+            // Use reflection to access the private publishMicronautEvent method
+            java.lang.reflect.Method method = DynamicConfigurationManagerImpl.class.getDeclaredMethod("publishMicronautEvent", PipelineClusterConfigChangeEvent.class);
+            method.setAccessible(true);
+            method.invoke(dynamicConfigurationManager, queuedEvent);
+        } catch (NoSuchFieldException | IllegalAccessException | NoSuchMethodException | java.lang.reflect.InvocationTargetException e) {
+            fail("Failed to access private members via reflection: " + e.getMessage());
+        }
+
+        // Now verify that the event was published
         verify(mockEventPublisher).publishEvent(eventCaptor.capture());
-        PipelineClusterConfigChangeEvent publishedEvent = eventCaptor.getValue(); // Type is correct
-        assertFalse(publishedEvent.isDeletion());
-        assertEquals(mockClusterConfig, publishedEvent.newConfig());
-        assertEquals(TEST_CLUSTER_NAME, publishedEvent.clusterName());
+        PipelineClusterConfigChangeEvent publishedEvent = eventCaptor.getValue();
+        assertFalse(publishedEvent.isDeletion(), "Published event should not be a deletion event");
+        assertEquals(mockClusterConfig, publishedEvent.newConfig(), "Published event should have the correct config");
+        assertEquals(TEST_CLUSTER_NAME, publishedEvent.clusterName(), "Published event should have the correct cluster name");
 
         verify(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), any(Consumer.class));
     }
-
     @Test
     void initialize_consulReturnsEmptyConfig_logsWarningAndStartsWatch() {
         when(mockConsulConfigFetcher.fetchPipelineClusterConfig(TEST_CLUSTER_NAME))

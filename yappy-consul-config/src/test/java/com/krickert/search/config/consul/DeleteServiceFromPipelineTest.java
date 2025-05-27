@@ -43,8 +43,9 @@ import static org.junit.jupiter.api.Assertions.*;
 @Property(name = "consul.client.enabled", value = "true")
 @Property(name = "testcontainers.consul.enabled", value = "true")
 @Property(name = "app.config.cluster-name", value = DeleteServiceFromPipelineTest.TEST_EXECUTION_CLUSTER)
+@Property(name = "yappy.consul.configured", value = "true")
 class DeleteServiceFromPipelineTest {
-
+    private static final Logger log = LoggerFactory.getLogger(DeleteServiceFromPipelineTest.class);
     static final String DEFAULT_PROPERTY_CLUSTER = "propertyClusterDeleteServiceDefault";
     static final String TEST_EXECUTION_CLUSTER = "comprehensive-cluster"; // Match the name in the JSON file
     private static final Logger LOG = LoggerFactory.getLogger(DeleteServiceFromPipelineTest.class);
@@ -478,10 +479,10 @@ class DeleteServiceFromPipelineTest {
         // Add debug logging to see what's in the current configuration
         if (currentConfigOpt != null && currentConfigOpt.isPresent()) {
             PipelineClusterConfig currentConfig = currentConfigOpt.get();
-            System.out.println("[DEBUG_LOG] Current configuration before adding Kafka topic:");
-            System.out.println("[DEBUG_LOG]   Cluster name: " + currentConfig.clusterName());
-            System.out.println("[DEBUG_LOG]   Allowed Kafka topics: " + currentConfig.allowedKafkaTopics());
-            System.out.println("[DEBUG_LOG]   Allowed gRPC services: " + currentConfig.allowedGrpcServices());
+            log.debug("[DEBUG_LOG] Current configuration before adding Kafka topic:");
+            log.debug("[DEBUG_LOG]   Cluster name: " + currentConfig.clusterName());
+            log.debug("[DEBUG_LOG]   Allowed Kafka topics: " + currentConfig.allowedKafkaTopics());
+            log.debug("[DEBUG_LOG]   Allowed gRPC services: " + currentConfig.allowedGrpcServices());
 
             // Create a copy of the config with the new topic and validate it directly
             Set<String> updatedTopics = new HashSet<>(currentConfig.allowedKafkaTopics());
@@ -500,21 +501,21 @@ class DeleteServiceFromPipelineTest {
                     updatedConfig,
                     schemaRef -> {
                         Optional<String> content = testCachedConfigHolder.getSchemaContent(schemaRef);
-                        System.out.println("[DEBUG_LOG] Validator requesting schema for " + schemaRef + ": " + (content.isPresent() ? "found" : "not found"));
+                        log.debug("[DEBUG_LOG] Validator requesting schema for " + schemaRef + ": " + (content.isPresent() ? "found" : "not found"));
                         return content;
                     }
             );
 
             if (!topicValidationResult.isValid()) {
-                System.out.println("[DEBUG_LOG] Validation failed for updated config with new Kafka topic. Errors: " + topicValidationResult.errors());
+                log.debug("[DEBUG_LOG] Validation failed for updated config with new Kafka topic. Errors: " + topicValidationResult.errors());
                 for (String error : topicValidationResult.errors()) {
-                    System.out.println("[DEBUG_LOG] Validation error: " + error);
+                    log.debug("[DEBUG_LOG] Validation error: " + error);
                 }
             } else {
-                System.out.println("[DEBUG_LOG] Validation passed for updated config with new Kafka topic.");
+                log.debug("[DEBUG_LOG] Validation passed for updated config with new Kafka topic.");
             }
         } else {
-            System.out.println("[DEBUG_LOG] No current configuration available before adding Kafka topic.");
+            log.debug("[DEBUG_LOG] No current configuration available before adding Kafka topic.");
             // If the configuration is not available, we need to create it
             LOG.info("No configuration available, creating a new one with the Kafka topic...");
 

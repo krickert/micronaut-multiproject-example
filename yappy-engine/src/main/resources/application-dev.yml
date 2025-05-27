@@ -1,0 +1,65 @@
+# src/main/resources/application-dev.yml
+
+micronaut:
+  application:
+    name: yappy-engine # Ensure this is set
+  server:
+    port: 8666
+endpoints:
+  health:
+    details-visible: ANONYMOUS
+  env:
+    enabled: true
+    sensitive: false
+  beans:
+    sensitive: false
+  loggers:
+    enabled: true
+    write-sensitive: false
+
+consul:
+  client:
+    # Use a direct value for defaultZone during this debugging phase
+    # Ensure this is the correct address for the Consul instance your app should connect to.
+    # Your logs previously showed ConsulClientFactory using localhost:8500 for one run,
+    # and test resources providing a dynamic port like 59385 or 58629 for others.
+    # For this test, make sure you know which Consul you are targeting.
+    # If you are running Consul MANUALLY for this dev run, use its address (e.g., "localhost:8500").
+    #defaultZone: "localhost:8500"
+    # Remove separate host/port if defaultZone is set explicitly like this
+    # host: localhost
+    # port: 8500
+    registration:
+      enabled: false # Keep this false unless this app needs to register itself
+    config:
+      enabled: false # Keep this false for now to ensure pipeline config is only from DCM
+
+# Your other app and kafka properties
+app:
+  config:
+    cluster.name: "yappy-cluster"
+    consul:
+      key-prefixes:
+        pipeline-clusters: "yappy/pipeline-configs/clusters"
+        schema-versions: "yappy/schema-versions"
+      watch-seconds: 5
+
+kafka:
+  enabled: true
+  schema:
+    registry:
+      type: apicurio
+  producers:
+    default: # This is for a producer named "default"
+      apicurio:
+        registry:
+          url: ${apicurio.registry.url:http://localhost:8081/apis/registry/v2} # Added a default for placeholder
+    pipestream-forwarder: # Ensure this is configured if KafkaForwarderClient uses it
+      bootstrap.servers: ${kafka.bootstrap.servers:localhost:9092} # Added default
+      acks: all
+      # Add key.serializer and value.serializer if not globally configured or inferred correctly
+      # key.serializer: org.apache.kafka.common.serialization.UUIDSerializer
+      # value.serializer: io.micronaut.configuration.kafka.serde.ProtobufSerde # Or your PipeStream serde
+      apicurio:
+        registry:
+          url: ${apicurio.registry.url:http://localhost:8081/apis/registry/v2}

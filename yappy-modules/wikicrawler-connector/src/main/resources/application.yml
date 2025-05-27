@@ -1,0 +1,34 @@
+micronaut:
+  application:
+    name: wikicrawler-connector
+  server:
+    port: 8080
+  grpc:
+    server:
+      port: 50052  # Different from the test server to avoid conflicts
+
+# WikiCrawler specific configurations
+wikicrawler:
+  base-storage-path: "downloaded_wikidumps"  # Base path for storing downloaded files
+
+  # Kafka configuration for each step in the pipeline
+  kafka-produce-download-requests: false  # Whether to send download requests to Kafka
+  download-request-topic: "wiki-download-requests"  # Topic for download requests
+
+  kafka-produce-downloaded-files: false  # Whether to send downloaded files to Kafka
+  downloaded-file-topic: "wiki-downloaded-files"  # Topic for downloaded files
+
+  kafka-produce-articles: true  # Whether to send articles to Kafka
+  article-output-topic: "wiki-articles"  # Topic for articles
+
+# gRPC client configuration for YappyIngestionService
+grpc:
+  channels:
+    connector-engine-service:
+      address: "static://localhost:50051"  # Points to the yappy-connector-test-server
+      plaintext: true  # No TLS for test server
+
+# HTTP Client configuration for RawFileDownloaderClient
+file:
+  download:
+    base-url: "https://dumps.wikimedia.org"  # Base URL for downloading wiki dumps

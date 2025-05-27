@@ -45,7 +45,7 @@ public class KiwiprojectConsulConfigFetcher implements ConsulConfigFetcher {
             @Value("${consul.client.port}") int consulPort,
             @Value("${app.config.consul.key-prefixes.pipeline-clusters}") String clusterConfigKeyPrefix,
             @Value("${app.config.consul.key-prefixes.schema-versions}") String schemaVersionsKeyPrefix,
-            @Value("${app.config.consul.watch-seconds}") int appWatchSeconds,
+            @Value("${app.config.consul.watch-seconds:5}") int appWatchSeconds,
             Consul consulClient // Injected from ConsulClientFactory
     ) {
         this.objectMapper = objectMapper;

@@ -39,11 +39,14 @@ import static org.junit.jupiter.api.Assertions.*;
 @Property(name = "testcontainers.consul.enabled", value = "true")
 @Property(name = "app.config.cluster-name", value = DynamicConfigurationManagerImplMicronautTest.DEFAULT_PROPERTY_CLUSTER)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@Property(name = "yappy.consul.configured", value = "true")
 class DynamicConfigurationManagerImplMicronautTest {
 
     static final String DEFAULT_PROPERTY_CLUSTER = "propertyClusterDefault";
     static final String TEST_EXECUTION_CLUSTER = "dynamicManagerTestCluster";
     private static final Logger LOG = LoggerFactory.getLogger(DynamicConfigurationManagerImplMicronautTest.class);
+
+
 
     @Inject
     ObjectMapper objectMapper;
@@ -308,27 +311,52 @@ class DynamicConfigurationManagerImplMicronautTest {
 
     @Test
     @DisplayName("Integration: Initial load - no config found, then config appears via watch")
-    @Timeout(value = 60, unit = TimeUnit.SECONDS)
+    @Timeout(value = 60, unit = TimeUnit.SECONDS) // Ensure timeout is sufficient for async ops
     void integration_initialLoad_noConfigFound_thenAppearsOnWatch() throws Exception {
+        String testClusterName = "dynamicManagerTestCluster"; // Using a local var for clarity
         String fullClusterKey = getFullClusterKey(TEST_EXECUTION_CLUSTER);
-        consulBusinessOperationsService.deleteClusterConfiguration(TEST_EXECUTION_CLUSTER).block();
 
-        dynamicConfigurationManager.initialize(TEST_EXECUTION_CLUSTER);
+        // Ensure config is deleted for a clean test run
+        LOG.info("Test: Deleting any existing configuration for cluster '{}' at key '{}'", testClusterName, fullClusterKey);
+        consulBusinessOperationsService.deleteClusterConfiguration(testClusterName).block();
+        // Verify it's gone if possible, or at least allow Consul time to process
+        // Optional<PipelineClusterConfig> checkDelete = consulBusinessOperationsService.getPipelineClusterConfig(testClusterName).block();
+        // assertFalse(checkDelete.isPresent(), "Config should be deleted before initialize");
 
-        PipelineClusterConfigChangeEvent initialEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 2, TimeUnit.SECONDS);
-        assertNull(initialEvent);
-        assertFalse(cachedConfigHolder.getCurrentConfig().isPresent());
+        LOG.info("Test: Calling dynamicConfigurationManager.initialize for an empty cluster '{}'", testClusterName);
+        dynamicConfigurationManager.initialize(testClusterName);
 
-        PipelineClusterConfig newConfigAppearing = createDummyClusterConfig(TEST_EXECUTION_CLUSTER, "topicAppeared1");
-        // No validator mocking
-        seedConsulKv(fullClusterKey, newConfigAppearing);
+        // 1. Expect the initial "deletion" event (or "not found" event)
+        // This event is published deferred after @PostConstruct of DCM.
+        LOG.info("Test: Polling for initial (expected deletion) event for cluster '{}'", testClusterName);
+        PipelineClusterConfigChangeEvent initialEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 5, TimeUnit.SECONDS); // Increased timeout
 
-        PipelineClusterConfigChangeEvent discoveredEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 15, TimeUnit.SECONDS);
-        assertNotNull(discoveredEvent);
-        assertFalse(discoveredEvent.isDeletion());
-        assertEquals(newConfigAppearing, discoveredEvent.newConfig());
-        assertEquals(TEST_EXECUTION_CLUSTER, discoveredEvent.clusterName());
-        assertEquals(newConfigAppearing, cachedConfigHolder.getCurrentConfig().orElse(null));
+        assertNotNull(initialEvent, "Should have received an initial event from DCM's initialization.");
+        assertTrue(initialEvent.isDeletion(), "The initial event should signify a deletion or 'not found' state.");
+        assertEquals(testClusterName, initialEvent.clusterName(), "Cluster name in the event should match.");
+
+        // Verify cache and staleness after this initial non-finding load
+        assertFalse(cachedConfigHolder.getCurrentConfig().isPresent(), "Cache should be empty after initial load found nothing.");
+        assertTrue(dynamicConfigurationManager.isCurrentConfigStale(), "DCM should be marked as stale.");
+
+        // 2. Now, seed the new configuration into Consul; the watch should pick it up
+        LOG.info("Test: Seeding new configuration for cluster '{}' into Consul at key '{}'", testClusterName, fullClusterKey);
+        PipelineClusterConfig newConfigAppearing = createDummyClusterConfig(testClusterName, "topicAppearedInWatch"); // Assuming createDummyClusterConfig exists
+        seedConsulKv(fullClusterKey, newConfigAppearing); // Your helper to write to Consul
+
+        // 3. Expect the watch to detect this new config and publish an update event
+        LOG.info("Test: Polling for discovered (update) event for cluster '{}'", testClusterName);
+        PipelineClusterConfigChangeEvent discoveredEvent = testApplicationEventListener.pollEvent(appWatchSeconds + 15, TimeUnit.SECONDS); // Allow time for watch
+
+        assertNotNull(discoveredEvent, "Should have discovered the newly seeded config via the watch.");
+        assertFalse(discoveredEvent.isDeletion(), "The discovered event should be an update, not a deletion.");
+        assertEquals(newConfigAppearing, discoveredEvent.newConfig(), "The discovered event should contain the newly seeded config.");
+        assertEquals(testClusterName, discoveredEvent.clusterName());
+
+        // Verify cache and staleness after the watch update
+        assertEquals(Optional.of(newConfigAppearing), cachedConfigHolder.getCurrentConfig(), "Cache should now hold the new config from the watch.");
+        assertFalse(dynamicConfigurationManager.isCurrentConfigStale(), "DCM should no longer be stale after a valid watch update.");
+        assertNotNull(dynamicConfigurationManager.getCurrentConfigVersionIdentifier().orElse(null), "Version should be set.");
     }
 
     @Test

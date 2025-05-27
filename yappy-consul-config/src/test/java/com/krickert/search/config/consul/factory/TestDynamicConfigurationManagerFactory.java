@@ -1,57 +1,64 @@
 package com.krickert.search.config.consul.factory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.krickert.search.config.consul.CachedConfigHolder;
-import com.krickert.search.config.consul.ConfigurationValidator;
-import com.krickert.search.config.consul.ConsulConfigFetcher;
-import com.krickert.search.config.consul.DynamicConfigurationManagerImpl;
-// import com.krickert.search.config.consul.event.ClusterConfigUpdateEvent; // Old event
-import com.krickert.search.config.pipeline.event.PipelineClusterConfigChangeEvent; // Import the new event
+import com.krickert.search.config.consul.*;
+import com.krickert.search.config.pipeline.event.PipelineClusterConfigChangeEvent;
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
-import io.micronaut.context.event.ApplicationEventPublisher;
 
-/**
- * Test-specific factory for creating DynamicConfigurationManager instances.
- * This factory is used in tests to create DynamicConfigurationManager instances
- * with mock dependencies.
- */
+import io.micronaut.context.event.ApplicationEventPublisher;
+// No Micronaut specific TaskExecutors needed here if we pass a general ExecutorService for tests
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors; // For a simple default executor in tests
+
 public class TestDynamicConfigurationManagerFactory {
 
-    /**
-     * Creates a new DynamicConfigurationManager with the specified dependencies.
-     * This method is used in tests to create a DynamicConfigurationManager with mock dependencies.
-     *
-     * @param clusterName                   the name of the cluster
-     * @param consulConfigFetcher           the ConsulConfigFetcher to use
-     * @param configurationValidator        the ConfigurationValidator to use
-     * @param cachedConfigHolder            the CachedConfigHolder to use
-     * @param eventPublisher                the ApplicationEventPublisher to use (for the new event type)
-     * @param consulKvService               the ConsulKvService to use
-     * @param consulBusinessOperationsService the ConsulBusinessOperationsService to use
-     * @param objectMapper                  the ObjectMapper to use
-     * @return a new DynamicConfigurationManager
-     */
     public static DynamicConfigurationManagerImpl createDynamicConfigurationManager(
             String clusterName,
             ConsulConfigFetcher consulConfigFetcher,
             ConfigurationValidator configurationValidator,
             CachedConfigHolder cachedConfigHolder,
-            ApplicationEventPublisher<PipelineClusterConfigChangeEvent> eventPublisher, // Updated type
-            com.krickert.search.config.consul.service.ConsulKvService consulKvService,
-            ConsulBusinessOperationsService consulBusinessOperationsService,
-            ObjectMapper objectMapper
+            ApplicationEventPublisher<PipelineClusterConfigChangeEvent> eventPublisher,
+            // ConsulKvService consulKvService, // Not directly used by DCM constructor
+            ConsulBusinessOperationsService consulBusinessOperationsService, // Needed for DefaultConfigurationSeeder
+            ObjectMapper objectMapper,
+            DefaultConfigurationSeeder seeder, // Pass the seeder instance (can be a mock or real for test)
+            ExecutorService eventPublishingExecutor // 👈 ADDED ExecutorService
     ) {
-        // Note: The DynamicConfigurationManagerImpl constructor itself doesn't take consulKvService directly.
-        // It's used by other injected components like ConsulConfigFetcher or ConsulBusinessOperationsService.
-        // So, it's not passed to the DynamicConfigurationManagerImpl constructor here.
         return new DynamicConfigurationManagerImpl(
                 clusterName,
                 consulConfigFetcher,
                 configurationValidator,
                 cachedConfigHolder,
-                eventPublisher, // This will now correctly pass the ApplicationEventPublisher<PipelineClusterConfigChangeEvent>
+                eventPublisher,
                 consulBusinessOperationsService,
-                objectMapper
+                objectMapper,
+                seeder, // Pass the provided seeder
+                eventPublishingExecutor // 👈 PASS IT
         );
     }
+
+    // Overloaded version if you want to provide a default test executor
+    public static DynamicConfigurationManagerImpl createDynamicConfigurationManager(
+            String clusterName,
+            ConsulConfigFetcher consulConfigFetcher,
+            ConfigurationValidator configurationValidator,
+            CachedConfigHolder cachedConfigHolder,
+            ApplicationEventPublisher<PipelineClusterConfigChangeEvent> eventPublisher,
+            ConsulBusinessOperationsService consulBusinessOperationsService,
+            ObjectMapper objectMapper,
+            DefaultConfigurationSeeder seeder
+    ) {
+        // Creates a simple executor for testing purposes if one isn't provided.
+        // For more control, tests should ideally provide their own or a mock.
+        ExecutorService defaultTestExecutor = Executors.newSingleThreadScheduledExecutor();
+        return createDynamicConfigurationManager(clusterName, consulConfigFetcher, configurationValidator,
+                cachedConfigHolder, eventPublisher, consulBusinessOperationsService, objectMapper,
+                seeder, defaultTestExecutor);
+    }
+
+
+    // Example of how you might create a DefaultConfigurationSeeder for tests if you don't want to mock it fully:
+    // public static DefaultConfigurationSeeder createTestSeeder(ConsulBusinessOperationsService mockConsulOps) {
+    // return new DefaultConfigurationSeeder(mockConsulOps);
+    // }
 }

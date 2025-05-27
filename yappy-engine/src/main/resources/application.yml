@@ -1,14 +1,28 @@
-kafka:
-  enabled: true
-  producers:
-    pipestream-forwarder: # Matches the id in @KafkaClient
-      # bootstrap.servers: localhost:9092 # Or your Kafka brokers
-      acks: all  # Wait for all in-sync replicas to acknowledge (highest durability)
-      retries: 3 # Number of times the producer will retry sending a message on failure
-      # delivery.timeout.ms: 120000 # Max time to wait for ack (includes retries), default 2 mins
-      # linger.ms: 5 # Batches records for 5ms to improve throughput under load
-      # enable.idempotence: true # Ensures exactly-once semantics per partition (requires acks=all, retries>0, max.in.flight.requests.per.connection<=5)
-      # max.in.flight.requests.per.connection: 5 # If idempotence is enabled
-      # You can add other standard Kafka producer properties here
-      # Example: compression.type: snappy
+# src/main/resources/application.yml (or application-dev.yml)
 
+# For DynamicConfigurationManagerImpl's constructor
+app:
+  config:
+    cluster.name: "yappy-cluster" # This ensures DCM tries to load the same cluster the seeder seeds
+    consul:
+      key-prefixes:
+        pipeline-clusters: "yappy/pipeline-configs/clusters"
+        schema-versions: "yappy/schema-versions"
+        # whitelists has a default in ConsulBusinessOperationsService constructor, override if needed
+      watch-seconds: 5 # Used by KiwiprojectConsulConfigFetcher
+
+# For ConsulBusinessOperationsService (and general Consul client)
+#consul:
+#  client:
+#    #defaultZone: "${CONSUL_HOST:localhost}:${CONSUL_PORT:8500}" # DEV default, overridden by test resources to 58629
+    # registration.enabled: true # If this service needs to register itself with Consul
+    # config.enabled: true       # If you use Micronaut's distributed config client for other properties
+    # acl-token: "your-token"    # If needed
+
+# For Kafka (if any beans try to initialize Kafka clients early)
+kafka:
+  enabled: true # Or false if you want to disable Kafka producer/consumer auto-configuration for now
+  # producers:
+  #   pipestream-forwarder:
+  #     # bootstrap.servers: localhost:9092 # If not using test resources for Kafka
+  #     acks: all

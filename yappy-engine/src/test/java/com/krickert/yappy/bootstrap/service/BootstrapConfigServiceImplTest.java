@@ -86,7 +86,7 @@ class BootstrapConfigServiceImplTest {
         testBootstrapFilePath = tempDir.resolve("test-engine-bootstrap.properties");
         Files.deleteIfExists(testBootstrapFilePath); // Ensure clean state
         Files.createFile(testBootstrapFilePath); // Create the file so it exists for tests that load properties
-        service = new BootstrapConfigServiceImpl(mockConsulBusinessOpsService, testBootstrapFilePath.toString(), mockApplicationContext);
+        service = new BootstrapConfigServiceImpl(mockConsulBusinessOpsService, testBootstrapFilePath.toString());
         System.clearProperty("yappy.consul.configured"); // Clear before each test
 
         // Mock the applicationContext.publishEvent call leniently
@@ -304,7 +304,7 @@ class BootstrapConfigServiceImplTest {
         // This is used by the local getFullClusterKey in simulation
         writeTestProperties(props);
 
-        service = new BootstrapConfigServiceImpl(null, testBootstrapFilePath.toString(), mockApplicationContext);
+        service = new BootstrapConfigServiceImpl(null, testBootstrapFilePath.toString());
 
         StreamObserver<ClusterList> mockObserver = mockStreamObserver();
         service.listAvailableClusters(Empty.newBuilder().build(), mockObserver);

@@ -4,7 +4,7 @@ plugins {
     `java-library`
     `maven-publish`
     id("io.micronaut.test-resources") version "4.5.3"
-    id("io.micronaut.library") version "4.5.3"
+    id("io.micronaut.minimal.application") version "4.5.3"
 }
 
 group = rootProject.group
@@ -31,6 +31,18 @@ micronaut {
         clientTimeout.set(60)
         sharedServer.set(false)
     }
+}
+
+// Helper function to check if DEV environment is enabled
+fun isDevEnvironmentEnabled(): Boolean {
+    // Check system property
+    val devFromSysProp = System.getProperty("micronaut.environments")?.contains("dev") ?: false
+    // Check environment variable (as fallback)
+    val devFromEnv = System.getenv("MICRONAUT_ENVIRONMENTS")?.contains("dev") ?: false
+    // Check Gradle project property if set
+    val devFromProject = project.findProperty("micronautEnv")?.toString()?.contains("dev") ?: false
+
+    return devFromSysProp || devFromEnv || devFromProject
 }
 
 dependencies {
@@ -126,6 +138,10 @@ dependencies {
     // https://mvnrepository.com/artifact/org.awaitility/awaitility
     testImplementation("org.awaitility:awaitility:4.3.0")
     implementation(mn.micronaut.views.thymeleaf)
+    developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-ui")
+    developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-management")
+
+
 }
 
 //// Add this block to explicitly configure the Mockito agent
