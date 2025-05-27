@@ -90,7 +90,8 @@ class DynamicConfigurationManagerImplTest {
 
         // Tell Mockito what to do when mockEventPublishingExecutor.execute() is called:
         // Capture the Runnable and run it immediately.
-        doAnswer(invocation -> {
+        // Use lenient() to avoid "unnecessary stubbing" errors when this stubbing is not used in all tests
+        lenient().doAnswer(invocation -> {
             Runnable task = invocation.getArgument(0);
             if (task != null) {
                 task.run(); // Execute the task (which calls publishMicronautEvent on mockEventPublisher)
@@ -145,6 +146,7 @@ class DynamicConfigurationManagerImplTest {
                 SchemaType.JSON_SCHEMA, SchemaCompatibility.NONE, Instant.now(), "Test Schema"
         );
 
+        doNothing().when(mockConsulConfigFetcher).connect();
         when(mockConsulConfigFetcher.fetchPipelineClusterConfig(TEST_CLUSTER_NAME))
                 .thenReturn(Optional.of(mockClusterConfig));
         when(mockConsulConfigFetcher.fetchSchemaVersionData(schemaRef1.subject(), schemaRef1.version()))
@@ -153,7 +155,7 @@ class DynamicConfigurationManagerImplTest {
                 .thenReturn(ValidationResult.valid());
 
         // Act
-        dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
+       dynamicConfigurationManager.initialize(TEST_CLUSTER_NAME);
 
         // Assert
         verify(mockConsulConfigFetcher).connect();
@@ -166,13 +168,41 @@ class DynamicConfigurationManagerImplTest {
         assertEquals(1, capturedSchemaMap.size());
         assertEquals(schemaVersionData1.schemaContent(), capturedSchemaMap.get(schemaRef1));
 
+        // Instead of verifying that the event was published, we'll verify that it was queued for publication
+        // This is because the event is published in the postConstructInitialize method, which we don't want to call
+        // in the test because it would call initialize again
 
-        // This verification should now pass!
+        // Use reflection to access the private initialLoadEventToPublish field
+        PipelineClusterConfigChangeEvent queuedEvent = null;
+        try {
+            java.lang.reflect.Field field = DynamicConfigurationManagerImpl.class.getDeclaredField("initialLoadEventToPublish");
+            field.setAccessible(true);
+            queuedEvent = (PipelineClusterConfigChangeEvent) field.get(dynamicConfigurationManager);
+
+            // Verify that the event was queued
+            assertNotNull(queuedEvent, "Event should be queued for publication");
+            assertFalse(queuedEvent.isDeletion(), "Event should not be a deletion event");
+            assertEquals(mockClusterConfig, queuedEvent.newConfig(), "Event should have the correct config");
+            assertEquals(TEST_CLUSTER_NAME, queuedEvent.clusterName(), "Event should have the correct cluster name");
+
+            // Manually publish the event to verify that the executor and event publisher work correctly
+            // This simulates what would happen in the postConstructInitialize method
+            // Note: The stubbing for mockEventPublishingExecutor.execute() is already done in setUp()
+
+            // Use reflection to access the private publishMicronautEvent method
+            java.lang.reflect.Method method = DynamicConfigurationManagerImpl.class.getDeclaredMethod("publishMicronautEvent", PipelineClusterConfigChangeEvent.class);
+            method.setAccessible(true);
+            method.invoke(dynamicConfigurationManager, queuedEvent);
+        } catch (NoSuchFieldException | IllegalAccessException | NoSuchMethodException | java.lang.reflect.InvocationTargetException e) {
+            fail("Failed to access private members via reflection: " + e.getMessage());
+        }
+
+        // Now verify that the event was published
         verify(mockEventPublisher).publishEvent(eventCaptor.capture());
         PipelineClusterConfigChangeEvent publishedEvent = eventCaptor.getValue();
-        assertFalse(publishedEvent.isDeletion());
-        assertEquals(mockClusterConfig, publishedEvent.newConfig());
-        assertEquals(TEST_CLUSTER_NAME, publishedEvent.clusterName());
+        assertFalse(publishedEvent.isDeletion(), "Published event should not be a deletion event");
+        assertEquals(mockClusterConfig, publishedEvent.newConfig(), "Published event should have the correct config");
+        assertEquals(TEST_CLUSTER_NAME, publishedEvent.clusterName(), "Published event should have the correct cluster name");
 
         verify(mockConsulConfigFetcher).watchClusterConfig(eq(TEST_CLUSTER_NAME), any(Consumer.class));
     }
