@@ -4,7 +4,7 @@ plugins {
     `java-library`
     `maven-publish`
     id("io.micronaut.test-resources") version "4.5.3"
-    id("io.micronaut.library") version "4.5.3"
+    id("io.micronaut.minimal.application") version "4.5.3"
 }
 
 group = rootProject.group
@@ -44,9 +44,6 @@ fun isDevEnvironmentEnabled(): Boolean {
 
     return devFromSysProp || devFromEnv || devFromProject
 }
-
-
-configurations.create("developmentOnly")
 
 dependencies {
     // Apply BOM/platform dependencies
@@ -141,6 +138,10 @@ dependencies {
     // https://mvnrepository.com/artifact/org.awaitility/awaitility
     testImplementation("org.awaitility:awaitility:4.3.0")
     implementation(mn.micronaut.views.thymeleaf)
+    developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-ui")
+    developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-management")
+
+
 }
 
 //// Add this block to explicitly configure the Mockito agent

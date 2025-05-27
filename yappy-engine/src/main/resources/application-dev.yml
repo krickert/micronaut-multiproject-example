@@ -3,6 +3,19 @@
 micronaut:
   application:
     name: yappy-engine # Ensure this is set
+  server:
+    port: 8666
+endpoints:
+  health:
+    details-visible: ANONYMOUS
+  env:
+    enabled: true
+    sensitive: false
+  beans:
+    sensitive: false
+  loggers:
+    enabled: true
+    write-sensitive: false
 
 consul:
   client:
