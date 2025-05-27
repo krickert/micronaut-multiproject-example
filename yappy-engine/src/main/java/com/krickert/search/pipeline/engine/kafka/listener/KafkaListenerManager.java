@@ -68,6 +68,7 @@ public class KafkaListenerManager implements ApplicationEventListener<PipelineCl
         this.applicationContext = applicationContext;
         this.configuredSchemaRegistryType = configuredSchemaRegistryType.toLowerCase(Locale.ROOT);
         this.appClusterName = appClusterName;
+
         LOG.info("KafkaListenerManager initialized for cluster '{}' with schema registry type: '{}'",
                 this.appClusterName, this.configuredSchemaRegistryType);
     }
