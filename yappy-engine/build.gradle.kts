@@ -3,12 +3,19 @@ import io.micronaut.testresources.buildtools.KnownModules
 plugins {
     `java-library`
     `maven-publish`
+    id("io.micronaut.application") version "4.5.3"
+    id("com.gradleup.shadow") version "8.3.6"
     id("io.micronaut.test-resources") version "4.5.3"
-    id("io.micronaut.minimal.application") version "4.5.3"
+    id("io.micronaut.aot") version "4.5.3"
 }
 
 group = rootProject.group
 version = rootProject.version
+application {
+    mainClass = "com.krickert.yappy.engine.YappyEngineApplication"
+}
+
+graalvmNative.toolchainDetection = false
 
 java {
     withJavadocJar()
@@ -18,7 +25,6 @@ java {
 }
 
 micronaut {
-    version("4.8.2")
     runtime("netty")
     testRuntime("junit5")
     processing {
@@ -30,6 +36,18 @@ micronaut {
         inferClasspath.set(true)
         clientTimeout.set(60)
         sharedServer.set(false)
+    }
+    aot {
+        // Please review carefully the optimizations enabled below
+        // Check https://micronaut-projects.github.io/micronaut-aot/latest/guide/ for more details
+        optimizeServiceLoading = false
+        convertYamlToJava = false
+        precomputeOperations = true
+        cacheEnvironment = true
+        optimizeClassLoading = true
+        deduceEnvironment = true
+        optimizeNetty = true
+        replaceLogbackXml = true
     }
 }
 
@@ -46,6 +64,41 @@ fun isDevEnvironmentEnabled(): Boolean {
 }
 
 dependencies {
+    annotationProcessor("org.projectlombok:lombok")
+    annotationProcessor("io.micronaut:micronaut-http-validation")
+    annotationProcessor("io.micronaut.jsonschema:micronaut-json-schema-processor")
+    annotationProcessor("io.micronaut.openapi:micronaut-openapi")
+    annotationProcessor("io.micronaut.serde:micronaut-serde-processor")
+    implementation("io.micrometer:context-propagation")
+    implementation("io.micronaut:micronaut-discovery-core")
+    implementation("io.micronaut:micronaut-http-client")
+    implementation("io.micronaut:micronaut-jackson-databind")
+    implementation("io.micronaut:micronaut-management")
+    implementation("io.micronaut:micronaut-retry")
+    implementation("io.micronaut.discovery:micronaut-discovery-client")
+    implementation("io.micronaut.jsonschema:micronaut-json-schema-annotations")
+    implementation("io.micronaut.micrometer:micronaut-micrometer-core")
+    implementation("io.micronaut.micrometer:micronaut-micrometer-observation")
+    implementation("io.micronaut.micrometer:micronaut-micrometer-registry-jmx")
+    implementation("io.micronaut.reactor:micronaut-reactor")
+    implementation("io.micronaut.reactor:micronaut-reactor-http-client")
+    implementation("io.micronaut.serde:micronaut-serde-jackson")
+    implementation("io.micronaut.views:micronaut-views-fieldset")
+    implementation("io.micronaut.views:micronaut-views-thymeleaf")
+    compileOnly("io.micronaut.openapi:micronaut-openapi-annotations")
+    compileOnly("org.projectlombok:lombok")
+    runtimeOnly("ch.qos.logback:logback-classic")
+    runtimeOnly("org.yaml:snakeyaml")
+    testImplementation("org.assertj:assertj-core")
+    testImplementation("org.awaitility:awaitility:4.3.0")
+    testImplementation("org.junit.jupiter:junit-jupiter-params")
+    testImplementation("org.junit.platform:junit-platform-suite-engine")
+    testImplementation("org.mockito:mockito-core")
+    testImplementation("org.testcontainers:junit-jupiter")
+    testImplementation("org.testcontainers:testcontainers")
+    developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-management")
+    developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-ui")
+
     // Apply BOM/platform dependencies
     implementation(platform(project(":bom")))
     annotationProcessor(platform(project(":bom")))
@@ -138,8 +191,8 @@ dependencies {
     // https://mvnrepository.com/artifact/org.awaitility/awaitility
     testImplementation("org.awaitility:awaitility:4.3.0")
     implementation(mn.micronaut.views.thymeleaf)
-    developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-ui")
-    developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-management")
+//    developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-ui")
+//    developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-management")
 
 
 }
@@ -175,4 +228,8 @@ publishing {
             }
         }
     }
+}
+
+tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative") {
+    jdkVersion = "21"
 }
