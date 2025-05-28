@@ -1,27 +1,44 @@
 package com.krickert.yappy.engine.controller.admin.dto;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.micronaut.core.annotation.Introspected;
 import io.micronaut.serde.annotation.Serdeable;
 
 @Introspected
 @Serdeable
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class CreateClusterResponse {
 
+    @JsonProperty("success")
     private boolean success;
+
+    @JsonProperty("message")
     private String message;
+
+    @JsonProperty("clusterName")
     private String clusterName;
+
+    @JsonProperty("seededConfigPath")
     private String seededConfigPath; // e.g., "yappy/pipeline-clusters/YOUR_CLUSTER_NAME"
 
     public CreateClusterResponse() {
     }
 
-    public CreateClusterResponse(boolean success, String message, String clusterName, String seededConfigPath) {
+    @JsonCreator
+    public CreateClusterResponse(
+            @JsonProperty("success") boolean success, 
+            @JsonProperty("message") String message, 
+            @JsonProperty("clusterName") String clusterName, 
+            @JsonProperty("seededConfigPath") String seededConfigPath) {
         this.success = success;
         this.message = message;
         this.clusterName = clusterName;
         this.seededConfigPath = seededConfigPath;
     }
 
+    @JsonProperty("success")
     public boolean isSuccess() {
         return success;
     }
@@ -30,6 +47,7 @@ public class CreateClusterResponse {
         this.success = success;
     }
 
+    @JsonProperty("message")
     public String getMessage() {
         return message;
     }
@@ -38,6 +56,7 @@ public class CreateClusterResponse {
         this.message = message;
     }
 
+    @JsonProperty("clusterName")
     public String getClusterName() {
         return clusterName;
     }
@@ -46,6 +65,7 @@ public class CreateClusterResponse {
         this.clusterName = clusterName;
     }
 
+    @JsonProperty("seededConfigPath")
     public String getSeededConfigPath() {
         return seededConfigPath;
     }

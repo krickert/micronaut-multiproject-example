@@ -14,14 +14,14 @@ grpc:
   client:
     plaintext: true
     discovery:
-      enabled: false
+      enabled: true
 
 
 # Consul client configuration
 consul:
   client:
     watch:
-      enabled: true
+      enabled: false
     registration:
       enabled: true
       port: ${grpc.server.port} # Micronaut resolves this to the gRPC server's port
@@ -30,7 +30,7 @@ consul:
         interval: 5s
         timeout: 3s
     discovery:
-      enabled: false
+      enabled: true
     config:
       enabled: true
       format: properties

@@ -9,6 +9,7 @@ import com.krickert.search.pipeline.engine.PipeStreamEngine;
 import com.krickert.search.pipeline.engine.core.DefaultPipeStreamEngineLogicImpl;
 import com.krickert.search.pipeline.engine.grpc.PipeStreamGrpcForwarder;
 import com.krickert.search.pipeline.engine.kafka.KafkaForwarder;
+import com.krickert.search.pipeline.engine.kafka.admin.KafkaAdminService;
 import com.krickert.search.pipeline.step.PipeStepExecutorFactory;
 import io.micronaut.configuration.kafka.annotation.KafkaClient;
 import io.micronaut.context.ApplicationContext;
@@ -43,6 +44,7 @@ import static org.mockito.Mockito.*;
 @Property(name = "kafka.enabled", value = "true")
 @Property(name = "kafka.schema.registry.type", value = "apicurio")
 @Property(name = "app.config.cluster-name", value = "test-e2e-cluster")
+@Property(name = "micronaut.server.port", value = "${random.port}")
 public class DynamicKafkaListenerE2ETest {
 
     private static final Logger LOG = LoggerFactory.getLogger(DynamicKafkaListenerE2ETest.class);
@@ -64,6 +66,9 @@ public class DynamicKafkaListenerE2ETest {
 
     @Inject
     KafkaListenerManager kafkaListenerManager;
+
+    @Inject
+    KafkaAdminService kafkaAdminService;
 
     @Inject
     PipeStreamEngine pipeStreamEngine;

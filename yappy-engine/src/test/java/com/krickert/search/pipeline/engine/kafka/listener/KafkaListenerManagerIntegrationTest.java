@@ -40,6 +40,7 @@ import static org.mockito.Mockito.verify;
 @Property(name = "kafka.enabled", value = "true")
 @Property(name = "kafka.schema.registry.type", value = "apicurio")
 @Property(name = "app.config.cluster-name", value = "test-integ-cluster")
+@Property(name = "micronaut.server.port" , value = "${random.port}")
 class KafkaListenerManagerIntegrationTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(KafkaListenerManagerIntegrationTest.class);
