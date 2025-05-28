@@ -21,9 +21,9 @@ grpc:
 consul:
   client:
     watch:
-      enabled: true
+      enabled: false
     registration:
-      enabled: true
+      enabled: false
       port: ${grpc.server.port} # Micronaut resolves this to the gRPC server's port
       check:
         enabled: true
@@ -32,7 +32,7 @@ consul:
     discovery:
       enabled: false
     config:
-      enabled: true
+      enabled: false
       format: properties
       path: config/pipeline
 

@@ -14,7 +14,7 @@ grpc:
   client:
     plaintext: true
     discovery:
-      enabled: true
+      enabled: false
 
 
 # Disable other services to avoid port conflicts
@@ -25,16 +25,16 @@ chunker.grpc.server:
 consul:
   client:
     watch:
-      enabled: true
+      enabled: false
     registration:
-      enabled: true
+      enabled: false
       port: ${grpc.server.port} # Micronaut resolves this to the gRPC server's port
       check:
         enabled: true
         interval: 5s
         timeout: 3s
     discovery:
-      enabled: true
+      enabled: false
     config:
       enabled: true
       format: properties

@@ -191,6 +191,7 @@ dependencies {
     // https://mvnrepository.com/artifact/org.awaitility/awaitility
     testImplementation("org.awaitility:awaitility:4.3.0")
     implementation(mn.micronaut.views.thymeleaf)
+
 //    developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-ui")
 //    developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-management")
 

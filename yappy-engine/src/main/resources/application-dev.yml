@@ -30,9 +30,9 @@ consul:
     # host: localhost
     # port: 8500
     registration:
-      enabled: false # Keep this false unless this app needs to register itself
+      enabled: true # Keep this false unless this app needs to register itself
     config:
-      enabled: false # Keep this false for now to ensure pipeline config is only from DCM
+      enabled: true # Keep this false for now to ensure pipeline config is only from DCM
 
 # Your other app and kafka properties
 app:
@@ -53,9 +53,9 @@ kafka:
     default: # This is for a producer named "default"
       apicurio:
         registry:
-          url: ${apicurio.registry.url:http://localhost:8081/apis/registry/v2} # Added a default for placeholder
+          url: ${apicurio.registry.url} # Added a default for placeholder
     pipestream-forwarder: # Ensure this is configured if KafkaForwarderClient uses it
-      bootstrap.servers: ${kafka.bootstrap.servers:localhost:9092} # Added default
+      bootstrap.servers: ${kafka.bootstrap.servers} # Added default
       acks: all
       # Add key.serializer and value.serializer if not globally configured or inferred correctly
       # key.serializer: org.apache.kafka.common.serialization.UUIDSerializer

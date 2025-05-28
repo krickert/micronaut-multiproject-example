@@ -51,32 +51,11 @@ public class EchoServiceIntegrationTest {
     @Inject
     private EmbeddedServer embeddedServer;
 
-    private ManagedChannel channel;
+    @Inject
+    @Named("echoClientStub")
     private PipeStepProcessorGrpc.PipeStepProcessorBlockingStub localBlockingClient;
 
-    @BeforeEach
-    void setup() {
-        checkNotNull(echoService, "echoService cannot be null");
-    }
 
-    @BeforeEach
-    void setUpClient() throws IOException {
-        int port = embeddedServer.getPort();
-        channel = ManagedChannelBuilder.forAddress("localhost", port).usePlaintext().build();
-        localBlockingClient = PipeStepProcessorGrpc.newBlockingStub(channel);
-    }
-
-    @AfterEach
-    void tearDownClient() {
-        if (channel != null) {
-            try {
-                channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                LOG.error("Interrupted while shutting down gRPC channel", e);
-            }
-        }
-    }
 
     /**
      * Test that the Echo service correctly echoes back a document.
