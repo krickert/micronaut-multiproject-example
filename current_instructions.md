@@ -5,18 +5,6 @@
 # SESSION START
 
 ## Session Section
-This goes over a response notes for the current chat sessions I have.  It's less organized than the "official" doc below.  When points 
-get done in this section we will put them in the sections below to keep a running status of the project
-
-This is sparated from marking SESSION START to SESSION END
-
-You've hit on some excellent points about environment separation and testing strategy! This is a very thoughtful approach to building a robust system.
-
-**Your Side-Task Idea: Environment Hardening**
-
-Yes, I think formalizing your DEV environment and having a "clean slate" mechanism is an **excellent side-task**. It's more than a side-task; it's a foundational piece for reliable development and testing.
-
-Here's why it's a good idea and how it fits:
 
 1.  **True DEV Isolation:**
     * Your `application-dev.yml` (or a similar profile-specific configuration for DEV) should explicitly define all necessary external service connections (Consul, Kafka, Apicurio, etc.) to point to your *local, developer-controlled instances* (e.g., those run by your `docker-compose.yml`).
@@ -30,8 +18,8 @@ Here's why it's a good idea and how it fits:
     * This ensures that when you test the "first-run" or "Setup Mode" experience, it's genuinely the first run.
 
 3.  **Path to Shared Test Resources Server:**
-    * You mentioned, "Right now the testresources is NOT a shared server, but we would like to get it to that point, this is a necessary step to get there."
-    * Absolutely. To effectively use a *shared* Micronaut Test Resources server (where multiple developers or CI jobs might connect), each test run or application instance connecting to it needs to be able to operate in its own isolated namespace within those shared services.
+    * Right now the testresources is NOT a shared server, but we would like to get it to that point, this is a necessary step to get there."
+    * To effectively use a *shared* Micronaut Test Resources server (where multiple developers or CI jobs might connect), each test run or application instance connecting to it needs to be able to operate in its own isolated namespace within those shared services.
     * This often involves:
         * Using unique prefixes for Consul keys based on a test ID or session.
         * Using unique Kafka topic names or consumer group IDs.
@@ -45,9 +33,7 @@ Here's why it's a good idea and how it fits:
         * **`@MicronautTest` with Shared Test Resources Server:** Your tests connect to a remote, already running Test Resources server, which manages a pool of shared Docker containers. Properties are resolved from this remote server. This requires careful namespacing.
         * **Deployed Non-Prod Environments (e.g., Staging):** These would have their own persistent Consul, Kafka, etc., and specific `application-{env}.yml` files.
 
-**Next Steps for This "Side-Task":**
-
-You are on the right track.
+**Next Steps:**
 
 1.  **Create `src/main/resources/application-dev.yml` (if it doesn't exist or is incomplete in `yappy-engine`):**
     * Manually list out all the properties that your Test Resources providers (`ConsulTestResourceProvider`, `KafkaTestResourceProvider`, etc.) currently inject into your `@MicronautTest` runs.
@@ -83,23 +69,22 @@ You are on the right track.
         # ... any other configurations your engine or its sub-components need ...
         ```
     * The goal is that when you run `YappyEngineApplication.main()` with the `dev` profile active (usually default if no other profile is specified and `application-dev.yml` exists) AND `-Dmicronaut.test.resources.enabled=false`, your application uses *these* explicit settings.
+2.  **Environment Hardening:**
+    * Formalize DEV environment setup using `application-dev.yml` and local services (Docker Compose).
+    * Ensure Testcontainers are used effectively and consistently for integration tests, and that test profiles correctly isolate test runs.
+    * Review and standardize the management of bootstrap properties (`~/.yappy/engine-bootstrap.properties`) across application run modes and test scenarios. The `EngineBootstrapManagerTest.java` and `AdminSetupControllerFirstTest.java` failures suggest this area needs attention.
+3.  **Complete Implementation of Admin APIs:**
+    * Based on the review of Section VII, identify and implement any remaining admin API endpoints for module management if they are still required and not covered.
+    * Ensure all admin APIs have comprehensive OpenAPI documentation.
+4.  **End-to-End Testing of Core Engine Features:**
+    * (As per original plan) Dynamic Kafka Listener functionality with actual message processing.
+    * Engine-Managed Module Registration (if applicable, including interaction between gRPC service and any admin REST APIs).
+5.  **Continue with Part B items from `current_instructions.md`:**
+    * B.1: Finalize and verify `ServiceOperationalStatus.java` and `ServiceAggregatedStatus.java` usage.
+    * B.2: Implement and test the engine logic for status aggregation and Consul KV updates for `ServiceAggregatedStatus`.
+    * B.3 & B.4: Progress on engine-managed module lifecycle (beyond initial registration if handled by gRPC) and health check integration.
 
-2.  **Disable Test Resources in `yappy-engine/build.gradle.kts` for `run` task (Optional but Recommended for DEV Focus):**
-    * You can configure the Gradle `run` task (which `YappyEngineApplication.main()` uses when run from Gradle) to always disable test resources, so you don't have to remember the system property for typical DEV runs.
-        ```kotlin
-        // In yappy-engine/build.gradle.kts
-        application {
-            mainClass.set("com.krickert.yappy.engine.YappyEngineApplication")
-        }
-        tasks.named<JavaExec>("run") {
-            systemProperty("micronaut.test.resources.enabled", "false")
-            // You might also want to explicitly set the active environment for 'run'
-            systemProperty("micronaut.environments", "dev")
-        }
-        ```
-    * For IDE runs, you'd still set the VM option `-Dmicronaut.test.resources.enabled=false`.
-
-3.  **Develop the "Clear-Out Settings" Utility:**
+6. **Develop the "Clear-Out Settings" Utility:**
     * This could be a separate Java main application, a shell script, or even a set of Gradle tasks.
     * It would use the Consul client library (like `kiwiproject/consul-client`) to delete keys.
     * It would use Kafka admin client to delete topics (if needed).
@@ -107,26 +92,27 @@ You are on the right track.
 
 **Sharing TestResources Code:**
 
-"If you think it's a good idea, I should share the testresources code and we can start by manually setting all the properties that this app sets."
+Right now the test resources are all different per test.  It is far more effective to clear out settings per test as well as create 
+different clusters and reseed per test run.
 
-Yes, this is a good idea. If you want to create the `application-dev.yml` by understanding what your `ConsulTestResourceProvider`, `KafkaTestResourceProvider`, etc., actually provide:
+Create the `application-dev.yml` by understanding what `ConsulTestResourceProvider`, `KafkaTestResourceProvider`, etc., actually 
+provide:
 
-* **Review Providers:** Look at your custom providers (e.g., `ConsulTestResourceProvider.java`, `KafkaTestResourceProvider.java`). The `getProperties()` or similar methods in these providers will show you the exact map of properties they return to the Micronaut application context during tests. These are the keys you'll want to define in your `application-dev.yml`.
-* You can also look at the properties defined by the official Micronaut Test Resources modules if you are using them directly or as inspiration.
+* **Review Providers:** Look at your custom providers (e.g., `ConsulTestResourceProvider.java`, `KafkaTestResourceProvider.java`). The `getProperties()` or similar methods in these providers will show  the exact map of properties they return to the Micronaut application context during tests. These are the keys you'll want to define in your `application-dev.yml`.
+* Look at the properties defined by the official Micronaut Test Resources modules if you are using them directly or as inspiration.
 
 **Plan Forward:**
 
-I agree. Let's treat this as a "Side-Quest" to solidify your DEV environment.
-
 1.  **You focus on:**
     * Creating/refining `yappy-engine/src/main/resources/application-dev.yml` with explicit configurations for all external services (Consul, Kafka, Apicurio, gRPC ports, etc.), using your local `docker-compose.yml` services as the target.
-    * Developing your "clear-out settings" utility.
+      * Developing the "clear-out settings" utility.
 2.  **Test it:**
     * Run `YappyEngineApplication.main()` from your IDE with `-Dmicronaut.test.resources.enabled=false` (and ensure `dev` profile is active or `application-dev.yml` is used).
     * Use your clear-out utility.
     * Verify the "Setup Mode" of `EngineBootstrapManager` by deleting `~/.yappy/engine-bootstrap.properties`. The logs should be clean of Test Resources intervention and show the engine trying to use only what `EngineBootstrapManager` or `application-dev.yml` provides (or doesn't provide, in the case of the bootstrap file).
 
-**Once you have this "clean DEV run" working for Setup Mode, we can confidently pick up Task 1.1 (verifying normal mode with a local bootstrap file) and then Task 1.2 (testing the `BootstrapConfigService` gRPCs) using this stable DEV setup.**
+**Once the "clean DEV run" is working the Setup Mode, one can confidently pick up Task 1.1 (verifying normal mode with a local bootstrap 
+file) and then Task 1.2 (testing the `BootstrapConfigService` gRPCs) using this stable DEV setup.**
 
 This approach will indeed give you much more control and understanding of the different environments and make subsequent development and testing much smoother. Let me know when you're ready to proceed after this, or if you want to dive into the specifics of your Test Resource Provider code now to extract those properties for `application-dev.yml`.
 
@@ -358,7 +344,7 @@ This section should reflect the failing tests and the environment hardening.
 3.  ** Engine-Managed Module Registration API**
     * **Status:** Update based on whether the controllers provided cover the REST APIs from Section VII. If `YappyModuleRegistrationServiceImpl.java` is the complete solution for module registration (i.e., no operator-triggered REST APIs needed), then Section VII might be closable or significantly refactored. If REST admin APIs for modules are still needed, their status should be individually assessed.
     * This is the next major feature for the "registration goal" based on clarified requirements.
-    * See **Section VII: Detailed Task for Jules AI** below.
+    * See **Section VII** below.
 
 4.  **Unit Test `DefaultPipeStreamEngineLogicImpl`:**
     * **Status:** Pending/In Progress.
@@ -472,7 +458,7 @@ void testKafkaAndGrpcFlow() {
 ```
 
 ---
-## VII. Detailed Task for Jules AI: Implement APIs for Engine-Managed Module Information & Registration Control
+## VII. Implement APIs for Engine-Managed Module Information & Registration Control
 
 This functionality might be partially covered by `GET /api/setup/clusters` in `AdminSetupController.java` if cluster details include module definitions. Alternatively, if a dedicated endpoint is still needed, its implementation status is TBD. The `DynamicConfigurationManagerImpl.java` holds `PipelineClusterConfig` which contains the `PipelineModuleMap`.
 
