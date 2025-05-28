@@ -56,7 +56,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Property(name = "testcontainers.consul.enabled", value = "true")
 // If your main app auto-registers with Consul, disable it for this specific test
 // to avoid interference with the YappyModuleRegistrationService's actions.
-@Property(name = "consul.client.registration.enabled", value = "false")
+@Property(name = "consul.client.registration.enabled", value = "true")
 class YappyModuleRegistrationServiceIT {
 
     private static final Logger LOG = LoggerFactory.getLogger(YappyModuleRegistrationServiceIT.class);
