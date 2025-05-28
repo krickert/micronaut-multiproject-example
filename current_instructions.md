@@ -269,14 +269,27 @@ The engine:
 
 ### Phase B.5: Expose Status and Configuration via API (Initial Focus on JSON/HTTP for UI)
 
-**Status Update:** The API endpoints listed below are candidates for Jules AI to implement next, focusing on leveraging existing backend services.
+**Status Update (May 28, 2025):** Implementation of several admin REST API endpoints is substantially complete, with controllers and DTOs developed. Corresponding tests (unit and integration-style) have also been created, though some are currently failing and require environment stabilization and debugging (see 'Current Focus'). These APIs leverage existing backend services like `EngineBootstrapManager`, `KafkaListenerManager`, `DynamicConfigurationManager`, and `ConsulBusinessOperationsService`.
+    
 1.  **Create REST Controllers in the Engine:**
     * `GET /api/status/engine`
-    * `GET /api/status/services` & `GET /api/status/services/{serviceName}` (depends on B.2)
+      * **Status:** Implemented in `AdminStatusController.java`. (Tests in `AdminStatusControllerTest.java` have `initializationError` - needs investigation).
+    * `GET /api/status/services` & `GET /api/status/services/{serviceName}`
+      * **Status:** `GET /api/status/services` implemented in `AdminStatusController.java`. Individual service status endpoint (`/{serviceName}`) status needs to be confirmed.
     * `GET /api/config/cluster` (calls DCM)
+      * **Status:** Appears to be covered by `AdminSetupController.java` (`GET /api/setup/clusters` and potentially `GET /api/setup/cluster/{clusterName}/config` if added). Review specific DCM calls.
     * `PUT /api/config/cluster` (calls DCM/ConsulBusinessOps to save, then relies on watch)
-    * Kafka Consumer Management APIs (Pause/Resume/Reset Offsets, List Statuses - calling `KafkaListenerManager`) (See Section VII Task 1)
-    * Module Management APIs (List configured, Get Status, Trigger Register/Deregister - calling DCM and `ConsulBusinessOperationsService` via a new `ModuleLifecycleManagerService`) (See Section VII Task 2)
+      * **Status:** Likely related to `AdminSetupController.java` `POST /api/setup/clusters` (for creation) and potentially needs a 
+      dedicated PUT for updates. Requires confirmation of DCM/ConsulBusinessOps integration for full update and watch cycle.
+
+   * **Kafka Consumer Management APIs** (Pause/Resume/Reset Offsets, List Statuses - calling `KafkaListenerManager`)
+       * **Status:**
+           * List Statuses: Implemented in `AdminKafkaController.java` (`GET /api/kafka/consumers/status`).
+           * Pause/Resume: Implemented in `AdminKafkaController.java` (`POST /api/kafka/consumers/pause`, `POST /api/kafka/consumers/resume`).
+           * (Reset Offsets: Status needs confirmation).
+       * (Tests in `AdminKafkaControllerTest.java` and `AdminKafkaControllerFirstTest.java` - `initializationError` noted in the latter).
+     * **Module Management APIs** (List configured, Get Status, Trigger Register/Deregister - calling DCM and `ConsulBusinessOperationsService` via a new `ModuleLifecycleManagerService`)
+       * **Status:** This is the area detailed in Section VII. The gRPC service `YappyModuleRegistrationServiceImpl.java` allows modules to register. The admin REST APIs for *operator-triggered* registration/deregistration from Section VII still need their implementation status confirmed against the provided controller code. (Are these covered by `AdminSetupController` or another controller I haven't seen yet, or are they still pending?)
 
 ### Phase B.6: Testing for Enhanced Operations
 
@@ -318,7 +331,17 @@ This unified plan should provide a clear roadmap, allowing for parallel work whe
 ---
 ## V. Current Focus & Next Development Tasks for Yappy Engine
 
-This section consolidates the immediate next steps.
+This section should reflect the failing tests and the environment hardening.
+* **New/Updated Task: Stabilize Test Environments and Resolve Failing Admin API Tests:**
+    * **Status:** Critical. Numerous tests for the newly implemented Admin REST APIs are failing.
+        * `AdminSetupControllerTest`: `testGetCurrentConsulConfiguration_ErrorReadingFile`
+        * `AdminSetupControllerFirstTest`: Multiple failures related to Consul/cluster operations (file handling, Consul interactions).
+        * `AdminKafkaControllerFirstTest`: `initializationError`.
+        * `AdminStatusControllerTest`: `initializationError`.
+    * **Action:**
+        * Investigate and resolve the root causes of these test failures. This likely involves "getting environments under control" by ensuring proper mock setups, Testcontainer configurations, bootstrap property handling in tests, and bean initializations for the test context.
+        * Verify interactions with `EngineBootstrapManager.java`, `ConsulBusinessOperationsService.java`, and `KafkaListenerManager`.
+    * **Goal:** Achieve green tests for all existing admin API controller tests to ensure reliability.
 
 1.  **Verify Apicurio Property in Running `KafkaListenerManager`:**
     * **Status:** Pending final verification in main application run.
@@ -332,7 +355,8 @@ This section consolidates the immediate next steps.
         * Test: Start Yappy Engine. Verify `KafkaListenerManager` creates a listener with correct Apicurio properties. Produce a Protobuf message. Verify consumption and processing by `DefaultPipeStreamEngineLogicImpl`.
     * **Goal:** Confirm dynamic Kafka listeners work end-to-end with Apicurio deserialization in the main application context.
 
-3.  **Implement Engine-Managed Module Registration (API & Logic - Task for Jules AI):**
+3.  ** Engine-Managed Module Registration API**
+    * **Status:** Update based on whether the controllers provided cover the REST APIs from Section VII. If `YappyModuleRegistrationServiceImpl.java` is the complete solution for module registration (i.e., no operator-triggered REST APIs needed), then Section VII might be closable or significantly refactored. If REST admin APIs for modules are still needed, their status should be individually assessed.
     * This is the next major feature for the "registration goal" based on clarified requirements.
     * See **Section VII: Detailed Task for Jules AI** below.
 
@@ -449,6 +473,8 @@ void testKafkaAndGrpcFlow() {
 
 ---
 ## VII. Detailed Task for Jules AI: Implement APIs for Engine-Managed Module Information & Registration Control
+
+This functionality might be partially covered by `GET /api/setup/clusters` in `AdminSetupController.java` if cluster details include module definitions. Alternatively, if a dedicated endpoint is still needed, its implementation status is TBD. The `DynamicConfigurationManagerImpl.java` holds `PipelineClusterConfig` which contains the `PipelineModuleMap`.
 
 **Background:**
 The Yappy Engine is now responsible for registering its paired/managed modules with Consul. Modules themselves are passive and do not self-register. We need API endpoints on the Yappy Engine to:
