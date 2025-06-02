@@ -1,8 +1,11 @@
 package com.krickert.search.pipeline.module;
 
 import com.krickert.search.sdk.PipeStepProcessorGrpc;
-import com.krickert.search.sdk.TestRequest;
-import com.krickert.search.sdk.TestResponse;
+import com.krickert.search.sdk.ProcessRequest;
+import com.krickert.search.sdk.ProcessResponse;
+import com.krickert.search.model.PipeDoc;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
 import io.grpc.StatusRuntimeException;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.context.annotation.Requires;
@@ -65,7 +68,7 @@ public class ModuleHealthMonitor {
                                     moduleName, error.getMessage());
                             return Mono.just(HealthCheckResult.failed(moduleName, error.getMessage()));
                         }))
-                .subscribeOn(Schedulers.elastic())
+                .subscribeOn(Schedulers.boundedElastic())
                 .subscribe();
         
         monitoringSubscriptions.put(moduleName, subscription);
@@ -109,29 +112,34 @@ public class ModuleHealthMonitor {
                 PipeStepProcessorGrpc.PipeStepProcessorStub stub = moduleInfo.stub();
                 Instant startTime = Instant.now();
                 
-                TestRequest request = TestRequest.newBuilder()
-                        .putAdditionalTests("health_check", "true")
-                        .build();
-                
-                stub.testMode(request, new io.grpc.stub.StreamObserver<TestResponse>() {
+                // Use the new CheckHealth RPC
+                stub.checkHealth(com.google.protobuf.Empty.getDefaultInstance(), 
+                        new io.grpc.stub.StreamObserver<com.krickert.search.sdk.HealthCheckResponse>() {
                     @Override
-                    public void onNext(TestResponse response) {
+                    public void onNext(com.krickert.search.sdk.HealthCheckResponse response) {
                         Duration responseTime = Duration.between(startTime, Instant.now());
                         
-                        if (response.getSuccess()) {
+                        if (response.getHealthy()) {
                             sink.success(HealthCheckResult.healthy(
                                     moduleInfo.serviceName(), 
                                     responseTime.toMillis()
                             ));
                         } else {
-                            String error = response.getTestResultsOrDefault("error", "Unknown error");
+                            String error = response.getMessage() != null && !response.getMessage().isEmpty() ? 
+                                    response.getMessage() : "Module unhealthy";
                             sink.success(HealthCheckResult.failed(moduleInfo.serviceName(), error));
                         }
                     }
                     
                     @Override
                     public void onError(Throwable t) {
-                        sink.error(t);
+                        // If CheckHealth is not implemented, fall back to ProcessData health check
+                        if (t instanceof io.grpc.StatusRuntimeException && 
+                            ((io.grpc.StatusRuntimeException) t).getStatus().getCode() == io.grpc.Status.Code.UNIMPLEMENTED) {
+                            performFallbackHealthCheck(moduleInfo, startTime, sink);
+                        } else {
+                            sink.error(t);
+                        }
                     }
                     
                     @Override
@@ -143,6 +151,59 @@ public class ModuleHealthMonitor {
                 sink.error(e);
             }
         });
+    }
+    
+    private void performFallbackHealthCheck(ModuleDiscoveryService.ModuleInfo moduleInfo, 
+                                           Instant startTime, 
+                                           reactor.core.publisher.MonoSink<HealthCheckResult> sink) {
+        // Fallback to using ProcessData for health check if CheckHealth is not implemented
+        try {
+            PipeDoc healthCheckDoc = PipeDoc.newBuilder()
+                    .setId("health-check-" + System.currentTimeMillis())
+                    .setBody("HEALTH_CHECK")
+                    .build();
+            
+            Struct.Builder configBuilder = Struct.newBuilder();
+            configBuilder.putFields("health_check", Value.newBuilder().setBoolValue(true).build());
+            
+            ProcessRequest request = ProcessRequest.newBuilder()
+                    .setDocument(healthCheckDoc)
+                    .setConfig(com.krickert.search.sdk.ProcessConfiguration.newBuilder()
+                            .setCustomJsonConfig(configBuilder.build())
+                            .build())
+                    .build();
+            
+            moduleInfo.stub().processData(request, new io.grpc.stub.StreamObserver<ProcessResponse>() {
+                @Override
+                public void onNext(ProcessResponse response) {
+                    Duration responseTime = Duration.between(startTime, Instant.now());
+                    
+                    if (response.getSuccess()) {
+                        sink.success(
+                                HealthCheckResult.healthy(moduleInfo.serviceName(), responseTime.toMillis())
+                        );
+                    } else {
+                        String error = response.hasErrorDetails() ? 
+                                response.getErrorDetails().toString() : "Unknown error";
+                        sink.success(
+                                HealthCheckResult.failed(moduleInfo.serviceName(), error)
+                        );
+                    }
+                }
+                
+                @Override
+                public void onError(Throwable t) {
+                    sink.error(t);
+                }
+                
+                @Override
+                public void onCompleted() {
+                    // Already handled in onNext
+                }
+            });
+        } catch (Exception e) {
+            sink.error(e);
+        }
     }
     
     private void handleHealthCheckResult(HealthCheckResult result) {

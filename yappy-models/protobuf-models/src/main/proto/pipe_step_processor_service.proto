@@ -20,6 +20,25 @@ service PipeStepProcessor {
   rpc ProcessData(ProcessRequest) returns (ProcessResponse);
 
   rpc GetServiceRegistration (google.protobuf.Empty) returns (ServiceMetadata);
+  
+  // Health check for the module - returns basic health status
+  // This is a simplified health check specific to PipeStepProcessor
+  rpc CheckHealth(google.protobuf.Empty) returns (HealthCheckResponse);
+}
+
+// Health check response for modules
+message HealthCheckResponse {
+  // Whether the module is healthy
+  bool healthy = 1;
+  
+  // Optional status message
+  string message = 2;
+  
+  // Module version
+  string version = 3;
+  
+  // Optional additional health details
+  map<string, string> details = 4;
 }
 
 message ServiceRegistrationData {

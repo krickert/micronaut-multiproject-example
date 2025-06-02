@@ -165,11 +165,15 @@ class ModuleDiscoveryWithSchemaIT {
         Server invalidSchemaServer = null;
         try {
             int port = serverPort + 1;
-            invalidSchemaServer = ServerBuilder
-                    .forPort(port)
-                    .addService(new ModuleWithInvalidSchema())
-                    .build()
-                    .start();
+            try {
+                invalidSchemaServer = ServerBuilder
+                        .forPort(port)
+                        .addService(new ModuleWithInvalidSchema())
+                        .build()
+                        .start();
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to start test server", e);
+            }
             
             ManagedChannel channel = io.grpc.ManagedChannelBuilder
                     .forAddress("localhost", port)

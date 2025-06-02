@@ -218,8 +218,13 @@ class ModuleFailoverIT {
         ModuleDiscoveryService.ModuleInfo info = moduleDiscoveryService.getModuleInfo(serviceName);
         assertNotNull(info);
         
+        var testDoc = com.krickert.search.model.PipeDoc.newBuilder()
+                .setId("test-" + System.currentTimeMillis())
+                .setBody("Test content")
+                .build();
+        
         ProcessRequest request = ProcessRequest.newBuilder()
-                .setContent("Test content")
+                .setDocument(testDoc)
                 .build();
         
         // This should fail on first instance and trigger failover
@@ -379,18 +384,20 @@ class ModuleFailoverIT {
         }
         
         @Override
-        public void testMode(TestRequest request,
-                StreamObserver<TestResponse> responseObserver) {
+        public void checkHealth(com.google.protobuf.Empty request,
+                StreamObserver<com.krickert.search.sdk.HealthCheckResponse> responseObserver) {
             if (!healthy.get()) {
                 responseObserver.onError(new StatusRuntimeException(
                         io.grpc.Status.UNAVAILABLE.withDescription("Health check failed")));
                 return;
             }
             
-            TestResponse response = TestResponse.newBuilder()
-                    .setSuccess(true)
-                    .putTestResults("instance", instanceId)
-                    .putTestResults("status", "healthy")
+            var response = com.krickert.search.sdk.HealthCheckResponse.newBuilder()
+                    .setHealthy(true)
+                    .setMessage("Module is healthy")
+                    .setVersion("1.0.0")
+                    .putDetails("instance", instanceId)
+                    .putDetails("status", "healthy")
                     .build();
             responseObserver.onNext(response);
             responseObserver.onCompleted();
