@@ -34,3 +34,14 @@ micronaut:
       openapi-explorer:
         paths: classpath:META-INF/swagger/views/openapi-explorer
         mapping: /openapi-explorer/**
+
+# Yappy Module Discovery Configuration
+yappy:
+  module:
+    discovery:
+      enabled: true
+      interval: 30s
+    health-check:
+      timeout: 5s
+    test:
+      enabled: true

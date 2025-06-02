@@ -140,6 +140,7 @@ dependencies {
     implementation("com.networknt:json-schema-validator:1.5.6")
     implementation("org.jgrapht:jgrapht-core:1.5.2")
     implementation("io.apicurio:apicurio-registry-protobuf-serde-kafka:3.0.6")
+    implementation("info.picocli:picocli:4.7.6")
 
     // AWS Dependencies
     api(mn.micronaut.aws.sdk.v2)
@@ -165,6 +166,7 @@ dependencies {
     testImplementation(mn.micronaut.http.client.core)
     testImplementation(mn.micronaut.grpc.client.runtime)
     testImplementation("org.awaitility:awaitility:4.3.0")
+    testImplementation("io.grpc:grpc-testing:1.72.0")
 }
 
 // Custom task for running in DEV mode without test resources
