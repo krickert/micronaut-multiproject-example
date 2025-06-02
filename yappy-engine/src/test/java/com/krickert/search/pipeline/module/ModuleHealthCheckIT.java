@@ -197,16 +197,21 @@ class ModuleHealthCheckIT {
     @Test
     @Order(6)
     void testHealthCheckWithConnectionFailure() {
-        // Deregister the module to simulate connection failure
-        testHelper.markServiceUnhealthy(registeredModule.getServiceId());
+        // To simulate a true connection failure, we need to shutdown the gRPC server
+        // First, get the current server and shut it down
+        testHelper.shutdownServer("health-check-module");
         
-        // Health check should handle gracefully
+        // Health check should handle the connection failure gracefully
         StepVerifier.create(moduleHealthMonitor.checkModuleHealth("health-check-module"))
-                .expectNextMatches(health -> !health.isHealthy())
+                .expectNextMatches(health -> {
+                    log.info("Health check result after server shutdown: healthy={}, error={}", 
+                            health.isHealthy(), health.getError());
+                    return !health.isHealthy() && health.getError() != null;
+                })
                 .verifyComplete();
         
-        // Re-register as healthy
-        testHelper.markServiceHealthy(registeredModule.getServiceId());
+        // Since we shutdown the server, we can't easily restart it for this test
+        // This test demonstrates handling connection failures, which is the intent
     }
     
     /**

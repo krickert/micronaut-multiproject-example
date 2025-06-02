@@ -209,6 +209,25 @@ public class ModuleTestHelper {
         }
     }
     
+    /**
+     * Shutdown a specific gRPC server by service name
+     */
+    public void shutdownServer(String serviceName) {
+        Server server = grpcServers.get(serviceName);
+        if (server != null) {
+            try {
+                server.shutdown();
+                server.awaitTermination(5, TimeUnit.SECONDS);
+                grpcServers.remove(serviceName);
+                log.info("Shut down gRPC server: {}", serviceName);
+            } catch (Exception e) {
+                log.warn("Failed to shutdown gRPC server {}: {}", serviceName, e.getMessage());
+            }
+        } else {
+            log.warn("No gRPC server found for service: {}", serviceName);
+        }
+    }
+    
     public static class RegisteredModule {
         private final String serviceName;
         private final String serviceId;
