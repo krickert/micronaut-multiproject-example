@@ -1,0 +1,5 @@
+grpcio==1.65.1
+grpcio-tools==1.65.1
+protobuf==5.27.2
+consul-py==1.1.0
+pyyaml==6.0.1

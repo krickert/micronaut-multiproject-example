@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  text-analyzer:
+    build: .
+    ports:
+      - "50051:50051"
+    environment:
+      - GRPC_PORT=50051
+      - CONSUL_ENABLED=true
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+    networks:
+      - yappy-network
+    depends_on:
+      - consul
+
+  consul:
+    image: consul:latest
+    ports:
+      - "8500:8500"
+      - "8600:8600/udp"
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+    networks:
+      - yappy-network
+    command: agent -dev -ui -client=0.0.0.0
+
+networks:
+  yappy-network:
+    driver: bridge
