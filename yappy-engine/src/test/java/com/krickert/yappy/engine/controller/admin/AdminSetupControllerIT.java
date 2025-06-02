@@ -325,12 +325,13 @@ class AdminSetupControllerIT {
     }
 
     @Test
-    @DisplayName("POST /cluster/select - Updates bootstrap file successfully")
+    @DisplayName("POST /cluster/select - Test with DTO object")
     void testSelectActiveYappyCluster_success() throws IOException {
-        SelectClusterRequest request = new SelectClusterRequest();
-        request.setClusterName("new-active-cluster");
-
-        HttpRequest<SelectClusterRequest> httpRequest = HttpRequest.POST("/api/setup/cluster/select", request);
+        // Create a properly constructed DTO object
+        SelectClusterRequest request = new SelectClusterRequest("new-active-cluster");
+        
+        HttpRequest<SelectClusterRequest> httpRequest = HttpRequest.POST("/api/setup/cluster/select", request)
+            .contentType(MediaType.APPLICATION_JSON);
         
         try {
             Mono<SelectClusterResponse> responseMono = Mono.from(client.retrieve(httpRequest, SelectClusterResponse.class));
@@ -345,8 +346,20 @@ class AdminSetupControllerIT {
             props.load(Files.newInputStream(testBootstrapPath));
             assertEquals("new-active-cluster", props.getProperty("yappy.bootstrap.cluster.selected_name"));
         } catch (HttpClientResponseException e) {
-            System.err.println("Select cluster error - Status: " + e.getStatus());
-            System.err.println("Select cluster error - Body: " + e.getResponse().body());
+            System.err.println("POST error - Status: " + e.getStatus());
+            System.err.println("POST error - Body: " + e.getResponse().body());
+            System.err.println("POST error - Message: " + e.getMessage());
+            
+            // Try calling the controller method directly to verify it works
+            SelectClusterRequest directRequest = new SelectClusterRequest("new-active-cluster");
+            Mono<SelectClusterResponse> directResponseMono = adminSetupController.selectActiveYappyCluster(directRequest);
+            SelectClusterResponse directResponse = directResponseMono.block();
+            
+            if (directResponse != null && directResponse.isSuccess()) {
+                System.out.println("Direct controller call worked: " + directResponse.getMessage());
+                fail("Controller method works but HTTP endpoint fails - possible routing/serialization issue");
+            }
+            
             throw e;
         }
     }
