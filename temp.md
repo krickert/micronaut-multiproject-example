@@ -1,30 +1,46 @@
+# Summary of Mermaid Diagrams Added to current_instructions.md
 
+I've successfully added 5 Mermaid diagrams to visualize the YAPPY Engine architecture and flows:
 
-### 3. Update Section VII: Detailed Task for Jules AI
+## 1. Deployment Architecture Diagram (Line 135)
+- Shows how Engine+Module pairs are deployed in containers/pods
+- Illustrates the infrastructure services (Consul, Kafka, Schema Registry)
+- Demonstrates that modules have no direct access to infrastructure
+- Shows engine-to-engine proxying connections
 
-This section needs the most significant update based on the admin controllers you've now implemented.
+## 2. Bootstrap Flow Diagram (Line 239)
+- Illustrates the engine startup and configuration loading process
+- Shows the sequence from main application through bootstrap manager
+- Demonstrates configuration seeding and loading from Consul
+- Shows event-driven initialization of components
 
-* **If the `AdminSetupController`, `AdminKafkaController`, `AdminStatusController` cover most of what was intended for "Jules AI" regarding general admin APIs, then:**
-    * The introduction to Section VII should be revised. It was focused on "Engine-Managed Module Information & Registration Control."
-    * We need to assess which of the four specific API endpoints listed in Section VII are:
-        1.  Covered by the existing new controllers (e.g., parts of `AdminSetupController.java` might relate to listing module *definitions* if they are part of the cluster config it handles).
-        2.  Still pending.
-        3.  No longer needed or are handled differently (e.g., by the gRPC service `YappyModuleRegistrationServiceImpl.java`).
+## 3. Request Processing Flow Diagram (Line 331)
+- Shows the normal flow when everything is healthy
+- Illustrates how external systems use ConnectorEngine as entry point
+- Demonstrates the orchestration through PipeStreamEngine
+- Shows both Kafka and gRPC routing options
 
-**Example: Revising Section VII API Endpoints**
+## 4. Module Discovery Flow Diagram (Line 440)
+- Shows how engines discover modules through Consul
+- Demonstrates localhost-first priority logic
+- Illustrates channel creation and caching
+- Notes where engine-to-engine proxying would be triggered
 
-Let's take the first API from the original Section VII:
+## 5. Engine-to-Engine Proxying Flow Diagram (Line 498)
+- Illustrates what happens when a local module is down
+- Shows how engines discover other engines with the required module
+- Demonstrates the forwarding of entire requests between engines
+- Shows status updates to reflect proxying state
 
-1.  **List Configured Modules:**
-    * **Endpoint:** `GET /api/admin/modules/definitions`
-    * **Original Task:** "Get `PipelineModuleMap` from DCM..."
-    * **New Status (Suggestion):** "This functionality might be partially covered by `GET /api/setup/clusters` in `AdminSetupController.java` if cluster details include module definitions. Alternatively, if a dedicated endpoint is still needed, its implementation status is TBD. The `DynamicConfigurationManagerImpl.java` holds `PipelineClusterConfig` which contains the `PipelineModuleMap`."
+All diagrams use consistent styling:
+- Engines: Blue (#4a90e2)
+- Modules: Teal (#50e3c2)
+- Infrastructure: Orange (#f5a623)
+- External Systems: Pink (#f9f)
 
-We would go through each of the four API endpoints in Section VII like this.
-
-## What's Needed (Next Steps Section in `current_instructions.md`)
-
-This section should flow from the "Current Focus" and also include broader goals.
-
-**Suggested Points for "What's Needed / Next Steps":**
-This is a starting point. You can tell me which parts you'd like to refine or if you want to focus on a specific section of `current_instructions.md` first. The information about the failing tests is particularly important for defining the immediate next steps.
+The diagrams effectively visualize the key architectural concepts:
+- Modules never touch Consul
+- Engines handle all orchestration
+- Engine-to-engine forwarding for resilience
+- Localhost-first processing
+- Configuration flows from Consul through engines

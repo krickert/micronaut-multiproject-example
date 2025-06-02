@@ -1,131 +1,80 @@
 # YAPPY Engine: Comprehensive Development and Integration Plan
 
----
-
-# SESSION START
-
-## Session Section
-
-1.  **True DEV Isolation:**
-    * Your `application-dev.yml` (or a similar profile-specific configuration for DEV) should explicitly define all necessary external service connections (Consul, Kafka, Apicurio, etc.) to point to your *local, developer-controlled instances* (e.g., those run by your `docker-compose.yml`).
-    * When running in this "true DEV" mode, `micronaut.test.resources.enabled` should indeed be `false`. This ensures you're not accidentally relying on Testcontainers for services you expect to be running locally. This makes your DEV environment predictable and mirrors a deployed environment more closely (where Test Resources won't be present).
-
-2.  **"Clear-Out Settings" Mini-App/Script:**
-    * This is invaluable. For local development and for certain types of tests, you want to ensure a known starting state. This utility could:
-        * Delete `~/.yappy/engine-bootstrap.properties`.
-        * Clear specific keys or prefixes in your local Consul (e.g., `yappy/config/clusters/your-dev-cluster`, `yappy/services/`, `yappy/schemas/`).
-        * Potentially clear relevant Kafka topics (if your tests require them to be empty).
-    * This ensures that when you test the "first-run" or "Setup Mode" experience, it's genuinely the first run.
-
-3.  **Path to Shared Test Resources Server:**
-    * Right now the testresources is NOT a shared server, but we would like to get it to that point, this is a necessary step to get there."
-    * To effectively use a *shared* Micronaut Test Resources server (where multiple developers or CI jobs might connect), each test run or application instance connecting to it needs to be able to operate in its own isolated namespace within those shared services.
-    * This often involves:
-        * Using unique prefixes for Consul keys based on a test ID or session.
-        * Using unique Kafka topic names or consumer group IDs.
-        * The "clear-out" logic becomes even more critical if namespaces aren't perfectly isolated, or for cleaning up after a test run against a shared server.
-    * Having a well-defined `application-dev.yml` that *doesn't* rely on test resources helps you understand what properties *must* be dynamically provided *by* a Test Resources server (shared or not) when it *is* used.
-
-4.  **Defining a True "Integration" Environment:**
-    * This effort helps delineate:
-        * **Local DEV:** You manage services, full control, `micronaut.test.resources.enabled=false`.
-        * **`@MicronautTest` with Local Test Resources:** Test Resources starts fresh Docker containers for each test class (or suite if configured for reuse). This is what you have now. Properties are injected by the Test Resources client.
-        * **`@MicronautTest` with Shared Test Resources Server:** Your tests connect to a remote, already running Test Resources server, which manages a pool of shared Docker containers. Properties are resolved from this remote server. This requires careful namespacing.
-        * **Deployed Non-Prod Environments (e.g., Staging):** These would have their own persistent Consul, Kafka, etc., and specific `application-{env}.yml` files.
-
-**Next Steps:**
-
-1.  **Create `src/main/resources/application-dev.yml` (if it doesn't exist or is incomplete in `yappy-engine`):**
-    * Manually list out all the properties that your Test Resources providers (`ConsulTestResourceProvider`, `KafkaTestResourceProvider`, etc.) currently inject into your `@MicronautTest` runs.
-    * For example, in `application-dev.yml`:
-        ```yaml
-        micronaut:
-          application:
-            name: yappy-engine-dev
-          config-client:
-            enabled: false # Start with this false for initial bootstrap testing
-        consul:
-          client:
-            host: ${CONSUL_HOST:localhost} # Allow override by env var, default to localhost
-            port: ${CONSUL_PORT:8500}
-            registration:
-              enabled: false # Engine will manage its own registration logic after bootstrap
-            enabled: false # Start with this false for initial bootstrap testing
-        kafka:
-          bootstrap:
-            servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-          # ... other essential Kafka client/producer/consumer defaults for DEV ...
-        apicurio:
-          registry:
-            url: ${APICURIO_URL:http://localhost:8081/apis/registry/v2} # or your Apicurio port
-            # ... other Apicurio settings ...
-        # Default gRPC and HTTP ports for the engine itself in DEV
-        grpc:
-          server:
-            port: 50051 # Or whatever you prefer for DEV
-        micronaut:
-          server:
-            port: 8666 # Or your preferred HTTP port for DEV
-        # ... any other configurations your engine or its sub-components need ...
-        ```
-    * The goal is that when you run `YappyEngineApplication.main()` with the `dev` profile active (usually default if no other profile is specified and `application-dev.yml` exists) AND `-Dmicronaut.test.resources.enabled=false`, your application uses *these* explicit settings.
-2.  **Environment Hardening:**
-    * Formalize DEV environment setup using `application-dev.yml` and local services (Docker Compose).
-    * Ensure Testcontainers are used effectively and consistently for integration tests, and that test profiles correctly isolate test runs.
-    * Review and standardize the management of bootstrap properties (`~/.yappy/engine-bootstrap.properties`) across application run modes and test scenarios. The `EngineBootstrapManagerTest.java` and `AdminSetupControllerFirstTest.java` failures suggest this area needs attention.
-3.  **Complete Implementation of Admin APIs:**
-    * Based on the review of Section VII, identify and implement any remaining admin API endpoints for module management if they are still required and not covered.
-    * Ensure all admin APIs have comprehensive OpenAPI documentation.
-4.  **End-to-End Testing of Core Engine Features:**
-    * (As per original plan) Dynamic Kafka Listener functionality with actual message processing.
-    * Engine-Managed Module Registration (if applicable, including interaction between gRPC service and any admin REST APIs).
-5.  **Continue with Part B items from `current_instructions.md`:**
-    * B.1: Finalize and verify `ServiceOperationalStatus.java` and `ServiceAggregatedStatus.java` usage.
-    * B.2: Implement and test the engine logic for status aggregation and Consul KV updates for `ServiceAggregatedStatus`.
-    * B.3 & B.4: Progress on engine-managed module lifecycle (beyond initial registration if handled by gRPC) and health check integration.
-
-6. **Develop the "Clear-Out Settings" Utility:**
-    * This could be a separate Java main application, a shell script, or even a set of Gradle tasks.
-    * It would use the Consul client library (like `kiwiproject/consul-client`) to delete keys.
-    * It would use Kafka admin client to delete topics (if needed).
-    * It would delete the `~/.yappy/engine-bootstrap.properties` file.
-
-**Sharing TestResources Code:**
-
-Right now the test resources are all different per test.  It is far more effective to clear out settings per test as well as create 
-different clusters and reseed per test run.
-
-Create the `application-dev.yml` by understanding what `ConsulTestResourceProvider`, `KafkaTestResourceProvider`, etc., actually 
-provide:
-
-* **Review Providers:** Look at your custom providers (e.g., `ConsulTestResourceProvider.java`, `KafkaTestResourceProvider.java`). The `getProperties()` or similar methods in these providers will show  the exact map of properties they return to the Micronaut application context during tests. These are the keys you'll want to define in your `application-dev.yml`.
-* Look at the properties defined by the official Micronaut Test Resources modules if you are using them directly or as inspiration.
-
-**Plan Forward:**
-
-1.  **You focus on:**
-    * Creating/refining `yappy-engine/src/main/resources/application-dev.yml` with explicit configurations for all external services (Consul, Kafka, Apicurio, gRPC ports, etc.), using your local `docker-compose.yml` services as the target.
-      * Developing the "clear-out settings" utility.
-2.  **Test it:**
-    * Run `YappyEngineApplication.main()` from your IDE with `-Dmicronaut.test.resources.enabled=false` (and ensure `dev` profile is active or `application-dev.yml` is used).
-    * Use your clear-out utility.
-    * Verify the "Setup Mode" of `EngineBootstrapManager` by deleting `~/.yappy/engine-bootstrap.properties`. The logs should be clean of Test Resources intervention and show the engine trying to use only what `EngineBootstrapManager` or `application-dev.yml` provides (or doesn't provide, in the case of the bootstrap file).
-
-**Once the "clean DEV run" is working the Setup Mode, one can confidently pick up Task 1.1 (verifying normal mode with a local bootstrap 
-file) and then Task 1.2 (testing the `BootstrapConfigService` gRPCs) using this stable DEV setup.**
-
-This approach will indeed give you much more control and understanding of the different environments and make subsequent development and testing much smoother. Let me know when you're ready to proceed after this, or if you want to dive into the specifics of your Test Resource Provider code now to extract those properties for `application-dev.yml`.
-
-# SESSION END
-
----
-
-
 ## I. Foundational Principle: User-Centric Design & Operational Excellence
 
 This plan aims to create a YAPPY Engine that is not only powerful and flexible but also easy to set up, configure, monitor, and manage. We prioritize a smooth initial bootstrapping experience which then enables more advanced operational capabilities like detailed status reporting, robust service lifecycle management, and comprehensive health checking.
 
-**Architectural Note:** The Yappy Engine operates with a clear distinction between the Engine itself and the Modules it manages. Modules are language-agnostic and do not have awareness of Consul or the Engine's registration mechanisms. The Engine is responsible for all Consul registrations on behalf of the modules it is configured to manage.
+**Architectural Note:** The Yappy Engine operates as a distributed system where each deployment unit consists of an Engine instance co-located with a Module instance (e.g., same container/pod). This creates a mesh of engine+module pairs across the cluster. Key principles:
+* **Deployment Pattern:** Each container/pod runs ONE Engine instance + ONE Module instance together
+* **Module Simplicity:** Modules are vanilla gRPC services with NO awareness of Consul, engines, or orchestration
+* **Engine Responsibilities:** ONLY engines interact with Consul - they handle all service discovery, registration, and configuration management
+* **Engine-to-Engine Mesh:** When an engine's local module is unavailable, it forwards requests to another engine (not directly to modules)
+* **Typical Deployment:** Multiple engine+module containers are deployed, each potentially with different module types (e.g., Container 1: Engine A + Chunker Module, Container 2: Engine B + Echo Module, etc.)
+
+### Deployment Architecture Diagram
+
+The following diagram illustrates how Engine+Module pairs are deployed across a cluster:
+
+```mermaid
+graph TB
+    subgraph "Container/Pod 1"
+        E1[Engine A]
+        M1[Chunker Module]
+        E1 -.->|localhost:50052| M1
+    end
+    
+    subgraph "Container/Pod 2"
+        E2[Engine B]
+        M2[Echo Module]
+        E2 -.->|localhost:50052| M2
+    end
+    
+    subgraph "Container/Pod 3"
+        E3[Engine C]
+        M3[Chunker Module]
+        E3 -.->|localhost:50052| M3
+    end
+    
+    subgraph "Infrastructure Services"
+        C[Consul]
+        K[Kafka]
+        SR[Schema Registry]
+    end
+    
+    E1 -->|Register/Discover| C
+    E2 -->|Register/Discover| C
+    E3 -->|Register/Discover| C
+    
+    E1 <-->|Engine-to-Engine<br/>Proxying| E2
+    E2 <-->|Engine-to-Engine<br/>Proxying| E3
+    E1 <-->|Engine-to-Engine<br/>Proxying| E3
+    
+    E1 --> K
+    E2 --> K
+    E3 --> K
+    
+    E1 --> SR
+    E2 --> SR
+    E3 --> SR
+    
+    M1 -.->|No Direct Access| C
+    M2 -.->|No Direct Access| C
+    M3 -.->|No Direct Access| C
+    
+    classDef engine fill:#4a90e2,stroke:#357abd,color:#fff
+    classDef module fill:#50e3c2,stroke:#36b39a,color:#fff
+    classDef infra fill:#f5a623,stroke:#d4881c,color:#fff
+    
+    class E1,E2,E3 engine
+    class M1,M2,M3 module
+    class C,K,SR infra
+```
+
+This diagram shows:
+- Each container/pod contains one Engine and one Module
+- Engines communicate with infrastructure services (Consul, Kafka, Schema Registry)
+- Modules have no direct access to infrastructure services
+- Engines can proxy requests to other engines when needed
 
 ## II. Part A: Initial Engine Bootstrapping & Cluster Association
 
@@ -166,6 +115,69 @@ The engine:
 * `DefaultConfigurationSeeder` runs at startup to ensure that this default/active cluster has at least a minimal valid `PipelineClusterConfig` present in Consul if one doesn't already exist.
 * The `BootstrapConfigService` gRPC interface allows for listing other clusters present in Consul, selecting a different cluster (by updating `engine-bootstrap.properties`, which would then influence `app.config.cluster-name` on next effective load), and creating new clusters (which seeds a minimal config via `ConsulBusinessOperationsService`).
 
+### Bootstrap Flow Diagram
+
+The following diagram shows the engine startup and configuration loading process:
+
+```mermaid
+sequenceDiagram
+    participant Main as YappyEngineApplication
+    participant EBM as EngineBootstrapManager
+    participant DCM as DynamicConfigurationManager
+    participant DCS as DefaultConfigurationSeeder
+    participant CBOS as ConsulBusinessOperationsService
+    participant Consul as Consul
+    participant KLM as KafkaListenerManager
+    
+    Main->>EBM: Initialize
+    EBM->>EBM: Check ~/.yappy/engine-bootstrap.properties
+    
+    alt Bootstrap file exists
+        EBM->>EBM: Load properties
+        EBM->>Main: Properties loaded
+    else Bootstrap file missing
+        EBM->>EBM: Log "Setup Mode"
+        EBM->>Main: Continue with defaults
+    end
+    
+    Main->>DCM: Initialize
+    DCM->>CBOS: Initialize Consul connection
+    CBOS->>Consul: Connect
+    Consul-->>CBOS: Connected
+    
+    Main->>DCS: Seed default configuration
+    DCS->>DCM: Get effective cluster name
+    DCM-->>DCS: Return cluster name
+    DCS->>CBOS: Check if config exists
+    CBOS->>Consul: Query config
+    
+    alt Config missing
+        DCS->>CBOS: Create minimal PipelineClusterConfig
+        CBOS->>Consul: Write config
+        Consul-->>CBOS: Saved
+    end
+    
+    DCM->>CBOS: Load PipelineClusterConfig
+    CBOS->>Consul: Get config
+    Consul-->>CBOS: Return config
+    CBOS-->>DCM: Return config
+    
+    DCM->>DCM: Start config watch
+    DCM->>Consul: Watch for changes
+    
+    DCM-->>KLM: Publish ConfigurationUpdateEvent
+    KLM->>KLM: Process configuration
+    KLM->>KLM: Start Kafka listeners
+    
+    Note over Main: Engine ready for operation
+```
+
+This diagram illustrates:
+- The bootstrap process checking for existing configuration
+- Default configuration seeding if needed
+- Configuration loading from Consul
+- Event-driven initialization of components like KafkaListenerManager
+
 1.  **Cluster Choice Time & Management: API**
     * **Status:** `BootstrapConfigService` (gRPC) provides:
         * `ListAvailableClusters`
@@ -195,6 +207,75 @@ The engine:
 
 *(This part assumes the engine has successfully completed Part A and is operating with a loaded Yappy cluster configuration)*
 
+### Request Processing Flow Diagram
+
+The following diagram shows the normal flow when everything is healthy:
+
+```mermaid
+flowchart TD
+    subgraph "External System"
+        ES[External System]
+    end
+    
+    subgraph "Engine Container"
+        CE[ConnectorEngine Service]
+        PSE[PipeStreamEngine]
+        PSEB[PipeStreamEngineLogic]
+        PSB[PipeStreamStateBuilder]
+        GCM[GrpcChannelManager]
+        KF[KafkaForwarder]
+        DCM[DynamicConfigManager]
+    end
+    
+    subgraph "Local Module"
+        LM[Module gRPC Service]
+    end
+    
+    subgraph "Infrastructure"
+        Kafka[Kafka]
+        Consul[Consul]
+    end
+    
+    ES -->|ConnectorRequest| CE
+    CE -->|Create PipeStream| PSE
+    PSE -->|Process| PSEB
+    
+    PSEB -->|Get Config| DCM
+    DCM -.->|Read Config| Consul
+    
+    PSEB -->|Execute Step| GCM
+    GCM -->|gRPC Call| LM
+    LM -->|Response| GCM
+    GCM -->|ProcessResponse| PSEB
+    
+    PSEB -->|Calculate Routes| PSB
+    PSB -->|Get Step Config| DCM
+    
+    PSB -->|Route Data| PSEB
+    
+    PSEB -->|Kafka Route| KF
+    KF -->|Publish| Kafka
+    
+    PSEB -->|gRPC Route| GCM
+    
+    PSEB -->|Final Response| PSE
+    PSE -->|ConnectorResponse| CE
+    CE -->|Response| ES
+    
+    style ES fill:#f9f,stroke:#333,stroke-width:2px
+    style LM fill:#50e3c2,stroke:#36b39a,color:#fff
+    style Kafka fill:#f5a623,stroke:#d4881c,color:#fff
+    style Consul fill:#f5a623,stroke:#d4881c,color:#fff
+```
+
+This diagram illustrates:
+- External systems use ConnectorEngine as entry point
+- PipeStreamEngine orchestrates the processing
+- Configuration is loaded from Consul via DynamicConfigManager
+- Local modules are called via GrpcChannelManager
+- Results can be routed via Kafka or gRPC based on configuration
+- The entire flow is asynchronous and event-driven
+
 ### Phase B.1: Define Core Status Models & Schema
 
 1.  **`ServiceOperationalStatus.java` (Enum):**
@@ -222,23 +303,127 @@ The engine:
 1.  **Implement "Bootstrap Cluster" Refinement (Engine Self-Healing for Empty Config):**
     * **Status:** This is effectively handled by `DefaultConfigurationSeeder`.
 
-2.  **Implement Engine-Managed Module Registration:**
-    * **Clarified Requirement:** Modules DO NOT self-register. The Yappy Engine is SOLELY responsible for registering its paired/configured module with Consul. An Engine instance is "tied" to a specific module type it's configured to manage.
-    * **Engine's Role:**
-        * The Engine knows which module `implementationId` it's responsible for (from its own configuration or the `PipelineClusterConfig.pipelineModuleMap` if the engine manages multiple *types* which seems less likely given "tied to only one module").
-        * The Engine polls a configured `host:port` for its paired module's health/availability.
-        * Once the module is "seen" and validated (config digest, schema checks etc. by the Engine), the Engine constructs a Consul `Registration` object and calls `ConsulBusinessOperationsService.registerService()`.
-        * The Engine will also handle deregistration via `ConsulBusinessOperationsService.deregisterService()` when it determines its paired module should be stopped or is gone.
-    * **Pre-registration Health Check:** Engine pings module's health endpoint. (To be implemented)
-    * **Authentication Stub:** (To be implemented)
+2.  **Module Discovery Pattern:**
+    * **Clarified Architecture:** Modules are discovered by Engines through Consul service discovery, NOT through self-registration.
+    * **Module Behavior:** Modules are simple gRPC services that:
+        * Register themselves with Consul using standard Consul mechanisms (agent, API, or Kubernetes integration)
+        * Expose their gRPC service endpoints
+        * Provide health check endpoints
+        * Have no knowledge of the Yappy Engine or its registration patterns
+    * **Engine Discovery Process:**
+        * The Engine uses `GrpcChannelManager` to discover available module instances from Consul
+        * Discovery is based on service names that match module `implementationId` values
+        * The Engine prioritizes localhost instances when available (localhost-first logic)
+        * **Status:** Localhost-first logic is COMPLETED in `GrpcChannelManager`
 
-3.  **Implement Proxying Logic:**
-    * If an Engine's *paired local module* is `UNAVAILABLE` or in `CONFIGURATION_ERROR`:
-        * The Engine queries Consul for other healthy remote instances of the *same logical module service name* (i.e., same `implementationId`).
-        * If found, the Engine routes traffic to a healthy remote instance.
-        * Update the service's `ServiceAggregatedStatus` in KV to `ACTIVE_PROXYING`.
-    * An Engine instance will *not* by default proxy to a different module type if its paired module is down.  In other words, if the 
-      request is for a Chunker pipestep, it will reject it.  Consul already handles that routing so such a request should be untrusted.
+### Module Discovery Flow Diagram
+
+The following diagram shows how engines discover modules through Consul:
+
+```mermaid
+sequenceDiagram
+    participant Engine as Engine A
+    participant GCM as GrpcChannelManager
+    participant DC as DiscoveryClient
+    participant Consul as Consul
+    participant LM as Local Module
+    participant RM as Remote Module
+    
+    Note over Engine: Need to process step requiring "chunker-v1"
+    
+    Engine->>GCM: getChannel("chunker-v1")
+    GCM->>DC: getInstances("chunker-v1")
+    DC->>Consul: Query healthy services
+    Consul-->>DC: Return service instances
+    DC-->>GCM: List of instances
+    
+    GCM->>GCM: Sort instances (localhost first)
+    
+    alt Localhost instance available
+        GCM->>GCM: Select localhost:50052
+        GCM->>LM: Create gRPC channel
+        LM-->>GCM: Channel established
+        GCM-->>Engine: Return local channel
+        Engine->>LM: ProcessData(request)
+        LM-->>Engine: ProcessResponse
+    else No localhost instance
+        GCM->>GCM: Select remote instance
+        GCM->>RM: Create gRPC channel
+        RM-->>GCM: Channel established
+        GCM-->>Engine: Return remote channel
+        Note over Engine: Should trigger engine-to-engine proxy (TODO)
+    end
+    
+    Note over GCM: Channels are cached and reused
+```
+
+This diagram shows:
+- Engines query Consul for module instances
+- Localhost instances are prioritized
+- Direct connections to modules (engine-to-engine proxying not shown here)
+- Channel caching for performance
+
+3.  **Implement Engine-to-Engine Proxying Logic:**
+    * **TODO - High Priority:** When an Engine cannot find a local module instance for a request:
+        * The Engine should forward the entire request to another Engine instance that has the required module available
+        * This is ENGINE-TO-ENGINE forwarding, not module-to-module
+        * The receiving Engine processes the request with its local module and returns the response
+        * Update the service's `ServiceAggregatedStatus` in KV to `ACTIVE_PROXYING`
+    * **Implementation Notes:**
+        * Engines discover each other through Consul (they register themselves)
+        * The proxying Engine acts as a transparent proxy, forwarding the complete gRPC request
+        * This allows for resilient processing even when modules are not evenly distributed
+
+### Engine-to-Engine Proxying Flow Diagram
+
+The following diagram illustrates what happens when a local module is down:
+
+```mermaid
+sequenceDiagram
+    participant Client as Client
+    participant EA as Engine A
+    participant MAdown as Module A (Chunker)<br/>[DOWN]
+    participant CBOS as ConsulBusinessOps
+    participant Consul as Consul
+    participant EB as Engine B
+    participant MB as Module B (Chunker)<br/>[HEALTHY]
+    
+    Client->>EA: ProcessPipe(request)<br/>target: chunker-v1
+    EA->>EA: Check local module
+    EA->>MAdown: Health check
+    MAdown--xEA: Unhealthy/Timeout
+    
+    EA->>CBOS: getEnginesWithModule("chunker-v1")
+    CBOS->>Consul: Query engines with metadata
+    Consul-->>CBOS: Engine instances
+    CBOS-->>EA: List of engines with chunker
+    
+    EA->>EA: Select Engine B
+    EA->>EA: Create proxy channel
+    
+    rect rgb(240, 240, 255)
+        Note over EA,EB: Engine-to-Engine Forwarding
+        EA->>EB: ProcessPipe(request)<br/>[Forward entire request]
+        EB->>EB: Check local module
+        EB->>MB: ProcessData(transformed request)
+        MB-->>EB: ProcessResponse
+        EB-->>EA: ProcessPipeResponse
+    end
+    
+    EA-->>Client: ProcessPipeResponse
+    
+    EA->>CBOS: Update ServiceAggregatedStatus
+    CBOS->>Consul: Write status (ACTIVE_PROXYING)
+    
+    Note over EA: Engine A proxied to Engine B successfully
+```
+
+This diagram shows:
+- Engine A's local module is down
+- Engine A discovers other engines with the same module type
+- Engine A forwards the entire request to Engine B
+- Engine B processes with its healthy local module
+- Status is updated to reflect proxying state
 
 ### Phase B.4: Implement Health Check Integration
 
@@ -341,10 +526,14 @@ This section should reflect the failing tests and the environment hardening.
         * Test: Start Yappy Engine. Verify `KafkaListenerManager` creates a listener with correct Apicurio properties. Produce a Protobuf message. Verify consumption and processing by `DefaultPipeStreamEngineLogicImpl`.
     * **Goal:** Confirm dynamic Kafka listeners work end-to-end with Apicurio deserialization in the main application context.
 
-3.  ** Engine-Managed Module Registration API**
-    * **Status:** Update based on whether the controllers provided cover the REST APIs from Section VII. If `YappyModuleRegistrationServiceImpl.java` is the complete solution for module registration (i.e., no operator-triggered REST APIs needed), then Section VII might be closable or significantly refactored. If REST admin APIs for modules are still needed, their status should be individually assessed.
-    * This is the next major feature for the "registration goal" based on clarified requirements.
-    * See **Section VII** below.
+3.  **Complete Engine-to-Engine Proxying Implementation**
+    * **Status:** TODO - This is the next major feature after localhost-first (which is completed)
+    * **Requirements:**
+        * Implement request forwarding logic in the Engine's gRPC service handlers
+        * Add Engine discovery logic to find other Engine instances via Consul
+        * Implement transparent proxying that preserves the original request/response
+        * Update status tracking to reflect when an Engine is proxying requests
+    * See updated **Section VII** below for implementation details.
 
 4.  **Unit Test `DefaultPipeStreamEngineLogicImpl`:**
     * **Status:** Pending/In Progress.
@@ -458,126 +647,149 @@ void testKafkaAndGrpcFlow() {
 ```
 
 ---
-## VII. Implement APIs for Engine-Managed Module Information & Registration Control
-
-This functionality might be partially covered by `GET /api/setup/clusters` in `AdminSetupController.java` if cluster details include module definitions. Alternatively, if a dedicated endpoint is still needed, its implementation status is TBD. The `DynamicConfigurationManagerImpl.java` holds `PipelineClusterConfig` which contains the `PipelineModuleMap`.
+## VII. Implement Engine-to-Engine Proxying for Resilient Processing
 
 **Background:**
-The Yappy Engine is now responsible for registering its paired/managed modules with Consul. Modules themselves are passive and do not self-register. We need API endpoints on the Yappy Engine to:
-a. Allow an administrator/operator to see which modules the Engine is configured to manage.
-b. View the current Consul registration status of these configured modules.
-c. Trigger the Engine to attempt to register (or deregister) a *specific instance* of a configured module with Consul. This requires the caller to provide host/port details for the module instance, as the module itself doesn't announce its location to the Engine directly for registration purposes.
+With the localhost-first logic now completed in `GrpcChannelManager`, the next priority is implementing engine-to-engine proxying. This feature enables an Engine instance to forward requests to other Engine instances when its co-located module is unavailable.
+
+**Architecture Clarification:**
+* Each deployment unit consists of an Engine + Module running together (same container/pod)
+* Modules are vanilla gRPC services with NO Consul awareness - they never register themselves
+* Engines handle ALL Consul interactions - they register both themselves AND their co-located module
+* When an Engine's local module is down, it forwards the ENTIRE request to another Engine (which has its own module)
+* This creates a mesh of engine+module pairs that provide resilience through engine-to-engine forwarding
 
 **Objective:**
-Implement REST API endpoints in the Yappy Engine to provide visibility into configured modules and allow an operator to trigger Consul registration/deregistration for specific module *instances* that the Engine is configured to be aware of.
+Implement engine-to-engine proxying to enable resilient request processing across the cluster, allowing any Engine to handle any request by forwarding to the appropriate Engine instance when necessary.
 
-**Prerequisites (Assumed Backend Components):**
-* `DynamicConfigurationManager` (DCM): Provides the current `PipelineClusterConfig`, which includes the `PipelineModuleMap` (the list of *defined* modules).
-* `ConsulBusinessOperationsService`: Has methods like `registerService(Registration details)`, `deregisterService(String serviceId)`, and `getServiceInstances(String serviceName)`.
+**Prerequisites (Completed Components):**
+* `GrpcChannelManager`: Already implements localhost-first logic and module discovery from Consul
+* `ConsulBusinessOperationsService`: Provides service discovery capabilities
+* `DynamicConfigurationManager`: Provides pipeline and module configuration
+* Engine self-registration: Engines register themselves with Consul
 
-**API Endpoints to Implement:**
+**Implementation Tasks:**
 
-1.  **List Configured Modules:**
-    * **Endpoint:** `GET /api/admin/modules/definitions`
-    * **Controller Method:**
+1.  **Engine Discovery Enhancement:**
+    * **Task:** Extend `ConsulBusinessOperationsService` to discover other Engine instances that have specific module types
+    * **Implementation:**
         ```java
-        @Get("/definitions")
-        public Map<String, PipelineModuleConfiguration> getConfiguredModules() {
-            Optional<PipelineClusterConfig> clusterConfigOpt = dynamicConfigurationManager.getCurrentPipelineClusterConfig();
-            if (clusterConfigOpt.isPresent() && clusterConfigOpt.get().pipelineModuleMap() != null) {
-                return clusterConfigOpt.get().pipelineModuleMap().availableModules();
+        public List<ServiceHealth> getHealthyEngineInstances() {
+            // Query Consul for all healthy instances of the engine service
+            // Each engine registers with metadata indicating its co-located module type
+            return consulClient.getHealthServices("yappy-engine", true, QueryOptions.BLANK).getResponse();
+        }
+        
+        public List<ServiceHealth> getEnginesWithModule(String moduleType) {
+            // Get all healthy engines and filter by those with the required module type
+            List<ServiceHealth> engines = getHealthyEngineInstances();
+            return engines.stream()
+                .filter(health -> moduleType.equals(health.getService().getMeta().get("module-type")))
+                .collect(Collectors.toList());
+        }
+        ```
+    * **Purpose:** Enable engines to discover other engine+module pairs for proxying requests
+
+2.  **Implement Proxying Logic in gRPC Service Handlers:**
+    * **Task:** Modify `PipeStreamEngineImpl` and other gRPC service implementations
+    * **Implementation Pattern:**
+        ```java
+        @Override
+        public void processPipe(ProcessPipeRequest request, StreamObserver<ProcessPipeResponse> responseObserver) {
+            String requiredModule = extractRequiredModule(request);
+            
+            // Try local processing first
+            if (canProcessLocally(requiredModule)) {
+                // Existing processing logic
+                processLocally(request, responseObserver);
+            } else {
+                // Find another engine+module pair of the same type
+                Optional<ServiceHealth> targetEngine = findHealthyEngineWithSameModuleType();
+                if (targetEngine.isPresent()) {
+                    // Forward the entire request to the target engine
+                    forwardToEngine(request, targetEngine.get(), responseObserver);
+                } else {
+                    // No engine available with the required module
+                    responseObserver.onError(new StatusException(Status.UNAVAILABLE
+                        .withDescription("No engine available with module: " + requiredModule)));
+                }
             }
-            return Collections.emptyMap();
         }
         ```
-    * **Dependencies:** Inject `DynamicConfigurationManager`.
-    * **Response:** JSON map of `implementationId` to `PipelineModuleConfiguration`.
-    * **Purpose:** Shows what module types are defined in the engine's current cluster configuration.
 
-2.  **View Status of Configured Modules in Consul:**
-    * **Endpoint:** `GET /api/admin/modules/status`
-    * **Controller Method:**
+3.  **Create Engine-to-Engine gRPC Client:**
+    * **Task:** Implement forwarding mechanism
+    * **Implementation:**
         ```java
-        @Get("/status")
-        public List<ModuleConsulStatus> getConfiguredModulesStatus() {
-            // ... (logic from previous API Task 2.2) ...
-            // 1. Get PipelineModuleMap from DCM.
-            // 2. For each module definition (implementationId) in the map:
-            //    a. Query Consul using ConsulBusinessOperationsService.getHealthyServiceInstances(implementationId).
-            //    b. Construct a ModuleConsulStatus object.
-            // Return List<ModuleConsulStatus>.
-        }
-        // Define a DTO: 
-        // record ModuleConsulStatus(String implementationId, String implementationName, boolean definedInConfig, String consulRegistrationStatus, int healthyInstanceCount) {}
-        ```
-    * **Dependencies:** Inject `DynamicConfigurationManager`, `ConsulBusinessOperationsService`.
-    * **Response:** JSON array of `ModuleConsulStatus` objects.
-    * **Purpose:** Shows which defined modules have active, healthy registrations in Consul.
-
-3.  **Trigger Engine to Register a Specific Module Instance:**
-    * **Endpoint:** `POST /api/admin/modules/instances/register`
-    * **Request Body (JSON):**
-        ```json
-        {
-          "implementationId": "echo-v1", // Must match an ID in PipelineModuleMap
-          "instanceId": "echo-v1-instance-01", // Unique ID for this physical instance
-          "host": "10.0.1.23",
-          "port": 50052,
-          "healthCheckType": "HTTP", // e.g., HTTP, GRPC, TCP
-          "healthCheckEndpoint": "/health", // e.g., "/health", "serviceName/method", or "host:port" for TCP
-          "healthCheckInterval": "10s",
-          "healthCheckTimeout": "5s",
-          "tags": ["version=1.0", "env=prod"] // Optional additional tags
-        }
-        ```
-    * **Controller Method:**
-        ```java
-        @Post("/instances/register")
-        public HttpResponse<Map<String, Object>> registerModuleInstance(@Body ModuleRegistrationRequest request) {
-            // 1. Validate request.
-            // 2. Optional: Validate request.implementationId against PipelineModuleMap from DCM.
-            // 3. Construct org.kiwiproject.consul.model.agent.Registration object:
-            //    - Registration.Address: request.host
-            //    - Registration.Port: request.port
-            //    - Registration.Name: request.implementationId (this is the Consul Service Name)
-            //    - Registration.Id: request.instanceId (this is the Consul Service ID, must be unique per agent)
-            //    - Registration.Tags: Add "yappy-module-implementation-id="+request.implementationId and request.tags
-            //    - Registration.Check: Create appropriate Registration.RegCheck based on request.healthCheckType/Endpoint/Interval/Timeout
-            //       (e.g., Registration.RegCheck.http(url, interval, timeout), .grpc(grpc, interval), .tcp(tcp, interval, timeout))
-            // 4. Call consulBusinessOperationsService.registerService(consulRegistration).
-            // 5. Return success/failure.
-        }
-        // Define DTO: ModuleRegistrationRequest based on JSON above.
-        ```
-    * **Dependencies:** Inject `DynamicConfigurationManager` (optional for validation), `ConsulBusinessOperationsService`.
-    * **Response:** `HttpResponse<Map<String, Object>>` e.g., `{ "success": true, "message": "Module instance submitted for registration.", "serviceIdRegistered": "echo-v1-instance-01" }`
-    * **Purpose:** Allows an operator to explicitly tell the Engine: "There's an instance of module 'echo-v1' running at this host/port; please register it in Consul with this health check."
-
-4.  **Trigger Engine to Deregister a Specific Module Instance:**
-    * **Endpoint:** `POST /api/admin/modules/instances/{consulServiceId}/deregister`
-    * **Path Variable:** `consulServiceId` (This is the unique ID used when registering the instance, e.g., "echo-v1-instance-01").
-    * **Controller Method:**
-        ```java
-        @Post("/instances/{consulServiceId}/deregister")
-        public HttpResponse<Map<String, Object>> deregisterModuleInstance(@PathVariable String consulServiceId) {
-            // 1. Call consulBusinessOperationsService.deregisterService(consulServiceId).
-            // 2. Return success/failure.
+        private void forwardToEngine(ProcessPipeRequest request, ServiceHealth targetEngine, 
+                                   StreamObserver<ProcessPipeResponse> responseObserver) {
+            // Create gRPC channel to target engine (not to its module)
+            // The target engine will process with its co-located module
+            ManagedChannel channel = ManagedChannelBuilder
+                .forAddress(targetEngine.getService().getAddress(), targetEngine.getService().getPort())
+                .usePlaintext() // Or use TLS in production
+                .build();
+            
+            try {
+                // Create stub for target engine
+                PipeStreamEngineGrpc.PipeStreamEngineStub stub = PipeStreamEngineGrpc.newStub(channel);
+                
+                // Forward the request and relay the response
+                stub.processPipe(request, new StreamObserver<ProcessPipeResponse>() {
+                    @Override
+                    public void onNext(ProcessPipeResponse response) {
+                        responseObserver.onNext(response);
+                    }
+                    
+                    @Override
+                    public void onError(Throwable t) {
+                        responseObserver.onError(t);
+                    }
+                    
+                    @Override
+                    public void onCompleted() {
+                        responseObserver.onCompleted();
+                        channel.shutdown();
+                    }
+                });
+            } catch (Exception e) {
+                responseObserver.onError(new StatusException(Status.INTERNAL
+                    .withDescription("Failed to forward request: " + e.getMessage())
+                    .withCause(e)));
+                channel.shutdown();
+            }
         }
         ```
-    * **Dependencies:** Inject `ConsulBusinessOperationsService`.
-    * **Response:** JSON: `{ "success": boolean, "message": "string" }`
-    * **Purpose:** Removes a specific module instance's registration from Consul via the Engine.
 
-**OpenAPI/Swagger Documentation:**
-* All implemented REST endpoints must include comprehensive OpenAPI annotations (`@Operation`, `@Parameter`, `@RequestBody`, `@ApiResponse`, etc.) to generate interactive API documentation.
+4.  **Update Status Tracking:**
+    * **Task:** Track when an engine is proxying requests
+    * **Implementation:**
+        * Update `ServiceAggregatedStatus` when proxying
+        * Add metrics for proxied requests
+        * Log proxying events for debugging
 
-**Testing These APIs:**
-* Write integration tests (`@MicronautTest`) for these new controller endpoints.
-* Use Testcontainers for Consul.
-* Mock `ConsulBusinessOperationsService` to verify it's called with the correct `Registration` details or `serviceId` for deregistration.
-* For `GET` endpoints, seed Consul (via a real `ConsulBusinessOperationsService` connected to Testcontainers Consul) with test data and verify the API returns the expected module definitions or statuses.
+**Testing the Proxying Implementation:**
+* Write integration tests that:
+    * Start multiple engine+module containers (e.g., Engine A + Chunker A, Engine B + Chunker B)
+    * Simulate module failure (e.g., kill Chunker A while keeping Engine A running)
+    * Send requests to Engine A and verify it forwards to Engine B
+    * Verify Engine B processes with its local Chunker B and returns the response
+    * Verify the response is correctly returned through Engine A
+* Test failure scenarios:
+    * All modules of a specific type are down (no engine can process)
+    * Target engine+module pair becomes unavailable during proxying
+    * Network failures between engines
+* Test deployment patterns:
+    * Mixed module types (e.g., Container 1: Engine+Chunker, Container 2: Engine+Echo)
+    * Multiple instances of same module type for load balancing
 
-This set of tasks provides a clear path for implementing the API layer for engine-managed module registration, which is your clarified next big step for the registration goal.
+**Performance Considerations:**
+* Implement connection pooling for engine-to-engine connections
+* Add caching for engine discovery results (with TTL)
+* Monitor latency impact of proxying
+* Consider implementing circuit breakers for failing engines
+
+This implementation provides resilient request processing, ensuring that any engine can handle any request by forwarding to the appropriate engine when necessary.
 
 ## VIII. Detailed Design Specifications, Workflows, and Future Considerations (Incorporated from Additional Notes)
 
@@ -670,43 +882,61 @@ This section outlines the design for key components involved in pipeline step ex
             * `destination` will be `target.grpcTransport().serviceName()` for gRPC or `target.kafkaTransport().topic()` for Kafka.
             * `nextTargetStep` is `target.targetStepName()`.
             * `targetPipeline` is usually the current pipeline unless the output explicitly targets a step in another pipeline (e.g., if `targetStepName` is "otherPipeline.stepX"). Logic for cross-pipeline `targetPipeline` determination based on `targetStepName` format needs to be robust.
-### B. Service Discovery & Engine-Managed Module Registration
+### B. Service Discovery & Module Integration
 
-This section is **critically updated** to reflect that the **Yappy Engine manages the Consul registration of modules.**
+This section reflects the correct architecture where engines manage all Consul interactions for their co-located modules.
 
 **1. Module Discovery and Invocation by the Engine:**
 * **Configuration-Driven:** The Engine knows which modules *could* be part of a pipeline via `PipelineClusterConfig.pipelineModuleMap` (managed by `DynamicConfigurationManager`).
 * **Identifying Processor:** `PipelineStepConfig.processorInfo.grpcServiceName` (which should align with a module's `implementationId` in the `PipelineModuleMap`) is the key for the Engine to know *which type* of module to use for a step.
-* **Locating Module Instances for Registration (Engine's Responsibility):**
-    * Since modules don't self-register, the Engine needs to know the network location (`host:port`) and health endpoint of each module *instance* it is expected to manage and register.
-    * This information must be provided to the Engine:
-        * **Via API:** An administrative API endpoint (e.g., `POST /api/admin/modules/instances/tell`) where an external system (orchestrator, deployment script, or admin UI) informs the Engine: "Module instance X of type Y (implementationId) is running at host Z, port P, with health check Q." (This aligns with **Section VII, Task 3 for Jules AI**).
-        * **(Future) Static Configuration in Engine:** Part of the Engine's own configuration could list expected local/paired modules and their addresses if they are tightly coupled.
-        * **(Future) Kubernetes/Environment Discovery:** The Engine could discover module pod IPs/ports from the container orchestrator and then register them in Consul.
-* **Engine Performs Registration:**
-    * Once the Engine knows a module instance's location and `implementationId` (and verifies it's defined in `PipelineModuleMap`), it polls the module's health endpoint.
-    * If healthy, the Engine constructs a Consul `Registration` object (using `implementationId` as service name, a unique instance ID, the provided host/port, health check details, and tags like `yappy-service-name`, `yappy-version`).
-    * The Engine calls `ConsulBusinessOperationsService.registerService()`.
+* **Engine-Managed Registration Pattern:**
+    * Engines handle ALL Consul registration for their co-located modules:
+        * Engine knows its module's configuration (type, port, health endpoint)
+        * Engine registers the module service in Consul with appropriate metadata
+        * Engine monitors module health and updates Consul accordingly
+        * Engine deregisters the module on shutdown
+    * Modules remain completely unaware of Consul or any orchestration
+    * This keeps modules simple and focused on their core functionality
 * **Service Discovery by Engine for Invocation:**
-    * When `PipelineStepGrpcProcessorImpl` needs to call a module (e.g., "echo-v1"), it uses the Micronaut `DiscoveryClient` (via `GrpcChannelManager`) to find healthy, *already registered* instances of that service name in Consul.
-    * It prioritizes a local/paired instance if that architectural pattern (Engine tied to one module instance it polls and registers) is fully implemented. The "Localhost-First" logic in your `GrpcChannelManager` can support this if the local module's `serviceName` and port are known.
-* **gRPC Invocation:** Standard gRPC call to the discovered instance.
+    * When `PipelineStepGrpcProcessorImpl` needs to call a module (e.g., "echo-v1"), it uses the Micronaut `DiscoveryClient` (via `GrpcChannelManager`) to find healthy instances in Consul.
+    * The "Localhost-First" logic in `GrpcChannelManager` (COMPLETED) prioritizes the engine's own co-located module.
+    * If the local module is unavailable, the engine will:
+        * Forward the request to another engine that has a healthy module of the same type (TODO - proxying feature)
+* **gRPC Invocation:** Standard gRPC call to either the local module or through another engine.
 
-**2. Registration Workflow (Engine-Driven):**
-* **Engine Action (Not Module Action):**
-    1.  **Engine Identifies Managed Module:** Based on its configuration or an API call, the Engine knows it's responsible for `ModuleTypeA` instance running at `host:port`.
-    2.  **Engine Polls Module Health:** Engine periodically checks the module's health endpoint.
-    3.  **Engine Validates (Optional here, more for config):** The Engine might validate the module's reported configuration digest against what's expected in `PipelineModuleMap`.
-    4.  **Engine Constructs Consul Registration:** Using `implementationId` from `PipelineModuleMap` as `serviceName`, unique `instanceId`, given `host:port`, tags, and health check details (also provided or derived).
-    5.  **Engine Registers in Consul:** Uses `ConsulBusinessOperationsService.registerService()`.
-    6.  **Engine Monitors & Re-registers/Deregisters:** The Engine is responsible for maintaining this registration (e.g., re-register if Consul agent restarts, deregister if module is gracefully shut down or consistently unhealthy).
+**2. Module Registration Workflow (Engine-Driven):**
+* **Engine-Managed Registration:**
+    1.  **Container Starts:** Both Engine and Module start within the same container/pod
+    2.  **Module Initializes:** Module becomes ready to serve requests on its configured port
+    3.  **Engine Registers Services:** Engine registers BOTH itself AND its co-located module with Consul
+    4.  **Engine Monitors Health:** Engine periodically checks its module's health endpoint
+    5.  **Engine Updates Consul:** Engine updates the module's health status in Consul based on health checks
+    6.  **Module Serves Requests:** Module responds to gRPC calls (unaware of Consul)
+    7.  **Engine Deregisters:** On shutdown, Engine deregisters both itself and its module from Consul
 
-**3. Additional Implementation Considerations for Engine-Managed Registration:**
-* **Error Handling & Retries by Engine:** If the Engine fails to register a module with Consul (e.g., Consul unavailable), it should retry with backoff.
-* **Service ID Generation by Engine:** The Engine generates the unique `instanceId` for each module instance it registers.
-* **Custom Tags Applied by Engine:** The Engine adds `yappy-service-name`, `yappy-version`, `yappy-config-digest` etc., to the Consul registration tags.
-* **Configuration Validation by Engine:** The Engine, when loading `PipelineClusterConfig`, uses its validators. When a module is about to be used for a step, its configuration (from `PipelineStepConfig.customConfig`) is validated against its schema (referenced in `PipelineModuleConfiguration.customConfigSchemaReference`). The module's health check should also confirm its own config validity.
-* **Multiple Instances & Load Balancing:** If the Engine registers multiple instances of the same module `implementationId`, Consul makes them discoverable. `GrpcChannelManager` (using Micronaut's `DiscoveryClient`) will get a list, and its load balancing strategy (or gRPC's client-side LB) will apply.
+**3. Engine-to-Engine Proxying (TODO - High Priority):**
+* **Proxying Workflow:**
+    1.  **Engine Receives Request:** Engine A receives a request requiring its co-located module
+    2.  **Local Module Check:** Engine A checks if its co-located module is healthy and available
+    3.  **Find Another Engine:** If local module is down, Engine A queries Consul for other engine+module pairs of the same type
+    4.  **Forward to Engine:** Engine A forwards the complete request to Engine B (not directly to Engine B's module)
+    5.  **Process Locally:** Engine B processes the request with its healthy co-located module
+    6.  **Return Response:** Engine B returns the response through Engine A to the original caller
+    7.  **Update Status:** Engine A updates its status to indicate it's proxying
+* **Example Scenario:**
+    * Container 1: Engine A + Chunker Module A (Module A is DOWN)
+    * Container 2: Engine B + Chunker Module B (Module B is HEALTHY)
+    * When Engine A receives a chunking request, it forwards to Engine B
+    * Engine B processes with its local Chunker Module B and returns the result
+* **Benefits:**
+    * Resilient processing - if a module instance fails, its engine can forward to another engine+module pair
+    * Simplified module development - modules remain vanilla gRPC services
+    * Clear separation of concerns - engines handle all orchestration complexity
+* **Implementation Considerations:**
+    * Connection pooling between engines
+    * Circuit breakers for failing engine+module pairs
+    * Latency monitoring for proxied requests
+    * Load balancing when multiple engine+module pairs are available
 
 ## Using the ConnectorEngine Service for Document Ingestion
 
@@ -914,8 +1144,6 @@ This plan provides a structured approach to implementing the required components
 
 
 ### E. Using PipelineModuleMap for Module Management
-*(It needs to be emphasized that the Engine uses this map to know *what modules are defined* and can then take action to register instances of these modules if it's told where they are running.)*
-*(adding a note about how the Engine uses it as a catalog for its registration responsibilities)*
 
 The PipelineModuleMap is a critical component in the system that serves as a catalog of available pipeline modules. It is defined in the PipelineClusterConfig and contains information about all the modules that can be used in the pipeline.
 
@@ -985,13 +1213,15 @@ if (clusterConfig.isPresent()) {
 
 1.  **Module Definition Management (via `PipelineClusterConfig`):**
     * APIs to GET/PUT the `PipelineClusterConfig` (already listed for Pipeline Designer, also an Admin function).
-    * Specific APIs to add/update/remove entries in `PipelineClusterConfig.pipelineModuleMap` (as designed for Jules AI in Task 5 of the previous API list). This allows admins to define *what types* of modules the system recognizes.
-2.  **Engine-Managed Module Instance Registration Control APIs:**
-    * The APIs for `POST /api/admin/modules/instances/register` and `POST /api/admin/modules/instances/{consulServiceId}/deregister` (as designed for Jules AI in Task 3 & 4 of the previous API list) are key here. These allow an admin/operator to tell a specific Yappy Engine instance: "An instance of module X (which is defined in your `PipelineModuleMap`) is now running at this host/port with this health check. Please register it in Consul."
-3.  **Module Status Viewing APIs:**
+    * Specific APIs to add/update/remove entries in `PipelineClusterConfig.pipelineModuleMap`. This allows admins to define *what types* of modules the system recognizes.
+2.  **Module Status Viewing APIs:**
     * `GET /api/admin/modules/definitions` (shows what's in `PipelineModuleMap`).
-    * `GET /api/admin/modules/status` (shows defined modules and their current Consul registration status as seen by the Engine).
-    * (These were Task 1 & 2 for Jules AI in the previous API list).
+    * `GET /api/admin/modules/status` (shows defined modules and their current Consul registration status).
+    * These APIs help administrators understand which modules are available and their health status
+3.  **Engine Status and Proxying APIs:**
+    * APIs to view which engines are proxying requests
+    * Metrics on proxying performance and frequency
+    * APIs to manually control proxying behavior (enable/disable, preferences)
 4.  **Schema Registry Integration for Module Config Schemas:**
     * This is still relevant. If modules define their `customConfig` structure with a JSON schema, that schema needs to be stored (Apicurio/Glue or even Consul KV) and referenced in `PipelineModuleConfiguration.customConfigSchemaReference`. The Engine (or an admin tool) would use this for validating `PipelineStepConfig.customConfig`.
 
@@ -1234,6 +1464,36 @@ The dashboard will provide a high-level overview of the pipeline system:
 - **Resource Usage**: Track resource usage (CPU, memory, disk, etc.)
 - **Throughput**: Monitor message throughput across the system
 
+
+## IX. TODO: Remaining Development Tasks
+
+### 1. Develop the "Clear-Out Settings" Utility
+
+**Purpose:** Create a utility that ensures a known starting state for local development and testing by clearing out persisted settings.
+
+**Requirements:**
+* Delete `~/.yappy/engine-bootstrap.properties` file
+* Clear specific keys or prefixes in local Consul:
+  * `yappy/config/clusters/your-dev-cluster`
+  * `yappy/services/`
+  * `yappy/schemas/`
+* Potentially clear relevant Kafka topics (if tests require them to be empty)
+
+**Implementation Options:**
+* Separate Java main application
+* Shell script
+* Set of Gradle tasks
+
+**Technical Details:**
+* Use Consul client library (e.g., `kiwiproject/consul-client`) to delete keys
+* Use Kafka admin client to delete topics if needed
+* Ensure proper error handling and logging
+
+**Usage Scenarios:**
+* Before running first-run or "Setup Mode" tests
+* Cleaning up after failed test runs
+* Resetting development environment
+* Preparing for clean integration tests
 
 ### Appendix: Additional Considerations for Integration Testing
 
