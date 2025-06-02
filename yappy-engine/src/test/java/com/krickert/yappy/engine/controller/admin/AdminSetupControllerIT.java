@@ -70,6 +70,9 @@ class AdminSetupControllerIT {
         System.clearProperty("consul.client.port");
         System.clearProperty("consul.client.acl-token");
         
+        // Ensure Consul is marked as configured for tests
+        System.setProperty("yappy.consul.configured", "true");
+        
         // Get the test bootstrap file path configured in application-test.yml
         testBootstrapPath = Paths.get(System.getProperty("java.io.tmpdir"), "yappy-test", "engine-bootstrap.properties");
         
@@ -96,6 +99,7 @@ class AdminSetupControllerIT {
         System.clearProperty("consul.client.host");
         System.clearProperty("consul.client.port");
         System.clearProperty("consul.client.acl-token");
+        System.clearProperty("yappy.consul.configured");
     }
 
     @Test

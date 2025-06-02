@@ -167,25 +167,40 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
     @Override
     public void listAvailableClusters(Empty request, StreamObserver<ClusterList> responseObserver) {
         LOG.info("listAvailableClusters called");
+        
+        if (consulBusinessOperationsService != null && Boolean.parseBoolean(System.getProperty("yappy.consul.configured", "false"))) {
+            LOG.info("Consul is configured, attempting to list clusters from ConsulBusinessOperationsService.");
+            // Use reactive approach instead of blocking
+            consulBusinessOperationsService.listAvailableClusterNames()
+                .subscribe(
+                    clusterNames -> {
+                        LOG.info("Retrieved {} cluster names from ConsulBusinessOperationsService: {}", clusterNames.size(), clusterNames);
+                        buildAndSendResponse(clusterNames, false, responseObserver);
+                    },
+                    error -> {
+                        LOG.error("Error retrieving cluster names from Consul: {}", error.getMessage(), error);
+                        responseObserver.onError(io.grpc.Status.INTERNAL
+                                .withDescription("Failed to retrieve cluster names from Consul: " + error.getMessage())
+                                .asRuntimeException());
+                    },
+                    () -> {
+                        // Empty completion - handle empty list case
+                        LOG.info("No clusters found in Consul");
+                        buildAndSendResponse(Collections.emptyList(), false, responseObserver);
+                    }
+                );
+        } else if (consulBusinessOperationsService == null) {
+            LOG.warn("ConsulBusinessOperationsService is null. Cannot list clusters from Consul. Simulating with hardcoded list for dev/test purposes.");
+            List<String> simulatedClusters = Arrays.asList("simulatedCluster_NoService1", "simulatedCluster_NoService2");
+            buildAndSendResponse(simulatedClusters, true, responseObserver);
+        } else {
+            LOG.warn("Consul is not marked as configured (yappy.consul.configured is not true). Not listing clusters from Consul.");
+            buildAndSendResponse(Collections.emptyList(), false, responseObserver);
+        }
+    }
+
+    private void buildAndSendResponse(List<String> clusterNames, boolean isSimulation, StreamObserver<ClusterList> responseObserver) {
         try {
-            List<String> clusterNames;
-            boolean isSimulation = false; // Flag to track if we are in simulation mode
-
-            if (consulBusinessOperationsService != null) {
-                if (Boolean.parseBoolean(System.getProperty("yappy.consul.configured", "false"))) {
-                    LOG.info("Consul is configured, attempting to list clusters from ConsulBusinessOperationsService.");
-                    clusterNames = consulBusinessOperationsService.listAvailableClusterNames().blockOptional().orElse(Collections.emptyList());
-                    LOG.info("Retrieved {} cluster names from ConsulBusinessOperationsService: {}", clusterNames.size(), clusterNames);
-                } else {
-                    LOG.warn("Consul is not marked as configured (yappy.consul.configured is not true). Not listing clusters from Consul.");
-                    clusterNames = Collections.emptyList();
-                }
-            } else {
-                LOG.warn("ConsulBusinessOperationsService is null. Cannot list clusters from Consul. Simulating with hardcoded list for dev/test purposes.");
-                clusterNames = Arrays.asList("simulatedCluster_NoService1", "simulatedCluster_NoService2");
-                isSimulation = true; // Mark that we are in simulation
-            }
-
             ClusterList.Builder clusterListBuilder = ClusterList.newBuilder();
             if (clusterNames != null) {
                 for (String name : clusterNames) {
@@ -213,9 +228,9 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
             responseObserver.onNext(clusterListBuilder.build());
             responseObserver.onCompleted();
         } catch (Exception e) {
-            LOG.error("Failed to list available clusters: {}", e.getMessage(), e);
+            LOG.error("Failed to build cluster response: {}", e.getMessage(), e);
             responseObserver.onError(io.grpc.Status.INTERNAL
-                    .withDescription("Failed to list available clusters: " + e.getMessage())
+                    .withDescription("Failed to build cluster response: " + e.getMessage())
                     .asRuntimeException());
         }
     }
