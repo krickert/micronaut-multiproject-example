@@ -8,6 +8,7 @@ import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.engine.PipeStreamEngine;
 import com.krickert.search.pipeline.engine.kafka.admin.KafkaAdminService;
 import io.micronaut.configuration.kafka.annotation.KafkaClient;
+import io.micronaut.configuration.kafka.annotation.Topic;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.context.annotation.Requires;
@@ -69,7 +70,7 @@ public class DynamicKafkaListenerE2ETest {
     @KafkaClient
     @Requires(env = {"test"})
     public interface TestKafkaProducer {
-        void sendMessage(String topic, PipeStream message);
+        void sendMessage(@Topic String topic, PipeStream message);
     }
 
     @Inject

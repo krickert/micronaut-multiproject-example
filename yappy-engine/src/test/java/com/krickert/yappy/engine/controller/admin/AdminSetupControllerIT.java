@@ -26,7 +26,7 @@ import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@MicronautTest
+@MicronautTest(environments = {"test"})
 @SerdeImport(ConsulConfigResponse.class)
 @SerdeImport(YappyClusterInfo.class)
 @SerdeImport(CreateClusterRequest.class)
@@ -110,7 +110,8 @@ class AdminSetupControllerIT {
     @DisplayName("Test direct controller method call")
     void testDirectControllerCall() {
         // Call the controller method directly to verify it works
-        ConsulConfigResponse response = adminSetupController.getCurrentConsulConfiguration();
+        Mono<ConsulConfigResponse> responseMono = adminSetupController.getCurrentConsulConfiguration();
+        ConsulConfigResponse response = responseMono.block();
         assertNotNull(response);
         // When no properties file exists, all values should be null
         assertNull(response.getHost());
@@ -236,9 +237,14 @@ class AdminSetupControllerIT {
         List<YappyClusterInfo> clusters = clustersMono.block();
 
         assertNotNull(clusters);
-        assertEquals(1, clusters.size());
-        assertEquals(TEST_CLUSTER_NAME, clusters.get(0).getClusterName());
-        assertEquals("NEEDS_VERIFICATION", clusters.get(0).getStatus());
+        // Should have at least our test cluster, may also have the default "yappy-cluster"
+        assertTrue(clusters.size() >= 1);
+        assertTrue(clusters.stream().anyMatch(c -> TEST_CLUSTER_NAME.equals(c.getClusterName())));
+        YappyClusterInfo testCluster = clusters.stream()
+            .filter(c -> TEST_CLUSTER_NAME.equals(c.getClusterName()))
+            .findFirst()
+            .orElseThrow();
+        assertEquals("NEEDS_VERIFICATION", testCluster.getStatus());
     }
 
     @Test
@@ -280,11 +286,13 @@ class AdminSetupControllerIT {
             .allowedGrpcServices(Collections.emptySet())
             .build();
         
-        consulBusinessOperationsService.storeClusterConfiguration(TEST_CLUSTER_NAME, existingConfig).block();
+        Boolean stored = consulBusinessOperationsService.storeClusterConfiguration(TEST_CLUSTER_NAME, existingConfig).block();
+        assertTrue(stored, "First cluster creation should succeed");
 
-        // Try to create again
+        // Try to create again - this should fail
         CreateClusterRequest request = new CreateClusterRequest();
         request.setClusterName(TEST_CLUSTER_NAME);
+        request.setFirstPipelineName("test-pipeline");
 
         HttpRequest<CreateClusterRequest> httpRequest = HttpRequest.POST("/api/setup/yappy-clusters", request);
         Mono<CreateClusterResponse> responseMono = Mono.from(client.retrieve(httpRequest, CreateClusterResponse.class));
@@ -313,18 +321,26 @@ class AdminSetupControllerIT {
         SelectClusterRequest request = new SelectClusterRequest();
         request.setClusterName("new-active-cluster");
 
-        HttpRequest<SelectClusterRequest> httpRequest = HttpRequest.POST("/api/setup/cluster/select", request);
-        Mono<SelectClusterResponse> responseMono = Mono.from(client.retrieve(httpRequest, SelectClusterResponse.class));
-        SelectClusterResponse response = responseMono.block();
-
-        assertNotNull(response);
-        assertTrue(response.isSuccess());
-        assertTrue(response.getMessage().contains("selected successfully"));
+        HttpRequest<SelectClusterRequest> httpRequest = HttpRequest.POST("/api/setup/cluster/select", request)
+            .contentType(MediaType.APPLICATION_JSON);
         
-        // Verify bootstrap file was updated
-        Properties props = new Properties();
-        props.load(Files.newInputStream(mockBootstrapFile));
-        assertEquals("new-active-cluster", props.getProperty("yappy.bootstrap.cluster.selectedName"));
+        try {
+            Mono<SelectClusterResponse> responseMono = Mono.from(client.retrieve(httpRequest, SelectClusterResponse.class));
+            SelectClusterResponse response = responseMono.block();
+
+            assertNotNull(response);
+            assertTrue(response.isSuccess());
+            assertTrue(response.getMessage().contains("selected successfully"));
+            
+            // Verify bootstrap file was updated
+            Properties props = new Properties();
+            props.load(Files.newInputStream(mockBootstrapFile));
+            assertEquals("new-active-cluster", props.getProperty("yappy.bootstrap.cluster.selectedName"));
+        } catch (HttpClientResponseException e) {
+            System.err.println("Select cluster error - Status: " + e.getStatus());
+            System.err.println("Select cluster error - Body: " + e.getResponse().body());
+            throw e;
+        }
     }
 
     @Test
