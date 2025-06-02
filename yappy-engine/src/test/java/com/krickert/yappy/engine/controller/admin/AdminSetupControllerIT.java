@@ -58,13 +58,7 @@ class AdminSetupControllerIT {
     io.micronaut.web.router.Router router;
 
     private static final String TEST_CLUSTER_NAME = "test-setup-cluster";
-    private String originalUserHome;
-    private Path mockBootstrapFile;
-
-    @BeforeAll
-    void setupClass() {
-        originalUserHome = System.getProperty("user.home");
-    }
+    private Path testBootstrapPath;
 
     @BeforeEach
     void setUp() throws IOException {
@@ -76,21 +70,32 @@ class AdminSetupControllerIT {
         System.clearProperty("consul.client.port");
         System.clearProperty("consul.client.acl-token");
         
-        // Create mock bootstrap file
-        Path tempDir = Files.createTempDirectory("test-yappy");
-        System.setProperty("user.home", tempDir.toString());
-        Path mockYappyDir = tempDir.resolve(".yappy");
-        Files.createDirectories(mockYappyDir);
-        mockBootstrapFile = mockYappyDir.resolve("engine-bootstrap.properties");
+        // Get the test bootstrap file path configured in application-test.yml
+        testBootstrapPath = Paths.get(System.getProperty("java.io.tmpdir"), "yappy-test", "engine-bootstrap.properties");
+        
+        // Ensure the directory exists
+        Files.createDirectories(testBootstrapPath.getParent());
+        
+        // Delete the file if it exists to ensure clean state
+        if (Files.exists(testBootstrapPath)) {
+            Files.delete(testBootstrapPath);
+        }
     }
 
     @AfterEach
-    void tearDown() {
+    void tearDown() throws IOException {
         // Clean up test cluster
         consulBusinessOperationsService.deleteClusterConfiguration(TEST_CLUSTER_NAME).block();
         
-        // Restore user home
-        System.setProperty("user.home", originalUserHome);
+        // Clean up the test bootstrap file
+        if (Files.exists(testBootstrapPath)) {
+            Files.delete(testBootstrapPath);
+        }
+        
+        // Clear system properties
+        System.clearProperty("consul.client.host");
+        System.clearProperty("consul.client.port");
+        System.clearProperty("consul.client.acl-token");
     }
 
     @Test
@@ -159,10 +164,10 @@ class AdminSetupControllerIT {
         Properties props = new Properties();
         props.setProperty("yappy.bootstrap.consul.host", "test-host");
         props.setProperty("yappy.bootstrap.consul.port", "8501");
-        props.setProperty("yappy.bootstrap.consul.aclToken", "test-token");
-        props.setProperty("yappy.bootstrap.cluster.selectedName", "test-cluster");
+        props.setProperty("yappy.bootstrap.consul.acl_token", "test-token");
+        props.setProperty("yappy.bootstrap.cluster.selected_name", "test-cluster");
         
-        try (FileWriter writer = new FileWriter(mockBootstrapFile.toFile())) {
+        try (FileWriter writer = new FileWriter(testBootstrapPath.toFile())) {
             props.store(writer, "Test Bootstrap Configuration");
         }
 
@@ -334,8 +339,8 @@ class AdminSetupControllerIT {
             
             // Verify bootstrap file was updated
             Properties props = new Properties();
-            props.load(Files.newInputStream(mockBootstrapFile));
-            assertEquals("new-active-cluster", props.getProperty("yappy.bootstrap.cluster.selectedName"));
+            props.load(Files.newInputStream(testBootstrapPath));
+            assertEquals("new-active-cluster", props.getProperty("yappy.bootstrap.cluster.selected_name"));
         } catch (HttpClientResponseException e) {
             System.err.println("Select cluster error - Status: " + e.getStatus());
             System.err.println("Select cluster error - Body: " + e.getResponse().body());
@@ -376,10 +381,10 @@ class AdminSetupControllerIT {
         
         // Verify bootstrap file was updated
         Properties props = new Properties();
-        props.load(Files.newInputStream(mockBootstrapFile));
+        props.load(Files.newInputStream(testBootstrapPath));
         assertEquals("new-consul-host", props.getProperty("yappy.bootstrap.consul.host"));
         assertEquals("8502", props.getProperty("yappy.bootstrap.consul.port"));
-        assertEquals("new-token", props.getProperty("yappy.bootstrap.consul.aclToken"));
+        assertEquals("new-token", props.getProperty("yappy.bootstrap.consul.acl_token"));
     }
 
     @Test

@@ -43,7 +43,12 @@ local:
       echo: 50052
       # another-service-local: 50053 # If you use the "-local" suffix convention
 
-yappy.consul.configured: true
+yappy:
+  consul:
+    configured: true
+  engine:
+    bootstrap-file:
+      path: ${java.io.tmpdir}/yappy-test/engine-bootstrap.properties
 
 kafka:
   enabled: true
