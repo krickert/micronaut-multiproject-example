@@ -71,7 +71,10 @@ class YappyModuleRegistrationServiceImplTest {
 
     @MockBean(ConsulBusinessOperationsService.class)
     ConsulBusinessOperationsService consulBusinessOpsService() {
-        return mock(ConsulBusinessOperationsService.class);
+        ConsulBusinessOperationsService mock = mock(ConsulBusinessOperationsService.class);
+        // Fix NPE in EngineRegistrationService during startup
+        when(mock.registerService(any())).thenReturn(Mono.empty());
+        return mock;
     }
 
     // Helper to calculate MD5 digest for test verification

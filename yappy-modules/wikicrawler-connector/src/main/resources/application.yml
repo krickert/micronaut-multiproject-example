@@ -6,6 +6,8 @@ micronaut:
   grpc:
     server:
       port: 50052  # Different from the test server to avoid conflicts
+      health:
+        enabled: true
 
 # WikiCrawler specific configurations
 wikicrawler:

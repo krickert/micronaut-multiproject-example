@@ -15,6 +15,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.kiwiproject.consul.model.agent.ImmutableRegistration;
+import org.kiwiproject.consul.AgentClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,6 +51,9 @@ class ModuleFailoverIT {
     
     @Inject
     ConsulBusinessOperationsService consulService;
+    
+    @Inject
+    AgentClient agentClient;
     
     @Inject
     GrpcChannelManager channelManager;
@@ -417,8 +421,9 @@ class ModuleFailoverIT {
     }
     
     private void registerModuleInstance(String serviceName, String instanceId, String address, int port) {
+        String serviceId = serviceName + "-" + instanceId;
         ImmutableRegistration registration = ImmutableRegistration.builder()
-                .id(serviceName + "-" + instanceId)
+                .id(serviceId)
                 .name(serviceName)
                 .address(address)
                 .port(port)
@@ -428,10 +433,21 @@ class ModuleFailoverIT {
                 .putMeta("grpc_health_check", "true")
                 .putMeta("version", "1.0.0")
                 .putMeta("environment", "test")
+                // Add TTL health check
+                .check(org.kiwiproject.consul.model.agent.Registration.RegCheck.ttl(30L))
                 .build();
         
         consulService.registerService(registration).block();
-        registeredServices.add(serviceName + "-" + instanceId);
+        registeredServices.add(serviceId);
+        
+        // Pass the TTL health check to make the service healthy
+        try {
+            Thread.sleep(100); // Wait a bit for registration
+            agentClient.pass(serviceId, "Module is healthy");
+            LOG.info("Passed TTL health check for service: {}", serviceId);
+        } catch (Exception e) {
+            LOG.warn("Failed to pass TTL health check for service: {}", serviceId, e);
+        }
     }
     
     private void clearConsulSystemProperties() {

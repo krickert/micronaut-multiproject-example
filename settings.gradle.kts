@@ -41,9 +41,8 @@ include(
     "yappy-modules:tika-parser",
     "yappy-modules:embedder",
     "yappy-modules:s3-connector",
-    //"yappy-modules:wikicrawler-connector",
-    //"yappy-modules:wikipedia-connector",
-    //"yappy-modules:web-crawler-connector"
+    "yappy-modules:wikicrawler-connector",
+    "yappy-modules:web-crawler-connector",
     "yappy-modules:opensearch-sink",
     "yappy-modules:yappy-connector-test-server"
 )
