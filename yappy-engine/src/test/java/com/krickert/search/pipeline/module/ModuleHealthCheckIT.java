@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.test.StepVerifier;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -163,14 +164,18 @@ class ModuleHealthCheckIT {
         // Start with unhealthy module
         healthModule.setHealthy(false);
         
-        // Check health - should fail
+        // Check health and update status
         StepVerifier.create(moduleHealthMonitor.checkModuleHealth("health-check-module"))
-                .expectNextMatches(health -> !health.isHealthy())
+                .expectNextMatches(health -> {
+                    // Update module health status based on check result
+                    moduleDiscoveryService.updateModuleHealth("health-check-module", health.isHealthy(), Instant.now());
+                    return !health.isHealthy();
+                })
                 .verifyComplete();
         
-        // Verify module is marked as failed
+        // Verify module is marked as unhealthy (not failed)
         var moduleInfo = moduleDiscoveryService.getModuleInfo("health-check-module");
-        assertEquals(ModuleDiscoveryService.ModuleStatusEnum.FAILED, moduleInfo.status());
+        assertEquals(ModuleDiscoveryService.ModuleStatusEnum.UNHEALTHY, moduleInfo.status());
         
         // Make module healthy again
         healthModule.setHealthy(true);

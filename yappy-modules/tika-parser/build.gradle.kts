@@ -27,6 +27,7 @@ dependencies {
     implementation(mn.grpc.stub)
     implementation(mn.micronaut.http.client.core)
     implementation("io.micronaut.grpc:micronaut-protobuff-support")
+    implementation(mn.micronaut.management)
     // https://mvnrepository.com/artifact/org.apache.tika/tika-core
     implementation("org.apache.tika:tika-core:3.1.0")
     // https://mvnrepository.com/artifact/org.apache.tika/tika-parsers

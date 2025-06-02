@@ -34,6 +34,7 @@ dependencies {
     implementation(mn.grpc.stub)
     implementation(mn.micronaut.http.client.core)
     implementation("io.micronaut.grpc:micronaut-protobuff-support")
+    implementation(mn.micronaut.management)
 
     // OpenSearch dependencies
     implementation("org.opensearch.client:opensearch-java:3.0.0")

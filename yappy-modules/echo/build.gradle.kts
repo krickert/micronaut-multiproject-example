@@ -25,6 +25,7 @@ dependencies {
     implementation(mn.grpc.services)
     implementation(mn.grpc.stub)
     implementation(mn.micronaut.http.client.core)
+    implementation(mn.micronaut.management)
     implementation("io.micronaut.grpc:micronaut-protobuff-support")
 
 }

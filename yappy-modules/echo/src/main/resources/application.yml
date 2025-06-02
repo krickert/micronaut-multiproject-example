@@ -1,3 +1,8 @@
 micronaut:
   application:
     name: echoApplication
+
+grpc:
+  server:
+    health:
+      enabled: true

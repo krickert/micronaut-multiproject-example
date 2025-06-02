@@ -3,6 +3,10 @@ micronaut:
     name: s3-connector
   server:
     port: 8080
+  grpc:
+    server:
+      health:
+        enabled: true
 
 # S3 connector configuration
 s3:

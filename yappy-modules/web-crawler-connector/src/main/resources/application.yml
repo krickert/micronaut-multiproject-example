@@ -3,6 +3,10 @@ micronaut:
     name: web-crawler-connector
   server:
     port: 8080
+  grpc:
+    server:
+      health:
+        enabled: true
 
 
 # Web crawler configuration

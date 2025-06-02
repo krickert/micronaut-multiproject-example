@@ -1,6 +1,10 @@
 micronaut:
   application:
     name: tikaParserApplication
+  grpc:
+    server:
+      health:
+        enabled: true
 tika:
   parser:
     test-data-buffer:

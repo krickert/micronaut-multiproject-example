@@ -29,6 +29,7 @@ dependencies {
     implementation(mn.grpc.stub)
     implementation(mn.micronaut.http.client.core)
     implementation("io.micronaut.grpc:micronaut-protobuff-support")
+    implementation(mn.micronaut.management)
 
     // AWS SDK for S3
     implementation("io.micronaut.aws:micronaut-aws-sdk-v2")

@@ -13,6 +13,8 @@ micronaut:
       port: 50051
       keep-alive-time: 3h
       max-inbound-message-size: 20971520 # 20MB
+      health:
+        enabled: true
     services:
       embedder:
         enabled: true

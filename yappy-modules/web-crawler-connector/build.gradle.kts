@@ -29,6 +29,7 @@ dependencies {
     implementation(mn.grpc.stub)
     implementation(mn.micronaut.http.client.core)
     implementation("io.micronaut.grpc:micronaut-protobuff-support")
+    implementation(mn.micronaut.management)
 
     // Selenium dependencies
     implementation("org.seleniumhq.selenium:selenium-java:4.18.1")

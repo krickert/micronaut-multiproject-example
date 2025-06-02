@@ -3,6 +3,10 @@ micronaut:
     name: opensearch-sink
   server:
     port: 8080
+  grpc:
+    server:
+      health:
+        enabled: true
 
 # Kafka configuration
 kafka:
