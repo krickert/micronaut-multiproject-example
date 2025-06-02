@@ -48,6 +48,38 @@ public class ServiceStatusAggregator {
         this.digestObjectMapper = digestObjectMapper;
     }
 
+    /**
+     * Updates a service's status to ACTIVE_PROXYING when it's being used remotely.
+     * This method is called by the engine when it detects it's using a remote module.
+     */
+    public void updateServiceStatusToProxying(String serviceName) {
+        LOG.info("Updating service '{}' status to ACTIVE_PROXYING", serviceName);
+        
+        // Create a status indicating this service is being accessed via proxying
+        ServiceAggregatedStatus proxyingStatus = new ServiceAggregatedStatus(
+                serviceName,
+                ServiceOperationalStatus.ACTIVE_PROXYING,
+                "Service is being accessed remotely via module discovery",
+                System.currentTimeMillis(),
+                0, // totalInstancesConsul - will be updated in next scheduled run
+                0, // healthyInstancesConsul - will be updated in next scheduled run
+                false, // isLocalInstanceActive
+                null,  // activeLocalInstanceId
+                true,  // isProxying
+                null,  // proxyTargetInstanceId - we don't track which specific instance
+                false, // isClusterConfigStale - will be updated in next scheduled run
+                dynamicConfigurationManager.getCurrentConfigVersionIdentifier().orElse("unknown"),
+                null,  // reportedConfigDigest
+                Collections.emptyList(), // errorMessages
+                Collections.emptyMap()   // additionalAttributes
+        );
+        
+        // Store the status immediately
+        storeServiceStatusInKv(proxyingStatus)
+                .doOnError(error -> LOG.error("Failed to update service status to ACTIVE_PROXYING for '{}'", serviceName, error))
+                .subscribe();
+    }
+
     @Scheduled(fixedDelay = "30s", initialDelay = "10s")
     public void aggregateAndStoreServiceStatuses() {
         LOG.debug("Starting scheduled aggregation of service statuses...");

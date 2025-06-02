@@ -44,6 +44,11 @@ import java.util.stream.Collectors;
 public class ConsulBusinessOperationsService {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConsulBusinessOperationsService.class);
+    private static final String YAPPY_ENGINE_TAG = "yappy-engine";
+    private static final String YAPPY_ENGINE_MODULE_TAG_PREFIX = "yappy-engine-module=";
+    private static final String YAPPY_MODULE_TAG = "yappy-module";
+    private static final String YAPPY_IMPLEMENTATION_ID_TAG_PREFIX = "yappy-module-implementation-id=";
+    
     private final ConsulKvService consulKvService;
     private final ObjectMapper objectMapper;
     private final String clusterConfigKeyPrefix;
@@ -487,6 +492,110 @@ public class ConsulBusinessOperationsService {
                     LOG.error("Unexpected error listing cluster names from Consul prefix {}: {}", queryPrefix, e.getMessage(), e);
                     return Mono.just(Collections.<String>emptyList());
                 });
+    }
+
+    // --- Engine Discovery Methods for Proxying ---
+
+    /**
+     * Gets all engine instances registered in Consul.
+     * Engines are identified by the "yappy-engine" tag.
+     *
+     * @return A Mono emitting a list of engine service instances
+     */
+    public Mono<List<ServiceHealth>> getEngineInstances() {
+        LOG.debug("Getting all engine instances from Consul");
+        return getHealthyServiceInstancesByTag(YAPPY_ENGINE_TAG);
+    }
+
+    /**
+     * Gets engine instances that have a specific module type co-located.
+     * The module type is specified in tags like "yappy-engine-module=echo-processor-v1"
+     *
+     * @param moduleImplementationId The implementation ID of the module to find
+     * @return A Mono emitting a list of engine instances with the specified module
+     */
+    public Mono<List<ServiceHealth>> getEngineInstancesWithModule(String moduleImplementationId) {
+        validateKey(moduleImplementationId);
+        String targetTag = YAPPY_ENGINE_MODULE_TAG_PREFIX + moduleImplementationId;
+        LOG.debug("Getting engine instances with module: {}, looking for tag: {}", moduleImplementationId, targetTag);
+        
+        return getEngineInstances()
+                .map(instances -> instances.stream()
+                        .filter(instance -> {
+                            if (instance.getService() != null && instance.getService().getTags() != null) {
+                                return instance.getService().getTags().contains(targetTag);
+                            }
+                            return false;
+                        })
+                        .collect(Collectors.toList())
+                );
+    }
+
+    /**
+     * Gets healthy service instances by tag.
+     * This is a generic method that can be used to find services with specific tags.
+     *
+     * @param tag The tag to search for
+     * @return A Mono emitting a list of healthy service instances with the specified tag
+     */
+    public Mono<List<ServiceHealth>> getHealthyServiceInstancesByTag(String tag) {
+        validateKey(tag);
+        LOG.debug("Getting healthy service instances with tag: {}", tag);
+        
+        return Mono.fromCallable(() -> {
+            // Get all services
+            ConsulResponse<Map<String, List<String>>> servicesResponse = catalogClient.getServices(Options.BLANK_QUERY_OPTIONS);
+            if (servicesResponse == null || servicesResponse.getResponse() == null) {
+                return Collections.<ServiceHealth>emptyList();
+            }
+            
+            // Find services that have the specified tag
+            List<String> servicesWithTag = new ArrayList<>();
+            for (Map.Entry<String, List<String>> entry : servicesResponse.getResponse().entrySet()) {
+                if (entry.getValue() != null && entry.getValue().contains(tag)) {
+                    servicesWithTag.add(entry.getKey());
+                }
+            }
+            
+            if (servicesWithTag.isEmpty()) {
+                LOG.debug("No services found with tag: {}", tag);
+                return Collections.<ServiceHealth>emptyList();
+            }
+            
+            // Get healthy instances for each service with the tag
+            List<ServiceHealth> allHealthyInstances = new ArrayList<>();
+            for (String serviceName : servicesWithTag) {
+                ConsulResponse<List<ServiceHealth>> healthResponse = 
+                    healthClient.getHealthyServiceInstances(serviceName, Options.BLANK_QUERY_OPTIONS);
+                if (healthResponse != null && healthResponse.getResponse() != null) {
+                    allHealthyInstances.addAll(healthResponse.getResponse());
+                }
+            }
+            
+            LOG.info("Found {} healthy instances with tag '{}'", allHealthyInstances.size(), tag);
+            return allHealthyInstances;
+        }).onErrorResume(e -> {
+            LOG.error("Failed to get healthy instances by tag '{}'", tag, e);
+            return Mono.just(Collections.<ServiceHealth>emptyList());
+        });
+    }
+
+    /**
+     * Checks if a service instance has a specific module implementation.
+     *
+     * @param serviceHealth The service instance to check
+     * @param moduleImplementationId The module implementation ID to look for
+     * @return true if the instance has the module, false otherwise
+     */
+    public boolean instanceHasModule(ServiceHealth serviceHealth, String moduleImplementationId) {
+        if (serviceHealth == null || serviceHealth.getService() == null || 
+            serviceHealth.getService().getTags() == null || moduleImplementationId == null) {
+            return false;
+        }
+        
+        String targetTag = YAPPY_IMPLEMENTATION_ID_TAG_PREFIX + moduleImplementationId;
+        return serviceHealth.getService().getTags().stream()
+                .anyMatch(tag -> tag.equals(targetTag));
     }
 
     public Mono<Void> cleanupTestResources(Iterable<String> clusterNames, Iterable<String> schemaSubjects, Iterable<String> serviceIds) {

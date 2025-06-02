@@ -4,6 +4,9 @@ import com.google.protobuf.Empty;
 import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.engine.PipeStreamEngine; // Your core engine interface
 import com.krickert.search.pipeline.engine.grpc.PipeStreamEngineImpl;
+import com.krickert.search.config.consul.DynamicConfigurationManager;
+import com.krickert.search.pipeline.grpc.client.GrpcChannelManager;
+import com.krickert.search.pipeline.status.ServiceStatusAggregator;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
@@ -29,6 +32,15 @@ class PipeStreamEngineImplTest {
 
     @Mock
     private PipeStreamEngine mockCoreEngine; // This remains your mock for the core logic
+    
+    @Mock
+    private DynamicConfigurationManager mockDynamicConfigManager;
+    
+    @Mock
+    private GrpcChannelManager mockGrpcChannelManager;
+    
+    @Mock
+    private ServiceStatusAggregator mockServiceStatusAggregator;
 
     @Mock
     private StreamObserver<Empty> mockProcessPipeAsyncResponseObserver;
@@ -50,8 +62,13 @@ class PipeStreamEngineImplTest {
         // The lambda () -> mockCoreEngine is a concise way to implement Provider.get()
         Provider<PipeStreamEngine> mockCoreEngineProvider = () -> mockCoreEngine;
 
-        // Instantiate the SUT (grpcService) with the Provider
-        grpcService = new PipeStreamEngineImpl(mockCoreEngineProvider);
+        // Instantiate the SUT (grpcService) with all required dependencies
+        grpcService = new PipeStreamEngineImpl(
+                mockCoreEngineProvider,
+                mockDynamicConfigManager,
+                mockGrpcChannelManager,
+                mockServiceStatusAggregator
+        );
     }
 
     // ... createBasicPipeStream method remains the same ...

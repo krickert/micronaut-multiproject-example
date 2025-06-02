@@ -4,12 +4,13 @@
 
 This plan aims to create a YAPPY Engine that is not only powerful and flexible but also easy to set up, configure, monitor, and manage. We prioritize a smooth initial bootstrapping experience which then enables more advanced operational capabilities like detailed status reporting, robust service lifecycle management, and comprehensive health checking.
 
-**Architectural Note:** The Yappy Engine operates as a distributed system where each deployment unit consists of an Engine instance co-located with a Module instance (e.g., same container/pod). This creates a mesh of engine+module pairs across the cluster. Key principles:
-* **Deployment Pattern:** Each container/pod runs ONE Engine instance + ONE Module instance together
+**Architectural Note:** The Yappy Engine operates as a distributed system with a simplified architecture. Key principles:
 * **Module Simplicity:** Modules are vanilla gRPC services with NO awareness of Consul, engines, or orchestration
-* **Engine Responsibilities:** ONLY engines interact with Consul - they handle all service discovery, registration, and configuration management
-* **Engine-to-Engine Mesh:** When an engine's local module is unavailable, it forwards requests to another engine (not directly to modules)
-* **Typical Deployment:** Multiple engine+module containers are deployed, each potentially with different module types (e.g., Container 1: Engine A + Chunker Module, Container 2: Engine B + Echo Module, etc.)
+* **Direct Module Discovery:** Engines discover and connect directly to module instances via Consul service discovery
+* **Engine Responsibilities:** Engines handle all service discovery, registration, and configuration management
+* **Localhost-First:** Engines prioritize localhost module instances when available (for co-located deployments)
+* **Status Tracking:** When using remote modules, engines update service status to ACTIVE_PROXYING
+* **Flexible Deployment:** Modules can be deployed alongside engines OR independently - the discovery mechanism handles both patterns
 
 ### Deployment Architecture Diagram
 
@@ -45,9 +46,9 @@ graph TB
     E2 -->|Register/Discover| C
     E3 -->|Register/Discover| C
     
-    E1 <-->|Engine-to-Engine<br/>Proxying| E2
-    E2 <-->|Engine-to-Engine<br/>Proxying| E3
-    E1 <-->|Engine-to-Engine<br/>Proxying| E3
+    E1 -.->|Direct Module<br/>Discovery| M2
+    E2 -.->|Direct Module<br/>Discovery| M1
+    E3 -.->|Direct Module<br/>Discovery| M2
     
     E1 --> K
     E2 --> K
@@ -71,10 +72,10 @@ graph TB
 ```
 
 This diagram shows:
-- Each container/pod contains one Engine and one Module
+- Engines and Modules can be co-located or deployed separately
 - Engines communicate with infrastructure services (Consul, Kafka, Schema Registry)
 - Modules have no direct access to infrastructure services
-- Engines can proxy requests to other engines when needed
+- Engines discover and connect directly to available module instances
 
 ## II. Part A: Initial Engine Bootstrapping & Cluster Association
 
@@ -351,7 +352,7 @@ sequenceDiagram
         GCM->>RM: Create gRPC channel
         RM-->>GCM: Channel established
         GCM-->>Engine: Return remote channel
-        Note over Engine: Should trigger engine-to-engine proxy (TODO)
+        Note over Engine: Direct connection to remote module
     end
     
     Note over GCM: Channels are cached and reused
@@ -363,67 +364,69 @@ This diagram shows:
 - Direct connections to modules (engine-to-engine proxying not shown here)
 - Channel caching for performance
 
-3.  **Implement Engine-to-Engine Proxying Logic:**
-    * **TODO - High Priority:** When an Engine cannot find a local module instance for a request:
-        * The Engine should forward the entire request to another Engine instance that has the required module available
-        * This is ENGINE-TO-ENGINE forwarding, not module-to-module
-        * The receiving Engine processes the request with its local module and returns the response
-        * Update the service's `ServiceAggregatedStatus` in KV to `ACTIVE_PROXYING`
-    * **Implementation Notes:**
-        * Engines discover each other through Consul (they register themselves)
-        * The proxying Engine acts as a transparent proxy, forwarding the complete gRPC request
-        * This allows for resilient processing even when modules are not evenly distributed
+3.  **Direct Module Discovery (COMPLETED):**
+    * **Implementation:** Engines now use direct module discovery instead of engine-to-engine proxying:
+        * Engines use `GrpcChannelManager` to discover module instances from Consul
+        * The localhost-first logic prioritizes co-located modules when available
+        * When using remote modules, the engine updates `ServiceAggregatedStatus` to `ACTIVE_PROXYING`
+        * This simplifies the architecture by removing the engine-to-engine proxy layer
+    * **Benefits:**
+        * Simpler architecture with fewer hops
+        * Direct connections reduce latency
+        * Easier to debug and monitor
+        * Module failover is handled by the existing GrpcChannelManager logic
 
-### Engine-to-Engine Proxying Flow Diagram
+### Direct Module Discovery Flow Diagram
 
-The following diagram illustrates what happens when a local module is down:
+The following diagram illustrates the simplified approach when a local module is unavailable:
 
 ```mermaid
 sequenceDiagram
     participant Client as Client
-    participant EA as Engine A
-    participant MAdown as Module A (Chunker)<br/>[DOWN]
-    participant CBOS as ConsulBusinessOps
+    participant Engine as Engine
+    participant GCM as GrpcChannelManager
+    participant DC as DiscoveryClient
     participant Consul as Consul
-    participant EB as Engine B
-    participant MB as Module B (Chunker)<br/>[HEALTHY]
+    participant LM as Local Module<br/>[UNAVAILABLE]
+    participant RM as Remote Module<br/>[HEALTHY]
+    participant SSA as ServiceStatusAggregator
     
-    Client->>EA: ProcessPipe(request)<br/>target: chunker-v1
-    EA->>EA: Check local module
-    EA->>MAdown: Health check
-    MAdown--xEA: Unhealthy/Timeout
+    Client->>Engine: ProcessPipe(request)<br/>target: chunker-v1
+    Engine->>Engine: Process through core logic
     
-    EA->>CBOS: getEnginesWithModule("chunker-v1")
-    CBOS->>Consul: Query engines with metadata
-    Consul-->>CBOS: Engine instances
-    CBOS-->>EA: List of engines with chunker
+    Note over Engine: Core engine logic attempts to execute step
     
-    EA->>EA: Select Engine B
-    EA->>EA: Create proxy channel
+    Engine->>GCM: getChannel("chunker-v1")
+    GCM->>GCM: Check localhost config
+    GCM->>LM: Try localhost connection
+    LM--xGCM: Connection failed
     
-    rect rgb(240, 240, 255)
-        Note over EA,EB: Engine-to-Engine Forwarding
-        EA->>EB: ProcessPipe(request)<br/>[Forward entire request]
-        EB->>EB: Check local module
-        EB->>MB: ProcessData(transformed request)
-        MB-->>EB: ProcessResponse
-        EB-->>EA: ProcessPipeResponse
-    end
+    GCM->>DC: getInstances("chunker-v1")
+    DC->>Consul: Query healthy services
+    Consul-->>DC: Return service instances
+    DC-->>GCM: Remote instances available
     
-    EA-->>Client: ProcessPipeResponse
+    GCM->>RM: Create direct channel
+    RM-->>GCM: Channel established
+    GCM-->>Engine: Return remote channel
     
-    EA->>CBOS: Update ServiceAggregatedStatus
-    CBOS->>Consul: Write status (ACTIVE_PROXYING)
+    Engine->>RM: ProcessData(request)
+    RM-->>Engine: ProcessResponse
     
-    Note over EA: Engine A proxied to Engine B successfully
+    Engine->>SSA: updateServiceStatusToProxying("chunker-v1")
+    SSA->>Consul: Write status (ACTIVE_PROXYING)
+    
+    Engine-->>Client: ProcessPipeResponse
+    
+    Note over Engine: Successfully used remote module directly
 ```
 
 This diagram shows:
-- Engine A's local module is down
-- Engine A discovers other engines with the same module type
-- Engine A forwards the entire request to Engine B
-- Engine B processes with its healthy local module
-- Status is updated to reflect proxying state
+- Engine's core logic attempts to process the request
+- GrpcChannelManager handles module discovery transparently
+- Direct connection to remote module when local is unavailable
+- Status is updated to ACTIVE_PROXYING when using remote modules
+- No engine-to-engine proxying needed
 
 ### Phase B.4: Implement Health Check Integration
 
@@ -526,16 +529,7 @@ This section should reflect the failing tests and the environment hardening.
         * Test: Start Yappy Engine. Verify `KafkaListenerManager` creates a listener with correct Apicurio properties. Produce a Protobuf message. Verify consumption and processing by `DefaultPipeStreamEngineLogicImpl`.
     * **Goal:** Confirm dynamic Kafka listeners work end-to-end with Apicurio deserialization in the main application context.
 
-3.  **Complete Engine-to-Engine Proxying Implementation**
-    * **Status:** TODO - This is the next major feature after localhost-first (which is completed)
-    * **Requirements:**
-        * Implement request forwarding logic in the Engine's gRPC service handlers
-        * Add Engine discovery logic to find other Engine instances via Consul
-        * Implement transparent proxying that preserves the original request/response
-        * Update status tracking to reflect when an Engine is proxying requests
-    * See updated **Section VII** below for implementation details.
-
-4.  **Unit Test `DefaultPipeStreamEngineLogicImpl`:**
+3.  **Unit Test `DefaultPipeStreamEngineLogicImpl`:**
     * **Status:** Pending/In Progress.
     * **Action:** Complete the unit tests for `DefaultPipeStreamEngineLogicImpl`, covering its core processing logic, retries, error handling, and routing calculations.
 
@@ -647,149 +641,81 @@ void testKafkaAndGrpcFlow() {
 ```
 
 ---
-## VII. Implement Engine-to-Engine Proxying for Resilient Processing
+## VII. Direct Module Discovery Architecture (COMPLETED)
 
 **Background:**
-With the localhost-first logic now completed in `GrpcChannelManager`, the next priority is implementing engine-to-engine proxying. This feature enables an Engine instance to forward requests to other Engine instances when its co-located module is unavailable.
+The Yappy Engine has been simplified to use direct module discovery instead of engine-to-engine proxying. This approach reduces complexity while maintaining resilience through existing service discovery mechanisms.
 
-**Architecture Clarification:**
-* Each deployment unit consists of an Engine + Module running together (same container/pod)
-* Modules are vanilla gRPC services with NO Consul awareness - they never register themselves
-* Engines handle ALL Consul interactions - they register both themselves AND their co-located module
-* When an Engine's local module is down, it forwards the ENTIRE request to another Engine (which has its own module)
-* This creates a mesh of engine+module pairs that provide resilience through engine-to-engine forwarding
+**Architecture Summary:**
+* Modules are vanilla gRPC services registered in Consul (by any mechanism - agent, API, or Kubernetes)
+* Engines discover modules directly through Consul service discovery
+* `GrpcChannelManager` implements localhost-first logic to prioritize co-located modules
+* When using remote modules, engines update status to ACTIVE_PROXYING
+* No engine-to-engine forwarding is needed - engines connect directly to available modules
 
-**Objective:**
-Implement engine-to-engine proxying to enable resilient request processing across the cluster, allowing any Engine to handle any request by forwarding to the appropriate Engine instance when necessary.
+**Completed Implementation:**
 
-**Prerequisites (Completed Components):**
-* `GrpcChannelManager`: Already implements localhost-first logic and module discovery from Consul
-* `ConsulBusinessOperationsService`: Provides service discovery capabilities
-* `DynamicConfigurationManager`: Provides pipeline and module configuration
-* Engine self-registration: Engines register themselves with Consul
-
-**Implementation Tasks:**
-
-1.  **Engine Discovery Enhancement:**
-    * **Task:** Extend `ConsulBusinessOperationsService` to discover other Engine instances that have specific module types
-    * **Implementation:**
+1.  **Module Discovery via GrpcChannelManager:**
+    * **Status:** COMPLETED
+    * **Implementation:** The `GrpcChannelManager` handles all module discovery:
         ```java
-        public List<ServiceHealth> getHealthyEngineInstances() {
-            // Query Consul for all healthy instances of the engine service
-            // Each engine registers with metadata indicating its co-located module type
-            return consulClient.getHealthServices("yappy-engine", true, QueryOptions.BLANK).getResponse();
-        }
-        
-        public List<ServiceHealth> getEnginesWithModule(String moduleType) {
-            // Get all healthy engines and filter by those with the required module type
-            List<ServiceHealth> engines = getHealthyEngineInstances();
-            return engines.stream()
-                .filter(health -> moduleType.equals(health.getService().getMeta().get("module-type")))
-                .collect(Collectors.toList());
+        public ManagedChannel getChannel(String serviceName) {
+            // 1. Check for localhost configuration first
+            Optional<ManagedChannel> localChannel = tryLocalhostConnection(serviceName);
+            if (localChannel.isPresent()) {
+                return localChannel.get();
+            }
+            
+            // 2. Discover remote instances via Consul
+            List<ServiceInstance> instances = discoverServiceInstances(serviceName);
+            if (!instances.isEmpty()) {
+                // Connect directly to the module instance
+                return buildManagedChannel(instance.getHost(), instance.getPort());
+            }
+            
+            throw new GrpcEngineException("Service not found: " + serviceName);
         }
         ```
-    * **Purpose:** Enable engines to discover other engine+module pairs for proxying requests
 
-2.  **Implement Proxying Logic in gRPC Service Handlers:**
-    * **Task:** Modify `PipeStreamEngineImpl` and other gRPC service implementations
-    * **Implementation Pattern:**
+2.  **Status Tracking for Remote Modules:**
+    * **Status:** COMPLETED
+    * **Implementation:** When an engine uses a remote module, it updates the service status:
         ```java
-        @Override
-        public void processPipe(ProcessPipeRequest request, StreamObserver<ProcessPipeResponse> responseObserver) {
-            String requiredModule = extractRequiredModule(request);
+        private void updateServiceStatusIfRemoteModule(String pipelineName, String targetStepName) {
+            String moduleId = getModuleImplementationIdForStep(pipelineName, targetStepName);
+            boolean isLocal = grpcChannelManager.isServiceAvailableLocally(moduleId);
             
-            // Try local processing first
-            if (canProcessLocally(requiredModule)) {
-                // Existing processing logic
-                processLocally(request, responseObserver);
-            } else {
-                // Find another engine+module pair of the same type
-                Optional<ServiceHealth> targetEngine = findHealthyEngineWithSameModuleType();
-                if (targetEngine.isPresent()) {
-                    // Forward the entire request to the target engine
-                    forwardToEngine(request, targetEngine.get(), responseObserver);
-                } else {
-                    // No engine available with the required module
-                    responseObserver.onError(new StatusException(Status.UNAVAILABLE
-                        .withDescription("No engine available with module: " + requiredModule)));
-                }
+            if (!isLocal) {
+                serviceStatusAggregator.updateServiceStatusToProxying(moduleId);
             }
         }
         ```
 
-3.  **Create Engine-to-Engine gRPC Client:**
-    * **Task:** Implement forwarding mechanism
-    * **Implementation:**
-        ```java
-        private void forwardToEngine(ProcessPipeRequest request, ServiceHealth targetEngine, 
-                                   StreamObserver<ProcessPipeResponse> responseObserver) {
-            // Create gRPC channel to target engine (not to its module)
-            // The target engine will process with its co-located module
-            ManagedChannel channel = ManagedChannelBuilder
-                .forAddress(targetEngine.getService().getAddress(), targetEngine.getService().getPort())
-                .usePlaintext() // Or use TLS in production
-                .build();
-            
-            try {
-                // Create stub for target engine
-                PipeStreamEngineGrpc.PipeStreamEngineStub stub = PipeStreamEngineGrpc.newStub(channel);
-                
-                // Forward the request and relay the response
-                stub.processPipe(request, new StreamObserver<ProcessPipeResponse>() {
-                    @Override
-                    public void onNext(ProcessPipeResponse response) {
-                        responseObserver.onNext(response);
-                    }
-                    
-                    @Override
-                    public void onError(Throwable t) {
-                        responseObserver.onError(t);
-                    }
-                    
-                    @Override
-                    public void onCompleted() {
-                        responseObserver.onCompleted();
-                        channel.shutdown();
-                    }
-                });
-            } catch (Exception e) {
-                responseObserver.onError(new StatusException(Status.INTERNAL
-                    .withDescription("Failed to forward request: " + e.getMessage())
-                    .withCause(e)));
-                channel.shutdown();
-            }
-        }
-        ```
+3.  **Simplified PipeStreamEngineImpl:**
+    * **Status:** COMPLETED
+    * **Changes:**
+        * Removed all engine-to-engine proxying logic
+        * Always delegates to core engine for processing
+        * Core engine uses `PipeStepExecutorFactory` which uses `GrpcChannelManager`
+        * Status tracking happens after processing
 
-4.  **Update Status Tracking:**
-    * **Task:** Track when an engine is proxying requests
-    * **Implementation:**
-        * Update `ServiceAggregatedStatus` when proxying
-        * Add metrics for proxied requests
-        * Log proxying events for debugging
+**Benefits of Direct Module Discovery:**
+* **Simpler Architecture:** No engine-to-engine proxy layer to maintain
+* **Better Performance:** Direct connections reduce latency
+* **Easier Debugging:** Fewer hops make issues easier to trace
+* **Flexible Deployment:** Modules can be co-located or remote without code changes
 
-**Testing the Proxying Implementation:**
-* Write integration tests that:
-    * Start multiple engine+module containers (e.g., Engine A + Chunker A, Engine B + Chunker B)
-    * Simulate module failure (e.g., kill Chunker A while keeping Engine A running)
-    * Send requests to Engine A and verify it forwards to Engine B
-    * Verify Engine B processes with its local Chunker B and returns the response
-    * Verify the response is correctly returned through Engine A
-* Test failure scenarios:
-    * All modules of a specific type are down (no engine can process)
-    * Target engine+module pair becomes unavailable during proxying
-    * Network failures between engines
-* Test deployment patterns:
-    * Mixed module types (e.g., Container 1: Engine+Chunker, Container 2: Engine+Echo)
-    * Multiple instances of same module type for load balancing
+**Testing Approach:**
+* **DirectModuleDiscoveryIT:** Tests both local and remote module discovery scenarios
+* Tests verify that local modules are preferred when available
+* Tests confirm status is updated to ACTIVE_PROXYING for remote modules
+* Tests handle unavailable module scenarios gracefully
 
-**Performance Considerations:**
-* Implement connection pooling for engine-to-engine connections
-* Add caching for engine discovery results (with TTL)
-* Monitor latency impact of proxying
-* Consider implementing circuit breakers for failing engines
-
-This implementation provides resilient request processing, ensuring that any engine can handle any request by forwarding to the appropriate engine when necessary.
+**Future Enhancements (Optional):**
+* Add connection pooling optimizations in GrpcChannelManager
+* Implement circuit breakers for failing module instances
+* Add metrics for local vs. remote module usage
+* Consider adding module health checks before selection
 
 ## VIII. Detailed Design Specifications, Workflows, and Future Considerations (Incorporated from Additional Notes)
 
@@ -901,8 +827,9 @@ This section reflects the correct architecture where engines manage all Consul i
     * When `PipelineStepGrpcProcessorImpl` needs to call a module (e.g., "echo-v1"), it uses the Micronaut `DiscoveryClient` (via `GrpcChannelManager`) to find healthy instances in Consul.
     * The "Localhost-First" logic in `GrpcChannelManager` (COMPLETED) prioritizes the engine's own co-located module.
     * If the local module is unavailable, the engine will:
-        * Forward the request to another engine that has a healthy module of the same type (TODO - proxying feature)
-* **gRPC Invocation:** Standard gRPC call to either the local module or through another engine.
+        * Connect directly to a remote module instance discovered via Consul
+        * Update the service status to ACTIVE_PROXYING when using remote modules
+* **gRPC Invocation:** Standard gRPC call to the module (local or remote).
 
 **2. Module Registration Workflow (Engine-Driven):**
 * **Engine-Managed Registration:**
@@ -914,29 +841,30 @@ This section reflects the correct architecture where engines manage all Consul i
     6.  **Module Serves Requests:** Module responds to gRPC calls (unaware of Consul)
     7.  **Engine Deregisters:** On shutdown, Engine deregisters both itself and its module from Consul
 
-**3. Engine-to-Engine Proxying (TODO - High Priority):**
-* **Proxying Workflow:**
-    1.  **Engine Receives Request:** Engine A receives a request requiring its co-located module
-    2.  **Local Module Check:** Engine A checks if its co-located module is healthy and available
-    3.  **Find Another Engine:** If local module is down, Engine A queries Consul for other engine+module pairs of the same type
-    4.  **Forward to Engine:** Engine A forwards the complete request to Engine B (not directly to Engine B's module)
-    5.  **Process Locally:** Engine B processes the request with its healthy co-located module
-    6.  **Return Response:** Engine B returns the response through Engine A to the original caller
-    7.  **Update Status:** Engine A updates its status to indicate it's proxying
+**3. Direct Module Discovery (COMPLETED):**
+* **Discovery Workflow:**
+    1.  **Engine Receives Request:** Engine receives a request requiring a specific module
+    2.  **GrpcChannelManager Handles Discovery:** The channel manager checks for modules:
+        * First checks localhost configuration for co-located modules
+        * If not available locally, discovers remote instances via Consul
+    3.  **Direct Connection:** Engine connects directly to the discovered module instance
+    4.  **Process Request:** Module processes the request and returns response
+    5.  **Update Status:** If using a remote module, status is updated to ACTIVE_PROXYING
 * **Example Scenario:**
-    * Container 1: Engine A + Chunker Module A (Module A is DOWN)
-    * Container 2: Engine B + Chunker Module B (Module B is HEALTHY)
-    * When Engine A receives a chunking request, it forwards to Engine B
-    * Engine B processes with its local Chunker Module B and returns the result
+    * Container 1: Engine A (with or without co-located module)
+    * Container 2: Chunker Module B (registered in Consul)
+    * When Engine A needs chunking, GrpcChannelManager discovers Module B
+    * Engine A connects directly to Module B for processing
 * **Benefits:**
-    * Resilient processing - if a module instance fails, its engine can forward to another engine+module pair
-    * Simplified module development - modules remain vanilla gRPC services
-    * Clear separation of concerns - engines handle all orchestration complexity
-* **Implementation Considerations:**
-    * Connection pooling between engines
-    * Circuit breakers for failing engine+module pairs
-    * Latency monitoring for proxied requests
-    * Load balancing when multiple engine+module pairs are available
+    * Simpler architecture - no engine-to-engine proxy layer
+    * Better performance - direct connections reduce latency
+    * Flexible deployment - modules can be co-located or remote
+    * Resilient processing - automatic failover to available instances
+* **Implementation Details:**
+    * GrpcChannelManager caches connections for reuse
+    * Localhost-first logic prioritizes co-located modules
+    * Service discovery handles instance health automatically
+    * Status tracking provides visibility into remote module usage
 
 ## Using the ConnectorEngine Service for Document Ingestion
 
@@ -1218,10 +1146,10 @@ if (clusterConfig.isPresent()) {
     * `GET /api/admin/modules/definitions` (shows what's in `PipelineModuleMap`).
     * `GET /api/admin/modules/status` (shows defined modules and their current Consul registration status).
     * These APIs help administrators understand which modules are available and their health status
-3.  **Engine Status and Proxying APIs:**
-    * APIs to view which engines are proxying requests
-    * Metrics on proxying performance and frequency
-    * APIs to manually control proxying behavior (enable/disable, preferences)
+3.  **Module Usage and Status APIs:**
+    * APIs to view which modules are being used locally vs remotely
+    * Metrics on module discovery and connection patterns
+    * APIs to view ACTIVE_PROXYING status for services
 4.  **Schema Registry Integration for Module Config Schemas:**
     * This is still relevant. If modules define their `customConfig` structure with a JSON schema, that schema needs to be stored (Apicurio/Glue or even Consul KV) and referenced in `PipelineModuleConfiguration.customConfigSchemaReference`. The Engine (or an admin tool) would use this for validating `PipelineStepConfig.customConfig`.
 

@@ -54,6 +54,7 @@ class ModuleFailoverIT {
         lenient().when(mock.listServices()).thenReturn(Mono.just(new HashMap<>()));
         lenient().when(mock.getHealthyServiceInstances(anyString())).thenReturn(Mono.just(List.of()));
         lenient().when(mock.getPipelineClusterConfig(anyString())).thenReturn(Mono.empty());
+        lenient().when(mock.registerService(any())).thenReturn(Mono.empty());
         return mock;
     }
     

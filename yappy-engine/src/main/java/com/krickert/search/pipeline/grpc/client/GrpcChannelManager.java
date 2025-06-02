@@ -195,6 +195,24 @@ public class GrpcChannelManager implements AutoCloseable { // Implement AutoClos
             }
         }
     }
+    
+    /**
+     * Checks if a service is available locally (on localhost).
+     * This is used to determine if we're using a local module or a remote one.
+     */
+    public boolean isServiceAvailableLocally(String serviceName) {
+        // Check if the service has a localhost configuration
+        String effectiveServiceNameKey = serviceName;
+        Integer localPort = localServicesPorts.get(effectiveServiceNameKey);
+        
+        if (localPort == null) {
+            // Convention: try with "-local" suffix
+            effectiveServiceNameKey = serviceName + "-local";
+            localPort = localServicesPorts.get(effectiveServiceNameKey);
+        }
+        
+        return localPort != null;
+    }
 
     @PreDestroy // This annotation ensures the method is called on context shutdown
     @Override    // From AutoCloseable
