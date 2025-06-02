@@ -6,19 +6,14 @@ import com.krickert.search.config.pipeline.model.*;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.engine.PipeStreamEngine;
-import com.krickert.search.pipeline.engine.core.DefaultPipeStreamEngineLogicImpl;
-import com.krickert.search.pipeline.engine.grpc.PipeStreamGrpcForwarder;
-import com.krickert.search.pipeline.engine.kafka.KafkaForwarder;
 import com.krickert.search.pipeline.engine.kafka.admin.KafkaAdminService;
-import com.krickert.search.pipeline.step.PipeStepExecutorFactory;
 import io.micronaut.configuration.kafka.annotation.KafkaClient;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Property;
-import io.micronaut.context.annotation.Replaces;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import io.micronaut.test.annotation.MockBean;
 import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,9 +33,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-@MicronautTest(
-    environments = {"dev", "test-integration"}
-)
+@MicronautTest
 @Property(name = "kafka.enabled", value = "true")
 @Property(name = "kafka.schema.registry.type", value = "apicurio")
 @Property(name = "app.config.cluster-name", value = "test-e2e-cluster")
@@ -74,7 +67,7 @@ public class DynamicKafkaListenerE2ETest {
     PipeStreamEngine pipeStreamEngine;
 
     @KafkaClient
-    @Requires(env = {"test-integration"})
+    @Requires(env = {"test"})
     public interface TestKafkaProducer {
         void sendMessage(String topic, PipeStream message);
     }
@@ -189,10 +182,8 @@ public class DynamicKafkaListenerE2ETest {
         LOG.info("Test completed successfully. Dynamic Kafka listener created and processed the message.");
     }
 
-    // Mock the DefaultPipeStreamEngineLogicImpl for verification
-    @Requires(env = {"test-integration"})
-    @Singleton
-    @Replaces(DefaultPipeStreamEngineLogicImpl.class)
+    // Mock the PipeStreamEngine for verification
+    @MockBean(PipeStreamEngine.class)
     PipeStreamEngine testPipeStreamEngine() {
         return Mockito.mock(PipeStreamEngine.class);
     }

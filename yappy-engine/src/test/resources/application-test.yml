@@ -4,9 +4,15 @@ micronaut:
     name: two-grpc-services-test-app-${random.uuid} # Keep the name for context, but disable its default registration
   server:
     port: ${random.port}
+    grpc:
+      port: ${random.port}
   test:
     resources:
       enabled: true
+      
+grpc:
+  server:
+    port: ${random.port}
 
 app:
   config:

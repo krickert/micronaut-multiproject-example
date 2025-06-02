@@ -90,12 +90,13 @@ class YappyModuleRegistrationServiceIT {
     @BeforeEach
     void setUpClientsAndMappers() {
         // 1. Setup gRPC client to call the YappyModuleRegistrationService
-        EmbeddedServer embeddedServer = applicationContext.getBean(EmbeddedServer.class);
-        if (!embeddedServer.isRunning()) {
-            LOG.info("Starting Micronaut EmbeddedServer for gRPC...");
-            embeddedServer.start();
+        // Get the gRPC server instance, not the HTTP server
+        io.micronaut.grpc.server.GrpcEmbeddedServer grpcServer = applicationContext.getBean(io.micronaut.grpc.server.GrpcEmbeddedServer.class);
+        if (!grpcServer.isRunning()) {
+            LOG.info("Starting Micronaut gRPC server...");
+            grpcServer.start();
         }
-        int grpcPort = embeddedServer.getPort();
+        int grpcPort = grpcServer.getPort();
         LOG.info("Micronaut gRPC server (service under test) running on port: {}", grpcPort);
 
         channel = ManagedChannelBuilder.forAddress("localhost", grpcPort)
@@ -306,8 +307,8 @@ class YappyModuleRegistrationServiceIT {
     void testRegisterAndForwardToEchoService() throws Exception {
         String echoServiceNameForConsul = "echo-service-it-" + System.currentTimeMillis(); // Unique name for this test run
         String echoImplementationId = "echo-module-for-it";
-        EmbeddedServer embeddedServer = applicationContext.getBean(EmbeddedServer.class);
-        int grpcServerPort = embeddedServer.getPort();
+        io.micronaut.grpc.server.GrpcEmbeddedServer grpcServer = applicationContext.getBean(io.micronaut.grpc.server.GrpcEmbeddedServer.class);
+        int grpcServerPort = grpcServer.getPort();
         String grpcServerHost = "localhost"; // Service is running in the same JVM
 
         // --- 1. Attempt to get channel via GrpcChannelManager BEFORE registration ---

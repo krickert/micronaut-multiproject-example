@@ -1,0 +1,381 @@
+package com.krickert.yappy.engine.controller.admin;
+
+import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
+import com.krickert.search.config.pipeline.model.*;
+import com.krickert.yappy.engine.controller.admin.dto.*;
+import io.micronaut.core.type.Argument;
+import io.micronaut.http.HttpRequest;
+import io.micronaut.http.HttpStatus;
+import io.micronaut.http.client.HttpClient;
+import io.micronaut.http.client.annotation.Client;
+import io.micronaut.http.client.exceptions.HttpClientResponseException;
+import io.micronaut.serde.annotation.SerdeImport;
+import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import jakarta.inject.Inject;
+import org.junit.jupiter.api.*;
+import reactor.core.publisher.Mono;
+import io.micronaut.http.MediaType;
+import io.micronaut.context.annotation.Requires;
+
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.*;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+@MicronautTest
+@SerdeImport(ConsulConfigResponse.class)
+@SerdeImport(YappyClusterInfo.class)
+@SerdeImport(CreateClusterRequest.class)
+@SerdeImport(CreateClusterResponse.class)
+@SerdeImport(SelectClusterRequest.class)
+@SerdeImport(SelectClusterResponse.class)
+@SerdeImport(SetConsulConfigRequest.class)
+@SerdeImport(SetConsulConfigResponse.class)
+@SerdeImport(PipelineModuleInput.class)
+@SerdeImport(PipelineClusterConfig.class)
+@SerdeImport(PipelineConfig.class)
+@SerdeImport(PipelineGraphConfig.class)
+@SerdeImport(PipelineModuleMap.class)
+@SerdeImport(PipelineModuleConfiguration.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class AdminSetupControllerIT {
+
+    @Inject
+    @Client("/")
+    HttpClient client;
+    
+    @Inject
+    AdminSetupController adminSetupController;
+
+    @Inject
+    ConsulBusinessOperationsService consulBusinessOperationsService;
+    
+    @Inject
+    io.micronaut.web.router.Router router;
+
+    private static final String TEST_CLUSTER_NAME = "test-setup-cluster";
+    private String originalUserHome;
+    private Path mockBootstrapFile;
+
+    @BeforeAll
+    void setupClass() {
+        originalUserHome = System.getProperty("user.home");
+    }
+
+    @BeforeEach
+    void setUp() throws IOException {
+        // Clean up test cluster if it exists
+        consulBusinessOperationsService.deleteClusterConfiguration(TEST_CLUSTER_NAME).block();
+        
+        // Clear system properties
+        System.clearProperty("consul.client.host");
+        System.clearProperty("consul.client.port");
+        System.clearProperty("consul.client.acl-token");
+        
+        // Create mock bootstrap file
+        Path tempDir = Files.createTempDirectory("test-yappy");
+        System.setProperty("user.home", tempDir.toString());
+        Path mockYappyDir = tempDir.resolve(".yappy");
+        Files.createDirectories(mockYappyDir);
+        mockBootstrapFile = mockYappyDir.resolve("engine-bootstrap.properties");
+    }
+
+    @AfterEach
+    void tearDown() {
+        // Clean up test cluster
+        consulBusinessOperationsService.deleteClusterConfiguration(TEST_CLUSTER_NAME).block();
+        
+        // Restore user home
+        System.setProperty("user.home", originalUserHome);
+    }
+
+    @Test
+    @DisplayName("Verify controller is injected")
+    void testControllerInjected() {
+        assertNotNull(adminSetupController);
+        
+        // Debug: List all registered routes
+        System.out.println("=== Registered Routes ===");
+        router.uriRoutes().forEach(route -> {
+            System.out.println("Route: " + route.getHttpMethodName() + " " + route.toString());
+        });
+        System.out.println("========================");
+    }
+    
+    @Test
+    @DisplayName("Test direct controller method call")
+    void testDirectControllerCall() {
+        // Call the controller method directly to verify it works
+        ConsulConfigResponse response = adminSetupController.getCurrentConsulConfiguration();
+        assertNotNull(response);
+        // When no properties file exists, all values should be null
+        assertNull(response.getHost());
+        assertNull(response.getPort());
+        assertNull(response.getAclToken());
+        assertNull(response.getSelectedYappyClusterName());
+    }
+    
+    @Test
+    @DisplayName("Test endpoint works")
+    void testTestEndpoint() {
+        try {
+            HttpRequest<Object> request = HttpRequest.GET("/api/setup/test");
+            String response = client.toBlocking().retrieve(request, String.class);
+            assertEquals("Controller is working", response);
+        } catch (HttpClientResponseException e) {
+            System.err.println("Test endpoint error - Status: " + e.getStatus());
+            System.err.println("Test endpoint error - Body: " + e.getResponse().body());
+            e.printStackTrace();
+            fail("Test endpoint failed: " + e.getMessage());
+        }
+    }
+    
+    @Test
+    @DisplayName("Test simple controller works")
+    void testSimpleController() {
+        HttpRequest<Object> request = HttpRequest.GET("/test/hello");
+        String response = client.toBlocking().retrieve(request, String.class);
+        assertEquals("Hello from TestController", response);
+    }
+    
+    @Test
+    @DisplayName("Test reactive endpoint works")
+    void testReactiveEndpoint() {
+        HttpRequest<Object> request = HttpRequest.GET("/api/setup/ping-reactive");
+        String response = client.toBlocking().retrieve(request, String.class);
+        assertEquals("pong reactive", response);
+    }
+    
+    
+    @Test
+    @DisplayName("GET /consul - Returns current configuration")
+    void testGetCurrentConsulConfiguration() throws IOException {
+        // Create bootstrap file with test data
+        Properties props = new Properties();
+        props.setProperty("yappy.bootstrap.consul.host", "test-host");
+        props.setProperty("yappy.bootstrap.consul.port", "8501");
+        props.setProperty("yappy.bootstrap.consul.aclToken", "test-token");
+        props.setProperty("yappy.bootstrap.cluster.selectedName", "test-cluster");
+        
+        try (FileWriter writer = new FileWriter(mockBootstrapFile.toFile())) {
+            props.store(writer, "Test Bootstrap Configuration");
+        }
+
+        HttpRequest<Object> request = HttpRequest.GET("/api/setup/consul-config")
+            .accept(MediaType.APPLICATION_JSON);
+        
+        try {
+            ConsulConfigResponse response = client.toBlocking().retrieve(request, ConsulConfigResponse.class);
+            assertNotNull(response);
+            assertEquals("test-host", response.getHost());
+            assertEquals("8501", response.getPort());
+            assertEquals("test-token", response.getAclToken());
+            assertEquals("test-cluster", response.getSelectedYappyClusterName());
+        } catch (HttpClientResponseException e) {
+            System.err.println("Error response: " + e.getResponse().body());
+            throw e;
+        }
+    }
+
+    @Test
+    @DisplayName("GET /consul - Returns empty when no properties file")
+    void testGetCurrentConsulConfiguration_noFile() {
+        HttpRequest<Object> request = HttpRequest.GET("/api/setup/consul-config");
+        
+        try {
+            ConsulConfigResponse response = client.toBlocking().retrieve(request, ConsulConfigResponse.class);
+            
+            assertNotNull(response);
+            assertNull(response.getHost());
+            assertNull(response.getPort());
+            assertNull(response.getAclToken());
+            assertNull(response.getSelectedYappyClusterName());
+        } catch (HttpClientResponseException e) {
+            System.err.println("Error status: " + e.getStatus());
+            System.err.println("Error response body: " + e.getResponse().body());
+            System.err.println("Error message: " + e.getMessage());
+            e.printStackTrace();
+            fail("Request failed with status: " + e.getStatus() + ", body: " + e.getResponse().body());
+        }
+    }
+
+    @Test
+    @DisplayName("GET /yappy-clusters - Returns list with default seeded cluster")
+    void testListAvailableYappyClusters_withDefaultCluster() {
+        HttpRequest<Object> request = HttpRequest.GET("/api/setup/yappy-clusters");
+        Mono<List<YappyClusterInfo>> clustersMono = Mono.from(client.retrieve(request, Argument.listOf(YappyClusterInfo.class)));
+        List<YappyClusterInfo> clusters = clustersMono.block();
+
+        assertNotNull(clusters);
+        // There's a default yappy-cluster that gets seeded
+        assertFalse(clusters.isEmpty());
+        assertTrue(clusters.stream().anyMatch(c -> "yappy-cluster".equals(c.getClusterName())));
+    }
+
+    @Test
+    @DisplayName("GET /yappy-clusters - Returns clusters when available")
+    void testListAvailableYappyClusters_withClusters() {
+        // Create a test cluster
+        PipelineClusterConfig testConfig = PipelineClusterConfig.builder()
+            .clusterName(TEST_CLUSTER_NAME)
+            .pipelineGraphConfig(new PipelineGraphConfig(Collections.emptyMap()))
+            .pipelineModuleMap(new PipelineModuleMap(Collections.emptyMap()))
+            .defaultPipelineName(null)
+            .allowedKafkaTopics(Collections.emptySet())
+            .allowedGrpcServices(Collections.emptySet())
+            .build();
+        
+        consulBusinessOperationsService.storeClusterConfiguration(TEST_CLUSTER_NAME, testConfig).block();
+
+        HttpRequest<Object> request = HttpRequest.GET("/api/setup/yappy-clusters");
+        Mono<List<YappyClusterInfo>> clustersMono = Mono.from(client.retrieve(request, Argument.listOf(YappyClusterInfo.class)));
+        List<YappyClusterInfo> clusters = clustersMono.block();
+
+        assertNotNull(clusters);
+        assertEquals(1, clusters.size());
+        assertEquals(TEST_CLUSTER_NAME, clusters.get(0).getClusterName());
+        assertEquals("NEEDS_VERIFICATION", clusters.get(0).getStatus());
+    }
+
+    @Test
+    @DisplayName("POST /yappy-clusters - Creates new cluster successfully")
+    void testCreateNewYappyCluster_success() {
+        CreateClusterRequest request = new CreateClusterRequest();
+        request.setClusterName(TEST_CLUSTER_NAME);
+        request.setFirstPipelineName("test-pipeline");
+        
+        List<PipelineModuleInput> modules = new ArrayList<>();
+        modules.add(new PipelineModuleInput("Test Module", "test-module-id"));
+        request.setInitialModules(modules);
+
+        HttpRequest<CreateClusterRequest> httpRequest = HttpRequest.POST("/api/setup/yappy-clusters", request);
+        Mono<CreateClusterResponse> responseMono = Mono.from(client.retrieve(httpRequest, CreateClusterResponse.class));
+        CreateClusterResponse response = responseMono.block();
+
+        assertNotNull(response);
+        assertTrue(response.isSuccess());
+        assertEquals(TEST_CLUSTER_NAME, response.getClusterName());
+        assertTrue(response.getMessage().contains("created and selected successfully"));
+        
+        // Verify cluster was created in Consul
+        Optional<PipelineClusterConfig> stored = consulBusinessOperationsService.getPipelineClusterConfig(TEST_CLUSTER_NAME).block();
+        assertTrue(stored.isPresent());
+        assertEquals(TEST_CLUSTER_NAME, stored.get().clusterName());
+    }
+
+    @Test
+    @DisplayName("POST /yappy-clusters - Fails when cluster already exists")
+    void testCreateNewYappyCluster_alreadyExists() {
+        // Create cluster first
+        PipelineClusterConfig existingConfig = PipelineClusterConfig.builder()
+            .clusterName(TEST_CLUSTER_NAME)
+            .pipelineGraphConfig(new PipelineGraphConfig(Collections.emptyMap()))
+            .pipelineModuleMap(new PipelineModuleMap(Collections.emptyMap()))
+            .defaultPipelineName(null)
+            .allowedKafkaTopics(Collections.emptySet())
+            .allowedGrpcServices(Collections.emptySet())
+            .build();
+        
+        consulBusinessOperationsService.storeClusterConfiguration(TEST_CLUSTER_NAME, existingConfig).block();
+
+        // Try to create again
+        CreateClusterRequest request = new CreateClusterRequest();
+        request.setClusterName(TEST_CLUSTER_NAME);
+
+        HttpRequest<CreateClusterRequest> httpRequest = HttpRequest.POST("/api/setup/yappy-clusters", request);
+        Mono<CreateClusterResponse> responseMono = Mono.from(client.retrieve(httpRequest, CreateClusterResponse.class));
+        CreateClusterResponse response = responseMono.block();
+
+        assertNotNull(response);
+        assertFalse(response.isSuccess());
+        assertTrue(response.getMessage().contains("Failed to store cluster configuration"));
+    }
+
+    @Test
+    @DisplayName("POST /yappy-clusters - Invalid request with blank cluster name")
+    void testCreateNewYappyCluster_invalidRequest() {
+        CreateClusterRequest request = new CreateClusterRequest();
+        request.setClusterName(""); // Invalid - blank name
+
+        HttpClientResponseException exception = assertThrows(HttpClientResponseException.class, () -> {
+            client.toBlocking().exchange(HttpRequest.POST("/api/setup/yappy-clusters", request));
+        });
+        assertEquals(HttpStatus.BAD_REQUEST.getCode(), exception.getStatus().getCode());
+    }
+
+    @Test
+    @DisplayName("POST /cluster/select - Updates bootstrap file successfully")
+    void testSelectActiveYappyCluster_success() throws IOException {
+        SelectClusterRequest request = new SelectClusterRequest();
+        request.setClusterName("new-active-cluster");
+
+        HttpRequest<SelectClusterRequest> httpRequest = HttpRequest.POST("/api/setup/cluster/select", request);
+        Mono<SelectClusterResponse> responseMono = Mono.from(client.retrieve(httpRequest, SelectClusterResponse.class));
+        SelectClusterResponse response = responseMono.block();
+
+        assertNotNull(response);
+        assertTrue(response.isSuccess());
+        assertTrue(response.getMessage().contains("selected successfully"));
+        
+        // Verify bootstrap file was updated
+        Properties props = new Properties();
+        props.load(Files.newInputStream(mockBootstrapFile));
+        assertEquals("new-active-cluster", props.getProperty("yappy.bootstrap.cluster.selectedName"));
+    }
+
+    @Test
+    @DisplayName("POST /cluster/select - Invalid request with blank cluster name")
+    void testSelectActiveYappyCluster_invalidRequest() {
+        SelectClusterRequest request = new SelectClusterRequest();
+        request.setClusterName(""); // Invalid - blank name
+
+        HttpClientResponseException exception = assertThrows(HttpClientResponseException.class, () -> {
+            client.toBlocking().exchange(HttpRequest.POST("/api/setup/cluster/select", request));
+        });
+        assertEquals(HttpStatus.BAD_REQUEST.getCode(), exception.getStatus().getCode());
+    }
+
+    @Test
+    @DisplayName("POST /consul-config - Updates consul configuration")
+    void testSetConsulConfiguration_success() throws IOException {
+        SetConsulConfigRequest request = new SetConsulConfigRequest();
+        request.setHost("new-consul-host");
+        request.setPort(8502);
+        request.setAclToken("new-token");
+
+        HttpRequest<SetConsulConfigRequest> httpRequest = HttpRequest.POST("/api/setup/consul-config", request);
+        Mono<SetConsulConfigResponse> responseMono = Mono.from(client.retrieve(httpRequest, SetConsulConfigResponse.class));
+        SetConsulConfigResponse response = responseMono.block();
+
+        assertNotNull(response);
+        assertTrue(response.isSuccess());
+        assertNotNull(response.getCurrentConfig());
+        assertEquals("new-consul-host", response.getCurrentConfig().getHost());
+        assertEquals("8502", response.getCurrentConfig().getPort());
+        assertEquals("new-token", response.getCurrentConfig().getAclToken());
+        
+        // Verify bootstrap file was updated
+        Properties props = new Properties();
+        props.load(Files.newInputStream(mockBootstrapFile));
+        assertEquals("new-consul-host", props.getProperty("yappy.bootstrap.consul.host"));
+        assertEquals("8502", props.getProperty("yappy.bootstrap.consul.port"));
+        assertEquals("new-token", props.getProperty("yappy.bootstrap.consul.aclToken"));
+    }
+
+    @Test
+    @DisplayName("POST /consul-config - Invalid request with missing host")
+    void testSetConsulConfiguration_invalidRequest() {
+        SetConsulConfigRequest request = new SetConsulConfigRequest();
+        request.setHost(""); // Invalid - blank host
+        request.setPort(8500);
+
+        HttpClientResponseException exception = assertThrows(HttpClientResponseException.class, () -> {
+            client.toBlocking().exchange(HttpRequest.POST("/api/setup/consul-config", request));
+        });
+        assertEquals(HttpStatus.BAD_REQUEST.getCode(), exception.getStatus().getCode());
+    }
+}

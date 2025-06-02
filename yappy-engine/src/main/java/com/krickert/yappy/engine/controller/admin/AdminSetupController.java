@@ -5,7 +5,6 @@ import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.Controller;
 import io.micronaut.http.annotation.Get;
 import io.micronaut.http.annotation.Produces;
-import io.micronaut.validation.Validated;
 import io.micronaut.http.annotation.Body;
 import io.micronaut.http.annotation.Consumes;
 import io.micronaut.http.annotation.Post;
@@ -46,39 +45,67 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 
-@Validated
 @Controller("/api/setup")
+@io.micronaut.core.annotation.Introspected
 public class AdminSetupController {
 
     private static final Logger LOG = LoggerFactory.getLogger(AdminSetupController.class);
-    private static final Path YAPPY_DIR_PATH = Paths.get(System.getProperty("user.home"), ".yappy");
     private static final String BOOTSTRAP_PROPERTIES_FILENAME = "engine-bootstrap.properties";
-    private static final Path BOOTSTRAP_PROPERTIES_PATH = YAPPY_DIR_PATH.resolve(BOOTSTRAP_PROPERTIES_FILENAME);
     private static final String YAPPY_CLUSTER_PREFIX = "yappy/pipeline-clusters/";
 
     private final ConsulBusinessOperationsService consulBusinessOperationsService;
+    
+    private Path getYappyDirPath() {
+        return Paths.get(System.getProperty("user.home"), ".yappy");
+    }
+    
+    private Path getBootstrapPropertiesPath() {
+        return getYappyDirPath().resolve(BOOTSTRAP_PROPERTIES_FILENAME);
+    }
 
     @Inject
     public AdminSetupController(ConsulBusinessOperationsService consulBusinessOperationsService) {
         this.consulBusinessOperationsService = consulBusinessOperationsService;
+        LOG.info("AdminSetupController initialized with hash: {}", this.hashCode());
+        LOG.info("AdminSetupController class: {}", this.getClass().getName());
+        LOG.info("AdminSetupController annotations: {}", java.util.Arrays.toString(this.getClass().getAnnotations()));
+    }
+    
+    @Get("/test")
+    @Produces(MediaType.TEXT_PLAIN)
+    public String test() {
+        LOG.info("test() method called");
+        return "Controller is working";
+    }
+    
+    @Get("/ping")
+    @Produces(MediaType.TEXT_PLAIN)
+    public String ping() {
+        LOG.info("ping() method called");
+        return "pong";
+    }
+    
+    @Get("/ping-reactive")
+    @Produces(MediaType.TEXT_PLAIN)
+    public Mono<String> pingReactive() {
+        LOG.info("pingReactive() method called");
+        return Mono.just("pong reactive");
     }
 
-    @Get("/consul")
+    @Get("/consul-config")
     @Produces(MediaType.APPLICATION_JSON)
-    @Operation(summary = "Get Current Consul Configuration",
-               description = "Retrieves the current Consul connection details from the engine's bootstrap configuration.")
-    @ApiResponse(responseCode = "200", description = "Successfully retrieved Consul configuration.")
-    @ApiResponse(responseCode = "500", description = "Error reading bootstrap configuration.")
     public ConsulConfigResponse getCurrentConsulConfiguration() {
+        LOG.info("getCurrentConsulConfiguration called");
         Properties props = loadProperties();
-        String host = props.getProperty("yappy.bootstrap.consul.host");
-        String port = props.getProperty("yappy.bootstrap.consul.port");
-        String aclToken = props.getProperty("yappy.bootstrap.consul.aclToken");
-        String selectedYappyClusterName = props.getProperty("yappy.bootstrap.cluster.selectedName");
-        return new ConsulConfigResponse(host, port, aclToken, selectedYappyClusterName);
+        return new ConsulConfigResponse(
+            props.getProperty("yappy.bootstrap.consul.host"),
+            props.getProperty("yappy.bootstrap.consul.port"),
+            props.getProperty("yappy.bootstrap.consul.aclToken"),
+            props.getProperty("yappy.bootstrap.cluster.selectedName")
+        );
     }
 
-    @Get("/clusters")
+    @Get("/yappy-clusters")
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(summary = "List Available Yappy Clusters",
                description = "Retrieves a list of available Yappy cluster configurations from Consul.")
@@ -127,7 +154,7 @@ public class AdminSetupController {
     }
 
     // Method from Task 2.2, now uncommented with corrected model imports
-    @Post("/clusters")
+    @Post("/yappy-clusters")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(summary = "Create New Yappy Cluster",
@@ -216,8 +243,9 @@ public class AdminSetupController {
         try {
             // Ensure .yappy directory exists, though loadProperties/saveProperties might implicitly handle some aspects.
             // It's good practice if creating the file for the first time.
-            if (!Files.exists(YAPPY_DIR_PATH)) {
-                Files.createDirectories(YAPPY_DIR_PATH);
+            Path yappyDir = getYappyDirPath();
+            if (!Files.exists(yappyDir)) {
+                Files.createDirectories(yappyDir);
             }
 
             Properties props = loadProperties();
@@ -253,13 +281,76 @@ public class AdminSetupController {
         }
     }
 
-    Properties loadProperties() {
+    @Post("/consul-config")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Set Consul Configuration",
+               description = "Updates the Consul connection details in the bootstrap properties file.")
+    @ApiResponse(responseCode = "200", description = "Consul configuration updated successfully.")
+    @ApiResponse(responseCode = "400", description = "Invalid request payload.")
+    @ApiResponse(responseCode = "500", description = "Error updating bootstrap properties file.")
+    public Mono<SetConsulConfigResponse> setConsulConfiguration(@Body @Valid SetConsulConfigRequest request) {
+        return Mono.fromCallable(() -> {
+            try {
+                // Ensure .yappy directory exists
+                Path yappyDir = getYappyDirPath();
+                if (!Files.exists(yappyDir)) {
+                    Files.createDirectories(yappyDir);
+                }
+
+                Properties props = loadProperties();
+                
+                // Update properties
+                if (request.getHost() != null && !request.getHost().trim().isEmpty()) {
+                    props.setProperty("yappy.bootstrap.consul.host", request.getHost());
+                }
+                // Port is an int, so it's always present (can't be null)
+                props.setProperty("yappy.bootstrap.consul.port", String.valueOf(request.getPort()));
+                
+                if (request.getAclToken() != null) {
+                    if (request.getAclToken().trim().isEmpty()) {
+                        // Remove ACL token if empty string provided
+                        props.remove("yappy.bootstrap.consul.aclToken");
+                    } else {
+                        props.setProperty("yappy.bootstrap.consul.aclToken", request.getAclToken());
+                    }
+                }
+                
+                saveProperties(props);
+                
+                // TODO: Optionally verify connection to Consul with new settings
+                
+                String message = "Consul configuration updated successfully. A restart may be required for changes to take effect.";
+                LOG.info(message);
+                
+                // Create ConsulConfigResponse to include in the response
+                ConsulConfigResponse currentConfig = new ConsulConfigResponse(
+                    props.getProperty("yappy.bootstrap.consul.host"),
+                    props.getProperty("yappy.bootstrap.consul.port"),
+                    props.getProperty("yappy.bootstrap.consul.aclToken"),
+                    props.getProperty("yappy.bootstrap.cluster.selectedName")
+                );
+                
+                return new SetConsulConfigResponse(true, message, currentConfig);
+                
+            } catch (IOException e) {
+                LOG.error("Error updating Consul configuration", e);
+                return new SetConsulConfigResponse(false, "Error updating configuration: " + e.getMessage(), null);
+            } catch (Exception e) {
+                LOG.error("Unexpected error updating Consul configuration", e);
+                return new SetConsulConfigResponse(false, "Unexpected error: " + e.getMessage(), null);
+            }
+        });
+    }
+
+    private Properties loadProperties() {
         Properties props = new Properties();
-        if (Files.exists(BOOTSTRAP_PROPERTIES_PATH)) {
-            try (InputStream input = new FileInputStream(BOOTSTRAP_PROPERTIES_PATH.toFile())) {
+        Path bootstrapPath = getBootstrapPropertiesPath();
+        if (Files.exists(bootstrapPath)) {
+            try (InputStream input = new FileInputStream(bootstrapPath.toFile())) {
                 props.load(input);
             } catch (IOException ex) {
-                LOG.error("Failed to load bootstrap properties from {}", BOOTSTRAP_PROPERTIES_PATH, ex);
+                LOG.error("Failed to load bootstrap properties from {}", bootstrapPath, ex);
                 // For now, returns empty props
             }
         }
@@ -267,7 +358,8 @@ public class AdminSetupController {
     }
 
     private void saveProperties(Properties props) throws IOException {
-        try (OutputStream output = new FileOutputStream(BOOTSTRAP_PROPERTIES_PATH.toFile())) {
+        Path bootstrapPath = getBootstrapPropertiesPath();
+        try (OutputStream output = new FileOutputStream(bootstrapPath.toFile())) {
             props.store(output, "Yappy Engine Bootstrap Configuration");
         }
     }
