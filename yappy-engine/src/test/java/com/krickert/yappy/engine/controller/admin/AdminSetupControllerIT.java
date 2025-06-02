@@ -330,8 +330,7 @@ class AdminSetupControllerIT {
         SelectClusterRequest request = new SelectClusterRequest();
         request.setClusterName("new-active-cluster");
 
-        HttpRequest<SelectClusterRequest> httpRequest = HttpRequest.POST("/api/setup/cluster/select", request)
-            .contentType(MediaType.APPLICATION_JSON);
+        HttpRequest<SelectClusterRequest> httpRequest = HttpRequest.POST("/api/setup/cluster/select", request);
         
         try {
             Mono<SelectClusterResponse> responseMono = Mono.from(client.retrieve(httpRequest, SelectClusterResponse.class));

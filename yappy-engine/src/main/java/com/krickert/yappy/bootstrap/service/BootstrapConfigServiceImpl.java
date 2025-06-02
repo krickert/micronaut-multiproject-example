@@ -113,42 +113,29 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
             LOG.info("System properties updated for Consul client. Host: {}, Port: {}", request.getHost(), request.getPort());
 
 
-            boolean consulPingSuccess = false;
-            if (this.consulBusinessOperationsService != null) {
-                LOG.info("Attempting to check Consul availability after saving properties and setting system properties...");
-                // Block on the reactive call for this synchronous gRPC method
-                consulPingSuccess = this.consulBusinessOperationsService.isConsulAvailable().blockOptional().orElse(false);
-            } else {
-                LOG.warn("ConsulBusinessOperationsService is null, cannot check Consul availability. Assuming ping failure for safety, though properties were saved.");
-            }
-
             ConsulConfigDetails.Builder currentConfigBuilder = request.toBuilder();
             String selectedCluster = props.getProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME);
             if (selectedCluster != null && !selectedCluster.isEmpty()) {
                 currentConfigBuilder.setSelectedYappyClusterName(selectedCluster);
             }
 
-            ConsulConnectionStatus.Builder responseBuilder = ConsulConnectionStatus.newBuilder();
-            if (consulPingSuccess) {
-                LOG.info("Consul configuration updated, saved, and Consul is available. RESTART RECOMMENDED.");
-                LOG.warn("**************************************************************************************");
-                LOG.warn("* Consul has been configured. Key Consul settings have been updated programmatically. *");
-                LOG.warn("* A RESTART of the YAPPY Engine is STRONGLY RECOMMENDED to ensure all components     *");
-                LOG.warn("* initialize correctly with the new configuration.                                 *");
-                LOG.warn("**************************************************************************************");
-
-                responseBuilder.setSuccess(true)
-                        .setMessage("Consul configuration updated and saved to " + resolvedBootstrapPath.toString() + ". Consul is available. RESTART RECOMMENDED.");
-                responseBuilder.setCurrentConfig(currentConfigBuilder.build());
+            if (this.consulBusinessOperationsService != null) {
+                LOG.info("Attempting to check Consul availability after saving properties and setting system properties...");
+                // Use reactive approach
+                this.consulBusinessOperationsService.isConsulAvailable()
+                    .subscribe(
+                        consulPingSuccess -> {
+                            handleConsulConfigurationResponse(consulPingSuccess, currentConfigBuilder, responseObserver);
+                        },
+                        error -> {
+                            LOG.warn("Error checking Consul availability: {}", error.getMessage(), error);
+                            handleConsulConfigurationResponse(false, currentConfigBuilder, responseObserver);
+                        }
+                    );
             } else {
-                LOG.warn("Consul configuration saved to {}, but FAILED TO CONFIRM CONSUL AVAILABILITY. Please verify settings and Consul status. RESTART RECOMMENDED once Consul is reachable.", resolvedBootstrapPath);
-                responseBuilder.setSuccess(false) // Indicate ping/connection failure
-                        .setMessage("Consul configuration saved to " + resolvedBootstrapPath.toString() + ", but FAILED TO CONFIRM CONSUL AVAILABILITY. Verify settings. RESTART RECOMMENDED.");
-                responseBuilder.setCurrentConfig(currentConfigBuilder.build()); // Still return the saved config
+                LOG.warn("ConsulBusinessOperationsService is null, cannot check Consul availability. Assuming ping failure for safety, though properties were saved.");
+                handleConsulConfigurationResponse(false, currentConfigBuilder, responseObserver);
             }
-
-            responseObserver.onNext(responseBuilder.build());
-            responseObserver.onCompleted();
 
         } catch (IOException e) {
             LOG.error("Error saving Consul configuration to {}: {}", resolvedBootstrapPath, e.getMessage(), e);
@@ -182,11 +169,6 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
                         responseObserver.onError(io.grpc.Status.INTERNAL
                                 .withDescription("Failed to retrieve cluster names from Consul: " + error.getMessage())
                                 .asRuntimeException());
-                    },
-                    () -> {
-                        // Empty completion - handle empty list case
-                        LOG.info("No clusters found in Consul");
-                        buildAndSendResponse(Collections.emptyList(), false, responseObserver);
                     }
                 );
         } else if (consulBusinessOperationsService == null) {
@@ -196,6 +178,62 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
         } else {
             LOG.warn("Consul is not marked as configured (yappy.consul.configured is not true). Not listing clusters from Consul.");
             buildAndSendResponse(Collections.emptyList(), false, responseObserver);
+        }
+    }
+
+    private void handleConsulConfigurationResponse(boolean consulPingSuccess, ConsulConfigDetails.Builder currentConfigBuilder, StreamObserver<ConsulConnectionStatus> responseObserver) {
+        ConsulConnectionStatus.Builder responseBuilder = ConsulConnectionStatus.newBuilder();
+        if (consulPingSuccess) {
+            LOG.info("Consul configuration updated, saved, and Consul is available. RESTART RECOMMENDED.");
+            LOG.warn("**************************************************************************************");
+            LOG.warn("* Consul has been configured. Key Consul settings have been updated programmatically. *");
+            LOG.warn("* A RESTART of the YAPPY Engine is STRONGLY RECOMMENDED to ensure all components     *");
+            LOG.warn("* initialize correctly with the new configuration.                                 *");
+            LOG.warn("**************************************************************************************");
+
+            responseBuilder.setSuccess(true)
+                    .setMessage("Consul configuration updated and saved to " + resolvedBootstrapPath.toString() + ". Consul is available. RESTART RECOMMENDED.");
+            responseBuilder.setCurrentConfig(currentConfigBuilder.build());
+        } else {
+            LOG.warn("Consul configuration saved to {}, but FAILED TO CONFIRM CONSUL AVAILABILITY. Please verify settings and Consul status. RESTART RECOMMENDED once Consul is reachable.", resolvedBootstrapPath);
+            responseBuilder.setSuccess(false) // Indicate ping/connection failure
+                    .setMessage("Consul configuration saved to " + resolvedBootstrapPath.toString() + ", but FAILED TO CONFIRM CONSUL AVAILABILITY. Verify settings. RESTART RECOMMENDED.");
+            responseBuilder.setCurrentConfig(currentConfigBuilder.build()); // Still return the saved config
+        }
+
+        responseObserver.onNext(responseBuilder.build());
+        responseObserver.onCompleted();
+    }
+
+    private void handleSuccessfulClusterCreation(String clusterName, NewClusterDetails request, StreamObserver<ClusterCreationStatus> responseObserver) {
+        try {
+            String consulPath = consulBusinessOperationsService.getFullClusterKey(clusterName);
+            LOG.info("Successfully stored minimal configuration for cluster '{}' at Consul path '{}'", clusterName, consulPath);
+
+            // Update bootstrap properties to select this new cluster
+            Properties props = loadProperties(resolvedBootstrapPath);
+            props.setProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME, clusterName);
+            saveProperties(resolvedBootstrapPath, props);
+            LOG.info("Set newly created cluster '{}' as selected in bootstrap properties file {}", clusterName, resolvedBootstrapPath);
+
+            ClusterCreationStatus response = ClusterCreationStatus.newBuilder()
+                    .setSuccess(true)
+                    .setMessage("Cluster '" + clusterName + "' created and selected successfully. Configuration stored in Consul.")
+                    .setClusterName(clusterName)
+                    .setSeededConfigPath(consulPath)
+                    .build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            LOG.error("Error updating bootstrap properties for cluster '{}': {}", clusterName, e.getMessage(), e);
+            ClusterCreationStatus response = ClusterCreationStatus.newBuilder()
+                    .setSuccess(false)
+                    .setMessage("Cluster '" + clusterName + "' was stored in Consul but failed to update bootstrap properties: " + e.getMessage())
+                    .setClusterName(clusterName)
+                    .setSeededConfigPath(consulBusinessOperationsService.getFullClusterKey(clusterName))
+                    .build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
         }
     }
 
@@ -276,47 +314,37 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
 
         try {
             PipelineClusterConfig minimalConfig = createMinimalClusterConfig(request);
-            // Using Jackson for potentially better logging of the object structure
-            // ObjectMapper localObjectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
-            // LOG.debug("Generated minimal PipelineClusterConfig for {}: {}", clusterName, localObjectMapper.writeValueAsString(minimalConfig));
             LOG.debug("Generated minimal PipelineClusterConfig for cluster name: {}", clusterName);
 
-
-            // Store in Consul using the reactive method and blocking for the result
-            Boolean storedSuccessfully = consulBusinessOperationsService.storeClusterConfiguration(clusterName, minimalConfig)
-                    .blockOptional()
-                    .orElse(false);
-
-            if (!storedSuccessfully) {
-                LOG.error("Failed to store minimal configuration for cluster '{}' in Consul.", clusterName);
-                ClusterCreationStatus response = ClusterCreationStatus.newBuilder()
-                        .setSuccess(false)
-                        .setMessage("Failed to store new cluster configuration for '" + clusterName + "' in Consul.")
-                        .setClusterName(clusterName)
-                        .build();
-                responseObserver.onNext(response);
-                responseObserver.onCompleted();
-                return;
-            }
-
-            String consulPath = consulBusinessOperationsService.getFullClusterKey(clusterName); // Assuming getFullClusterKey is public
-            LOG.info("Successfully stored minimal configuration for cluster '{}' at Consul path '{}'", clusterName, consulPath);
-
-
-            // Update bootstrap properties to select this new cluster
-            Properties props = loadProperties(resolvedBootstrapPath);
-            props.setProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME, clusterName);
-            saveProperties(resolvedBootstrapPath, props);
-            LOG.info("Set newly created cluster '{}' as selected in bootstrap properties file {}", clusterName, resolvedBootstrapPath);
-
-            ClusterCreationStatus response = ClusterCreationStatus.newBuilder()
-                    .setSuccess(true)
-                    .setMessage("Cluster '" + clusterName + "' created successfully and configuration stored in Consul.")
-                    .setClusterName(clusterName)
-                    .setSeededConfigPath(consulPath)
-                    .build();
-            responseObserver.onNext(response);
-            responseObserver.onCompleted();
+            // Store in Consul using reactive approach
+            consulBusinessOperationsService.storeClusterConfiguration(clusterName, minimalConfig)
+                    .subscribe(
+                        storedSuccessfully -> {
+                            if (storedSuccessfully) {
+                                handleSuccessfulClusterCreation(clusterName, request, responseObserver);
+                            } else {
+                                LOG.error("Failed to store minimal configuration for cluster '{}' in Consul.", clusterName);
+                                ClusterCreationStatus response = ClusterCreationStatus.newBuilder()
+                                        .setSuccess(false)
+                                        .setMessage("Failed to store new cluster configuration for '" + clusterName + "' in Consul.")
+                                        .setClusterName(clusterName)
+                                        .build();
+                                responseObserver.onNext(response);
+                                responseObserver.onCompleted();
+                            }
+                        },
+                        error -> {
+                            LOG.error("Error storing cluster configuration for '{}': {}", clusterName, error.getMessage(), error);
+                            ClusterCreationStatus response = ClusterCreationStatus.newBuilder()
+                                    .setSuccess(false)
+                                    .setMessage("Failed to create new cluster '" + clusterName + "': " + error.getMessage())
+                                    .setClusterName(clusterName)
+                                    .setSeededConfigPath(getFullClusterKey(clusterName))
+                                    .build();
+                            responseObserver.onNext(response);
+                            responseObserver.onCompleted();
+                        }
+                    );
 
         } catch (Exception e) {
             LOG.error("Failed to create or store new cluster configuration for '{}': {}", clusterName, e.getMessage(), e);
@@ -450,7 +478,7 @@ public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.Boots
             LOG.info("Successfully selected cluster '{}' and saved to {}", clusterName, resolvedBootstrapPath);
             OperationStatus response = OperationStatus.newBuilder()
                     .setSuccess(true)
-                    .setMessage("Successfully selected cluster '" + clusterName + "'.")
+                    .setMessage("Cluster '" + clusterName + "' selected successfully.")
                     .build();
             responseObserver.onNext(response);
             responseObserver.onCompleted();
