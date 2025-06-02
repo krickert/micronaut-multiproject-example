@@ -1,0 +1,8 @@
+# Additional requirements for gRPC Health Service support
+# Add these to your existing requirements.txt
+
+# Standard gRPC health checking
+grpcio-health-checking>=1.60.0
+
+# gRPC reflection (optional but recommended for debugging)
+grpcio-reflection>=1.60.0
