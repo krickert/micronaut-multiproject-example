@@ -33,7 +33,15 @@ micronaut {
         annotations("com.krickert.search..**", "com.krickert.testcontainers.consul.*")
     }
     testResources {
-        enabled.set(true)
+        // Disable test resources when:
+        // 1. Running with -PdisableTestResources=true
+        // 2. Environment variable DISABLE_TEST_RESOURCES=true
+        // 3. System property disable.test.resources=true
+        val shouldDisable = project.hasProperty("disableTestResources") ||
+                           System.getenv("DISABLE_TEST_RESOURCES") == "true" ||
+                           System.getProperty("disable.test.resources") == "true"
+        
+        enabled.set(!shouldDisable)
         inferClasspath.set(true)
         clientTimeout.set(60)
         sharedServer.set(false)
@@ -50,18 +58,6 @@ micronaut {
         optimizeNetty = true
         replaceLogbackXml = true
     }
-}
-
-// Helper function to check if DEV environment is enabled
-fun isDevEnvironmentEnabled(): Boolean {
-    // Check system property
-    val devFromSysProp = System.getProperty("micronaut.environments")?.contains("dev") ?: false
-    // Check environment variable (as fallback)
-    val devFromEnv = System.getenv("MICRONAUT_ENVIRONMENTS")?.contains("dev") ?: false
-    // Check Gradle project property if set
-    val devFromProject = project.findProperty("micronautEnv")?.toString()?.contains("dev") ?: false
-
-    return devFromSysProp || devFromEnv || devFromProject
 }
 
 dependencies {
@@ -169,6 +165,36 @@ dependencies {
     testImplementation(mn.micronaut.http.client.core)
     testImplementation(mn.micronaut.grpc.client.runtime)
     testImplementation("org.awaitility:awaitility:4.3.0")
+}
+
+// Custom task for running in DEV mode without test resources
+tasks.register<JavaExec>("runDev") {
+    group = "application"
+    description = "Run the application in DEV mode without test resources"
+    
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.krickert.yappy.engine.YappyEngineApplication")
+    
+    // Set system properties
+    systemProperty("micronaut.environments", "dev-apicurio")
+    systemProperty("micronaut.test.resources.enabled", "false")
+    systemProperty("disable.test.resources", "true")
+    
+    // Set environment variables
+    environment("MICRONAUT_ENVIRONMENTS", "dev-apicurio")
+    environment("DISABLE_TEST_RESOURCES", "true")
+    environment("KAFKA_BOOTSTRAP_SERVERS", "localhost:9094")
+}
+
+// Modify the standard run task to respect test resources disable flag
+tasks.named<JavaExec>("run") {
+    doFirst {
+        if (System.getenv("DISABLE_TEST_RESOURCES") == "true" || 
+            System.getProperty("disable.test.resources") == "true") {
+            environment("DISABLE_TEST_RESOURCES", "true")
+            systemProperty("disable.test.resources", "true")
+        }
+    }
 }
 
 // Publishing configuration

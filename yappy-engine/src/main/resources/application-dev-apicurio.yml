@@ -1,0 +1,151 @@
+# application-dev-apicurio.yml
+# Development configuration for Apicurio Schema Registry mode
+# This configuration eliminates dependency on test resources by providing
+# explicit connections to docker-compose services in ./docker-dev
+
+micronaut:
+  application:
+    name: yappy-engine
+  server:
+    port: 8666
+  test-resources:
+    enabled: false  # Disable test resources for dev mode
+
+# Logging configuration for development
+logger:
+  levels:
+    com.krickert: DEBUG
+    io.micronaut.configuration.kafka: INFO
+    org.apache.kafka: WARN
+
+# Health endpoints for monitoring
+endpoints:
+  health:
+    details-visible: ANONYMOUS
+  env:
+    enabled: true
+    sensitive: false
+  beans:
+    sensitive: false
+  loggers:
+    enabled: true
+    write-sensitive: false
+
+# Consul Configuration
+consul:
+  client:
+    host: ${CONSUL_HOST:localhost}
+    port: ${CONSUL_PORT:8500}
+    default-zone: ${CONSUL_HOST:localhost}:${CONSUL_PORT:8500}
+    discovery:
+      host: ${CONSUL_HOST:localhost}
+      port: ${CONSUL_PORT:8500}
+    registration:
+      host: ${CONSUL_HOST:localhost}
+      port: ${CONSUL_PORT:8500}
+      enabled: false  # Engine manages module registration
+
+# Application-specific configuration
+app:
+  config:
+    cluster.name: "yappy-cluster"
+    consul:
+      key-prefixes:
+        pipeline-clusters: "yappy/pipeline-configs/clusters"
+        schema-versions: "yappy/schema-versions"
+      watch-seconds: 5
+
+# Kafka Configuration
+# For external access (outside Docker), use localhost:9094
+# For internal Docker network access, use kafka:9092
+kafka:
+  enabled: true
+  bootstrap:
+    servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+  request:
+    timeout:
+      ms: 30000
+  default:
+    api:
+      timeout:
+        ms: 30000
+  
+  # Admin client configuration (required for KafkaAdminClient)
+  admin:
+    bootstrap:
+      servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+  
+  # Schema Registry Type Selection
+  schema:
+    registry:
+      type: apicurio  # Use Apicurio (not Moto/Glue)
+
+  # Producer Configuration
+  producers:
+    default:
+      bootstrap.servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+      acks: all
+      key.serializer: org.apache.kafka.common.serialization.UUIDSerializer
+      value.serializer: io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer
+      # Apicurio-specific producer properties (properly nested)
+      apicurio:
+        registry:
+          url: ${APICURIO_REGISTRY_URL:http://localhost:8080/apis/registry/v3}
+          auto-register-artifact: true
+          artifact-resolver-strategy: io.apicurio.registry.serde.strategy.TopicIdStrategy
+          explicit-artifact-group-id: "default"
+    
+    pipestream-forwarder:
+      bootstrap.servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+      acks: all
+      key.serializer: org.apache.kafka.common.serialization.UUIDSerializer
+      value.serializer: io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer
+      apicurio:
+        registry:
+          url: ${APICURIO_REGISTRY_URL:http://localhost:8080/apis/registry/v3}
+          auto-register-artifact: true
+          artifact-resolver-strategy: io.apicurio.registry.serde.strategy.TopicIdStrategy
+          explicit-artifact-group-id: "default"
+
+  # Consumer Configuration  
+  consumers:
+    default:
+      bootstrap.servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+      key.deserializer: org.apache.kafka.common.serialization.UUIDDeserializer
+      value.deserializer: io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer
+      # Apicurio-specific consumer properties (properly nested)
+      apicurio:
+        registry:
+          url: ${APICURIO_REGISTRY_URL:http://localhost:8080/apis/registry/v3}
+          artifact-resolver-strategy: io.apicurio.registry.serde.strategy.TopicIdStrategy
+          explicit-artifact-group-id: "default"
+          deserializer-specific-value-return-class: com.krickert.search.model.PipeStream
+
+# Apicurio Registry Configuration
+apicurio:
+  registry:
+    url: ${APICURIO_REGISTRY_URL:http://localhost:8080/apis/registry/v3}
+
+# OpenSearch Configuration
+opensearch:
+  host: ${OPENSEARCH_HOST:localhost}
+  port: ${OPENSEARCH_PORT:9200}
+  url: ${OPENSEARCH_URL:http://localhost:9200}
+  username: ${OPENSEARCH_USERNAME:admin}
+  password: ${OPENSEARCH_PASSWORD:admin}
+  security:
+    enabled: false  # Matches docker-compose DISABLE_SECURITY_PLUGIN=true
+
+# gRPC Configuration
+grpc:
+  server:
+    port: 50051
+  client:
+    plaintext: true  # For local development
+
+# Development-specific settings
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
