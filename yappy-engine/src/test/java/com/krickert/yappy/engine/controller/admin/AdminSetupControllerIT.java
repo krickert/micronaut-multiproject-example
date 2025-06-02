@@ -62,13 +62,19 @@ class AdminSetupControllerIT {
 
     @BeforeEach
     void setUp() throws IOException {
-        // Clean up test cluster if it exists
-        consulBusinessOperationsService.deleteClusterConfiguration(TEST_CLUSTER_NAME).block();
-        
-        // Clear system properties
+        // Clear ALL consul-related system properties for test isolation
         System.clearProperty("consul.client.host");
         System.clearProperty("consul.client.port");
         System.clearProperty("consul.client.acl-token");
+        System.clearProperty("consul.host");
+        System.clearProperty("consul.port");
+        System.clearProperty("yappy.bootstrap.consul.host");
+        System.clearProperty("yappy.bootstrap.consul.port");
+        System.clearProperty("yappy.bootstrap.consul.acl_token");
+        System.clearProperty("yappy.bootstrap.cluster.selected_name");
+        
+        // Clean up test cluster if it exists
+        consulBusinessOperationsService.deleteClusterConfiguration(TEST_CLUSTER_NAME).block();
         
         // Ensure Consul is marked as configured for tests
         System.setProperty("yappy.consul.configured", "true");
@@ -95,10 +101,16 @@ class AdminSetupControllerIT {
             Files.delete(testBootstrapPath);
         }
         
-        // Clear system properties
+        // Clear ALL consul-related system properties for test isolation
         System.clearProperty("consul.client.host");
         System.clearProperty("consul.client.port");
         System.clearProperty("consul.client.acl-token");
+        System.clearProperty("consul.host");
+        System.clearProperty("consul.port");
+        System.clearProperty("yappy.bootstrap.consul.host");
+        System.clearProperty("yappy.bootstrap.consul.port");
+        System.clearProperty("yappy.bootstrap.consul.acl_token");
+        System.clearProperty("yappy.bootstrap.cluster.selected_name");
         System.clearProperty("yappy.consul.configured");
     }
 

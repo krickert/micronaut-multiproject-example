@@ -228,6 +228,19 @@ class ModuleWithGrpcForwardingIT {
                 String forwardTo = request.getConfig().getConfigParamsOrDefault("forward_to", "");
                 log.info("Forwarding request to: {}", forwardTo);
                 
+                // If no forwarding target specified (during testing), just echo the request
+                if (forwardTo.isEmpty()) {
+                    ProcessResponse response = ProcessResponse.newBuilder()
+                            .setSuccess(true)
+                            .setOutputDoc(request.getDocument())
+                            .addProcessorLogs("Forwarder module processed (no forwarding target specified)")
+                            .build();
+                    
+                    responseObserver.onNext(response);
+                    responseObserver.onCompleted();
+                    return;
+                }
+                
                 // Get the target module
                 var targetModule = moduleDiscoveryService.getModuleInfo(forwardTo);
                 if (targetModule == null) {

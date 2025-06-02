@@ -48,7 +48,12 @@ class ModuleDiscoveryWithSchemaIT {
     
     @MockBean(ConsulBusinessOperationsService.class)
     ConsulBusinessOperationsService consulService() {
-        return mock(ConsulBusinessOperationsService.class);
+        ConsulBusinessOperationsService mock = mock(ConsulBusinessOperationsService.class);
+        // Setup default stubbing to prevent NPE during application startup
+        lenient().when(mock.listServices()).thenReturn(Mono.just(new HashMap<>()));
+        lenient().when(mock.getHealthyServiceInstances(anyString())).thenReturn(Mono.just(List.of()));
+        lenient().when(mock.getPipelineClusterConfig(anyString())).thenReturn(Mono.empty());
+        return mock;
     }
     
     @MockBean(GrpcChannelManager.class)
@@ -101,13 +106,17 @@ class ModuleDiscoveryWithSchemaIT {
     
     @Test
     void testModuleDiscoveryWithSchemaRegistration() throws InterruptedException {
-        // Setup
+        // Reset mocks and setup test-specific behavior
+        reset(mockConsulService, mockChannelManager);
+        
+        // Create test data first to avoid nesting in stubbing
+        var healthyInstance = createHealthyInstance();
         Map<String, List<String>> services = new HashMap<>();
         services.put("schema-test-module", List.of("yappy-module"));
         
         when(mockConsulService.listServices()).thenReturn(Mono.just(services));
         when(mockConsulService.getHealthyServiceInstances("schema-test-module"))
-                .thenReturn(Mono.just(List.of(createHealthyInstance())));
+                .thenReturn(Mono.just(List.of(healthyInstance)));
         when(mockChannelManager.getChannel("schema-test-module")).thenReturn(testChannel);
         
         // Execute discovery
@@ -180,12 +189,17 @@ class ModuleDiscoveryWithSchemaIT {
                     .usePlaintext()
                     .build();
             
+            // Reset mocks and setup test-specific behavior
+            reset(mockConsulService, mockChannelManager);
+            
+            // Create test data first to avoid nesting in stubbing
+            var healthyInstance = createHealthyInstance();
             Map<String, List<String>> services = new HashMap<>();
             services.put("invalid-schema-module", List.of("yappy-module"));
             
             when(mockConsulService.listServices()).thenReturn(Mono.just(services));
             when(mockConsulService.getHealthyServiceInstances("invalid-schema-module"))
-                    .thenReturn(Mono.just(List.of(createHealthyInstance())));
+                    .thenReturn(Mono.just(List.of(healthyInstance)));
             when(mockChannelManager.getChannel("invalid-schema-module")).thenReturn(channel);
             
             // Execute discovery

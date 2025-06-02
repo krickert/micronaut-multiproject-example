@@ -6,10 +6,16 @@
         </encoder>
     </appender>
 
-    <logger name="io.micronaut" level="INFO"/>
-    <logger name="com.krickert" level="DEBUG"/> <!-- Keep your app's debug logs if needed -->
+    <!-- Reduce verbose logging during tests -->
+    <logger name="io.micronaut" level="WARN"/>
+    <logger name="com.krickert.testcontainers" level="WARN"/>
+    <logger name="org.testcontainers" level="WARN"/>
+    <logger name="com.github.dockerjava" level="WARN"/>
+    <logger name="org.apache.kafka" level="WARN"/>
+    <logger name="io.grpc" level="WARN"/>
+    <logger name="com.krickert" level="INFO"/> <!-- Keep app logs at INFO level -->
 
-    <root level="INFO">
+    <root level="WARN">
         <appender-ref ref="STDOUT"/>
     </root>
 

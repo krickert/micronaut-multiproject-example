@@ -12,6 +12,7 @@ import io.micronaut.http.client.annotation.Client;
 import io.micronaut.http.client.exceptions.HttpClientResponseException;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -38,8 +39,33 @@ class AdminKafkaControllerIT {
 
     @BeforeEach
     void setUp() {
+        // Clear ALL consul-related system properties for test isolation
+        System.clearProperty("consul.client.host");
+        System.clearProperty("consul.client.port");
+        System.clearProperty("consul.client.acl-token");
+        System.clearProperty("consul.host");
+        System.clearProperty("consul.port");
+        System.clearProperty("yappy.bootstrap.consul.host");
+        System.clearProperty("yappy.bootstrap.consul.port");
+        System.clearProperty("yappy.bootstrap.consul.acl_token");
+        System.clearProperty("yappy.bootstrap.cluster.selected_name");
+        
         // Ensure clean state
         kafkaListenerManager.getConsumerStatuses().clear();
+    }
+    
+    @AfterEach
+    void tearDown() {
+        // Clear ALL consul-related system properties for test isolation
+        System.clearProperty("consul.client.host");
+        System.clearProperty("consul.client.port");
+        System.clearProperty("consul.client.acl-token");
+        System.clearProperty("consul.host");
+        System.clearProperty("consul.port");
+        System.clearProperty("yappy.bootstrap.consul.host");
+        System.clearProperty("yappy.bootstrap.consul.port");
+        System.clearProperty("yappy.bootstrap.consul.acl_token");
+        System.clearProperty("yappy.bootstrap.cluster.selected_name");
     }
 
     @Test

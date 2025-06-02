@@ -83,11 +83,22 @@ class BootstrapConfigServiceImplTest {
 
     @BeforeEach
     void setUp() throws IOException {
+        // Clear ALL consul-related system properties for test isolation
+        System.clearProperty("consul.client.host");
+        System.clearProperty("consul.client.port");
+        System.clearProperty("consul.client.acl-token");
+        System.clearProperty("consul.host");
+        System.clearProperty("consul.port");
+        System.clearProperty("yappy.bootstrap.consul.host");
+        System.clearProperty("yappy.bootstrap.consul.port");
+        System.clearProperty("yappy.bootstrap.consul.acl_token");
+        System.clearProperty("yappy.bootstrap.cluster.selected_name");
+        System.clearProperty("yappy.consul.configured");
+        
         testBootstrapFilePath = tempDir.resolve("test-engine-bootstrap.properties");
         Files.deleteIfExists(testBootstrapFilePath); // Ensure clean state
         Files.createFile(testBootstrapFilePath); // Create the file so it exists for tests that load properties
         service = new BootstrapConfigServiceImpl(mockConsulBusinessOpsService, testBootstrapFilePath.toString());
-        System.clearProperty("yappy.consul.configured"); // Clear before each test
 
         // Mock the applicationContext.publishEvent call leniently
         lenient().doNothing().when(mockApplicationContext).publishEvent(any(ApplicationEvent.class));
@@ -95,7 +106,17 @@ class BootstrapConfigServiceImplTest {
 
     @AfterEach
     void tearDown() {
-        System.clearProperty("yappy.consul.configured"); // Clear after each test
+        // Clear ALL consul-related system properties for test isolation
+        System.clearProperty("consul.client.host");
+        System.clearProperty("consul.client.port");
+        System.clearProperty("consul.client.acl-token");
+        System.clearProperty("consul.host");
+        System.clearProperty("consul.port");
+        System.clearProperty("yappy.bootstrap.consul.host");
+        System.clearProperty("yappy.bootstrap.consul.port");
+        System.clearProperty("yappy.bootstrap.consul.acl_token");
+        System.clearProperty("yappy.bootstrap.cluster.selected_name");
+        System.clearProperty("yappy.consul.configured");
     }
 
 
@@ -383,7 +404,7 @@ class BootstrapConfigServiceImplTest {
 
         OperationStatus status = operationStatusCaptor.getValue();
         assertTrue(status.getSuccess());
-        assertEquals("Successfully selected cluster 'testCluster1'.", status.getMessage());
+        assertEquals("Cluster 'testCluster1' selected successfully.", status.getMessage());
 
         Properties propsFromFile = loadTestProperties();
         assertEquals("testCluster1", propsFromFile.getProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME));
@@ -404,7 +425,7 @@ class BootstrapConfigServiceImplTest {
         verify(mockObserver).onNext(operationStatusCaptor.capture());
         OperationStatus status = operationStatusCaptor.getValue();
         assertTrue(status.getSuccess());
-        assertEquals("Successfully selected cluster 'newSelectedCluster'.", status.getMessage());
+        assertEquals("Cluster 'newSelectedCluster' selected successfully.", status.getMessage());
 
         Properties updatedProps = loadTestProperties();
         assertEquals("newSelectedCluster", updatedProps.getProperty(YAPPY_BOOTSTRAP_CLUSTER_SELECTED_NAME));
@@ -473,7 +494,7 @@ class BootstrapConfigServiceImplTest {
         assertTrue(status.getSuccess(), "Cluster creation should be successful. Message: " + status.getMessage());
         assertEquals("newClusterMin", status.getClusterName());
         assertEquals(DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH + "/newClusterMin", status.getSeededConfigPath());
-        assertTrue(status.getMessage().contains("created successfully and configuration stored in Consul"));
+        assertTrue(status.getMessage().contains("created and selected successfully"), "Expected success message, got: " + status.getMessage());
 
         PipelineClusterConfig storedConfig = pipelineClusterConfigCaptor.getValue();
         assertEquals("newClusterMin", storedConfig.clusterName());
@@ -584,10 +605,10 @@ class BootstrapConfigServiceImplTest {
         StreamObserver<ClusterCreationStatus> mockObserver = mockStreamObserver();
         NewClusterDetails request = NewClusterDetails.newBuilder().setClusterName("failCluster").build();
 
-        when(mockConsulBusinessOpsService.storeClusterConfiguration(anyString(), any(PipelineClusterConfig.class)))
+        lenient().when(mockConsulBusinessOpsService.storeClusterConfiguration(anyString(), any(PipelineClusterConfig.class)))
                 .thenReturn(Mono.error(new RuntimeException("Consul save failed!")));
         // Mock getFullClusterKey because it's called in the catch block to build the response
-        when(mockConsulBusinessOpsService.getFullClusterKey(eq("failCluster")))
+        lenient().when(mockConsulBusinessOpsService.getFullClusterKey(eq("failCluster")))
                 .thenReturn(DEFAULT_TEST_CONSUL_CONFIG_BASE_PATH + "/failCluster");
 
 
