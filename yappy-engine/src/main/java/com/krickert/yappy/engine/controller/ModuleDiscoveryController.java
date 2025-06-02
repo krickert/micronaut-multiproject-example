@@ -1,13 +1,14 @@
 package com.krickert.yappy.engine.controller;
 
 import com.krickert.search.pipeline.module.ModuleDiscoveryService;
+import com.krickert.search.pipeline.module.ModuleSchemaRegistryService;
+import com.krickert.search.pipeline.module.ModuleSchemaValidator;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.http.HttpResponse;
-import io.micronaut.http.annotation.Controller;
-import io.micronaut.http.annotation.Get;
-import io.micronaut.http.annotation.Post;
-import io.micronaut.http.annotation.PathVariable;
+import io.micronaut.http.MediaType;
+import io.micronaut.http.annotation.*;
 import io.micronaut.serde.annotation.Serdeable;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import reactor.core.publisher.Mono;
 
@@ -25,10 +26,14 @@ import java.util.stream.Collectors;
 public class ModuleDiscoveryController {
     
     private final ModuleDiscoveryService moduleDiscoveryService;
+    private final ModuleSchemaRegistryService schemaRegistryService;
     
     @Inject
-    public ModuleDiscoveryController(ModuleDiscoveryService moduleDiscoveryService) {
+    public ModuleDiscoveryController(
+            ModuleDiscoveryService moduleDiscoveryService,
+            @Nullable ModuleSchemaRegistryService schemaRegistryService) {
         this.moduleDiscoveryService = moduleDiscoveryService;
+        this.schemaRegistryService = schemaRegistryService;
     }
     
     /**
@@ -98,6 +103,78 @@ public class ModuleDiscoveryController {
         ));
     }
     
+    /**
+     * Get the configuration schema for a module
+     */
+    @Get(value = "/{moduleName}/schema", produces = MediaType.APPLICATION_JSON)
+    public HttpResponse<SchemaResponse> getModuleSchema(@PathVariable String moduleName) {
+        if (schemaRegistryService == null) {
+            return HttpResponse.notFound();
+        }
+        
+        String schema = schemaRegistryService.getModuleSchema(moduleName);
+        if (schema == null) {
+            // Try to get from module metadata
+            var statuses = moduleDiscoveryService.getModuleStatuses();
+            var status = statuses.get(moduleName);
+            if (status != null && status.getMetadata().containsKey("json_config_schema")) {
+                schema = status.getMetadata().get("json_config_schema");
+            }
+        }
+        
+        if (schema == null) {
+            return HttpResponse.notFound();
+        }
+        
+        return HttpResponse.ok(new SchemaResponse(moduleName, schema));
+    }
+    
+    /**
+     * Get the default configuration for a module based on its schema
+     */
+    @Get(value = "/{moduleName}/default-config", produces = MediaType.APPLICATION_JSON)
+    public HttpResponse<ConfigResponse> getDefaultConfig(@PathVariable String moduleName) {
+        if (schemaRegistryService == null) {
+            return HttpResponse.ok(new ConfigResponse(moduleName, "{}"));
+        }
+        
+        String defaultConfig = schemaRegistryService.getDefaultConfiguration(moduleName);
+        return HttpResponse.ok(new ConfigResponse(moduleName, defaultConfig));
+    }
+    
+    /**
+     * Validate a configuration against a module's schema
+     */
+    @Post(value = "/{moduleName}/validate-config", consumes = MediaType.APPLICATION_JSON)
+    public HttpResponse<ValidationResponse> validateConfig(
+            @PathVariable String moduleName,
+            @Body Map<String, Object> configuration) {
+        
+        if (schemaRegistryService == null) {
+            return HttpResponse.ok(new ValidationResponse(
+                    true, 
+                    "Schema validation not available"
+            ));
+        }
+        
+        try {
+            String configJson = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .writeValueAsString(configuration);
+            
+            var result = schemaRegistryService.validateModuleConfiguration(moduleName, configJson);
+            
+            return HttpResponse.ok(new ValidationResponse(
+                    result.isValid(),
+                    result.getMessage()
+            ));
+        } catch (Exception e) {
+            return HttpResponse.ok(new ValidationResponse(
+                    false,
+                    "Validation error: " + e.getMessage()
+            ));
+        }
+    }
+    
     // Response DTOs
     
     @Serdeable
@@ -164,5 +241,47 @@ public class ModuleDiscoveryController {
         
         public String getMessage() { return message; }
         public int getDiscoveredModules() { return discoveredModules; }
+    }
+    
+    @Serdeable
+    public static class SchemaResponse {
+        private final String moduleName;
+        private final String schema;
+        
+        public SchemaResponse(String moduleName, String schema) {
+            this.moduleName = moduleName;
+            this.schema = schema;
+        }
+        
+        public String getModuleName() { return moduleName; }
+        public String getSchema() { return schema; }
+    }
+    
+    @Serdeable
+    public static class ConfigResponse {
+        private final String moduleName;
+        private final String configuration;
+        
+        public ConfigResponse(String moduleName, String configuration) {
+            this.moduleName = moduleName;
+            this.configuration = configuration;
+        }
+        
+        public String getModuleName() { return moduleName; }
+        public String getConfiguration() { return configuration; }
+    }
+    
+    @Serdeable
+    public static class ValidationResponse {
+        private final boolean valid;
+        private final String message;
+        
+        public ValidationResponse(boolean valid, String message) {
+            this.valid = valid;
+            this.message = message;
+        }
+        
+        public boolean isValid() { return valid; }
+        public String getMessage() { return message; }
     }
 }

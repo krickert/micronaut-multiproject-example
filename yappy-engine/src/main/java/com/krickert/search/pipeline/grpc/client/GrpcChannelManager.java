@@ -176,6 +176,26 @@ public class GrpcChannelManager implements AutoCloseable { // Implement AutoClos
         return channel;
     }
 
+    /**
+     * Updates the channel for a service (used for failover).
+     */
+    public void updateChannel(String serviceName, ManagedChannel newChannel) {
+        ManagedChannel oldChannel = channelCache.put(serviceName, newChannel);
+        if (oldChannel != null && oldChannel != newChannel) {
+            try {
+                log.info("Replacing channel for service '{}', shutting down old channel", serviceName);
+                oldChannel.shutdown();
+                if (!oldChannel.awaitTermination(5, TimeUnit.SECONDS)) {
+                    oldChannel.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                log.warn("Interrupted while shutting down old channel for service '{}'", serviceName);
+                oldChannel.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
     @PreDestroy // This annotation ensures the method is called on context shutdown
     @Override    // From AutoCloseable
     public void close() { // Renamed for clarity and to match AutoCloseable

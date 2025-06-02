@@ -24,6 +24,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.Flux;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -40,9 +41,14 @@ public class ModuleDiscoveryService {
     
     private final ConsulBusinessOperationsService consulService;
     private final GrpcChannelManager channelManager;
+    private final ModuleSchemaRegistryService schemaRegistryService;
+    private final ModuleSchemaValidator schemaValidator;
     
     // Cache of discovered modules and their status
     private final Map<String, ModuleStatus> moduleStatusCache = new ConcurrentHashMap<>();
+    
+    // Cache of module stubs and additional info
+    private final Map<String, ModuleInfo> moduleInfoCache = new ConcurrentHashMap<>();
     
     @io.micronaut.context.annotation.Value("${yappy.module.discovery.interval:30s}")
     private String discoveryIntervalString;
@@ -59,9 +65,13 @@ public class ModuleDiscoveryService {
     @Inject
     public ModuleDiscoveryService(
             ConsulBusinessOperationsService consulService,
-            GrpcChannelManager channelManager) {
+            GrpcChannelManager channelManager,
+            @jakarta.annotation.Nullable ModuleSchemaRegistryService schemaRegistryService,
+            @jakarta.annotation.Nullable ModuleSchemaValidator schemaValidator) {
         this.consulService = consulService;
         this.channelManager = channelManager;
+        this.schemaRegistryService = schemaRegistryService;
+        this.schemaValidator = schemaValidator;
         
         // Parse duration strings
         this.discoveryInterval = parseDuration(discoveryIntervalString, Duration.ofSeconds(30));
@@ -295,6 +305,49 @@ public class ModuleDiscoveryService {
         
         moduleStatusCache.put(serviceName, status);
         
+        // Create and cache the module info with stub
+        try {
+            ManagedChannel channel = channelManager.getChannel(serviceName);
+            PipeStepProcessorGrpc.PipeStepProcessorStub stub = PipeStepProcessorGrpc.newStub(channel);
+            
+            ModuleInfo moduleInfo = new ModuleInfo(
+                serviceName,
+                metadata.getPipeStepName(),
+                stub,
+                ModuleStatusEnum.READY,
+                instanceCount,
+                metadata.getContextParamsMap(),
+                Instant.now()
+            );
+            
+            moduleInfoCache.put(serviceName, moduleInfo);
+        } catch (Exception e) {
+            LOG.error("Failed to create stub for module {}", serviceName, e);
+        }
+        
+        // Register schema if provided and schema registry is available
+        String schemaJson = metadata.getContextParamsOrDefault("json_config_schema", null);
+        if (schemaJson != null && !schemaJson.isEmpty() && schemaRegistryService != null) {
+            LOG.info("Module {} provides configuration schema, registering with schema registry", serviceName);
+            
+            schemaRegistryService.registerModuleSchema(metadata.getPipeStepName(), schemaJson)
+                .subscribe(
+                    result -> {
+                        if (result.isSuccess()) {
+                            LOG.info("Successfully registered schema for module {} with ID {}", 
+                                    serviceName, result.getSchemaId());
+                            // Update status with schema info
+                            status.getMetadata().put("schema_id", String.valueOf(result.getSchemaId()));
+                            status.getMetadata().put("schema_subject", result.getSubjectName());
+                        } else {
+                            LOG.warn("Failed to register schema for module {}: {}", 
+                                    serviceName, result.getMessage());
+                        }
+                    },
+                    error -> LOG.error("Error registering schema for module {}", serviceName, error)
+                );
+        }
+        
         LOG.info("Module {} registered successfully with {} instances", serviceName, instanceCount);
         return Mono.just(new ModuleRegistrationResult(serviceName, true, "Registered with " + instanceCount + " instances"));
     }
@@ -312,6 +365,13 @@ public class ModuleDiscoveryService {
     public boolean isModuleAvailable(String moduleName) {
         ModuleStatus status = moduleStatusCache.get(moduleName);
         return status != null && status.isHealthy();
+    }
+    
+    /**
+     * Gets the full module information including stub.
+     */
+    public ModuleInfo getModuleInfo(String moduleName) {
+        return moduleInfoCache.get(moduleName);
     }
     
     /**
@@ -384,5 +444,71 @@ public class ModuleDiscoveryService {
         public boolean isHealthy() { return healthy; }
         public int getInstanceCount() { return instanceCount; }
         public Map<String, String> getMetadata() { return metadata; }
+    }
+    
+    /**
+     * Represents the full information about a module including its stub.
+     */
+    public record ModuleInfo(
+            String serviceName,
+            String pipeStepName,
+            PipeStepProcessorGrpc.PipeStepProcessorStub stub,
+            ModuleStatusEnum status,
+            int instanceCount,
+            Map<String, String> metadata,
+            Instant lastHealthCheck
+    ) {}
+    
+    /**
+     * Module status enumeration.
+     */
+    public enum ModuleStatusEnum {
+        READY,
+        UNHEALTHY,
+        TESTING,
+        FAILED
+    }
+    
+    /**
+     * Updates the health status of a module based on health check results.
+     * 
+     * @param moduleName The name of the module
+     * @param healthy Whether the module is healthy
+     * @param checkTime The time of the health check
+     */
+    public void updateModuleHealth(String moduleName, boolean healthy, java.time.Instant checkTime) {
+        ModuleStatus currentStatus = moduleStatusCache.get(moduleName);
+        if (currentStatus != null) {
+            // Create updated module status with new health state
+            ModuleStatus updatedStatus = new ModuleStatus(
+                    currentStatus.getServiceName(),
+                    currentStatus.getPipeStepName(),
+                    healthy,
+                    currentStatus.getInstanceCount(),
+                    currentStatus.getMetadata()
+            );
+            
+            moduleStatusCache.put(moduleName, updatedStatus);
+            
+            // Also update the module info cache
+            ModuleInfo currentInfo = moduleInfoCache.get(moduleName);
+            if (currentInfo != null) {
+                ModuleInfo updatedInfo = new ModuleInfo(
+                        currentInfo.serviceName(),
+                        currentInfo.pipeStepName(),
+                        currentInfo.stub(),
+                        healthy ? ModuleStatusEnum.READY : ModuleStatusEnum.UNHEALTHY,
+                        currentInfo.instanceCount(),
+                        currentInfo.metadata(),
+                        checkTime
+                );
+                moduleInfoCache.put(moduleName, updatedInfo);
+            }
+            
+            LOG.debug("Updated module {} health status to {} at {}", 
+                    moduleName, healthy ? "healthy" : "unhealthy", checkTime);
+        } else {
+            LOG.warn("Attempted to update health for unknown module: {}", moduleName);
+        }
     }
 }
