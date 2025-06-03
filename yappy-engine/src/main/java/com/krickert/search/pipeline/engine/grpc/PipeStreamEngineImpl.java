@@ -1,14 +1,21 @@
 package com.krickert.search.pipeline.engine.grpc;
 
 import com.google.protobuf.Empty;
+import com.google.protobuf.util.Timestamps;
 import com.krickert.search.engine.PipeStreamEngineGrpc;
+import com.krickert.search.model.ErrorData;
 import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.engine.PipeStreamEngine;
 import com.krickert.search.config.consul.DynamicConfigurationManager;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig;
+import com.krickert.search.pipeline.engine.common.RouteData;
+import com.krickert.search.pipeline.engine.state.PipeStreamStateBuilder;
+import com.krickert.search.pipeline.engine.state.PipeStreamStateBuilderImpl;
 import com.krickert.search.pipeline.grpc.client.GrpcChannelManager;
 import com.krickert.search.pipeline.status.ServiceStatusAggregator;
+import com.krickert.search.pipeline.step.PipeStepExecutor;
+import com.krickert.search.pipeline.step.PipeStepExecutorFactory;
 import io.micronaut.grpc.annotation.GrpcService;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -17,6 +24,7 @@ import io.grpc.stub.StreamObserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Optional;
 
 @Singleton
@@ -28,18 +36,21 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
     private final DynamicConfigurationManager dynamicConfigManager;
     private final GrpcChannelManager grpcChannelManager;
     private final ServiceStatusAggregator serviceStatusAggregator;
+    private final PipeStepExecutorFactory executorFactory;
 
     @Inject
     public PipeStreamEngineImpl(
             Provider<PipeStreamEngine> coreEngineProvider,
             DynamicConfigurationManager dynamicConfigManager,
             GrpcChannelManager grpcChannelManager,
-            ServiceStatusAggregator serviceStatusAggregator
+            ServiceStatusAggregator serviceStatusAggregator,
+            PipeStepExecutorFactory executorFactory
     ) {
         this.coreEngineProvider = coreEngineProvider;
         this.dynamicConfigManager = dynamicConfigManager;
         this.grpcChannelManager = grpcChannelManager;
         this.serviceStatusAggregator = serviceStatusAggregator;
+        this.executorFactory = executorFactory;
     }
 
     @Override
@@ -133,9 +144,79 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
 
     @Override
     public void testPipeStream(PipeStream request, StreamObserver<PipeStream> responseObserver) {
-        // If this method also uses coreEngine, it should also use coreEngineProvider.get()
-        // For now, assuming it's still placeholder or has its own logic
-        log.error("testPipeStream needs refactoring after core logic moved. Returning error for now.");
-        responseObserver.onError(io.grpc.Status.UNIMPLEMENTED.withDescription("testPipeStream needs refactoring").asRuntimeException());
+        try {
+            if (request.getTargetStepName() == null || request.getTargetStepName().isEmpty()) {
+                responseObserver.onError(new IllegalArgumentException("Target step name must be set in the request"));
+                return;
+            }
+
+            String targetStepName = request.getTargetStepName();
+            log.debug("Test processing step '{}' for streamId: {}", targetStepName, request.getStreamId());
+            
+            // Use the core engine to process the stream but capture the result
+            // Note: For testing, we execute the step but do NOT forward to next steps
+            PipeStream processedStream = executeStepWithoutForwarding(request);
+            
+            // Add routing information to context params for testing visibility
+            PipeStreamStateBuilder stateBuilder = new PipeStreamStateBuilderImpl(processedStream, dynamicConfigManager);
+            List<RouteData> routes = stateBuilder.calculateNextRoutes();
+            
+            PipeStream.Builder responseBuilder = processedStream.toBuilder();
+            
+            // Add routing info to context params for test inspection
+            if (!routes.isEmpty()) {
+                responseBuilder.putContextParams("test.routing.count", String.valueOf(routes.size()));
+                for (int i = 0; i < routes.size(); i++) {
+                    RouteData route = routes.get(i);
+                    String prefix = "test.routing." + i + ".";
+                    responseBuilder.putContextParams(prefix + "destination", route.destination());
+                    responseBuilder.putContextParams(prefix + "nextTargetStep", route.nextTargetStep());
+                    responseBuilder.putContextParams(prefix + "transportType", route.transportType().toString());
+                }
+            }
+            
+            PipeStream response = responseBuilder.build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            log.error("Failed to test pipe stream", e);
+            responseObserver.onError(io.grpc.Status.INTERNAL
+                    .withDescription("Failed to test pipe: " + e.getMessage())
+                    .withCause(e)
+                    .asRuntimeException());
+        }
+    }
+    
+    /**
+     * Executes a step without forwarding to next steps (for testing purposes).
+     * This method processes the step and returns the result but does not trigger routing.
+     */
+    private PipeStream executeStepWithoutForwarding(PipeStream request) {
+        try {
+            // Get the executor for the step
+            PipeStepExecutor executor = executorFactory.getExecutor(
+                    request.getCurrentPipelineName(),
+                    request.getTargetStepName()
+            );
+            
+            // Execute the step
+            PipeStreamStateBuilder stateBuilder = new PipeStreamStateBuilderImpl(request, dynamicConfigManager);
+            stateBuilder.withHopNumber((int) request.getCurrentHopNumber() + 1);
+            PipeStream streamToExecute = stateBuilder.getPresentState().build();
+            
+            return executor.execute(streamToExecute);
+        } catch (Exception e) {
+            log.error("Error executing step {} for test: {}", request.getTargetStepName(), e.getMessage(), e);
+            
+            // Return a stream with error information
+            return request.toBuilder()
+                    .setStreamErrorData(ErrorData.newBuilder()
+                            .setErrorMessage("Test execution failed: " + e.getMessage())
+                            .setErrorCode("TEST_EXECUTION_ERROR")
+                            .setOriginatingStepName(request.getTargetStepName())
+                            .setTimestamp(Timestamps.fromMillis(System.currentTimeMillis()))
+                            .build())
+                    .build();
+        }
     }
 }

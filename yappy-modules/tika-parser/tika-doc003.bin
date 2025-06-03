@@ -1,0 +1,119 @@
+
+test-doc-id"Sample file for testing*ÕFREE TEST DATA
+
+
+
+Sample HTML File
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse et odio tempor, venenatis leo at, feugiat mauris.
+
+
+	Suspendisse et odio tempor, venenatis leo at, feugiat mauris
+
+	lobortis et tortor nec, viverra pellentesque quam. 
+
+	Curabitur purus felis, iaculis vitae nulla id, efficitur feugiat libero.
+
+	Duis ornare ex sed nisl sollicitudin sollicitudin. In luctus gravida scelerisque
+
+	Suspendisse et odio tempor, venenatis leo at, feugiat mauris
+
+	lobortis et tortor nec, viverra pellentesque quam. 
+
+	roin venenatis massa eu turpis eleifend convallis. Quisque vel eleifend magna. In arcu turpis,
+
+	Curabitur purus felis, iaculis vitae nulla id, efficitur feugiat libero.
+
+	Duis ornare ex sed nisl sollicitudin sollicitudin. In luctus gravida scelerisque
+
+
+
+Vestibulum ut diam magna. Maecenas ut interdum ante, vel volutpat nibh
+
+
+	Curabitur purus felis, iaculis vitae nulla id, efficitur feugiat libero.
+
+	Duis ornare ex sed nisl sollicitudin sollicitudin. In luctus gravida scelerisque
+
+	Suspendisse et odio tempor, venenatis leo at, feugiat mauris
+
+	Curabitur purus felis, iaculis vitae nulla id, efficitur feugiat libero.
+
+	Duis ornare ex sed nisl sollicitudin sollicitudin. In luctus gravida scelerisque
+
+	Suspendisse et odio tempor, venenatis leo at, feugiat mauris
+
+	lobortis et tortor nec, viverra pellentesque quam. 
+
+	roin venenatis massa eu turpis eleifend convallis. Quisque vel eleifend magna. In arcu turpis,
+
+	lobortis et tortor nec, viverra pellentesque quam. 
+
+	roin venenatis massa eu turpis eleifend convallis. Quisque vel eleifend magna. In arcu turpis,bÿ
+ü
+tika_metadataê*ç
+
+X-UA-Compatible	IE=edge
+3
+viewport'%width=device-width, initial-scale=1.0
+:
+X-TIKA:Parsed-By&$org.apache.tika.parser.DefaultParser
+%
+dc:titleSample file for testing
+C
+X-TIKA:Parsed-By-Full-Set&$org.apache.tika.parser.DefaultParser
+ 
+Content-Encoding
+ISO-8859-1
+'
+X-TIKA:detectedEncoding
+ISO-8859-1
+
+robotsnoindex,nofollow
+6
+X-TIKA:encodingDetectorUniversalEncodingDetector
+
+Content-Languageen
+/
+Content-Typetext/html; charset=ISO-8859-1zß
+test-blob-id¿
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sample file for testing</title>
+<META NAME="robots" CONTENT="noindex,nofollow">
+</head>
+<body>
+<h1>FREE TEST DATA</h1>
+<br>
+<h2>Sample HTML File</h2>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse et odio tempor, venenatis leo at, feugiat mauris.</p>
+<ul>
+<li>Suspendisse et odio tempor, venenatis leo at, feugiat mauris</li>
+<li>lobortis et tortor nec, viverra pellentesque quam. </li>
+<li>Curabitur purus felis, iaculis vitae nulla id, efficitur feugiat libero.</li>
+<li>Duis ornare ex sed nisl sollicitudin sollicitudin. In luctus gravida scelerisque</li>
+<li>Suspendisse et odio tempor, venenatis leo at, feugiat mauris</li>
+<li>lobortis et tortor nec, viverra pellentesque quam. </li>
+<li>roin venenatis massa eu turpis eleifend convallis. Quisque vel eleifend magna. In arcu turpis,</li>
+<li>Curabitur purus felis, iaculis vitae nulla id, efficitur feugiat libero.</li>
+<li>Duis ornare ex sed nisl sollicitudin sollicitudin. In luctus gravida scelerisque</li>
+</ul>
+<p>Vestibulum ut diam magna. Maecenas ut interdum ante, vel volutpat nibh</p>
+<ol>
+<li>Curabitur purus felis, iaculis vitae nulla id, efficitur feugiat libero.</li>
+<li>Duis ornare ex sed nisl sollicitudin sollicitudin. In luctus gravida scelerisque</li>
+<li>Suspendisse et odio tempor, venenatis leo at, feugiat mauris</li>
+<li>Curabitur purus felis, iaculis vitae nulla id, efficitur feugiat libero.</li>
+<li>Duis ornare ex sed nisl sollicitudin sollicitudin. In luctus gravida scelerisque</li>
+<li>Suspendisse et odio tempor, venenatis leo at, feugiat mauris</li>
+<li>lobortis et tortor nec, viverra pellentesque quam. </li>
+<li>roin venenatis massa eu turpis eleifend convallis. Quisque vel eleifend magna. In arcu turpis,</li>
+<li>lobortis et tortor nec, viverra pellentesque quam. </li>
+<li>roin venenatis massa eu turpis eleifend convallis. Quisque vel eleifend magna. In arcu turpis,</li>
+</ol>
+</body>
+</html>"HTML_3KB.html

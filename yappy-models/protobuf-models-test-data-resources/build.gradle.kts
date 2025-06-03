@@ -35,6 +35,9 @@ dependencies {
 
     // Guava for collections
     implementation("com.google.guava:guava:33.0.0-jre")
+    
+    // Logging
+    implementation("org.slf4j:slf4j-api")
 
     // Annotation processors
     annotationProcessor(libs.lombok)

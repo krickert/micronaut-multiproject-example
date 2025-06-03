@@ -7,6 +7,7 @@ import com.krickert.search.pipeline.engine.grpc.PipeStreamEngineImpl;
 import com.krickert.search.config.consul.DynamicConfigurationManager;
 import com.krickert.search.pipeline.grpc.client.GrpcChannelManager;
 import com.krickert.search.pipeline.status.ServiceStatusAggregator;
+import com.krickert.search.pipeline.step.PipeStepExecutorFactory;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
@@ -41,6 +42,9 @@ class PipeStreamEngineImplTest {
     
     @Mock
     private ServiceStatusAggregator mockServiceStatusAggregator;
+    
+    @Mock
+    private PipeStepExecutorFactory mockExecutorFactory;
 
     @Mock
     private StreamObserver<Empty> mockProcessPipeAsyncResponseObserver;
@@ -53,6 +57,9 @@ class PipeStreamEngineImplTest {
     private ArgumentCaptor<IllegalArgumentException> illegalArgumentExceptionCaptor;
     @Captor
     private ArgumentCaptor<StatusRuntimeException> statusRuntimeExceptionCaptor;
+    
+    @Captor
+    private ArgumentCaptor<PipeStream> streamCaptor;
 
     private PipeStreamEngineImpl grpcService; // SUT
 
@@ -67,7 +74,8 @@ class PipeStreamEngineImplTest {
                 mockCoreEngineProvider,
                 mockDynamicConfigManager,
                 mockGrpcChannelManager,
-                mockServiceStatusAggregator
+                mockServiceStatusAggregator,
+                mockExecutorFactory
         );
     }
 
@@ -147,18 +155,55 @@ class PipeStreamEngineImplTest {
     }
 
     @Test
-    @DisplayName("testPipeStream should call onError with UNIMPLEMENTED (as per refactor placeholder)")
-    void testPipeStream_callsUnimplemented() {
+    @DisplayName("testPipeStream should execute step and return result with routing info")
+    void testPipeStream_executesStepAndReturnsResult() throws Exception {
+        // Given
         PipeStream request = createBasicPipeStream("testStep");
+        PipeStream processedStream = request.toBuilder()
+                .addHistory(com.krickert.search.model.StepExecutionRecord.newBuilder()
+                        .setHopNumber(1)
+                        .setStepName("testStep")
+                        .setStatus("SUCCESS")
+                        .build())
+                .build();
+        
+        // Mock executor
+        com.krickert.search.pipeline.step.PipeStepExecutor mockExecutor = mock(com.krickert.search.pipeline.step.PipeStepExecutor.class);
+        when(mockExecutorFactory.getExecutor("testPipeline", "testStep")).thenReturn(mockExecutor);
+        when(mockExecutor.execute(any())).thenReturn(processedStream);
+        
+        // Mock configuration for routing calculation
+        com.krickert.search.config.pipeline.model.PipelineConfig pipelineConfig = 
+                new com.krickert.search.config.pipeline.model.PipelineConfig(
+                        "testPipeline",
+                        java.util.Map.of("testStep", com.krickert.search.config.pipeline.model.PipelineStepConfig.builder()
+                                .stepName("testStep")
+                                .outputs(java.util.Map.of("output1", 
+                                        com.krickert.search.config.pipeline.model.PipelineStepConfig.OutputTarget.builder()
+                                                .targetStepName("nextStep")
+                                                .transportType(com.krickert.search.config.pipeline.model.TransportType.KAFKA)
+                                                .kafkaTransport(com.krickert.search.config.pipeline.model.KafkaTransportConfig.builder()
+                                                        .topic("test-topic")
+                                                        .build())
+                                                .build()))
+                                .build())
+                );
+        when(mockDynamicConfigManager.getPipelineConfig("testPipeline"))
+                .thenReturn(java.util.Optional.of(pipelineConfig));
 
+        // When
         grpcService.testPipeStream(request, mockTestPipeStreamResponseObserver);
 
-        verify(mockTestPipeStreamResponseObserver, never()).onNext(any());
-        verify(mockTestPipeStreamResponseObserver, never()).onCompleted();
-        verify(mockTestPipeStreamResponseObserver).onError(statusRuntimeExceptionCaptor.capture());
-
-        StatusRuntimeException exception = statusRuntimeExceptionCaptor.getValue();
-        assertEquals(Status.Code.UNIMPLEMENTED, exception.getStatus().getCode());
-        assertEquals("testPipeStream needs refactoring", exception.getStatus().getDescription());
+        // Then
+        verify(mockTestPipeStreamResponseObserver).onNext(streamCaptor.capture());
+        verify(mockTestPipeStreamResponseObserver).onCompleted();
+        verify(mockTestPipeStreamResponseObserver, never()).onError(any());
+        
+        PipeStream response = streamCaptor.getValue();
+        assertNotNull(response);
+        assertEquals("1", response.getContextParamsMap().get("test.routing.count"));
+        assertEquals("test-topic", response.getContextParamsMap().get("test.routing.0.destination"));
+        assertEquals("nextStep", response.getContextParamsMap().get("test.routing.0.nextTargetStep"));
+        assertEquals("KAFKA", response.getContextParamsMap().get("test.routing.0.transportType"));
     }
 }

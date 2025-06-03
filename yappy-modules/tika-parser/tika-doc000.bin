@@ -1,0 +1,19 @@
+
+test-doc-id*This is a sample TXT file.bÎ
+Ë
+tika_metadata¹*¶
+ 
+Content-Encoding
+ISO-8859-1
+'
+X-TIKA:detectedEncoding
+ISO-8859-1
+6
+X-TIKA:encodingDetectorUniversalEncodingDetector
+:
+X-TIKA:Parsed-By&$org.apache.tika.parser.DefaultParser
+C
+X-TIKA:Parsed-By-Full-Set&$org.apache.tika.parser.DefaultParser
+0
+Content-Type text/plain; charset=ISO-8859-1z3
+test-blob-idThis is a sample TXT file."TXT.txt
