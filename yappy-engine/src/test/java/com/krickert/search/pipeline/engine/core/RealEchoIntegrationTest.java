@@ -10,6 +10,7 @@ import com.krickert.search.pipeline.engine.kafka.listener.KafkaListenerManager;
 import com.krickert.search.pipeline.engine.kafka.listener.ConsumerStatus;
 import com.krickert.search.pipeline.grpc.client.GrpcChannelManager;
 import com.krickert.search.pipeline.engine.grpc.PipeStreamGrpcForwarder;
+import com.krickert.search.pipeline.engine.grpc.PipeStreamEngineImpl;
 import com.krickert.search.pipeline.step.PipeStepExecutorFactory;
 import com.krickert.yappy.modules.echo.EchoService;
 import io.apicurio.registry.serde.config.SerdeConfig;
@@ -396,10 +397,36 @@ class RealEchoIntegrationTest {
     @Test
     @DisplayName("Should process document through two Echo services via gRPC forwarding")
     void testGrpcServiceToServiceForwarding() throws Exception {
-        // Set up a pipeline with two echo steps forwarding via gRPC
+        // NOTE: This test demonstrates gRPC forwarding capability
+        // In a real deployment, gRPC forwarding would be between different engine instances
+        // For this test, we'll simulate the scenario by having the engine forward to itself
+        
         tearDown(); // Clean up previous config
         
-        // Create pipeline with echo1 -> echo2 via gRPC
+        // Start the engine's gRPC server to enable engine-to-engine forwarding
+        int enginePort;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            enginePort = socket.getLocalPort();
+        }
+        
+        // Get the PipeStreamEngineImpl bean and start it as a gRPC service
+        PipeStreamEngineImpl engineImpl = applicationContext.getBean(PipeStreamEngineImpl.class);
+        Server engineGrpcServer = ServerBuilder
+                .forPort(enginePort)
+                .addService(engineImpl)
+                .build()
+                .start();
+        
+        LOG.info("Started PipeStreamEngine gRPC server on port {} for engine-to-engine forwarding test", enginePort);
+        
+        // Register the engine service channel
+        ManagedChannel engineChannel = ManagedChannelBuilder
+                .forAddress("localhost", enginePort)
+                .usePlaintext()
+                .build();
+        grpcChannelManager.updateChannel("test-engine", engineChannel);
+        
+        // Create pipeline with echo1 -> echo2 via gRPC engine forwarding
         PipelineStepConfig echo1Step = PipelineStepConfig.builder()
                 .stepName("echo1")
                 .stepType(StepType.PIPELINE)
@@ -411,7 +438,7 @@ class RealEchoIntegrationTest {
                                 .targetStepName("echo2")
                                 .transportType(TransportType.GRPC)
                                 .grpcTransport(GrpcTransportConfig.builder()
-                                        .serviceName("echo")
+                                        .serviceName("test-engine")  // Forward to the engine service, not the module
                                         .build())
                                 .build()))
                 .build();
@@ -451,66 +478,77 @@ class RealEchoIntegrationTest {
                 .build();
         
         storeTestConfiguration("grpc-forward-pipeline", testPipeline,
-                Set.of("echo2-output"), Set.of("echo", "dummy-sink"));
+                Set.of("echo2-output"), Set.of("echo", "dummy-sink", "test-engine"));
         
         // Set up Kafka consumer for the final output
         setupKafkaConsumerForTopic("echo2-output");
         
-        // Given
-        PipeStream testPipeStream = PipeStream.newBuilder()
-                .setStreamId("grpc-forward-stream-" + UUID.randomUUID())
-                .setDocument(PipeDoc.newBuilder()
-                        .setId("grpc-forward-doc-1")
-                        .setTitle("gRPC Forwarding Test")
-                        .setBody("Testing echo1 -> echo2 via gRPC")
-                        .build())
-                .setCurrentPipelineName("grpc-forward-pipeline")
-                .setTargetStepName("echo1")
-                .setCurrentHopNumber(0)
-                .build();
-        
-        LOG.info("Starting gRPC service-to-service forwarding test");
-        
-        // When - Process through the pipeline
-        PipeStreamGrpcForwarder grpcForwarder = applicationContext.getBean(PipeStreamGrpcForwarder.class);
-        DefaultPipeStreamEngineLogicImpl engineLogic = new DefaultPipeStreamEngineLogicImpl(
-                applicationContext.getBean(PipeStepExecutorFactory.class),
-                grpcForwarder,
-                kafkaForwarder,
-                dynamicConfigurationManager
-        );
-        
-        engineLogic.processStream(testPipeStream);
-        
-        // Then - Verify the message went through both services
-        LOG.info("Waiting for message that passed through both Echo services");
-        ConsumerRecords<String, PipeStream> records = pollKafka("echo2-output", Duration.ofSeconds(10));
-        
-        assertFalse(records.isEmpty(), "Should have received message after passing through both services");
-        
-        ConsumerRecord<String, PipeStream> record = records.iterator().next();
-        PipeStream processedStream = record.value();
-        
-        assertNotNull(processedStream, "Processed stream should not be null");
-        assertEquals("grpc-forward-doc-1", processedStream.getDocument().getId());
-        
-        // Verify processor logs from both echo services
-        assertTrue(processedStream.getHistoryCount() >= 2, "Should have history from at least 2 services");
-        
-        List<String> allLogs = new ArrayList<>();
-        processedStream.getHistoryList().forEach(execRecord -> allLogs.addAll(execRecord.getProcessorLogsList()));
-        
-        // Check that both echo1 and echo2 processed the document
-        boolean hasEcho1Step = processedStream.getHistoryList().stream()
-                .anyMatch(execRecord -> execRecord.getStepName().equals("echo1"));
-        boolean hasEcho2Step = processedStream.getHistoryList().stream()
-                .anyMatch(execRecord -> execRecord.getStepName().equals("echo2"));
-        
-        assertTrue(hasEcho1Step, "Should have execution record from echo1");
-        assertTrue(hasEcho2Step, "Should have execution record from echo2");
-        
-        LOG.info("Successfully verified gRPC forwarding through two services. History: {}", 
-                processedStream.getHistoryList());
+        try {
+            // Given
+            PipeStream testPipeStream = PipeStream.newBuilder()
+                    .setStreamId("grpc-forward-stream-" + UUID.randomUUID())
+                    .setDocument(PipeDoc.newBuilder()
+                            .setId("grpc-forward-doc-1")
+                            .setTitle("gRPC Forwarding Test")
+                            .setBody("Testing echo1 -> echo2 via gRPC")
+                            .build())
+                    .setCurrentPipelineName("grpc-forward-pipeline")
+                    .setTargetStepName("echo1")
+                    .setCurrentHopNumber(0)
+                    .build();
+            
+            LOG.info("Starting gRPC service-to-service forwarding test");
+            
+            // When - Process through the pipeline
+            PipeStreamGrpcForwarder grpcForwarder = applicationContext.getBean(PipeStreamGrpcForwarder.class);
+            DefaultPipeStreamEngineLogicImpl engineLogic = new DefaultPipeStreamEngineLogicImpl(
+                    applicationContext.getBean(PipeStepExecutorFactory.class),
+                    grpcForwarder,
+                    kafkaForwarder,
+                    dynamicConfigurationManager
+            );
+            
+            engineLogic.processStream(testPipeStream);
+            
+            // Then - Verify the message went through both services
+            LOG.info("Waiting for message that passed through both Echo services");
+            ConsumerRecords<String, PipeStream> records = pollKafka("echo2-output", Duration.ofSeconds(15));
+            
+            assertFalse(records.isEmpty(), "Should have received message after passing through both services");
+            
+            ConsumerRecord<String, PipeStream> record = records.iterator().next();
+            PipeStream processedStream = record.value();
+            
+            assertNotNull(processedStream, "Processed stream should not be null");
+            assertEquals("grpc-forward-doc-1", processedStream.getDocument().getId());
+            
+            // Verify processor logs from both echo services
+            assertTrue(processedStream.getHistoryCount() >= 2, "Should have history from at least 2 services");
+            
+            List<String> allLogs = new ArrayList<>();
+            processedStream.getHistoryList().forEach(execRecord -> allLogs.addAll(execRecord.getProcessorLogsList()));
+            
+            // Check that both echo1 and echo2 processed the document
+            boolean hasEcho1Step = processedStream.getHistoryList().stream()
+                    .anyMatch(execRecord -> execRecord.getStepName().equals("echo1"));
+            boolean hasEcho2Step = processedStream.getHistoryList().stream()
+                    .anyMatch(execRecord -> execRecord.getStepName().equals("echo2"));
+            
+            assertTrue(hasEcho1Step, "Should have execution record from echo1");
+            assertTrue(hasEcho2Step, "Should have execution record from echo2");
+            
+            LOG.info("Successfully verified gRPC forwarding through two services. History: {}", 
+                    processedStream.getHistoryList());
+        } finally {
+            // Clean up the engine gRPC server
+            engineGrpcServer.shutdown();
+            try {
+                engineGrpcServer.awaitTermination(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                engineGrpcServer.shutdownNow();
+            }
+            LOG.info("Shut down engine gRPC server");
+        }
     }
     
     @Test
@@ -518,6 +556,28 @@ class RealEchoIntegrationTest {
     void testMixedRoutingScenario() throws Exception {
         // Set up a complex pipeline with mixed routing
         tearDown(); // Clean up previous config
+        
+        // Start the engine's gRPC server for engine-to-engine forwarding
+        int enginePort;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            enginePort = socket.getLocalPort();
+        }
+        
+        PipeStreamEngineImpl engineImpl = applicationContext.getBean(PipeStreamEngineImpl.class);
+        Server engineGrpcServer = ServerBuilder
+                .forPort(enginePort)
+                .addService(engineImpl)
+                .build()
+                .start();
+        
+        LOG.info("Started PipeStreamEngine gRPC server on port {} for mixed routing test", enginePort);
+        
+        // Register the engine service channel
+        ManagedChannel engineChannel = ManagedChannelBuilder
+                .forAddress("localhost", enginePort)
+                .usePlaintext()
+                .build();
+        grpcChannelManager.updateChannel("mixed-engine", engineChannel);
         
         String kafkaInputTopic = "pipeline.mixed-pipeline.step.kafka-entry.input";
         
@@ -540,7 +600,7 @@ class RealEchoIntegrationTest {
                                 .targetStepName("grpc-processor")
                                 .transportType(TransportType.GRPC)
                                 .grpcTransport(GrpcTransportConfig.builder()
-                                        .serviceName("echo")
+                                        .serviceName("mixed-engine")  // Forward to engine, not module
                                         .build())
                                 .build()))
                 .build();
@@ -581,62 +641,73 @@ class RealEchoIntegrationTest {
         
         storeTestConfiguration("mixed-pipeline", testPipeline,
                 Set.of(kafkaInputTopic, "mixed-final-output"), 
-                Set.of("echo", "dummy-sink"));
+                Set.of("echo", "dummy-sink", "mixed-engine"));
         
-        // Wait for Kafka listener to be ready
-        await().atMost(10, TimeUnit.SECONDS)
-                .pollInterval(500, TimeUnit.MILLISECONDS)
-                .until(() -> {
-                    Map<String, ConsumerStatus> statuses = kafkaListenerManager.getConsumerStatuses();
-                    return statuses.keySet().stream()
-                            .anyMatch(key -> key.contains("mixed-pipeline:kafka-entry"));
-                });
-        
-        // Set up consumer for final output
-        setupKafkaConsumerForTopic("mixed-final-output");
-        
-        // Given
-        PipeStream testPipeStream = PipeStream.newBuilder()
-                .setStreamId("mixed-stream-" + UUID.randomUUID())
-                .setDocument(PipeDoc.newBuilder()
-                        .setId("mixed-doc-1")
-                        .setTitle("Mixed Routing Test")
-                        .setBody("Testing Kafka -> gRPC -> Kafka routing")
-                        .build())
-                .setCurrentPipelineName("mixed-pipeline")
-                .setTargetStepName("kafka-entry")
-                .setCurrentHopNumber(0)
-                .build();
-        
-        LOG.info("Sending message to Kafka input topic for mixed routing test");
-        
-        // When - Send to Kafka input
-        kafkaForwarder.forwardToKafka(testPipeStream, kafkaInputTopic).get(10, TimeUnit.SECONDS);
-        
-        // Then - Verify final output
-        LOG.info("Waiting for message after mixed routing");
-        ConsumerRecords<String, PipeStream> records = pollKafka("mixed-final-output", Duration.ofSeconds(15));
-        
-        assertFalse(records.isEmpty(), "Should have received message after mixed routing");
-        
-        ConsumerRecord<String, PipeStream> record = records.iterator().next();
-        PipeStream processedStream = record.value();
-        
-        assertNotNull(processedStream);
-        assertEquals("mixed-doc-1", processedStream.getDocument().getId());
-        
-        // Verify all steps were executed
-        assertTrue(processedStream.getHistoryCount() >= 2, "Should have history from multiple steps");
-        
-        boolean hasKafkaEntryStep = processedStream.getHistoryList().stream()
-                .anyMatch(execRecord -> execRecord.getStepName().equals("kafka-entry"));
-        boolean hasGrpcProcessorStep = processedStream.getHistoryList().stream()
-                .anyMatch(execRecord -> execRecord.getStepName().equals("grpc-processor"));
-        
-        assertTrue(hasKafkaEntryStep, "Should have execution record from kafka-entry step");
-        assertTrue(hasGrpcProcessorStep, "Should have execution record from grpc-processor step");
-        
-        LOG.info("Successfully verified mixed routing scenario. History: {}", processedStream.getHistoryList());
+        try {
+            // Wait for Kafka listener to be ready
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .until(() -> {
+                        Map<String, ConsumerStatus> statuses = kafkaListenerManager.getConsumerStatuses();
+                        return statuses.keySet().stream()
+                                .anyMatch(key -> key.contains("mixed-pipeline:kafka-entry"));
+                    });
+            
+            // Set up consumer for final output
+            setupKafkaConsumerForTopic("mixed-final-output");
+            
+            // Given
+            PipeStream testPipeStream = PipeStream.newBuilder()
+                    .setStreamId("mixed-stream-" + UUID.randomUUID())
+                    .setDocument(PipeDoc.newBuilder()
+                            .setId("mixed-doc-1")
+                            .setTitle("Mixed Routing Test")
+                            .setBody("Testing Kafka -> gRPC -> Kafka routing")
+                            .build())
+                    .setCurrentPipelineName("mixed-pipeline")
+                    .setTargetStepName("kafka-entry")
+                    .setCurrentHopNumber(0)
+                    .build();
+            
+            LOG.info("Sending message to Kafka input topic for mixed routing test");
+            
+            // When - Send to Kafka input
+            kafkaForwarder.forwardToKafka(testPipeStream, kafkaInputTopic).get(10, TimeUnit.SECONDS);
+            
+            // Then - Verify final output
+            LOG.info("Waiting for message after mixed routing");
+            ConsumerRecords<String, PipeStream> records = pollKafka("mixed-final-output", Duration.ofSeconds(15));
+            
+            assertFalse(records.isEmpty(), "Should have received message after mixed routing");
+            
+            ConsumerRecord<String, PipeStream> record = records.iterator().next();
+            PipeStream processedStream = record.value();
+            
+            assertNotNull(processedStream);
+            assertEquals("mixed-doc-1", processedStream.getDocument().getId());
+            
+            // Verify all steps were executed
+            assertTrue(processedStream.getHistoryCount() >= 2, "Should have history from multiple steps");
+            
+            boolean hasKafkaEntryStep = processedStream.getHistoryList().stream()
+                    .anyMatch(execRecord -> execRecord.getStepName().equals("kafka-entry"));
+            boolean hasGrpcProcessorStep = processedStream.getHistoryList().stream()
+                    .anyMatch(execRecord -> execRecord.getStepName().equals("grpc-processor"));
+            
+            assertTrue(hasKafkaEntryStep, "Should have execution record from kafka-entry step");
+            assertTrue(hasGrpcProcessorStep, "Should have execution record from grpc-processor step");
+            
+            LOG.info("Successfully verified mixed routing scenario. History: {}", processedStream.getHistoryList());
+        } finally {
+            // Clean up the engine gRPC server
+            engineGrpcServer.shutdown();
+            try {
+                engineGrpcServer.awaitTermination(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                engineGrpcServer.shutdownNow();
+            }
+            LOG.info("Shut down engine gRPC server for mixed routing test");
+        }
     }
     
     @Test
@@ -644,6 +715,28 @@ class RealEchoIntegrationTest {
     void testFanOutRouting() throws Exception {
         // Clean up and set up fan-out pipeline
         tearDown();
+        
+        // Start the engine's gRPC server for fan-out gRPC forwarding
+        int enginePort;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            enginePort = socket.getLocalPort();
+        }
+        
+        PipeStreamEngineImpl engineImpl = applicationContext.getBean(PipeStreamEngineImpl.class);
+        Server engineGrpcServer = ServerBuilder
+                .forPort(enginePort)
+                .addService(engineImpl)
+                .build()
+                .start();
+        
+        LOG.info("Started PipeStreamEngine gRPC server on port {} for fan-out test", enginePort);
+        
+        // Register the engine service channel
+        ManagedChannel engineChannel = ManagedChannelBuilder
+                .forAddress("localhost", enginePort)
+                .usePlaintext()
+                .build();
+        grpcChannelManager.updateChannel("fanout-engine", engineChannel);
         
         // Create pipeline with fan-out: input -> echo -> (kafka1, kafka2, grpc)
         PipelineStepConfig fanOutEchoStep = PipelineStepConfig.builder()
@@ -671,7 +764,7 @@ class RealEchoIntegrationTest {
                                 .targetStepName("grpc-processor")
                                 .transportType(TransportType.GRPC)
                                 .grpcTransport(GrpcTransportConfig.builder()
-                                        .serviceName("echo")
+                                        .serviceName("fanout-engine")  // Forward to engine
                                         .build())
                                 .build()
                 ))
@@ -707,57 +800,68 @@ class RealEchoIntegrationTest {
         
         storeTestConfiguration("fan-out-pipeline", fanOutPipeline,
                 Set.of("fan-out-topic-1", "fan-out-topic-2", "fan-out-grpc-output"),
-                Set.of("echo", "dummy-sink"));
+                Set.of("echo", "dummy-sink", "fanout-engine"));
         
-        // Set up consumers for all output topics
-        List<KafkaConsumer<String, PipeStream>> consumers = new ArrayList<>();
-        for (String topic : List.of("fan-out-topic-1", "fan-out-topic-2", "fan-out-grpc-output")) {
-            consumers.add(createConsumerForTopic(topic));
-        }
-        
-        // Given
-        PipeStream testStream = PipeStream.newBuilder()
-                .setStreamId("fan-out-stream-" + UUID.randomUUID())
-                .setDocument(PipeDoc.newBuilder()
-                        .setId("fan-out-doc-1")
-                        .setTitle("Fan-out Test")
-                        .setBody("Testing fan-out routing to multiple destinations")
-                        .build())
-                .setCurrentPipelineName("fan-out-pipeline")
-                .setTargetStepName("fan-out-echo")
-                .setCurrentHopNumber(0)
-                .build();
-        
-        // When - Process through engine
-        DefaultPipeStreamEngineLogicImpl engineLogic = createEngineLogic();
-        engineLogic.processStream(testStream);
-        
-        // Then - Verify all outputs received the message
-        Map<String, Boolean> receivedMessages = new HashMap<>();
-        long endTime = System.currentTimeMillis() + 15000; // 15 second timeout
-        
-        while (System.currentTimeMillis() < endTime && receivedMessages.size() < 3) {
-            for (int i = 0; i < consumers.size(); i++) {
-                KafkaConsumer<String, PipeStream> consumer = consumers.get(i);
-                ConsumerRecords<String, PipeStream> records = consumer.poll(Duration.ofMillis(1000));
-                
-                if (!records.isEmpty()) {
-                    String topic = records.iterator().next().topic();
-                    receivedMessages.put(topic, true);
-                    LOG.info("Received message on topic: {}", topic);
+        try {
+            // Set up consumers for all output topics
+            List<KafkaConsumer<String, PipeStream>> consumers = new ArrayList<>();
+            for (String topic : List.of("fan-out-topic-1", "fan-out-topic-2", "fan-out-grpc-output")) {
+                consumers.add(createConsumerForTopic(topic));
+            }
+            
+            // Given
+            PipeStream testStream = PipeStream.newBuilder()
+                    .setStreamId("fan-out-stream-" + UUID.randomUUID())
+                    .setDocument(PipeDoc.newBuilder()
+                            .setId("fan-out-doc-1")
+                            .setTitle("Fan-out Test")
+                            .setBody("Testing fan-out routing to multiple destinations")
+                            .build())
+                    .setCurrentPipelineName("fan-out-pipeline")
+                    .setTargetStepName("fan-out-echo")
+                    .setCurrentHopNumber(0)
+                    .build();
+            
+            // When - Process through engine
+            DefaultPipeStreamEngineLogicImpl engineLogic = createEngineLogic();
+            engineLogic.processStream(testStream);
+            
+            // Then - Verify all outputs received the message
+            Map<String, Boolean> receivedMessages = new HashMap<>();
+            long endTime = System.currentTimeMillis() + 15000; // 15 second timeout
+            
+            while (System.currentTimeMillis() < endTime && receivedMessages.size() < 3) {
+                for (int i = 0; i < consumers.size(); i++) {
+                    KafkaConsumer<String, PipeStream> consumer = consumers.get(i);
+                    ConsumerRecords<String, PipeStream> records = consumer.poll(Duration.ofMillis(1000));
+                    
+                    if (!records.isEmpty()) {
+                        String topic = records.iterator().next().topic();
+                        receivedMessages.put(topic, true);
+                        LOG.info("Received message on topic: {}", topic);
+                    }
                 }
             }
+            
+            // Verify all three outputs received the message
+            assertTrue(receivedMessages.containsKey("fan-out-topic-1"), "Should receive message on fan-out-topic-1");
+            assertTrue(receivedMessages.containsKey("fan-out-topic-2"), "Should receive message on fan-out-topic-2");
+            assertTrue(receivedMessages.containsKey("fan-out-grpc-output"), "Should receive message on fan-out-grpc-output (after gRPC forward)");
+            
+            LOG.info("Successfully verified fan-out routing to {} destinations", receivedMessages.size());
+            
+            // Clean up consumers
+            consumers.forEach(KafkaConsumer::close);
+        } finally {
+            // Clean up the engine gRPC server
+            engineGrpcServer.shutdown();
+            try {
+                engineGrpcServer.awaitTermination(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                engineGrpcServer.shutdownNow();
+            }
+            LOG.info("Shut down engine gRPC server for fan-out test");
         }
-        
-        // Verify all three outputs received the message
-        assertTrue(receivedMessages.containsKey("fan-out-topic-1"), "Should receive message on fan-out-topic-1");
-        assertTrue(receivedMessages.containsKey("fan-out-topic-2"), "Should receive message on fan-out-topic-2");
-        assertTrue(receivedMessages.containsKey("fan-out-grpc-output"), "Should receive message on fan-out-grpc-output (after gRPC forward)");
-        
-        LOG.info("Successfully verified fan-out routing to {} destinations", receivedMessages.size());
-        
-        // Clean up consumers
-        consumers.forEach(KafkaConsumer::close);
     }
     
     @Test
@@ -765,6 +869,28 @@ class RealEchoIntegrationTest {
     void testConditionalRouting() throws Exception {
         // This test demonstrates how different outputs can be selected based on configuration
         tearDown();
+        
+        // Start the engine's gRPC server for conditional routing
+        int enginePort;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            enginePort = socket.getLocalPort();
+        }
+        
+        PipeStreamEngineImpl engineImpl = applicationContext.getBean(PipeStreamEngineImpl.class);
+        Server engineGrpcServer = ServerBuilder
+                .forPort(enginePort)
+                .addService(engineImpl)
+                .build()
+                .start();
+        
+        LOG.info("Started PipeStreamEngine gRPC server on port {} for conditional routing test", enginePort);
+        
+        // Register the engine service channel
+        ManagedChannel engineChannel = ManagedChannelBuilder
+                .forAddress("localhost", enginePort)
+                .usePlaintext()
+                .build();
+        grpcChannelManager.updateChannel("conditional-engine", engineChannel);
         
         // Create pipeline with conditional outputs
         PipelineStepConfig conditionalStep = PipelineStepConfig.builder()
@@ -778,14 +904,14 @@ class RealEchoIntegrationTest {
                                 .targetStepName("processor-a")
                                 .transportType(TransportType.GRPC)
                                 .grpcTransport(GrpcTransportConfig.builder()
-                                        .serviceName("echo")
+                                        .serviceName("conditional-engine")  // Forward to engine
                                         .build())
                                 .build(),
                         "route-b", PipelineStepConfig.OutputTarget.builder()
                                 .targetStepName("processor-b")
                                 .transportType(TransportType.GRPC)
                                 .grpcTransport(GrpcTransportConfig.builder()
-                                        .serviceName("echo")
+                                        .serviceName("conditional-engine")  // Forward to engine
                                         .build())
                                 .build()
                 ))
@@ -836,60 +962,71 @@ class RealEchoIntegrationTest {
         
         storeTestConfiguration("conditional-pipeline", conditionalPipeline,
                 Set.of("route-a-output", "route-b-output"),
-                Set.of("echo", "dummy-sink"));
+                Set.of("echo", "dummy-sink", "conditional-engine"));
         
-        // Test documents that would trigger different routes
-        // In reality, the routing decision would be made by the processor
-        // For this test, we'll demonstrate that both routes work
-        
-        // Set up consumers
-        KafkaConsumer<String, PipeStream> consumerA = createConsumerForTopic("route-a-output");
-        KafkaConsumer<String, PipeStream> consumerB = createConsumerForTopic("route-b-output");
-        
-        // Process two documents
-        DefaultPipeStreamEngineLogicImpl engineLogic = createEngineLogic();
-        
-        for (int i = 0; i < 2; i++) {
-            PipeStream testStream = PipeStream.newBuilder()
-                    .setStreamId("conditional-stream-" + i + "-" + UUID.randomUUID())
-                    .setDocument(PipeDoc.newBuilder()
-                            .setId("conditional-doc-" + i)
-                            .setTitle("Conditional Test " + i)
-                            .setBody("Document for route " + (i == 0 ? "A" : "B"))
-                            .build())
-                    .setCurrentPipelineName("conditional-pipeline")
-                    .setTargetStepName("conditional-router")
-                    .setCurrentHopNumber(0)
-                    .build();
+        try {
+            // Test documents that would trigger different routes
+            // In reality, the routing decision would be made by the processor
+            // For this test, we'll demonstrate that both routes work
             
-            engineLogic.processStream(testStream);
+            // Set up consumers
+            KafkaConsumer<String, PipeStream> consumerA = createConsumerForTopic("route-a-output");
+            KafkaConsumer<String, PipeStream> consumerB = createConsumerForTopic("route-b-output");
+            
+            // Process two documents
+            DefaultPipeStreamEngineLogicImpl engineLogic = createEngineLogic();
+            
+            for (int i = 0; i < 2; i++) {
+                PipeStream testStream = PipeStream.newBuilder()
+                        .setStreamId("conditional-stream-" + i + "-" + UUID.randomUUID())
+                        .setDocument(PipeDoc.newBuilder()
+                                .setId("conditional-doc-" + i)
+                                .setTitle("Conditional Test " + i)
+                                .setBody("Document for route " + (i == 0 ? "A" : "B"))
+                                .build())
+                        .setCurrentPipelineName("conditional-pipeline")
+                        .setTargetStepName("conditional-router")
+                        .setCurrentHopNumber(0)
+                        .build();
+                
+                engineLogic.processStream(testStream);
+            }
+            
+            // Verify both routes were exercised
+            // Note: In this test both documents go through both routes due to the echo service
+            // In a real scenario, the processor would make routing decisions
+            Thread.sleep(5000); // Give time for processing
+            
+            boolean receivedOnA = false;
+            boolean receivedOnB = false;
+            
+            ConsumerRecords<String, PipeStream> recordsA = consumerA.poll(Duration.ofSeconds(5));
+            if (!recordsA.isEmpty()) {
+                receivedOnA = true;
+                LOG.info("Received {} messages on route A", recordsA.count());
+            }
+            
+            ConsumerRecords<String, PipeStream> recordsB = consumerB.poll(Duration.ofSeconds(5));
+            if (!recordsB.isEmpty()) {
+                receivedOnB = true;
+                LOG.info("Received {} messages on route B", recordsB.count());
+            }
+            
+            assertTrue(receivedOnA || receivedOnB, "Should receive messages on at least one route");
+            LOG.info("Successfully demonstrated conditional routing");
+            
+            consumerA.close();
+            consumerB.close();
+        } finally {
+            // Clean up the engine gRPC server
+            engineGrpcServer.shutdown();
+            try {
+                engineGrpcServer.awaitTermination(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                engineGrpcServer.shutdownNow();
+            }
+            LOG.info("Shut down engine gRPC server for conditional routing test");
         }
-        
-        // Verify both routes were exercised
-        // Note: In this test both documents go through both routes due to the echo service
-        // In a real scenario, the processor would make routing decisions
-        Thread.sleep(5000); // Give time for processing
-        
-        boolean receivedOnA = false;
-        boolean receivedOnB = false;
-        
-        ConsumerRecords<String, PipeStream> recordsA = consumerA.poll(Duration.ofSeconds(5));
-        if (!recordsA.isEmpty()) {
-            receivedOnA = true;
-            LOG.info("Received {} messages on route A", recordsA.count());
-        }
-        
-        ConsumerRecords<String, PipeStream> recordsB = consumerB.poll(Duration.ofSeconds(5));
-        if (!recordsB.isEmpty()) {
-            receivedOnB = true;
-            LOG.info("Received {} messages on route B", recordsB.count());
-        }
-        
-        assertTrue(receivedOnA || receivedOnB, "Should receive messages on at least one route");
-        LOG.info("Successfully demonstrated conditional routing");
-        
-        consumerA.close();
-        consumerB.close();
     }
     
     // Helper methods
