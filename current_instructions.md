@@ -1,5 +1,288 @@
 # YAPPY Engine: Comprehensive Development and Integration Plan
 
+## Phase 0: Containerization and End-to-End Integration Testing Strategy
+
+### Overview
+This phase establishes a complete containerization strategy and integration testing framework for the YAPPY Engine distributed system. The goal is to create a production-like testing environment with three separate engine containers, each hosting different modules (Tika Parser, Chunker, Embedder), plus supporting services (Test Connector, OpenSearch Sink).
+
+### Key Objectives
+1. **Containerize all modules** with the engine using Gradle and Micronaut's build tools
+2. **Create incremental tests** that build toward a full end-to-end integration test
+3. **Support both local and CI/CD workflows** with Docker registries
+4. **Enable future optimizations** (native images, CRaC) through proper build configuration
+
+### Architecture Overview
+```
+Test Connector → Tika Parser → Chunker (2x configs) → Embedder (2x configs) → OpenSearch Sink
+                                         ↓                      ↓
+                              (2 chunking methods)   (2 embedding models)
+                                                              ↓
+                                                    (4 total embeddings)
+```
+
+### Implementation Plan
+
+#### Step 1: Create Container Build Infrastructure
+**Goal**: Set up Gradle-based container building with Micronaut
+
+**Tasks**:
+1. Create `yappy-containers` project structure
+2. Configure root `build.gradle.kts` with Micronaut plugins
+3. Set up Docker build configurations
+4. Create base configuration templates
+
+**Deliverables**:
+- [x] `yappy-containers/build.gradle.kts` with Micronaut Docker plugin
+- [x] Subprojects for each containerized module
+- [x] Gradle tasks for building and pushing containers
+- [x] Local registry setup script
+
+**Test**: `./gradlew :yappy-containers:engine-tika-parser:dockerBuild` produces a container image
+
+**Completed**:
+- Created `yappy-containers` project structure with modern Micronaut 4.8.2 configuration
+- Used `com.gradleup.shadow` plugin (replacing deprecated `johnrengelman.shadow`)
+- Added support for AOT optimization and CRaC
+- Created example subprojects (`engine-tika-parser`, `test-connector`)
+- Added `setup-local-registry.sh` script for local Docker registry
+- Configured multi-architecture builds (linux/amd64, linux/arm64)
+- Added comprehensive README.md
+- Fixed build configuration issues:
+  - Removed docker plugin declaration (included in application plugin)
+  - Fixed Micronaut DSL configuration in parent build file
+  - Configured composite builds for dependency resolution
+  - Successfully generated gradle wrapper
+- Build now works with: `./gradlew wrapper`
+- Updated registry setup script to support external registries:
+  - Made registry host/port configurable via environment variables
+  - Added support for NAS or other external registries
+  - Created .env.example for easy configuration
+  - Updated README with both local and external registry options
+
+#### Step 2: Update Development Docker Compose
+**Goal**: Modernize `docker-dev/docker-compose.yml` for development
+
+**Tasks**:
+1. Remove Solr service
+2. Update to latest service versions
+3. Add local Docker registry
+4. Configure proper networking
+
+**Deliverables**:
+- [x] Updated `docker-dev/docker-compose.yml` without Solr
+- [x] Local registry service configuration
+- [x] Health checks for all services
+- [x] Volume management for persistence
+
+**Test**: `docker-compose up -d` starts all infrastructure services successfully
+
+**Completed**:
+- Removed Solr service and replaced with OpenSearch 3.0.0
+- Added local Docker Registry service on port 5000
+- Updated all services to latest stable versions:
+  - Kafka 3.7.0 (in KRaft mode)
+  - Apicurio Registry 2.5.11.Final
+  - Consul 1.18.0
+  - OpenSearch 3.0.0 with Dashboards
+  - Moto 5.0.2 (AWS Glue mock)
+- Added comprehensive health checks for all services
+- Configured named network `yappy-network` for all services
+- Added persistent volumes for all stateful services
+- Updated scripts:
+  - Enhanced `start-dev-env.sh` with health checks
+  - Updated `status-dev-env.sh` for new services
+  - Created `.env.example` for configuration
+- Created comprehensive README.md with service details
+- Removed deprecated `version` field from docker-compose.yml
+
+#### Step 3: Implement Required Admin APIs
+**Goal**: Create APIs needed for cluster setup and management
+
+**Tasks**:
+1. Cluster creation API
+2. Engine registration API
+3. Pipeline definition API
+4. Kafka topic management API
+5. Schema registration API
+
+**Deliverables**:
+- [ ] POST `/api/admin/cluster` - Create cluster
+- [ ] POST `/api/admin/engines/register` - Register engine
+- [ ] POST `/api/admin/pipelines` - Create pipeline
+- [ ] POST `/api/admin/kafka/topics` - Create and whitelist topics
+- [ ] POST `/api/admin/schemas` - Register module schemas
+
+**Test**: Each API endpoint has integration tests verifying functionality
+
+#### Step 4: Create Infrastructure Setup Test
+**Goal**: Test that all infrastructure services start correctly
+
+**Deliverables**:
+- [ ] `InfrastructureSetupTest.java` - Verifies Consul, Kafka, OpenSearch, etc.
+- [ ] Test utilities for waiting on service health
+- [ ] Infrastructure cleanup methods
+
+**Test**: Infrastructure services are accessible and healthy
+
+#### Step 5: Create Cluster Initialization Test
+**Goal**: Test cluster creation via admin API
+
+**Deliverables**:
+- [ ] `ClusterInitializationTest.java` - Creates cluster configuration
+- [ ] Verification of cluster storage in Consul
+- [ ] Configuration retrieval tests
+
+**Test**: Cluster configuration is stored and retrievable from Consul
+
+#### Step 6: Create Single Engine Registration Test
+**Goal**: Test engine registration process
+
+**Deliverables**:
+- [ ] `EngineRegistrationTest.java` - Registers single engine
+- [ ] Consul service registration verification
+- [ ] Health check validation
+
+**Test**: Engine appears in Consul with healthy status
+
+#### Step 7: Create Pipeline Definition Test
+**Goal**: Test pipeline configuration via API
+
+**Deliverables**:
+- [ ] `PipelineDefinitionTest.java` - Defines complete pipeline
+- [ ] Step configuration with custom configs
+- [ ] Routing rules validation
+
+**Test**: Pipeline configuration is stored correctly with all steps
+
+#### Step 8: Create Schema Registration Test
+**Goal**: Test module schema registration
+
+**Deliverables**:
+- [ ] `SchemaRegistrationTest.java` - Registers all module schemas
+- [ ] Schema validation tests
+- [ ] Version management tests
+
+**Test**: All module schemas are registered and validated
+
+#### Step 9: Create Kafka Topic Setup Test
+**Goal**: Test topic creation and whitelisting
+
+**Deliverables**:
+- [ ] `KafkaTopicSetupTest.java` - Creates required topics
+- [ ] Topic whitelist verification
+- [ ] Error topic creation
+
+**Test**: All required Kafka topics exist and are whitelisted
+
+#### Step 10: Create Three Engine Deployment Test
+**Goal**: Test full three-engine deployment
+
+**Deliverables**:
+- [ ] `ThreeEngineDeploymentTest.java` - Starts all engines
+- [ ] Service discovery verification
+- [ ] Inter-engine communication tests
+
+**Test**: All three engines are running and can discover each other
+
+#### Step 11: Create End-to-End Processing Test
+**Goal**: Test complete document processing pipeline
+
+**Deliverables**:
+- [ ] `EndToEndProcessingTest.java` - Processes documents through pipeline
+- [ ] Result verification in OpenSearch
+- [ ] Performance metrics collection
+
+**Test**: Documents flow through entire pipeline and appear in OpenSearch with embeddings
+
+#### Step 12: Create CI/CD Pipeline
+**Goal**: Automate container building and testing
+
+**Deliverables**:
+- [ ] GitHub Actions workflow for building containers
+- [ ] Multi-architecture build support
+- [ ] Integration test automation
+- [ ] Container registry publishing
+
+**Test**: CI/CD pipeline builds and publishes all containers on commit
+
+### Container Project Structure
+
+```
+yappy-containers/
+├── build.gradle.kts                    # Root build configuration
+├── settings.gradle.kts
+├── gradle.properties
+├── engine-base/                        # Base engine container
+│   ├── build.gradle.kts
+│   └── src/main/resources/
+│       └── application-base.yml
+├── engine-tika-parser/                 # Engine + Tika Parser
+│   ├── build.gradle.kts
+│   └── src/main/resources/
+│       └── application.yml
+├── engine-chunker/                     # Engine + Chunker
+│   ├── build.gradle.kts
+│   └── src/main/resources/
+│       └── application.yml
+├── engine-embedder/                    # Engine + Embedder
+│   ├── build.gradle.kts
+│   └── src/main/resources/
+│       └── application.yml
+├── test-connector/                     # Standalone test connector
+│   ├── build.gradle.kts
+│   └── src/main/resources/
+│       └── application.yml
+└── engine-opensearch-sink/             # Engine + OpenSearch Sink
+    ├── build.gradle.kts
+    └── src/main/resources/
+        └── application.yml
+```
+
+### Integration Test Structure
+
+```
+yappy-integration-tests/
+├── build.gradle.kts
+├── docker-compose.test.yml
+├── src/test/java/com/krickert/yappy/integration/
+│   ├── infrastructure/
+│   │   └── InfrastructureSetupTest.java
+│   ├── cluster/
+│   │   └── ClusterInitializationTest.java
+│   ├── engine/
+│   │   └── EngineRegistrationTest.java
+│   ├── pipeline/
+│   │   └── PipelineDefinitionTest.java
+│   ├── schema/
+│   │   └── SchemaRegistrationTest.java
+│   ├── kafka/
+│   │   └── KafkaTopicSetupTest.java
+│   ├── deployment/
+│   │   └── ThreeEngineDeploymentTest.java
+│   └── e2e/
+│       └── EndToEndProcessingTest.java
+└── src/test/resources/
+    ├── test-pipeline-config.json
+    ├── module-schemas/
+    └── test-documents/
+```
+
+### Success Criteria
+1. All containers build successfully with Gradle/Micronaut
+2. Each incremental test passes independently
+3. Full end-to-end test processes documents successfully
+4. CI/CD pipeline automates the entire process
+5. Documentation is complete for running tests locally
+
+### Future Enhancements
+1. **Native Image Support**: Build GraalVM native images for faster startup
+2. **CRaC Integration**: Add checkpoint/restore for instant startup
+3. **Performance Testing**: Add load testing and benchmarking
+4. **Chaos Testing**: Test failure scenarios and recovery
+5. **Multi-Architecture**: Support ARM64 for cloud deployments
+
+---
+
 ## I. Foundational Principle: User-Centric Design & Operational Excellence
 
 This plan aims to create a YAPPY Engine that is not only powerful and flexible but also easy to set up, configure, monitor, and manage. We prioritize a smooth initial bootstrapping experience which then enables more advanced operational capabilities like detailed status reporting, robust service lifecycle management, and comprehensive health checking.

@@ -226,3 +226,8 @@ tasks.register<DownloadOpenSearchProtobufsTask>("downloadOpenSearchProtobufs") {
     outputDir.set(file("src/main/proto-opensearch"))
     versionFile.set(file("src/main/proto-opensearch/tag_version.txt"))
 }
+
+// Configure shadowJar to enable zip64 for large archives
+tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+    isZip64 = true
+}

@@ -1,18 +1,7 @@
-909version: '3.8'
-
 services:
-  moto-glue:
-    image: motoserver/moto:latest
-    command: -H 0.0.0.0
-    ports:
-      - "5001:5000"
-    environment:
-      - MOTO_SERVICE=glue
-      - TEST_SERVER_MODE=true
-
-  # 1. Kafka in Kraft mode
+  # Kafka in KRaft mode
   kafka:
-    image: apache/kafka:latest
+    image: apache/kafka:3.7.0
     hostname: kafka
     container_name: kafka
     ports:
@@ -26,61 +15,80 @@ services:
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CLUSTER_ID: 'testcontainers'
+      KAFKA_CLUSTER_ID: 'yappy-dev'
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_HELP_OPTS: -Xmx4096M
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xmx4096M -Xms4096M
     volumes:
       - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - yappy-network
 
-  # 2. Apicurio Registry
+  # Apicurio Registry
   apicurio:
-    image: apicurio/apicurio-registry:latest
+    image: apicurio/apicurio-registry:3.0.8
     container_name: apicurio
     ports:
       - "8080:8080"
     environment:
-      REGISTRY_DATASOURCE_URL: "jdbc:h2:mem:registry;DB_CLOSE_DELAY=-1"
-      REGISTRY_DATASOURCE_USERNAME: "sa"
-      REGISTRY_DATASOURCE_PASSWORD: "sa"
+      APICURIO_STORAGE_KIND: "sql"
+      APICURIO_STORAGE_SQL_KIND: "h2"
+      APICURIO_REST_MUTABILITY_ENABLED: "true"
+      APICURIO_CORS_ALLOWED_ORIGINS: "*"
+      APICURIO_LOG_LEVEL: "INFO"
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - yappy-network
 
-  # 3. Solr in cloud mode
-  solr:
-    image: solr:9.8.1
-    container_name: solr
-    ports:
-      - "8983:8983"
-    command: solr -c -f
-    environment:
-      SOLR_HEAP: "2g"
-
-  # 4. Kafka UI
+  # Kafka UI
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
     ports:
       - "8081:8080"
     environment:
-      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_NAME: yappy-dev
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://apicurio:8080/apis/ccompat/v7
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRYVENDOR: APICURIO
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
+      apicurio:
+        condition: service_healthy
+    networks:
+      - yappy-network
 
-  # 5. OpenSearch 3.0
+  # OpenSearch 3.0
   opensearch:
     image: opensearchproject/opensearch:3.0.0
     container_name: opensearch
     ports:
       - "9200:9200"
-      - "9600:9600"  # Required for Performance Analyzer
+      - "9600:9600"  # Performance Analyzer
     environment:
       - discovery.type=single-node
       - bootstrap.memory_lock=true
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
       - "DISABLE_INSTALL_DEMO_CONFIG=true"
-      - "DISABLE_SECURITY_PLUGIN=true"  # For development simplicity
+      - "DISABLE_SECURITY_PLUGIN=true"  # For development only
+      - "OPENSEARCH_INITIAL_ADMIN_PASSWORD=admin"
     ulimits:
       memlock:
         soft: -1
@@ -90,10 +98,16 @@ services:
         hard: 65536
     volumes:
       - opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     networks:
-      - internal_app_net
+      - yappy-network
 
-  # 6. OpenSearch Dashboards
+  # OpenSearch Dashboards
   opensearch-dashboards:
     image: opensearchproject/opensearch-dashboards:3.0.0
     container_name: opensearch-dashboards
@@ -101,15 +115,23 @@ services:
       - "5601:5601"
     environment:
       - OPENSEARCH_HOSTS=["http://opensearch:9200"]
-      - "DISABLE_SECURITY_DASHBOARDS_PLUGIN=true"  # For development simplicity
+      - "DISABLE_SECURITY_DASHBOARDS_PLUGIN=true"  # For development only
     depends_on:
-      - opensearch
+      opensearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5601/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     networks:
-      - internal_app_net
+      - yappy-network
 
+  # Consul
   consul:
-    image: hashicorp/consul:latest
-    container_name: consul-server-dev
+    image: hashicorp/consul:1.18.0
+    container_name: consul-dev
     ports:
       - "8500:8500"
       - "8600:8600/tcp"
@@ -118,13 +140,44 @@ services:
       - "8301:8301/tcp"
       - "8301:8301/udp"
     command: "agent -dev -client=0.0.0.0 -ui"
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+    volumes:
+      - consul-data:/consul/data
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - yappy-network
+
+  # AWS Glue Schema Registry (via Moto)
+  moto-glue:
+    image: motoserver/moto:5.0.2
+    container_name: moto-glue
+    command: -H 0.0.0.0
+    ports:
+      - "5001:5000"
+    environment:
+      - MOTO_SERVICE=glue
+      - TEST_SERVER_MODE=true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - yappy-network
 
 networks:
-  internal_app_net:
+  yappy-network:
     driver: bridge
-    name: search-dev
+    name: yappy-network
 
 volumes:
   kafka-data:
-  solr-data:
   opensearch-data:
+  consul-data:

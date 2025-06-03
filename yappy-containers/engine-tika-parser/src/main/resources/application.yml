@@ -1,0 +1,67 @@
+micronaut:
+  application:
+    name: ${YAPPY_ENGINE_NAME:yappy-engine-tika}
+  server:
+    port: 8080
+  environments: docker
+
+grpc:
+  server:
+    port: 50051
+    health:
+      enabled: true
+
+yappy:
+  engine:
+    cluster-name: ${YAPPY_CLUSTER_NAME:yappy-cluster}
+    instance-id: ${HOSTNAME:${random.uuid}}
+    colocated-modules:
+      - tika-parser
+    health-check-port: 50051
+    auto-register: ${YAPPY_AUTO_REGISTER:true}
+    
+  modules:
+    tika-parser:
+      enabled: true
+      grpc:
+        port: 50052
+      config:
+        max-string-length: ${TIKA_MAX_STRING_LENGTH:2000000}
+        parse-timeout: ${TIKA_PARSE_TIMEOUT:120s}
+        supported-types:
+          - application/pdf
+          - application/msword
+          - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+          - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+          - application/vnd.openxmlformats-officedocument.presentationml.presentation
+          - text/plain
+          - text/html
+          - text/csv
+          - application/rtf
+
+consul:
+  client:
+    host: ${CONSUL_HOST:localhost}
+    port: ${CONSUL_PORT:8500}
+    registration:
+      enabled: ${CONSUL_REGISTRATION_ENABLED:true}
+      health-check-interval: 10s
+      health-check-timeout: 5s
+
+kafka:
+  bootstrap:
+    servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  schema:
+    registry:
+      type: ${SCHEMA_REGISTRY_TYPE:apicurio}
+      
+apicurio:
+  registry:
+    url: ${APICURIO_REGISTRY_URL:http://localhost:8080}
+
+# Logging configuration
+logger:
+  levels:
+    com.krickert: DEBUG
+    io.micronaut.discovery: DEBUG
+    io.micronaut.health: DEBUG

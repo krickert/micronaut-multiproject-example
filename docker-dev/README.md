@@ -1,122 +1,152 @@
-# Docker Development Environment
+# Yappy Development Environment
 
-This directory contains a Docker Compose setup for local development with the following services:
+This directory contains the Docker Compose configuration for the Yappy development environment.
 
-1. **Kafka** (in Kraft mode) - Message broker
-2. **Apicurio Registry** - Schema registry
-3. **Solr** (in cloud mode) - Search platform
-4. **Kafka UI** - Web UI for Kafka management
+## Services
 
-## Prerequisites
+The development environment includes the following services:
 
-- Docker
-- Docker Compose
+1. **Kafka** (ports 9092, 9094) - Event streaming platform in KRaft mode
+2. **Apicurio Registry** (port 8080) - Schema registry for Kafka
+3. **Consul** (port 8500) - Service discovery and configuration
+4. **OpenSearch** (port 9200) - Search and analytics engine
+5. **OpenSearch Dashboards** (port 5601) - Visualization for OpenSearch
+6. **Moto/Glue** (port 5001) - AWS Glue mock for testing
+7. **Kafka UI** (port 8081) - Web UI for Kafka management
 
-## Getting Started
+**Note:** Docker Registry is now external (default: nas:5000). Configure with NAS_REGISTRY_HOST environment variable.
 
-To start all services, run:
+## Quick Start
+
+1. **Start all services:**
+   ```bash
+   ./start-dev-env.sh
+   ```
+
+2. **Check service status:**
+   ```bash
+   ./status-dev-env.sh
+   ```
+
+3. **Stop all services:**
+   ```bash
+   ./stop-dev-env.sh
+   ```
+
+## Configuration
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and adjust values as needed:
 
 ```bash
-cd docker-dev
-docker-compose up -d
+cp .env.example .env
 ```
 
-To stop all services:
+### Service URLs
 
-```bash
-cd docker-dev
-docker-compose down
-```
-
-## Testing the Setup
-
-A test script is provided to verify that all services are running correctly:
-
-```bash
-cd docker-dev
-./test-docker-setup.sh
-```
-
-## Service Access
-
-Once the containers are running, you can access the services at:
-
-- **Kafka**: localhost:9092
-- **Solr UI**: http://localhost:8983
-- **Apicurio Registry**: http://localhost:8080
+- **External Registry**: http://nas:5000 (or configure NAS_REGISTRY_HOST)
+- **Consul UI**: http://localhost:8500
+- **Kafka**: localhost:9092 (internal), localhost:9094 (external)
 - **Kafka UI**: http://localhost:8081
+- **Apicurio Registry**: http://localhost:8080
+- **OpenSearch**: http://localhost:9200
+- **OpenSearch Dashboards**: http://localhost:5601
+- **Moto/Glue**: http://localhost:5001
+
+### Network
+
+All services are connected via the `yappy-network` bridge network.
+
+### Volumes
+
+Data is persisted in Docker volumes:
+- `registry-data` - Docker registry data
+- `kafka-data` - Kafka logs and data
+- `opensearch-data` - OpenSearch indices
+- `consul-data` - Consul data
+
+## Health Checks
+
+All services include health checks to ensure they're properly initialized before dependent services start.
 
 ## Service Details
 
-### Kafka
+### Docker Registry
+- Image: `registry:2`
+- Port: 5000
+- Provides local container registry for development
 
-- Image: `apache/kafka:latest`
-- Port: 9092
-- Mode: Kraft (KRaft mode without Zookeeper)
-- The Kafka Kraft ID is automatically generated on startup
-- Automatically detects and uses Kafka scripts from either /opt/kafka/bin/ or directly from PATH
+### Kafka
+- Image: `apache/kafka:3.7.0`
+- Ports: 9092 (internal), 9094 (external)
+- Mode: KRaft (without Zookeeper)
+- Memory: 4GB heap
+- Cluster ID: yappy-dev
 
 ### Apicurio Registry
-
-- Image: `apicurio/apicurio-registry:latest`
+- Image: `apicurio/apicurio-registry:2.5.11.Final`
 - Port: 8080
 - Uses in-memory H2 database
+- CORS enabled for development
 
-### Solr
+### Consul
+- Image: `hashicorp/consul:1.18.0`
+- Port: 8500 (UI/API), 8600 (DNS), 8300-8301 (cluster)
+- Mode: Development mode with UI enabled
 
-- Image: `solr:9.8.1`
-- Port: 8983
-- Mode: Cloud mode with embedded Zookeeper (started with the -c flag)
-- ZK_HOST set to localhost:9983 for internal ZooKeeper connection
-- SOLR_HOST set to solr to explicitly define the hostname
-- Memory: 3GB
-- Default collection: `default_collection`
-- Uses -c flag with solr-precreate command to start embedded ZooKeeper
+### OpenSearch
+- Image: `opensearchproject/opensearch:3.0.0`
+- Port: 9200 (API), 9600 (Performance Analyzer)
+- Mode: Single-node
+- Memory: 1GB heap
+- Security disabled for development
+
+### OpenSearch Dashboards
+- Image: `opensearchproject/opensearch-dashboards:3.0.0`
+- Port: 5601
+- Security disabled for development
+
+### Moto/Glue
+- Image: `motoserver/moto:5.0.2`
+- Port: 5001
+- Provides AWS Glue mock for testing
 
 ### Kafka UI
-
 - Image: `provectuslabs/kafka-ui:latest`
 - Port: 8081
-- Depends on Kafka service
-
-## Volumes
-
-The following persistent volumes are created:
-
-- `kafka-data`: Stores Kafka data
-- `solr-data`: Stores Solr data
+- Connected to Kafka and Apicurio Registry
 
 ## Troubleshooting
 
-If you encounter issues:
-
-1. Check container logs:
+1. **View logs for a specific service:**
    ```bash
-   docker-compose logs [service_name]
+   docker-compose logs -f [service-name]
    ```
 
-2. Ensure all ports are available and not used by other applications
-
-3. Restart the services:
+2. **Restart a specific service:**
    ```bash
-   docker-compose down
-   docker-compose up -d
+   docker-compose restart [service-name]
    ```
 
-4. Run the test script to verify service health:
+3. **Clean up everything (including volumes):**
    ```bash
-   ./test-docker-setup.sh
+   docker-compose down -v
    ```
 
-### Common Issues and Solutions
+4. **Check service health:**
+   ```bash
+   ./status-dev-env.sh
+   ```
 
-1. **Kafka Script Path Issues**:
-    - If you see errors like `kafka-storage.sh: command not found`, the scripts might be in a different location.
-    - Solution: The docker-compose.yml now automatically checks for scripts in both /opt/kafka/bin/ and in the PATH.
-    - If issues persist, you may need to modify the paths in the docker-compose.yml file based on your Kafka image.
+## Updates from Previous Version
 
-2. **Solr ZooKeeper Connection Issues**:
-    - If Solr fails with `Connection refused` errors when trying to connect to ZooKeeper, check the ZK_HOST setting and ensure the -c flag
-      is present.
-    - Solution: The current configuration uses the -c flag to start an embedded ZooKeeper server and sets ZK_HOST=localhost:9983.
-    - Also sets SOLR_HOST=solr to explicitly define the hostname for better network resolution.
+- **Removed**: Solr service (replaced by OpenSearch)
+- **Added**: Local Docker registry for development
+- **Added**: Consul for service discovery
+- **Updated**: All services to latest stable versions
+- **Added**: Comprehensive health checks for all services
+- **Improved**: Network configuration with named network
+- **Added**: Volume persistence for all stateful services
+- **Added**: Status checking script
+- **Enhanced**: Start script with health checks

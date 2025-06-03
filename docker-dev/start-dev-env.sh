@@ -11,6 +11,12 @@ if ! docker info &> /dev/null; then
     exit 1
 fi
 
+# Load environment variables if .env exists
+if [ -f .env ]; then
+    echo "Loading environment variables from .env file..."
+    export $(cat .env | grep -v '^#' | xargs)
+fi
+
 # Stop any existing containers first (in case they're in a bad state)
 echo "Stopping any existing containers..."
 docker-compose down
@@ -34,6 +40,16 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ] && [ "$SERVICES_READY" = false ]; do
     
     ALL_READY=true
     
+    # Check NAS Registry (optional)
+    if [ -n "${NAS_REGISTRY_HOST:-}" ]; then
+        if ! curl -s "http://${NAS_REGISTRY_HOST}:5000/v2/" | grep -q "{}"; then
+            echo "  NAS Registry (${NAS_REGISTRY_HOST}:5000) not ready yet..."
+            # Don't fail if external registry is not ready
+        else
+            echo "  ✓ NAS Registry (${NAS_REGISTRY_HOST}:5000) is ready"
+        fi
+    fi
+    
     # Check Consul
     if ! curl -s "http://localhost:8500/v1/status/leader" | grep -q ":"; then
         echo "  Consul not ready yet..."
@@ -43,7 +59,7 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ] && [ "$SERVICES_READY" = false ]; do
     fi
     
     # Check Kafka
-    if ! docker exec kafka bash -c "if [ -f /opt/kafka/bin/kafka-topics.sh ]; then /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list; else kafka-topics.sh --bootstrap-server kafka:9092 --list; fi" &> /dev/null; then
+    if ! docker exec kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 &> /dev/null; then
         echo "  Kafka not ready yet..."
         ALL_READY=false
     else
@@ -51,7 +67,7 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ] && [ "$SERVICES_READY" = false ]; do
     fi
     
     # Check Apicurio
-    if ! curl -s "http://localhost:8080/apis" | grep -q "apiVersion"; then
+    if ! curl -s "http://localhost:8080/health" | grep -q "UP"; then
         echo "  Apicurio not ready yet..."
         ALL_READY=false
     else
@@ -67,7 +83,7 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ] && [ "$SERVICES_READY" = false ]; do
     fi
     
     # Check OpenSearch
-    if ! curl -s "http://localhost:9200" | grep -q "version"; then
+    if ! curl -s "http://localhost:9200/_cluster/health" | grep -q "status"; then
         echo "  OpenSearch not ready yet..."
         ALL_READY=false
     else
@@ -77,7 +93,7 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ] && [ "$SERVICES_READY" = false ]; do
     if [ "$ALL_READY" = true ]; then
         SERVICES_READY=true
     else
-        sleep 2
+        sleep 3
     fi
 done
 
@@ -86,16 +102,19 @@ if [ "$SERVICES_READY" = true ]; then
     echo "✓ All services are ready!"
     echo ""
     echo "Service endpoints:"
-    echo "  - Consul UI:      http://localhost:8500"
-    echo "  - Kafka:          localhost:9094"
-    echo "  - Kafka UI:       http://localhost:8081"
-    echo "  - Apicurio:       http://localhost:8080"
-    echo "  - Moto/Glue:      http://localhost:5001"
-    echo "  - OpenSearch:     http://localhost:9200"
-    echo "  - OS Dashboards:  http://localhost:5601"
-    echo "  - Solr:           http://localhost:8983"
+    echo "  - NAS Registry:     ${NAS_REGISTRY_HOST:-nas}:5000 (if configured)"
+    echo "  - Consul UI:       http://localhost:8500"
+    echo "  - Kafka:           localhost:9092 (internal), localhost:9094 (external)"
+    echo "  - Kafka UI:        http://localhost:8081"
+    echo "  - Apicurio:        http://localhost:8080"
+    echo "  - Moto/Glue:       http://localhost:5001"
+    echo "  - OpenSearch:      http://localhost:9200"
+    echo "  - OS Dashboards:   http://localhost:5601"
+    echo ""
+    echo "Network: yappy-network"
     echo ""
     echo "To stop the environment, run: ./stop-dev-env.sh"
+    echo "To check service status, run: ./status-dev-env.sh"
 else
     echo ""
     echo "⚠️  Some services failed to start properly."
