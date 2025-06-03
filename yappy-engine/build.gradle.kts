@@ -70,6 +70,7 @@ dependencies {
     // Project dependencies
     api(project(":yappy-consul-config"))
     implementation(project(":yappy-models:protobuf-models"))
+    testImplementation(project(":yappy-models:protobuf-models-test-data-resources"))
 
     // Test resources
     testImplementation(project(":yappy-test-resources:consul-test-resource"))
@@ -82,6 +83,8 @@ dependencies {
     testResourcesImplementation(project(":yappy-test-resources:moto-test-resource"))
     testImplementation(project(":yappy-modules:echo"))
     testImplementation(project(":yappy-modules:chunker"))
+    testImplementation(project(":yappy-modules:tika-parser"))
+    testImplementation(project(":yappy-modules:embedder"))
 
     // Annotation processors
     annotationProcessor(mn.lombok)

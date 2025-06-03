@@ -1484,6 +1484,163 @@ The dashboard will provide a high-level overview of the pipeline system:
 * Resetting development environment
 * Preparing for clean integration tests
 
+### 2. Multi-Engine Integration Testing Architecture
+
+**Purpose:** Establish a clear testing architecture for validating the distributed YAPPY Engine system with multiple engines and modules working together.
+
+**Background:**
+The YAPPY Engine system is designed as a distributed processing platform where:
+- Multiple engines can run in a cluster
+- Each engine may have co-located modules (Tika, Chunker, Embedder, etc.)
+- Engines discover modules through Consul service discovery
+- Pipelines can route data via gRPC (synchronous) or Kafka (asynchronous)
+- The system must handle complex routing patterns including fan-out and conditional routing
+
+**Testing Challenges:**
+1. **JVM Limitations:** Cannot run multiple instances of the same gRPC service interface in a single JVM
+2. **Test Resource Conflicts:** Micronaut test resources may interfere when starting multiple ApplicationContexts
+3. **Service Discovery:** Need to properly simulate Consul-based service discovery
+4. **Mixed Transports:** Must test both gRPC and Kafka routing in the same pipeline
+
+**Proposed Testing Architecture:**
+
+#### A. API-Driven Test Approach
+The recommended approach simulates real-world deployment patterns:
+
+1. **Seed Engine Initialization:**
+   - Start a single "seed" engine using `@MicronautTest`
+   - This engine has access to Consul, Kafka, and Schema Registry
+   - Use this engine's admin APIs to configure the cluster
+
+2. **Cluster Configuration via APIs:**
+   - Use `ConsulBusinessOperationsService` to store `PipelineClusterConfig`
+   - Define pipelines, steps, and routing rules
+   - Register allowed Kafka topics and gRPC services
+
+3. **Module Service Startup:**
+   - Start module services as separate gRPC servers (not full engines)
+   - Each module is a simple gRPC service with no Consul awareness
+   - Modules can be started via:
+     * Manual gRPC server creation (for simple cases)
+     * Separate ApplicationContexts (for Micronaut-managed services)
+     * Docker containers (for true isolation)
+
+4. **Service Registration:**
+   - Register module services with `GrpcChannelManager`
+   - Simulate Consul service discovery by manually updating channels
+   - In production, engines would discover services via Consul
+
+5. **Pipeline Execution Testing:**
+   - Use `ProtobufTestDataHelper.loadSamplePipeStreams()` for test data
+   - Process documents through the pipeline
+   - Verify routing through multiple steps
+   - Validate final output on Kafka topics
+
+#### B. Test Data Management
+The `ProtobufTestDataHelper` provides various test data sets:
+- **Sample Documents:** Real files (PDFs, DOCX, etc.) with binary content
+- **Pre-processed Data:** Tika-parsed documents, chunked documents
+- **PipeStreams:** Complete pipeline messages ready for processing
+
+#### C. Test Scenarios to Cover
+
+1. **Basic Pipeline Flow:**
+   - Input → Tika (gRPC) → Chunker (gRPC) → Embedder (gRPC) → Kafka Output
+
+2. **Mixed Transport:**
+   - Input → Tika (gRPC) → Kafka → Chunker (gRPC) → Embedder (gRPC) → Kafka Output
+
+3. **Fan-out Processing:**
+   - Input → Tika → Multiple Chunkers (parallel) → Multiple Embedders → Kafka
+
+4. **Error Handling:**
+   - Module failures and retries
+   - Kafka connection issues
+   - Invalid document handling
+
+5. **Dynamic Configuration:**
+   - Pipeline updates via Consul
+   - Module registration/deregistration
+   - Kafka listener management
+
+#### D. Implementation Patterns
+
+1. **Module Service Pattern:**
+   ```java
+   // Start a module as a simple gRPC server
+   Server tikaServer = ServerBuilder
+       .forPort(findAvailablePort())
+       .addService(new TikaParserService())
+       .build()
+       .start();
+   
+   // Register with GrpcChannelManager
+   grpcChannelManager.updateChannel("tika-parser-service", 
+       ManagedChannelBuilder
+           .forAddress("localhost", tikaPort)
+           .usePlaintext()
+           .build());
+   ```
+
+2. **Pipeline Configuration Pattern:**
+   ```java
+   // Define pipeline steps with routing
+   PipelineStepConfig tikaStep = PipelineStepConfig.builder()
+       .stepName("tika-parser")
+       .stepType(StepType.PIPELINE)
+       .processorInfo(ProcessorInfo.builder()
+           .grpcServiceName("tika-parser-service")
+           .build())
+       .outputs(Map.of("parsed", OutputTarget.builder()
+           .targetStepName("chunker")
+           .transportType(TransportType.GRPC)
+           .build()))
+       .build();
+   ```
+
+3. **Test Execution Pattern:**
+   ```java
+   // Load test data
+   Collection<PipeStream> samples = ProtobufTestDataHelper.loadSamplePipeStreams();
+   
+   // Process through pipeline
+   DefaultPipeStreamEngineLogicImpl engineLogic = new DefaultPipeStreamEngineLogicImpl(
+       pipeStepExecutorFactory,
+       pipeStreamGrpcForwarder,
+       kafkaForwarder,
+       dynamicConfigurationManager
+   );
+   
+   engineLogic.processStream(testPipeStream);
+   
+   // Verify output
+   PipeStream result = kafkaConsumer.poll(Duration.ofSeconds(30));
+   ```
+
+#### E. Future Enhancements
+
+1. **Docker-based Testing:**
+   - Package each module as a Docker container
+   - Use Testcontainers for orchestration
+   - True process isolation
+   - More realistic network conditions
+
+2. **Performance Testing:**
+   - Multi-threaded document processing
+   - Throughput measurements
+   - Resource utilization monitoring
+
+3. **Chaos Testing:**
+   - Random module failures
+   - Network partitions
+   - Consul outages
+   - Kafka broker failures
+
+4. **Contract Testing:**
+   - Verify gRPC service contracts
+   - Schema evolution testing
+   - Backward compatibility validation
+
 ### Appendix: Additional Considerations for Integration Testing
 
 While the overall plan is comprehensive, here are a few additional points to keep in mind as you progress with integration testing:
