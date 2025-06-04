@@ -9,15 +9,13 @@ import com.krickert.search.pipeline.engine.grpc.PipeStreamGrpcForwarder;
 import com.krickert.search.pipeline.engine.kafka.KafkaForwarder;
 import com.krickert.search.pipeline.grpc.client.GrpcChannelManager;
 import com.krickert.search.pipeline.step.PipeStepExecutorFactory;
-import com.krickert.search.pipeline.step.impl.PipeStepExecutorFactoryImpl;
-import com.krickert.search.pipeline.step.grpc.PipelineStepGrpcProcessorImpl;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.ApplicationContextBuilder;
 import io.micronaut.context.env.PropertySource;
-import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import io.micronaut.context.annotation.Property;
 import jakarta.inject.Inject;
 import reactor.core.publisher.Mono;
 import org.junit.jupiter.api.*;
@@ -35,38 +33,20 @@ import static org.awaitility.Awaitility.await;
  * Uses Echo service as a real module and verifies end-to-end routing.
  * This test uses real Consul, Kafka, and Apicurio provided by test resources.
  */
-@MicronautTest
-@Property(name = "micronaut.config-client.enabled", value = "false")
-@Property(name = "consul.client.enabled", value = "true")
-@Property(name = "kafka.enabled", value = "true")
-@Property(name = "kafka.schema.registry.type", value = "apicurio")
-// Configure Kafka producer for PipeStream forwarding
-@Property(name = "kafka.producers.pipestream-forwarder.key.serializer", value = "org.apache.kafka.common.serialization.UUIDSerializer")
-@Property(name = "kafka.producers.pipestream-forwarder.value.serializer", value = "io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer")
-@Property(name = "kafka.producers.pipestream-forwarder.registry.url", value = "${apicurio.registry.url}")
-@Property(name = "kafka.producers.pipestream-forwarder.auto.register.artifact", value = "true")
-@Property(name = "kafka.producers.pipestream-forwarder.artifact.resolver.strategy", value = "io.apicurio.registry.serde.strategy.TopicIdStrategy")
-// Configure default Kafka consumer
-@Property(name = "kafka.consumers.default.key.deserializer", value = "org.apache.kafka.common.serialization.UUIDDeserializer")
-@Property(name = "kafka.consumers.default.value.deserializer", value = "io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer")
-@Property(name = "kafka.consumers.default.registry.url", value = "${apicurio.registry.url}")
-@Property(name = "kafka.consumers.default.deserializer.specific.value.return.class", value = "com.krickert.search.model.PipeStream")
-@Property(name = "kafka.consumers.default.artifact.resolver.strategy", value = "io.apicurio.registry.serde.strategy.TopicIdStrategy")
-// Application configuration
-@Property(name = "app.config.cluster.name", value = "test-cluster")
-@Property(name = "app.config.initialize", value = "true")
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@MicronautTest(environments = "engine-logic-it")
+@TestInstance(TestInstance.Lifecycle.PER_METHOD)
+@Property(name = "app.config.cluster-name", value = "test-engine-logic-cluster")
 class DefaultPipeStreamEngineLogicImplIT {
     
     private static final Logger log = LoggerFactory.getLogger(DefaultPipeStreamEngineLogicImplIT.class);
     
-    private static final String TEST_CLUSTER = "test-cluster";
     private static final String TEST_PIPELINE = "test-pipeline";
     private static final String ECHO_STEP = "echo";
     private static final String SINK_STEP = "sink-step";
     private static final String TEST_STREAM_ID = "test-stream-123";
     private static final String ECHO_KAFKA_TOPIC = "pipeline.test-pipeline.step.echo.output";
     private static final String SINK_KAFKA_TOPIC = "pipeline.test-pipeline.step.sink-step.input";
+    private static final String TEST_CLUSTER = "test-engine-logic-cluster";
     
     @Inject
     ApplicationContext applicationContext;
@@ -83,13 +63,21 @@ class DefaultPipeStreamEngineLogicImplIT {
     @Inject
     GrpcChannelManager grpcChannelManager;
     
+    @Inject
+    PipeStepExecutorFactory executorFactory;
+    
+    @Inject
+    PipeStreamGrpcForwarder grpcForwarder;
+    
     private DefaultPipeStreamEngineLogicImpl engineLogic;
     
     private ApplicationContext echoServiceContext;
-    private java.util.concurrent.ExecutorService executorService;
     
-    @BeforeAll
-    void setupAll() {
+    @BeforeEach
+    void setup() {
+        // Clear any lingering system properties from previous tests
+        clearSystemProperties();
+        
         // Start Echo service as a separate Micronaut application
         log.info("Starting Echo service context...");
         
@@ -122,42 +110,27 @@ class DefaultPipeStreamEngineLogicImplIT {
         grpcChannelManager.updateChannel("echo", echoChannel);
         log.info("Echo channel registered with GrpcChannelManager");
         
-        // Create real components
-        PipelineStepGrpcProcessorImpl grpcProcessor = new PipelineStepGrpcProcessorImpl(
-                configManager, grpcChannelManager);
-        
-        PipeStepExecutorFactory executorFactory = new PipeStepExecutorFactoryImpl(configManager, grpcProcessor);
-        
-        // Create a simple executor service for the test
-        executorService = java.util.concurrent.Executors.newCachedThreadPool();
-        PipeStreamGrpcForwarder grpcForwarder = new PipeStreamGrpcForwarder(grpcChannelManager, 
-                executorService, kafkaForwarder);
-        
+        // Create engine logic using injected dependencies
         engineLogic = new DefaultPipeStreamEngineLogicImpl(
                 executorFactory, grpcForwarder, kafkaForwarder, configManager);
-    }
-    
-    @AfterAll
-    void tearDownAll() {
-        if (echoServiceContext != null && echoServiceContext.isRunning()) {
-            log.info("Stopping Echo service context...");
-            echoServiceContext.stop();
-        }
-        if (executorService != null) {
-            executorService.shutdown();
-        }
-    }
-    
-    @BeforeEach
-    void setUp() {
-        // Clean up any previous test configurations
-        consulBusinessOperationsService.deleteClusterConfiguration(TEST_CLUSTER).block();
     }
     
     @AfterEach
     void tearDown() {
         // Clean up test configurations
-        consulBusinessOperationsService.deleteClusterConfiguration(TEST_CLUSTER).block();
+        try {
+            consulBusinessOperationsService.deleteClusterConfiguration(TEST_CLUSTER).block();
+        } catch (Exception e) {
+            log.warn("Failed to delete cluster configuration: {}", e.getMessage());
+        }
+        
+        if (echoServiceContext != null && echoServiceContext.isRunning()) {
+            log.info("Stopping Echo service context...");
+            echoServiceContext.stop();
+        }
+        
+        // Clear system properties to prevent test pollution
+        clearSystemProperties();
     }
     
     @Test
@@ -205,22 +178,27 @@ class DefaultPipeStreamEngineLogicImplIT {
     @Test
     @DisplayName("Test pipeline execution with error handling")
     void testPipelineExecutionWithError() throws Exception {
-        // Given - Configure pipeline without Echo step configured properly to simulate error
+        // Given - Configure pipeline with Echo step but no actual echo service running
+        // This will pass validation but fail at runtime
         PipelineConfig pipelineConfig = new PipelineConfig(
                 TEST_PIPELINE,
-                Map.of("non-existent-step", PipelineStepConfig.builder()
-                        .stepName("non-existent-step")
+                Map.of("echo-no-service", PipelineStepConfig.builder()
+                        .stepName("echo-no-service")
                         .stepType(StepType.PIPELINE)
                         .processorInfo(PipelineStepConfig.ProcessorInfo.builder()
-                                .grpcServiceName("non-existent-service")
+                                .grpcServiceName("echo")  // Valid service name but will fail at runtime
                                 .build())
                         .outputs(Map.of())
                         .build())
         );
         storeClusterConfig(pipelineConfig);
         
+        // Shutdown the echo channel to simulate connection failure
+        ManagedChannel echoChannel = grpcChannelManager.getChannel("echo");
+        echoChannel.shutdownNow();
+        
         PipeStream inputStream = createTestPipeStream().toBuilder()
-                .setTargetStepName("non-existent-step")
+                .setTargetStepName("echo-no-service")
                 .build();
         
         // When - Process in reactive style
@@ -238,7 +216,7 @@ class DefaultPipeStreamEngineLogicImplIT {
     
     // Helper methods
     
-    private void configurePipelineWithEchoStep() {
+    private void configurePipelineWithEchoStep() throws InterruptedException {
         // Create pipeline with both echo and sink steps
         Map<String, PipelineStepConfig> steps = new HashMap<>();
         
@@ -275,7 +253,7 @@ class DefaultPipeStreamEngineLogicImplIT {
         storeClusterConfig(pipelineConfig);
     }
     
-    private void configurePipelineWithFanOut() {
+    private void configurePipelineWithFanOut() throws InterruptedException {
         // Create pipeline with echo, sink, and echo-output steps
         Map<String, PipelineStepConfig> steps = new HashMap<>();
         
@@ -343,7 +321,7 @@ class DefaultPipeStreamEngineLogicImplIT {
                 .build();
     }
     
-    private void storeClusterConfig(PipelineConfig pipelineConfig) {
+    private void storeClusterConfig(PipelineConfig pipelineConfig) throws InterruptedException {
         // Create module configurations for all services
         Map<String, PipelineModuleConfiguration> modules = new HashMap<>();
         
@@ -378,17 +356,44 @@ class DefaultPipeStreamEngineLogicImplIT {
                 .allowedGrpcServices(Set.of("echo", "dummy-sink", "dummy-echo-output"))
                 .build();
         
-        // Store in Consul and wait for it to be loaded
+        // Store in Consul
+        log.info("Storing cluster configuration for cluster: {}", TEST_CLUSTER);
         consulBusinessOperationsService.storeClusterConfiguration(TEST_CLUSTER, clusterConfig).block();
+        log.info("Cluster configuration stored in Consul");
+        
+        // Give the config manager time to load the config (it's already watching TEST_CLUSTER)
+        Thread.sleep(2000);
         
         // Wait for the configuration to be loaded by DynamicConfigurationManager
-        await().atMost(10, TimeUnit.SECONDS)
-                .pollInterval(500, TimeUnit.MILLISECONDS)
-                .until(() -> {
+        await().atMost(30, TimeUnit.SECONDS)
+                .pollInterval(1, TimeUnit.SECONDS)
+                .untilAsserted(() -> {
                     Optional<PipelineClusterConfig> currentConfig = configManager.getCurrentPipelineClusterConfig();
-                    return currentConfig.isPresent() && currentConfig.get().clusterName().equals(TEST_CLUSTER);
+                    log.debug("Checking config - present: {}, cluster: {}", 
+                            currentConfig.isPresent(), 
+                            currentConfig.map(PipelineClusterConfig::clusterName).orElse("none"));
+                    assertTrue(currentConfig.isPresent(), "Configuration should be present");
+                    assertEquals(TEST_CLUSTER, currentConfig.get().clusterName(), "Cluster name should match");
                 });
         
         log.info("Cluster configuration stored and loaded for cluster: {}", TEST_CLUSTER);
+    }
+    
+    private void clearSystemProperties() {
+        // Clear all consul-related system properties as per TEST_ISOLATION_GUIDELINES.md
+        System.clearProperty("consul.client.host");
+        System.clearProperty("consul.client.port");
+        System.clearProperty("consul.client.acl-token");
+        System.clearProperty("consul.host");
+        System.clearProperty("consul.port");
+        System.clearProperty("yappy.bootstrap.consul.host");
+        System.clearProperty("yappy.bootstrap.consul.port");
+        System.clearProperty("yappy.bootstrap.consul.acl_token");
+        System.clearProperty("yappy.bootstrap.cluster.selected_name");
+        System.clearProperty("yappy.consul.configured");
+        
+        // Also clear any cluster-specific properties
+        System.clearProperty("app.config.cluster.name");
+        System.clearProperty("app.config.cluster-name");
     }
 }

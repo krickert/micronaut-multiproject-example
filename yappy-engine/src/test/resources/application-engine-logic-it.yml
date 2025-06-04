@@ -1,0 +1,26 @@
+# Override cluster name to use hyphen consistently
+app:
+  config:
+    cluster-name: test-cluster
+
+# Configure pipestream-forwarder producer to match default producer from test resources
+kafka:
+  producers:
+    pipestream-forwarder:
+      key:
+        serializer: org.apache.kafka.common.serialization.UUIDSerializer
+      value:
+        serializer: io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer
+      apicurio:
+        registry:
+          url: ${apicurio.registry.url}
+      auto:
+        register:
+          artifact: true
+      artifact:
+        resolver:
+          strategy: io.apicurio.registry.serde.strategy.TopicIdStrategy
+      explicit:
+        artifact:
+          group:
+            id: default

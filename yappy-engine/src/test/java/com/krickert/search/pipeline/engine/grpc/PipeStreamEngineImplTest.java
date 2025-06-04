@@ -169,15 +169,19 @@ class PipeStreamEngineImplTest {
         
         // Mock executor
         com.krickert.search.pipeline.step.PipeStepExecutor mockExecutor = mock(com.krickert.search.pipeline.step.PipeStepExecutor.class);
-        when(mockExecutorFactory.getExecutor("testPipeline", "testStep")).thenReturn(mockExecutor);
+        when(mockExecutorFactory.getExecutor("test-pipeline", "testStep")).thenReturn(mockExecutor);
         when(mockExecutor.execute(any())).thenReturn(processedStream);
         
         // Mock configuration for routing calculation
         com.krickert.search.config.pipeline.model.PipelineConfig pipelineConfig = 
                 new com.krickert.search.config.pipeline.model.PipelineConfig(
-                        "testPipeline",
+                        "test-pipeline",
                         java.util.Map.of("testStep", com.krickert.search.config.pipeline.model.PipelineStepConfig.builder()
                                 .stepName("testStep")
+                                .stepType(com.krickert.search.config.pipeline.model.StepType.PIPELINE)
+                                .processorInfo(com.krickert.search.config.pipeline.model.PipelineStepConfig.ProcessorInfo.builder()
+                                        .grpcServiceName("test-service")
+                                        .build())
                                 .outputs(java.util.Map.of("output1", 
                                         com.krickert.search.config.pipeline.model.PipelineStepConfig.OutputTarget.builder()
                                                 .targetStepName("nextStep")
@@ -188,7 +192,7 @@ class PipeStreamEngineImplTest {
                                                 .build()))
                                 .build())
                 );
-        when(mockDynamicConfigManager.getPipelineConfig("testPipeline"))
+        when(mockDynamicConfigManager.getPipelineConfig("test-pipeline"))
                 .thenReturn(java.util.Optional.of(pipelineConfig));
 
         // When
