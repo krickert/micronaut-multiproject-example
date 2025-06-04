@@ -44,7 +44,7 @@ micronaut {
         enabled.set(!shouldDisable)
         inferClasspath.set(true)
         clientTimeout.set(60)
-        sharedServer.set(false)
+        sharedServer.set(true)
     }
     aot {
         // Please review carefully the optimizations enabled below
@@ -108,10 +108,10 @@ dependencies {
     implementation(mn.micronaut.discovery.client)
     implementation(mn.micronaut.http.client)
     implementation(mn.micronaut.jackson.databind)
+    implementation(mn.micronaut.serde.jackson)
     implementation(mn.micronaut.management)
     implementation(mn.micronaut.retry)
     implementation(mn.micronaut.json.schema.annotations)
-    implementation(mn.micronaut.serde.jackson)
     implementation(mn.micronaut.reactor)
     implementation(mn.micronaut.reactor.http.client)
     implementation(mn.micronaut.views.thymeleaf)

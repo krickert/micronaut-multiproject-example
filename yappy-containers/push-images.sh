@@ -21,6 +21,7 @@ IMAGES=(
     "tika-parser"
     "chunker"
     "echo"
+    "embedder"
     "opensearch-sink"
     "test-connector"
 )

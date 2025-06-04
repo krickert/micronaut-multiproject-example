@@ -34,6 +34,13 @@ micronaut:
       openapi-explorer:
         paths: classpath:META-INF/swagger/views/openapi-explorer
         mapping: /openapi-explorer/**
+  serde:
+    enabled: true
+  jackson:
+    enabled: true
+  json:
+    mapper:
+      enabled: true
 
 # Yappy Module Discovery Configuration
 yappy:
