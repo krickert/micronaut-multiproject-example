@@ -19,7 +19,10 @@ COPY yappy-modules/chunker/build/libs/*-all.jar /app/modules/chunker.jar
 COPY yappy-containers/engine-chunker/src/main/resources/supervisord.conf /etc/supervisor/conf.d/
 COPY yappy-containers/engine-chunker/src/main/resources/application.yml /app/engine/
 COPY yappy-containers/engine-chunker/src/main/resources/module-application.yml /app/modules/
+COPY yappy-containers/engine-chunker/src/main/resources/start.sh /app/start.sh
 
+# Make start script executable
+RUN chmod +x /app/start.sh
 # Expose ports
 # 8080: Engine HTTP/REST
 # 50051: Engine gRPC  
@@ -32,4 +35,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
 
 # Start supervisor
 USER root
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+CMD ["/app/start.sh"]

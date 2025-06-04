@@ -1,3 +1,7 @@
+#!/bin/sh
+
+# Generate supervisord.conf with environment variables
+cat > /etc/supervisor/conf.d/supervisord.conf <<EOF
 [supervisord]
 nodaemon=true
 user=root
@@ -12,7 +16,7 @@ autorestart=true
 startretries=3
 startretrydelay=5
 user=appuser
-environment=YAPPY_ENGINE_NAME="yappy-engine-tika"
+environment=YAPPY_ENGINE_NAME="${YAPPY_ENGINE_NAME:-yappy-engine-tika}",YAPPY_CLUSTER_NAME="${YAPPY_CLUSTER_NAME:-default-cluster}",CONSUL_HOST="${CONSUL_HOST:-consul}",CONSUL_PORT="${CONSUL_PORT:-8500}",KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}",APICURIO_REGISTRY_URL="${APICURIO_REGISTRY_URL:-http://apicurio:8080}"
 stdout_logfile=/var/log/supervisor/engine.log
 stderr_logfile=/var/log/supervisor/engine.err.log
 priority=10
@@ -41,3 +45,7 @@ serverurl=unix:///var/run/supervisor.sock
 
 [rpcinterface:supervisor]
 supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+EOF
+
+# Start supervisord
+exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf

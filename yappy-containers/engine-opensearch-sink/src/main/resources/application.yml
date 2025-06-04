@@ -1,0 +1,40 @@
+micronaut:
+  application:
+    name: ${YAPPY_ENGINE_NAME:yappy-engine-opensearch-sink}
+  server:
+    port: 8080
+  environments: docker
+
+grpc:
+  server:
+    port: 50051
+    health:
+      enabled: true
+
+yappy:
+  engine:
+    cluster-name: ${YAPPY_CLUSTER_NAME:yappy-cluster}
+    instance-id: ${HOSTNAME:${random.uuid}}
+    colocated-modules:
+      - opensearch-sink
+    health-check-port: 50051
+
+consul:
+  client:
+    host: ${CONSUL_HOST:localhost}
+    port: ${CONSUL_PORT:8500}
+    registration:
+      enabled: ${CONSUL_REGISTRATION_ENABLED:true}
+
+kafka:
+  bootstrap:
+    servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+schema-registry:
+  url: ${APICURIO_REGISTRY_URL:http://localhost:8080}
+  
+logging:
+  level:
+    com.krickert: DEBUG
+    io.micronaut.discovery: DEBUG
+    io.micronaut.health: DEBUG

@@ -1,0 +1,15 @@
+#!/bin/bash
+
+echo "This script needs sudo to access the certificate files owned by root."
+echo "Please run:"
+echo ""
+echo "  sudo chown -R $(whoami):staff ./certs/"
+echo ""
+echo "This will change ownership of the certificate files to your user."
+echo "Then run:"
+echo ""
+echo "  ./setup-rokkon-cert.sh"
+echo ""
+echo "Alternatively, run the setup script with sudo:"
+echo ""
+echo "  sudo ./setup-rokkon-cert.sh"

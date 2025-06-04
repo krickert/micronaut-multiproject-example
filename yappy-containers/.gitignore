@@ -1,0 +1,71 @@
+# Certificate files - never commit these!
+certs/
+*.crt
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.truststore
+*.ca-bundle
+*.cer
+*.csr
+*.der
+
+# Private key files
+private/
+*.private
+*.priv
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+
+# Environment files with passwords
+*.env
+.env.*
+!example.env
+!*.env.example
+!*.env.template
+
+# Security configuration files
+*-security.yml
+!*-security.yml.example
+*-secrets.yml
+*-passwords.yml
+
+# Temporary files
+*.tmp
+*.log
+*.pid
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*~
+*.old
+
+# Docker volumes
+volumes/
+data/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Test outputs
+test-results/
+coverage/
+
+# Allow scripts directory
+!scripts/
+!scripts/**

@@ -17,8 +17,8 @@ echo "Building tika-parser module JAR..."
 echo "Building Docker image..."
 docker build \
   -f engine-tika-parser/Dockerfile \
-  -t localhost:5000/yappy/engine-tika-parser:latest \
-  -t localhost:5000/yappy/engine-tika-parser:1.0.0-SNAPSHOT \
+  -t nas:5000/yappy/engine-tika-parser:latest \
+  -t nas:5000/yappy/engine-tika-parser:1.0.0-SNAPSHOT \
   ..
 
 echo "Build complete!"
@@ -30,4 +30,4 @@ echo "  -e KAFKA_BOOTSTRAP_SERVERS=host.docker.internal:9092 \\"
 echo "  -p 8081:8080 \\"
 echo "  -p 50051:50051 \\"
 echo "  -p 50052:50052 \\"
-echo "  localhost:5000/yappy/engine-tika-parser:latest"
+echo "  nas:5000/yappy/engine-tika-parser:latest"

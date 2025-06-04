@@ -1,0 +1,29 @@
+micronaut:
+  application:
+    name: test-connector
+  server:
+    port: -1  # Disable HTTP server for module
+    
+grpc:
+  server:
+    port: 50059  # Following the increment pattern
+    health:
+      enabled: true
+
+# Module doesn't need Consul or Kafka configuration
+# It's just a simple gRPC service
+
+# Test connector configuration
+test-connector:
+  mode: ${TEST_CONNECTOR_MODE:echo}  # echo, random, file
+  echo-prefix: ${TEST_ECHO_PREFIX:[TEST]}
+  random-doc-count: ${TEST_RANDOM_COUNT:10}
+  file-path: ${TEST_FILE_PATH:/tmp/test-docs}
+  delay-ms: ${TEST_DELAY_MS:0}
+  simulate-errors: ${TEST_SIMULATE_ERRORS:false}
+  error-rate: ${TEST_ERROR_RATE:0.1}
+
+# Logging
+logger:
+  levels:
+    com.krickert.yappy.modules.connector.test: DEBUG

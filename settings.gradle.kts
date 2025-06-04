@@ -45,5 +45,6 @@ include(
     //"yappy-modules:web-crawler-connector",
     "yappy-modules:opensearch-sink",
     "yappy-modules:yappy-connector-test-server",
-    "yappy-modules:test-connector"
+    "yappy-modules:test-connector",
+    "yappy-engine-integration-tests"
 )

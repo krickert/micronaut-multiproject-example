@@ -1,0 +1,33 @@
+micronaut:
+  test-resources:
+    enabled: true
+    
+# Test configuration
+test:
+  containers:
+    engine-tika:
+      image: ${engine.tika.image:localhost:5000/yappy/engine-tika-parser:latest}
+      engine-port: 8080
+      engine-grpc-port: 50051
+      tika-grpc-port: 50052
+    engine-chunker:
+      image: ${engine.chunker.image:localhost:5000/yappy/engine-chunker:latest}
+      engine-port: 8080
+      engine-grpc-port: 50051  
+      chunker-grpc-port: 50053  # Incrementing port pattern
+    engine-embedder:
+      image: ${engine.embedder.image:localhost:5000/yappy/engine-embedder:latest}
+      engine-port: 8080
+      engine-grpc-port: 50051
+      embedder-grpc-port: 50054  # Continuing the pattern
+
+# Consul configuration
+consul:
+  client:
+    host: ${consul.host:localhost}
+    port: ${consul.port:8500}
+
+# Kafka configuration  
+kafka:
+  bootstrap:
+    servers: ${kafka.bootstrap.servers:localhost:9092}

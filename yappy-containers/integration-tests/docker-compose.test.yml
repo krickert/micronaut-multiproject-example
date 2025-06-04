@@ -1,0 +1,199 @@
+
+networks:
+  yappy-test:
+    driver: bridge
+
+services:
+  # Infrastructure services
+  consul:
+    image: hashicorp/consul:1.18.0
+    container_name: consul-test
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+      - CONSUL_CLIENT_INTERFACE=eth0
+    ports:
+      - "18500:8500"
+    networks:
+      - yappy-test
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: kafka-test
+    environment:
+      - KAFKA_NODE_ID=1
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_LOG_DIRS=/var/lib/kafka/data
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+    ports:
+      - "29092:9092"
+    networks:
+      - yappy-test
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  apicurio:
+    image: apicurio/apicurio-registry-mem:2.5.11.Final
+    container_name: apicurio-test
+    environment:
+      - QUARKUS_HTTP_PORT=8080
+    ports:
+      - "18081:8080"
+    networks:
+      - yappy-test
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.1
+    container_name: opensearch-test
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - DISABLE_SECURITY_PLUGIN=true
+    ports:
+      - "19200:9200"
+      - "19600:9600"
+    networks:
+      - yappy-test
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\\|yellow\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Engine containers
+  engine-tika:
+    image: ${DOCKER_REGISTRY:-nas:5000}/${DOCKER_NAMESPACE:-yappy}/engine-tika-parser:latest
+    container_name: engine-tika-test
+    environment:
+      - YAPPY_CLUSTER_NAME=test-cluster
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - APICURIO_REGISTRY_URL=http://apicurio:8080
+      - YAPPY_ENGINE_NAME=engine-tika-test
+    ports:
+      - "8082:8080"   # Engine HTTP
+      - "50051:50051" # Engine gRPC
+      - "50052:50052" # Tika module gRPC
+    networks:
+      - yappy-test
+    depends_on:
+      consul:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      apicurio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  engine-chunker:
+    image: ${DOCKER_REGISTRY:-nas:5000}/${DOCKER_NAMESPACE:-yappy}/engine-chunker:latest
+    container_name: engine-chunker-test
+    environment:
+      - YAPPY_CLUSTER_NAME=test-cluster
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - APICURIO_REGISTRY_URL=http://apicurio:8080
+      - YAPPY_ENGINE_NAME=engine-chunker-test
+    ports:
+      - "8083:8080"   # Engine HTTP
+      - "50061:50051" # Engine gRPC
+      - "50053:50053" # Chunker module gRPC
+    networks:
+      - yappy-test
+    depends_on:
+      consul:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      apicurio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  engine-embedder:
+    image: ${DOCKER_REGISTRY:-nas:5000}/${DOCKER_NAMESPACE:-yappy}/engine-embedder:latest
+    container_name: engine-embedder-test
+    environment:
+      - YAPPY_CLUSTER_NAME=test-cluster
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - APICURIO_REGISTRY_URL=http://apicurio:8080
+      - YAPPY_ENGINE_NAME=engine-embedder-test
+    ports:
+      - "8084:8080"   # Engine HTTP
+      - "50071:50051" # Engine gRPC
+      - "50054:50054" # Embedder module gRPC
+    networks:
+      - yappy-test
+    depends_on:
+      consul:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      apicurio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  engine-opensearch-sink:
+    image: ${DOCKER_REGISTRY:-nas:5000}/${DOCKER_NAMESPACE:-yappy}/engine-opensearch-sink:latest
+    container_name: engine-opensearch-sink-test
+    environment:
+      - YAPPY_CLUSTER_NAME=test-cluster
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - APICURIO_REGISTRY_URL=http://apicurio:8080
+      - OPENSEARCH_HOSTS=opensearch:9200
+      - YAPPY_ENGINE_NAME=engine-opensearch-sink-test
+    ports:
+      - "8085:8080"   # Engine HTTP
+      - "50081:50051" # Engine gRPC
+      - "50055:50055" # OpenSearch sink module gRPC
+    networks:
+      - yappy-test
+    depends_on:
+      consul:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      apicurio:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10

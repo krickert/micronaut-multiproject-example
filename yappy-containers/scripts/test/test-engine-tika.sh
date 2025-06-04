@@ -26,7 +26,7 @@ docker run -d --rm \
   -p 8082:8080 \
   -p 50051:50051 \
   -p 50052:50052 \
-  localhost:5000/yappy/engine-tika-parser:latest
+  nas:5000/yappy/engine-tika-parser:latest
 
 echo "Container started. Waiting for services to be ready..."
 sleep 10

@@ -28,8 +28,9 @@ include(
     "engine-tika-parser",
     "engine-chunker",
     "engine-embedder",
-    "test-connector",
-    "engine-opensearch-sink"
+    "engine-opensearch-sink",
+    "engine-test-connector",
+    "test-connector"
 )
 
 // Include parent projects for dependency resolution

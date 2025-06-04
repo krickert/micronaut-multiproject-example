@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+
+    <!-- Debug logging for our tests -->
+    <logger name="com.krickert.yappy.integration" level="DEBUG"/>
+    
+    <!-- Reduce noise from test containers -->
+    <logger name="org.testcontainers" level="INFO"/>
+    <logger name="com.github.dockerjava" level="WARN"/>
+    <logger name="tc" level="INFO"/>
+    
+    <!-- Micronaut test resources -->
+    <logger name="io.micronaut.testresources" level="INFO"/>
+</configuration>

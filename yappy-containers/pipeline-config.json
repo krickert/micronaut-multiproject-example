@@ -1,0 +1,91 @@
+{
+  "id": "document-processing",
+  "name": "Document Processing Pipeline",
+  "description": "Complete document processing pipeline with Tika, Chunker, Embedder, and OpenSearch",
+  "steps": [
+    {
+      "id": "tika-parser",
+      "name": "Tika Document Parser",
+      "type": "MODULE",
+      "moduleType": "tika-parser",
+      "processorInfo": {
+        "serviceName": "tika-parser",
+        "methodName": "parse"
+      },
+      "config": {
+        "maxDocumentSize": "10485760",
+        "extractMetadata": "true",
+        "detectLanguage": "true"
+      },
+      "inputConfig": {
+        "kafkaTopic": "document-input"
+      },
+      "outputTargets": [
+        {
+          "stepId": "text-chunker",
+          "transportType": "GRPC"
+        }
+      ]
+    },
+    {
+      "id": "text-chunker",
+      "name": "Text Chunker",
+      "type": "MODULE",
+      "moduleType": "chunker",
+      "processorInfo": {
+        "serviceName": "chunker",
+        "methodName": "chunk"
+      },
+      "config": {
+        "chunkSize": "512",
+        "chunkOverlap": "50",
+        "minChunkSize": "100"
+      },
+      "dependencies": ["tika-parser"],
+      "outputTargets": [
+        {
+          "stepId": "text-embedder",
+          "transportType": "GRPC"
+        }
+      ]
+    },
+    {
+      "id": "text-embedder",
+      "name": "Text Embedder",
+      "type": "MODULE",
+      "moduleType": "embedder",
+      "processorInfo": {
+        "serviceName": "embedder",
+        "methodName": "embed"
+      },
+      "config": {
+        "model": "all-MiniLM-L6-v2",
+        "batchSize": "16"
+      },
+      "dependencies": ["text-chunker"],
+      "outputTargets": [
+        {
+          "stepId": "opensearch-indexer",
+          "transportType": "GRPC"
+        }
+      ]
+    },
+    {
+      "id": "opensearch-indexer",
+      "name": "OpenSearch Indexer",
+      "type": "MODULE",
+      "moduleType": "opensearch-sink",
+      "processorInfo": {
+        "serviceName": "opensearch-sink",
+        "methodName": "index"
+      },
+      "config": {
+        "indexName": "yappy-documents",
+        "indexType": "_doc",
+        "batchSize": "100",
+        "flushInterval": "5000"
+      },
+      "dependencies": ["text-embedder"]
+    }
+  ]
+}

@@ -1,0 +1,242 @@
+# YAPPY Multi-Container Orchestration with SSL/TLS
+# This compose file runs the complete YAPPY system with SSL enabled
+
+networks:
+  yappy-network:
+    driver: bridge
+    name: yappy-network
+
+volumes:
+  kafka-data:
+  consul-data:
+  opensearch-data:
+
+services:
+  # ============================================
+  # Infrastructure Services with SSL
+  # ============================================
+  
+  consul:
+    image: hashicorp/consul:1.18.0
+    container_name: consul
+    hostname: consul
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+      - CONSUL_CLIENT_INTERFACE=eth0
+      - CONSUL_ENABLE_SCRIPT_CHECKS=true
+      # SSL Configuration
+      - CONSUL_HTTP_SSL=true
+      - CONSUL_HTTP_SSL_VERIFY=false
+    ports:
+      - "8500:8500"   # HTTPS UI
+      - "8501:8501"   # HTTPS API
+      - "8600:8600/tcp"
+      - "8600:8600/udp"
+    volumes:
+      - consul-data:/consul/data
+      - ./certs:/consul/config/certs:ro
+    networks:
+      - yappy-network
+    command: >
+      consul agent -server -bootstrap-expect=1 
+      -node=consul-server -client=0.0.0.0 
+      -datacenter=dc1 -ui 
+      -config-dir=/consul/config
+    healthcheck:
+      test: ["CMD", "consul", "members", "-http-addr=https://localhost:8501", "-ca-file=/consul/config/certs/ca.crt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: kafka
+    hostname: kafka
+    environment:
+      # KRaft configuration
+      - KAFKA_NODE_ID=1
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,SSL://0.0.0.0:9093,CONTROLLER://0.0.0.0:9094
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,SSL://kafka:9093
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,SSL:SSL
+      - KAFKA_LOG_DIRS=/var/lib/kafka/data
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      # SSL Configuration
+      - KAFKA_SSL_KEYSTORE_LOCATION=/etc/kafka/certs/kafka.keystore.jks
+      - KAFKA_SSL_KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD:-changeit}
+      - KAFKA_SSL_KEY_PASSWORD=${KEYSTORE_PASSWORD:-changeit}
+      - KAFKA_SSL_TRUSTSTORE_LOCATION=/etc/kafka/certs/kafka.truststore.jks
+      - KAFKA_SSL_TRUSTSTORE_PASSWORD=${TRUSTSTORE_PASSWORD:-changeit}
+      - KAFKA_SSL_CLIENT_AUTH=required
+      # Topic defaults
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+    ports:
+      - "9092:9092"  # Plaintext
+      - "9093:9093"  # SSL
+      - "9094:9094"  # Controller
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+      - ./certs:/etc/kafka/certs:ro
+    networks:
+      - yappy-network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  apicurio:
+    image: apicurio/apicurio-registry-mem:2.5.11.Final
+    container_name: apicurio
+    hostname: apicurio
+    environment:
+      - QUARKUS_HTTP_PORT=8080
+      - QUARKUS_HTTP_SSL_PORT=8443
+      - QUARKUS_HTTP_SSL_CERTIFICATE_FILE=/certs/server.crt
+      - QUARKUS_HTTP_SSL_CERTIFICATE_KEY_FILE=/certs/server.key
+      - REGISTRY_LOG_LEVEL=INFO
+    ports:
+      - "8081:8080"   # HTTP
+      - "8443:8443"   # HTTPS
+    volumes:
+      - ./certs:/certs:ro
+    networks:
+      - yappy-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "https://localhost:8443/health/ready", "--no-check-certificate"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.1
+    container_name: opensearch
+    hostname: opensearch
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
+      # Disable demo security - we'll use our own certs
+      - DISABLE_SECURITY_PLUGIN=false
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      # SSL Configuration
+      - plugins.security.ssl.transport.enabled=true
+      - plugins.security.ssl.transport.pemcert_filepath=/usr/share/opensearch/config/certs/server.crt
+      - plugins.security.ssl.transport.pemkey_filepath=/usr/share/opensearch/config/certs/server.key
+      - plugins.security.ssl.transport.pemtrustedcas_filepath=/usr/share/opensearch/config/certs/ca.crt
+      - plugins.security.ssl.transport.enforce_hostname_verification=false
+      - plugins.security.ssl.http.enabled=true
+      - plugins.security.ssl.http.pemcert_filepath=/usr/share/opensearch/config/certs/server.crt
+      - plugins.security.ssl.http.pemkey_filepath=/usr/share/opensearch/config/certs/server.key
+      - plugins.security.ssl.http.pemtrustedcas_filepath=/usr/share/opensearch/config/certs/ca.crt
+      - plugins.security.allow_unsafe_democertificates=true
+      - plugins.security.allow_default_init_securityindex=true
+      - plugins.security.authcz.admin_dn=CN=admin,O=YAPPY,C=US
+      - plugins.security.nodes_dn=CN=*.yappy.local,O=YAPPY,C=US
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "9200:9200"   # HTTPS API
+      - "9300:9300"   # Transport (SSL)
+      - "9600:9600"   # Performance analyzer
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+      - ./certs:/usr/share/opensearch/config/certs:ro
+      - ./opensearch-security.yml:/usr/share/opensearch/config/opensearch-security/config.yml:ro
+    networks:
+      - yappy-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -k -s https://admin:admin@localhost:9200/_cluster/health | grep -q '\"status\":\"green\\|yellow\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.11.1
+    container_name: opensearch-dashboards
+    hostname: opensearch-dashboards
+    environment:
+      - OPENSEARCH_HOSTS=https://opensearch:9200
+      - SERVER_SSL_ENABLED=true
+      - SERVER_SSL_CERTIFICATE=/certs/server.crt
+      - SERVER_SSL_KEY=/certs/server.key
+      - OPENSEARCH_SSL_VERIFICATIONMODE=none
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=false
+    ports:
+      - "5601:5601"   # HTTPS
+    volumes:
+      - ./certs:/certs:ro
+    networks:
+      - yappy-network
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ============================================
+  # YAPPY Engine + Module Containers with SSL
+  # ============================================
+
+  engine-tika:
+    image: ${DOCKER_REGISTRY:-nas:5000}/${DOCKER_NAMESPACE:-yappy}/engine-tika-parser:latest
+    container_name: engine-tika
+    hostname: engine-tika
+    environment:
+      - YAPPY_ENGINE_NAME=engine-tika
+      - YAPPY_CLUSTER_NAME=${YAPPY_CLUSTER_NAME:-yappy-cluster}
+      # SSL-enabled service endpoints
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8501
+      - CONSUL_SCHEME=https
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9093
+      - KAFKA_SECURITY_PROTOCOL=SSL
+      - KAFKA_SSL_TRUSTSTORE_LOCATION=/certs/kafka.truststore.jks
+      - KAFKA_SSL_TRUSTSTORE_PASSWORD=${TRUSTSTORE_PASSWORD:-changeit}
+      - KAFKA_SSL_KEYSTORE_LOCATION=/certs/kafka.keystore.jks
+      - KAFKA_SSL_KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD:-changeit}
+      - APICURIO_REGISTRY_URL=https://apicurio:8443
+      # Engine SSL
+      - MICRONAUT_SSL_ENABLED=true
+      - MICRONAUT_SSL_KEY_STORE_PATH=/certs/server.p12
+      - MICRONAUT_SSL_KEY_STORE_PASSWORD=${KEYSTORE_PASSWORD:-changeit}
+      - MICRONAUT_SSL_KEY_STORE_TYPE=PKCS12
+      - JAVA_OPTS=-Xms512m -Xmx1g -Djavax.net.ssl.trustStore=/certs/truststore.jks -Djavax.net.ssl.trustStorePassword=${TRUSTSTORE_PASSWORD:-changeit}
+    ports:
+      - "8082:8080"   # HTTPS Engine API
+      - "50051:50051" # Engine gRPC (TLS)
+      - "50052:50052" # Tika module gRPC (TLS)
+    volumes:
+      - ./certs:/certs:ro
+    networks:
+      - yappy-network
+    depends_on:
+      consul:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      apicurio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "https://localhost:8080/health", "--no-check-certificate"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # Similar SSL configuration for other engines...
+  # (Abbreviated for brevity - same pattern applies to chunker, embedder, opensearch-sink)

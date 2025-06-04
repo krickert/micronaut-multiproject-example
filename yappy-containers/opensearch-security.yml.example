@@ -1,0 +1,31 @@
+# OpenSearch security configuration example
+# Copy this to opensearch-security.yml and customize as needed
+_meta:
+  type: "config"
+  config_version: 2
+
+config:
+  dynamic:
+    http:
+      anonymous_auth_enabled: false
+      xff:
+        enabled: false
+        remoteIpHeader: "x-forwarded-for"
+    authc:
+      basic_internal_auth_domain:
+        description: "Authenticate via HTTP Basic against internal users database"
+        http_enabled: true
+        transport_enabled: true
+        order: 0
+        http_authenticator:
+          type: basic
+          challenge: true
+        authentication_backend:
+          type: internal
+    authz:
+      roles_from_internal:
+        description: "Authorize via internal roles"
+        http_enabled: true
+        transport_enabled: true
+        authorization_backend:
+          type: internal

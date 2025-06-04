@@ -24,6 +24,10 @@ COPY yappy-modules/tika-parser/build/libs/*-all.jar /app/modules/tika-parser.jar
 COPY yappy-containers/engine-tika-parser/src/main/resources/supervisord.conf /etc/supervisor/conf.d/
 COPY yappy-containers/engine-tika-parser/src/main/resources/application.yml /app/engine/
 COPY yappy-containers/engine-tika-parser/src/main/resources/module-application.yml /app/modules/
+COPY yappy-containers/engine-tika-parser/src/main/resources/start.sh /app/start.sh
+
+# Make start script executable
+RUN chmod +x /app/start.sh
 
 # Expose ports
 # 8080: Engine HTTP/REST
@@ -35,6 +39,6 @@ EXPOSE 8080 50051 50052
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-# Start supervisor
+# Start using the startup script
 USER root
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+CMD ["/app/start.sh"]

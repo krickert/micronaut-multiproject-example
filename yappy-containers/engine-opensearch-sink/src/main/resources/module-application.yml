@@ -1,0 +1,31 @@
+micronaut:
+  application:
+    name: opensearch-sink
+  server:
+    port: -1  # Disable HTTP server for module
+    
+grpc:
+  server:
+    port: 50055  # Following the increment pattern
+    health:
+      enabled: true
+
+# Module doesn't need Consul or Kafka configuration
+# It's just a simple gRPC service
+
+# OpenSearch sink configuration
+opensearch:
+  hosts: ${OPENSEARCH_HOSTS:localhost:9200}
+  username: ${OPENSEARCH_USERNAME:admin}
+  password: ${OPENSEARCH_PASSWORD:admin}
+  ssl-enabled: ${OPENSEARCH_SSL_ENABLED:false}
+  index-prefix: ${OPENSEARCH_INDEX_PREFIX:yappy}
+  bulk:
+    batch-size: ${OPENSEARCH_BULK_SIZE:100}
+    flush-interval: ${OPENSEARCH_FLUSH_INTERVAL:5000}
+    max-retries: ${OPENSEARCH_MAX_RETRIES:3}
+
+# Logging
+logger:
+  levels:
+    com.krickert.yappy.modules.opensearchsink: DEBUG

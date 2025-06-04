@@ -38,3 +38,6 @@ docs/.asciidoctor
 OLD_PROJECTS
 
 .DS_Store
+
+certs/
+
