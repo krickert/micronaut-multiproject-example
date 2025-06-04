@@ -1,0 +1,31 @@
+# Multi-architecture Dockerfile for embedder
+
+# Base image for all architectures
+FROM eclipse-temurin:21-jre AS base-amd64
+# Install CUDA runtime dependencies for AMD64
+RUN apt-get update && apt-get install -y \
+    libgomp1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM eclipse-temurin:21-jre-alpine AS base-arm64
+# Just install curl for ARM64
+RUN apk add --no-cache curl
+
+# Select the appropriate base image based on target architecture
+FROM base-${TARGETARCH} AS final
+
+WORKDIR /app
+
+# Copy the jar file
+COPY build/libs/*-all.jar app.jar
+
+EXPOSE 8080
+
+# Set JVM options for better container performance
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+
+# For AMD64, set PyTorch environment variables
+ENV PYTORCH_CUDA_ALLOC_CONF=garbage_collection_threshold:0.6,max_split_size_mb:128
+
+CMD ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
