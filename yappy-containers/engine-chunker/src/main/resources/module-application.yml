@@ -1,0 +1,26 @@
+micronaut:
+  application:
+    name: chunker
+  server:
+    port: -1  # Disable HTTP server for module
+    
+grpc:
+  server:
+    port: 50053
+    health:
+      enabled: true
+
+# Module doesn't need Consul or Kafka configuration
+# It's just a simple gRPC service
+
+# Chunker-specific configuration
+chunker:
+  chunk-size: ${CHUNKER_CHUNK_SIZE:1000}
+  chunk-overlap: ${CHUNKER_OVERLAP:200}
+  chunking-method: ${CHUNKER_METHOD:sentence}
+  max-chunks: ${CHUNKER_MAX_CHUNKS:100}
+
+# Logging
+logger:
+  levels:
+    com.krickert.search.modules.chunker: DEBUG

@@ -1,0 +1,58 @@
+micronaut:
+  application:
+    name: ${YAPPY_ENGINE_NAME:yappy-engine-chunker}
+  server:
+    port: 8080
+  environments: docker
+
+grpc:
+  server:
+    port: 50051
+    health:
+      enabled: true
+
+yappy:
+  engine:
+    cluster-name: ${YAPPY_CLUSTER_NAME:yappy-cluster}
+    instance-id: ${HOSTNAME:${random.uuid}}
+    colocated-modules:
+      - chunker
+    health-check-port: 50051
+    auto-register: ${YAPPY_AUTO_REGISTER:true}
+    
+  modules:
+    chunker:
+      enabled: true
+      grpc:
+        port: 50053
+      config:
+        chunk-size: ${CHUNKER_CHUNK_SIZE:1000}
+        chunk-overlap: ${CHUNKER_OVERLAP:200}
+        chunking-method: ${CHUNKER_METHOD:sentence}
+
+consul:
+  client:
+    host: ${CONSUL_HOST:localhost}
+    port: ${CONSUL_PORT:8500}
+    registration:
+      enabled: ${CONSUL_REGISTRATION_ENABLED:true}
+      health-check-interval: 10s
+      health-check-timeout: 5s
+
+kafka:
+  bootstrap:
+    servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  schema:
+    registry:
+      type: ${SCHEMA_REGISTRY_TYPE:apicurio}
+      
+apicurio:
+  registry:
+    url: ${APICURIO_REGISTRY_URL:http://localhost:8080}
+
+# Logging configuration
+logger:
+  levels:
+    com.krickert: DEBUG
+    io.micronaut.discovery: DEBUG
+    io.micronaut.health: DEBUG

@@ -2,45 +2,8 @@
 
 ## Current Status
 
-### Broken tests
-
-There are tests that are not properly working in the engine project
-
-DefaultPipeStreamEngineLogicImplIT 
-1. pipeline execution with multiple outputs
-2. Test pipeline execution with error handling
-3. Test successful pipeline execution with gRPC step and Kafka routing
 
 
-
-### ✅ Completed:
-1. **Docker Development Environment** - All services healthy and running
-2. **Container Build Infrastructure** - Successfully built and pushed 6 containers to NAS registry:
-   - `nas:5000/yappy/tika-parser:latest`
-   - `nas:5000/yappy/chunker:latest`
-   - `nas:5000/yappy/embedder:latest`
-   - `nas:5000/yappy/echo:latest`
-   - `nas:5000/yappy/opensearch-sink:latest`
-   - `nas:5000/yappy/test-connector:latest`
-
-However, this is slightly off - we need to package this with the yappy-engine in the same container.  Although this is a good start 
-though, we need to make this a separate build that takes in the engine and the module together.  We can even find a way to do this in a 
-single project.
-
-
-### 🔄 In Progress: Phase 0 - Container Build Infrastructure
-
-According to current_instructions.md, we're on **Step 3: Implement Required Admin APIs**
-
-Most, if not all, of this is complete.  However, we do have broken tests right now that need to be addressed.
-
-
-
-## Next Steps
-
-### Step 3: Implement Required Admin APIs (Current)
-
-The admin APIs already partially exist, but we need to ensure complete coverage:
 
 #### Existing APIs:
 - `/api/setup/*` - Cluster management (AdminSetupController)

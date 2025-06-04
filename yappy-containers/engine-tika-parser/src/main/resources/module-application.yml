@@ -1,0 +1,34 @@
+micronaut:
+  application:
+    name: tika-parser
+  server:
+    port: -1  # Disable HTTP server for module
+    
+grpc:
+  server:
+    port: 50052
+    health:
+      enabled: true
+
+# Module doesn't need Consul or Kafka configuration
+# It's just a simple gRPC service
+
+# Tika-specific configuration
+tika:
+  max-string-length: ${TIKA_MAX_STRING_LENGTH:2000000}
+  parse-timeout: ${TIKA_PARSE_TIMEOUT:120s}
+  supported-types:
+    - application/pdf
+    - application/msword
+    - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+    - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+    - application/vnd.openxmlformats-officedocument.presentationml.presentation
+    - text/plain
+    - text/html
+    - text/csv
+    - application/rtf
+
+# Logging
+logger:
+  levels:
+    com.krickert.search.modules.tika: DEBUG

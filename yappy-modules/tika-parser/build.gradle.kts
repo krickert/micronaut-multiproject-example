@@ -43,7 +43,7 @@ dependencies {
 
 
 application {
-    mainClass = "com.krickert.yappy.modules.echo.TikaParserApplication"
+    mainClass = "com.krickert.yappy.modules.tikaparser.TikaParserApplication"
 }
 java {
     sourceCompatibility = JavaVersion.toVersion("21")
@@ -66,4 +66,9 @@ micronaut {
         incremental(true)
         annotations("com.krickert.yappy.modules.tikaparser.*")
     }
+}
+
+// Enable zip64 for shadowJar to handle large number of entries
+tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
+    isZip64 = true
 }

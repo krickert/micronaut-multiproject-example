@@ -6,7 +6,7 @@ plugins {
 }
 
 // This module is just for Docker packaging
-// The actual building happens in the Dockerfile multi-stage build
+// The actual building happens on the host
 
 val dockerRegistry: String by project
 val dockerNamespace: String by project
@@ -25,7 +25,7 @@ tasks.register<Copy>("prepareDockerContext") {
     
     from("${projectDir}/Dockerfile")
     from("${projectDir}/src/main/resources") {
-        into("engine-tika-parser/src/main/resources")
+        into("engine-chunker/src/main/resources")
     }
     
     into("${buildDir}/docker")
@@ -33,13 +33,13 @@ tasks.register<Copy>("prepareDockerContext") {
 
 tasks.register<DockerBuildImage>("dockerBuild") {
     group = "docker"
-    description = "Build Docker image for engine-tika-parser"
+    description = "Build Docker image for engine-chunker"
     dependsOn("prepareDockerContext")
     
     inputDir.set(rootProject.projectDir) // Build from root to access all modules
     dockerFile.set(file("${buildDir}/docker/Dockerfile"))
-    images.add("${dockerRegistry}/${dockerNamespace}/engine-tika-parser:${version}")
-    images.add("${dockerRegistry}/${dockerNamespace}/engine-tika-parser:latest")
+    images.add("${dockerRegistry}/${dockerNamespace}/engine-chunker:${version}")
+    images.add("${dockerRegistry}/${dockerNamespace}/engine-chunker:latest")
     
     // Build args for flexibility
     buildArgs.put("ENGINE_VERSION", version.toString())
@@ -51,6 +51,6 @@ tasks.register<DockerPushImage>("dockerPush") {
     description = "Push Docker image to registry"
     dependsOn("dockerBuild")
     
-    images.add("${dockerRegistry}/${dockerNamespace}/engine-tika-parser:${version}")
-    images.add("${dockerRegistry}/${dockerNamespace}/engine-tika-parser:latest")
+    images.add("${dockerRegistry}/${dockerNamespace}/engine-chunker:${version}")
+    images.add("${dockerRegistry}/${dockerNamespace}/engine-chunker:latest")
 }

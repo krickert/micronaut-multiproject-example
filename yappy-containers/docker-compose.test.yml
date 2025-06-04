@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  engine-tika:
+    build:
+      context: ..
+      dockerfile: yappy-containers/engine-tika-parser/Dockerfile
+    environment:
+      - YAPPY_CLUSTER_NAME=test-cluster
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - APICURIO_REGISTRY_URL=http://apicurio:8080
+    ports:
+      - "8081:8080"   # Engine HTTP
+      - "50051:50051" # Engine gRPC
+      - "50052:50052" # Tika module gRPC
+    depends_on:
+      - consul
+      - kafka
+      - apicurio
+    networks:
+      - yappy-network
+
+  # Use existing infrastructure from docker-dev
+  consul:
+    image: consul:1.18.0
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+    ports:
+      - "8500:8500"
+    networks:
+      - yappy-network
+
+  kafka:
+    image: apache/kafka:3.7.0
+    environment:
+      - KAFKA_NODE_ID=1
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_LOG_DIRS=/var/lib/kafka/data
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+    ports:
+      - "9092:9092"
+    networks:
+      - yappy-network
+
+  apicurio:
+    image: apicurio/apicurio-registry:3.0.0
+    environment:
+      - APICURIO_STORAGE_KIND=kafkasql
+      - APICURIO_KAFKASQL_BOOTSTRAP_SERVERS=kafka:9092
+    ports:
+      - "8080:8080"
+    depends_on:
+      - kafka
+    networks:
+      - yappy-network
+
+networks:
+  yappy-network:
+    driver: bridge
