@@ -15,7 +15,8 @@ COPY --link layers/project_libs /home/app/libs
 COPY --link layers/snapshot_libs /home/app/libs
 
 # Copy additional module and config files
-COPY --link layers/tika-parser.jar /app/modules/tika-parser.jar
+COPY --link layers/engine/engine.jar /app/engine/engine.jar
+COPY --link layers/modules/tika-parser.jar /app/modules/tika-parser.jar
 COPY --link layers/config/supervisord.conf /etc/supervisor/conf.d/
 COPY --link layers/config/application.yml /app/engine/
 COPY --link layers/config/module-application.yml /app/modules/application.yml

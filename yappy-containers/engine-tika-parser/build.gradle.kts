@@ -39,8 +39,17 @@ tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJ
 tasks.register<Copy>("prepareDockerContext") {
     dependsOn("shadowJar", ":yappy-modules:tika-parser:shadowJar")
     
+    // Copy engine JAR (this project's shadowJar)
+    from(tasks.named("shadowJar", Jar::class.java)) {
+        rename { "engine.jar" }
+        into("engine")
+    }
+    
     // Copy tika-parser JAR
-    from(project(":yappy-modules:tika-parser").tasks.named("shadowJar", Jar::class.java))
+    from(project(":yappy-modules:tika-parser").tasks.named("shadowJar", Jar::class.java)) {
+        rename { "tika-parser.jar" }
+        into("modules")
+    }
     
     // Copy config files
     from("src/main/resources") {
@@ -49,15 +58,6 @@ tasks.register<Copy>("prepareDockerContext") {
     }
     
     into("build/docker/main/layers")
-    
-    // Rename tika jar
-    rename { fileName ->
-        if (fileName.contains("tika-parser") && fileName.endsWith(".jar")) {
-            "tika-parser.jar"
-        } else {
-            fileName
-        }
-    }
 }
 
 tasks.named("dockerBuild") {

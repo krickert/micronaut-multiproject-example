@@ -42,7 +42,7 @@ dependencies {
 
 
 application {
-    mainClass = "com.krickert.yappy.modules.echo.TikaParserApplication"
+    mainClass = "com.krickert.yappy.modules.tikaparser.Application"
 }
 java {
     sourceCompatibility = JavaVersion.toVersion("21")
