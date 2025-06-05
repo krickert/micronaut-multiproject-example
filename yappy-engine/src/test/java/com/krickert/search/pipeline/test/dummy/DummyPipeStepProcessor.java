@@ -5,8 +5,6 @@ import com.google.protobuf.Value;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.sdk.*;
 import io.grpc.stub.StreamObserver;
-import io.micronaut.context.annotation.Requires;
-import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,12 +15,24 @@ import java.util.concurrent.atomic.AtomicInteger;
  * This processor simply echoes the input document and adds some test metadata.
  * It can be configured to simulate different behaviors like delays or errors.
  */
-@Singleton
-@Requires(env = "test")
+// Not annotated with @GrpcService to prevent Micronaut from managing it
+// This allows us to create our own isolated gRPC server for testing
 public class DummyPipeStepProcessor extends PipeStepProcessorGrpc.PipeStepProcessorImplBase {
     
     private static final Logger LOG = LoggerFactory.getLogger(DummyPipeStepProcessor.class);
     private final AtomicInteger processCount = new AtomicInteger(0);
+    
+    private final String defaultBehavior;
+    private final String defaultSuffix;
+    
+    public DummyPipeStepProcessor() {
+        this("append", " [PROCESSED]");
+    }
+    
+    public DummyPipeStepProcessor(String defaultBehavior, String defaultSuffix) {
+        this.defaultBehavior = defaultBehavior;
+        this.defaultSuffix = defaultSuffix;
+    }
     
     @Override
     public void processData(ProcessRequest request, StreamObserver<ProcessResponse> responseObserver) {
@@ -37,7 +47,7 @@ public class DummyPipeStepProcessor extends PipeStepProcessorGrpc.PipeStepProces
             // Check for test behaviors in config
             boolean simulateError = false;
             int delayMs = 0;
-            String testBehavior = "echo"; // default behavior
+            String testBehavior = defaultBehavior; // use configured default
             
             if (customConfig != null && customConfig.getFieldsCount() > 0) {
                 if (customConfig.containsFields("simulate_error")) {
@@ -111,9 +121,15 @@ public class DummyPipeStepProcessor extends PipeStepProcessorGrpc.PipeStepProces
                 break;
                 
             case "append":
-                // Append to body
-                String currentBody = inputDoc.getBody();
-                outputDoc.setBody(currentBody + "\n[Processed by DummyPipeStepProcessor]");
+                // Append to title (to match test expectations)
+                if (inputDoc.hasTitle()) {
+                    outputDoc.setTitle(inputDoc.getTitle() + defaultSuffix);
+                }
+                // Also append to body
+                if (inputDoc.hasBody()) {
+                    String currentBody = inputDoc.getBody();
+                    outputDoc.setBody(currentBody + "\n[Processed by DummyPipeStepProcessor]");
+                }
                 break;
                 
             case "uppercase":

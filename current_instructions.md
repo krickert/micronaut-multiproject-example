@@ -203,11 +203,153 @@ This section covers the broader testing and feature development outlined in the 
     *   **Error Handling, Idempotency, Retries, Security.**
 
 This unified plan should provide a clear roadmap, allowing for parallel work where appropriate and ensuring that foundational pieces are in place before building more complex features on top.
+## Current Status and Achievements
+
+### Self-Contained Engine Testing (COMPLETED)
+
+We have successfully refactored the yappy-engine to be completely self-contained, with no dependencies on external modules during testing. Key achievements:
+
+1. **Created DummyPipeStepProcessor**: A test-only gRPC service that implements the PipeStepProcessor interface, allowing us to test the engine's orchestration without real modules.
+
+2. **Implemented Local Service Discovery**: Added support for `local.services.ports` configuration, allowing the engine to connect to services on localhost without requiring Consul service discovery. This is crucial for production environments where modules may not participate in Micronaut's service discovery.
+
+3. **Fixed Kafka Topic Timing Issues**: Implemented a `waitForTopics` method using Reactor to handle asynchronous topic creation, ensuring tests don't fail due to timing issues.
+
+4. **Created Integration Tests**: 
+   - `EngineWithDummyProcessorIntegrationTest`: Demonstrates full pipeline processing with a standalone gRPC server
+   - `KafkaPipelineIntegrationTest`: Tests Kafka forwarding functionality
+   - Both tests use real Kafka and Apicurio Schema Registry via Testcontainers
+
+### Architecture Improvements
+
+1. **Standalone gRPC Servers**: Modules run as standalone gRPC servers not managed by Micronaut, providing better isolation and supporting modules written in any language.
+
+2. **Flexible Service Discovery**: The GrpcChannelManager now checks localhost configuration first before falling back to Consul discovery, supporting both tightly-coupled and distributed deployments.
+
+3. **Consistent Transport Handling**: Both gRPC and Kafka transports are treated uniformly as asynchronous operations that accept PipeStream messages.
+
+### Next Steps: Moto Integration
+
+While we've successfully integrated with Apicurio Registry for protobuf schema management, we need to add support for AWS Glue Schema Registry (using Moto for testing):
+
+1. **Create Moto Test Resource**: Similar to the existing Apicurio test resource
+2. **Schema Registration Process**: 
+   - Create a registry first (unlike Apicurio which auto-creates)
+   - Register all protobuf schemas from the models project
+   - In production, this would be part of the CI/CD process
+3. **Create Integration Tests**: Duplicate the existing tests but configure them to use Moto instead of Apicurio
+
+### Service Registration States
+
+The service registration state management is partially addressed:
+- `ServiceStatusAggregatorTest` exists for testing service status aggregation
+- The engine doesn't currently track detailed registration states during the registration process
+- This can be tested more thoroughly in the uber-integration tests where multiple services interact
+
 ## Future Steps
 
-### 3. Test Kafka Serialization of PipeStream Objects
+### Docker Container Creation
 
-Create a test that demonstrates serializing and deserializing PipeStream objects through Kafka:
+Next major milestone is containerizing the modules:
+
+1. **Module Selection for Containerization**:
+   - Echo module
+   - Chunker module
+   - Tika Parser module
+   - Embedder module
+   - OpenSearch Sink module
+   - Test Connector module
+   - S3 Connector module (future)
+   - Web Crawler Connector module (future)
+   - Wikipedia Crawler Connector module (future)
+
+2. **Container Structure**:
+   - Each container will include both the module and a configured yappy-engine
+   - Modules will start on localhost with a known port
+   - Engine will use `local.services.ports` configuration to connect to the module
+   - Both components will run under supervisord for process management
+
+3. **Build Process**:
+   - Create Dockerfiles in `yappy-containers/engine-{module-name}/`
+   - Use multi-stage builds to optimize image size
+   - Include health checks for both engine and module
+   - Configure logging to stdout for container environments
+
+4. **Configuration Management**:
+   - Use environment variables for runtime configuration
+   - Support both Consul and file-based configuration
+   - Include default configurations for common scenarios
+   - Support configuration overlays for different environments
+
+5. **Supervisord Configuration**:
+   - Use supervisord to manage both the module and engine processes
+   - Configure process priorities (module starts first, then engine)
+   - Set up proper shutdown handling
+   - Enable stdout/stderr logging for both processes
+
+6. **Example Container Structure**:
+   ```
+   yappy-containers/
+   ├── engine-base/
+   │   ├── Dockerfile
+   │   └── supervisord-base.conf
+   ├── engine-echo/
+   │   ├── Dockerfile
+   │   ├── module-application.yml
+   │   ├── engine-application.yml
+   │   └── supervisord.conf
+   ├── engine-chunker/
+   │   ├── Dockerfile
+   │   ├── module-application.yml
+   │   ├── engine-application.yml
+   │   └── supervisord.conf
+   └── engine-tika-parser/
+       ├── Dockerfile
+       ├── module-application.yml
+       ├── engine-application.yml
+       └── supervisord.conf
+   ```
+
+7. **Local Service Discovery Configuration**:
+   Each container's engine-application.yml will include:
+   ```yaml
+   local:
+     services:
+       ports:
+         echo-service: 50051      # For echo container
+         chunker-service: 50052   # For chunker container
+         tika-service: 50053      # For tika container
+   ```
+
+8. **Docker Compose for Development**:
+   Create a docker-compose.yml that:
+   - Starts all required infrastructure (Consul, Kafka, Schema Registry)
+   - Launches each module container
+   - Sets up networking between containers
+   - Configures health checks and dependencies
+
+### Immediate Next Steps
+
+1. **Start Container Creation Process**:
+   - Begin with the Echo module as the simplest example
+   - Create a base Dockerfile that includes the engine JAR
+   - Set up supervisord configuration for dual-process management
+   - Test the container locally before moving to other modules
+
+2. **Integration Testing Strategy**:
+   - Create integration tests that run actual containers
+   - Test inter-container communication via gRPC
+   - Verify Kafka message flow between containers
+   - Ensure proper service discovery through Consul
+
+3. **Module Testing Priorities**:
+   - Echo module: Basic functionality and gRPC communication
+   - Chunker module: Text processing and semantic result generation
+   - Tika Parser: File parsing and metadata extraction
+   - Embedder: Vector generation and storage
+   - OpenSearch Sink: Document indexing and search
+
+### Test Kafka Serialization of PipeStream Objects
 
 ```java
 @Test
@@ -1857,3 +1999,31 @@ While the overall plan is comprehensive, here are a few additional points to kee
 
 8.  **`testPipeStream` Method in `PipeStreamEngineImpl`**:
    * You correctly note: "We do NOT forward to next steps in `testPipeStream`". Ensure tests for this method specifically check the `contextParams` for the *intended* routing information, rather than expecting actual forwarding.
+
+## Summary of Current State
+
+We have successfully achieved several major milestones:
+
+1. **Self-Contained Engine**: The yappy-engine can now run and be tested without any external module dependencies, using the DummyPipeStepProcessor for testing.
+
+2. **Local Service Discovery**: Implemented support for localhost-first service discovery, which is critical for containerized deployments where modules run as separate processes.
+
+3. **Standalone gRPC Servers**: Modules can run as standalone gRPC servers independent of Micronaut, providing better isolation and language flexibility.
+
+4. **Integration Testing**: Created comprehensive integration tests that demonstrate full pipeline processing with real Kafka and Schema Registry.
+
+5. **Architecture Clarity**: Established clear patterns for:
+   - Module-engine communication
+   - Service discovery fallback (local first, then Consul)
+   - Consistent transport handling (gRPC and Kafka)
+   - Test isolation and configuration
+
+### Ready for Containerization
+
+With these foundations in place, we are now ready to begin the containerization process. The architecture supports:
+- Modules running as separate processes
+- Engines discovering modules on localhost
+- Clear separation of concerns
+- Flexible deployment options
+
+The next phase will focus on creating Docker containers that package modules with engines, enabling distributed deployment while maintaining the simplicity of local development.

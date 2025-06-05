@@ -1,0 +1,6 @@
+applicationType: default
+defaultPackage: example.docker.build
+testFramework: junit
+sourceLanguage: java
+buildTool: gradle_kotlin
+features: [app-name, gradle, http-client-test, jackson-databind, java, java-application, junit, kafka, logback, lombok, micronaut-aot, micronaut-build, micronaut-http-validation, netty-server, openapi, openapi-explorer, readme, shade, static-resources, test-resources, testcontainers, yaml, yaml-build]

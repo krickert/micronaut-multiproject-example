@@ -1,0 +1,72 @@
+micronaut:
+  application:
+    name: ${YAPPY_ENGINE_NAME:yappy-engine-tika-parser}
+  server:
+    port: 8080
+  environments: docker
+
+grpc:
+  server:
+    port: 50051
+    health:
+      enabled: true
+  client:
+    plaintext: true
+
+# Application configuration
+app:
+  config:
+    cluster-name: ${YAPPY_CLUSTER_NAME:yappy-cluster}
+  engine:
+    instance-id: ${HOSTNAME:${random.uuid}}
+    bootstrapper:
+      enabled: ${YAPPY_BOOTSTRAPPER_ENABLED:false}
+
+# Local service discovery - engine will find Tika Parser on localhost
+local:
+  services:
+    ports:
+      tika-parser: 50053
+
+# Consul configuration
+consul:
+  client:
+    enabled: ${CONSUL_ENABLED:true}
+    host: ${CONSUL_HOST:localhost}
+    port: ${CONSUL_PORT:8500}
+    registration:
+      enabled: ${CONSUL_REGISTRATION_ENABLED:true}
+      health-check-interval: 10s
+      health-check-timeout: 5s
+      deregister-critical-service-after: 30s
+
+# Kafka configuration
+kafka:
+  enabled: ${KAFKA_ENABLED:true}
+  bootstrap:
+    servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  producers:
+    pipestream-forwarder:
+      key.serializer: org.apache.kafka.common.serialization.UUIDSerializer
+      value.serializer: io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer
+      apicurio.registry.url: ${APICURIO_REGISTRY_URL:http://localhost:8080}
+      apicurio.registry.auto-register: true
+      apicurio.registry.artifact-resolver-strategy: io.apicurio.registry.serde.strategy.TopicIdStrategy
+
+# Schema registry configuration
+kafka:
+  schema:
+    registry:
+      type: ${SCHEMA_REGISTRY_TYPE:apicurio}
+
+apicurio:
+  registry:
+    url: ${APICURIO_REGISTRY_URL:http://localhost:8080}
+
+# Logging
+logger:
+  levels:
+    com.krickert: DEBUG
+    com.krickert.search.pipeline.engine: DEBUG
+    io.micronaut.discovery: INFO
+    io.micronaut.health: INFO

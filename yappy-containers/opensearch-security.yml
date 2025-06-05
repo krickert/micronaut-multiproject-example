@@ -1,0 +1,30 @@
+# OpenSearch security configuration
+_meta:
+  type: "config"
+  config_version: 2
+
+config:
+  dynamic:
+    http:
+      anonymous_auth_enabled: false
+      xff:
+        enabled: false
+    authc:
+      basic_internal_auth_domain:
+        description: "Authenticate via HTTP Basic against internal users database"
+        http_enabled: true
+        transport_enabled: true
+        order: 0
+        http_authenticator:
+          type: basic
+          challenge: true
+        authentication_backend:
+          type: internal
+    authz:
+      roles_from_myldap:
+        description: "Authorize via LDAP or Active Directory"
+        http_enabled: true
+        transport_enabled: true
+        authorization_backend:
+          type: internal
+EOF < /dev/null
