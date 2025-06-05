@@ -1,0 +1,50 @@
+# Configuration for YappyEngineBootstrapperIntegrationTest
+# This extends the base test configuration but enables service registration
+micronaut:
+  application:
+    name: yappy-engine-bootstrapper-test-${random.uuid}
+  server:
+    port: -1
+  test:
+    resources:
+      enabled: true
+
+app:
+  config:
+    cluster-name: bootstrapperTestCluster
+    consul:
+      key-prefixes:
+        pipeline-clusters: pipeline-configs/clusters
+        schema-versions: pipeline-configs/schemas/versions
+      watch-seconds: 5
+
+consul:
+  client:
+    enabled: true
+    registration:
+      enabled: true # Enable registration for this test
+      check:
+        enabled: true
+        http: true
+        interval: 10s
+    discovery:
+      enabled: true
+      shared-instance: true
+
+# Kafka configuration for tests
+kafka:
+  enabled: true
+  schema:
+    registry:
+      type: apicurio
+  producers:
+    default:
+      apicurio:
+        registry:
+          url: ${apicurio.registry.url}
+
+# gRPC configuration
+grpc:
+  server:
+    port: 0  # Use 0 for random available port
+    enable-reflection: true
