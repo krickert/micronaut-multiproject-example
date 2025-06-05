@@ -37,7 +37,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Singleton
 @GrpcService
-public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineImplBase {
+public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineImplBase implements com.krickert.search.pipeline.engine.PipeStreamEngine {
     private static final Logger log = LoggerFactory.getLogger(PipeStreamEngineImpl.class);
 
     private final PipeStepExecutorFactory executorFactory;
@@ -486,4 +486,35 @@ public class PipeStreamEngineImpl extends PipeStreamEngineGrpc.PipeStreamEngineI
             handleFailedStepExecutionOrRouting(streamForErrorHandling, originalTargetStepName, e, "STEP_EXECUTION_OR_ROUTING_FAILURE");
         }
     } // End of executeStepAndForward method
+    
+    /**
+     * Implementation of the PipeStreamEngine interface method.
+     * This method processes a PipeStream by calling the internal executeStepAndForward method.
+     * 
+     * @param pipeStream The PipeStream to process
+     * @throws IllegalArgumentException if pipeStream is null
+     * @throws RuntimeException if processing fails
+     */
+    @Override
+    public void processStream(PipeStream pipeStream) {
+        if (pipeStream == null) {
+            throw new IllegalArgumentException("Cannot process null PipeStream");
+        }
+        
+        if (pipeStream.getTargetStepName() == null || pipeStream.getTargetStepName().isEmpty()) {
+            throw new IllegalArgumentException("PipeStream must have a target step name");
+        }
+        
+        log.info("Processing PipeStream via processStream method: streamId={}, targetStep={}", 
+                pipeStream.getStreamId(), pipeStream.getTargetStepName());
+        
+        try {
+            executeStepAndForward(pipeStream);
+        } catch (Exception e) {
+            log.error("Error processing PipeStream {}: {}", pipeStream.getStreamId(), e.getMessage(), e);
+            // Re-throw as RuntimeException to propagate the error
+            throw new RuntimeException("Failed to process PipeStream " + pipeStream.getStreamId() + 
+                    " for step " + pipeStream.getTargetStepName(), e);
+        }
+    }
 }
