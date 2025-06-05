@@ -8,6 +8,16 @@ kafka:
     registry:
       type: apicurio
 
+# Consul configuration properties required by ConsulBusinessOperationsService
+app:
+  config:
+    consul:
+      key-prefixes:
+        pipeline-clusters: "config/pipeline/clusters"
+        schema-versions: "config/pipeline/schemas"
+        whitelists: "config/pipeline/whitelists"
+
+
 # Logging configuration
 logger:
   levels:

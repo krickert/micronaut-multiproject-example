@@ -70,6 +70,14 @@ dependencies {
     testImplementation(libs.amazon.msk.iam)
     testImplementation(libs.amazon.connection.client)
     
+    // YAPPY dependencies for configuration management
+    testImplementation(project(":yappy-consul-config"))
+    testImplementation(project(":yappy-models:pipeline-config-models"))
+    testImplementation(project(":yappy-models:pipeline-config-models-test-utils"))
+    
+    // Reactive support
+    testImplementation("io.projectreactor:reactor-core")
+    
     // YAPPY test resources - following the pattern from yappy-engine
     testImplementation(project(":yappy-test-resources:consul-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))

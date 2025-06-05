@@ -10,21 +10,16 @@ repositories {
     mavenCentral()
 }
 
-// Configuration to fetch the module JAR
-configurations {
-    create("moduleArtifact")
-}
-
 dependencies {
-    // Engine dependencies (inherit from engine project)
+    // Engine dependencies
     implementation(project(":yappy-engine"))
     
-    // Module artifact - reference the module project
-    "moduleArtifact"(project(":yappy-modules:tika-parser"))
+    // Module dependencies
+    implementation(project(":yappy-modules:tika-parser"))
 }
 
 application {
-    mainClass.set("com.krickert.search.pipeline.Application")
+    mainClass.set("com.krickert.yappy.bootstrap.EngineApplication")
 }
 
 micronaut {
@@ -34,71 +29,45 @@ micronaut {
     }
 }
 
-// Task to copy module files into docker build directory
-tasks.register<Copy>("copyModuleFiles") {
+// Ensure we build all dependencies
+tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
     dependsOn(":yappy-modules:tika-parser:shadowJar")
+    isZip64 = true
+}
+
+// Copy files for Docker build
+tasks.register<Copy>("prepareDockerContext") {
+    dependsOn("shadowJar", ":yappy-modules:tika-parser:shadowJar")
     
-    // Find the shadow JAR from the tika-parser module
-    val tikaProject = project(":yappy-modules:tika-parser")
+    // Copy tika-parser JAR
+    from(project(":yappy-modules:tika-parser").tasks.named("shadowJar", Jar::class.java))
     
-    from(tikaProject.tasks.named("shadowJar", Jar::class.java).map { it.archiveFile })
-    from("src/main/docker")
+    // Copy config files
+    from("src/main/resources") {
+        include("supervisord.conf", "application.yml", "module-application.yml", "start.sh")
+        into("config")
+    }
     
-    into("build/docker/main/layers/modules")
+    into("build/docker/main/layers")
     
-    rename { filename ->
-        when {
-            filename.endsWith(".jar") -> "tika-parser.jar"
-            else -> filename
+    // Rename tika jar
+    rename { fileName ->
+        if (fileName.contains("tika-parser") && fileName.endsWith(".jar")) {
+            "tika-parser.jar"
+        } else {
+            fileName
         }
     }
 }
 
-// Configure Docker build after Dockerfile is generated
-tasks.named("dockerfile") {
-    dependsOn("copyModuleFiles")
-    
-    doLast {
-        // Get the generated Dockerfile
-        val dockerFile = file("build/docker/main/Dockerfile")
-        val originalContent = dockerFile.readText()
-        
-        // Modify the Dockerfile
-        val modifiedContent = originalContent
-            .replace("FROM eclipse-temurin:21-jre", "FROM eclipse-temurin:21-jre-alpine")
-            .replace("EXPOSE 8080", "EXPOSE 8080 50051 50053")
-            .replace("ENTRYPOINT [\"java\", \"-jar\", \"/home/app/application.jar\"]", 
-                     "ENTRYPOINT [\"/home/app/start.sh\"]")
-        
-        // Add our custom instructions before the EXPOSE line
-        val customInstructions = """
-# Install supervisord
-RUN apk add --no-cache supervisor bash curl
-
-# Create directories
-RUN mkdir -p /var/log/supervisor /var/run
-
-# Copy module JAR and config files
-COPY --link layers/modules /home/app/modules
-
-# Set up startup script
-RUN echo '#!/bin/bash' > /home/app/start.sh && \
-    echo 'exec /usr/bin/supervisord -c /home/app/modules/supervisord.conf' >> /home/app/start.sh && \
-    chmod +x /home/app/start.sh
-
-"""
-        
-        // Insert custom instructions before EXPOSE
-        val finalContent = modifiedContent.replace("EXPOSE ", customInstructions + "EXPOSE ")
-        
-        // Write back
-        dockerFile.writeText(finalContent)
+tasks.named("dockerBuild") {
+    dependsOn("prepareDockerContext")
+    doFirst {
+        // Copy our custom Dockerfile over the generated one
+        copy {
+            from("src/main/docker/Dockerfile")
+            into(file("build/docker/main"))
+        }
     }
 }
 
-// Task to build Docker image
-tasks.register("buildDockerImage") {
-    group = "docker"
-    description = "Build Docker image for Engine with Tika Parser"
-    dependsOn("dockerBuild")
-}
