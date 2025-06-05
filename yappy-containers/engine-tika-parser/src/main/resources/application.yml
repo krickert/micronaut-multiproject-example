@@ -16,7 +16,7 @@ grpc:
 # Application configuration
 app:
   config:
-    cluster-name: ${YAPPY_CLUSTER_NAME:yappy-cluster}
+    cluster-name: ${YAPPY_CLUSTER_NAME:default-cluster}
   engine:
     instance-id: ${HOSTNAME:${random.uuid}}
     bootstrapper:
@@ -27,6 +27,18 @@ local:
   services:
     ports:
       tika-parser: 50053
+
+# Health check configuration for local module
+health-check:
+  tika-parser:
+    initial-delay: 5s
+    max-attempts: 20
+    intervals:
+      - 5s    # First 5 attempts (25s total)
+      - 10s   # Next 5 attempts (50s total)  
+      - 30s   # Next 5 attempts (150s total)
+      - 60s   # Next 5 attempts (300s total)
+      - 300s  # Every 5 minutes thereafter
 
 # Consul configuration
 consul:
@@ -45,6 +57,9 @@ kafka:
   enabled: ${KAFKA_ENABLED:true}
   bootstrap:
     servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  schema:
+    registry:
+      type: ${SCHEMA_REGISTRY_TYPE:apicurio}
   producers:
     pipestream-forwarder:
       key.serializer: org.apache.kafka.common.serialization.UUIDSerializer
@@ -53,12 +68,6 @@ kafka:
       apicurio.registry.auto-register: true
       apicurio.registry.artifact-resolver-strategy: io.apicurio.registry.serde.strategy.TopicIdStrategy
 
-# Schema registry configuration
-kafka:
-  schema:
-    registry:
-      type: ${SCHEMA_REGISTRY_TYPE:apicurio}
-
 apicurio:
   registry:
     url: ${APICURIO_REGISTRY_URL:http://localhost:8080}
@@ -66,7 +75,7 @@ apicurio:
 # Logging
 logger:
   levels:
-    com.krickert: DEBUG
+    com.krickert: INFO
     com.krickert.search.pipeline.engine: DEBUG
     io.micronaut.discovery: INFO
     io.micronaut.health: INFO

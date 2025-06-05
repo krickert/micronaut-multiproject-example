@@ -52,20 +52,22 @@ include(
     "yappy-consul-config",
     
     // Engine (no longer depends on modules)
-    "yappy-engine"
+    "yappy-engine",
+    
+    // Modules - needed for container builds
+    "yappy-modules:tika-parser",
     
     // TODO: Add these back after engine is updated
     // "yappy-modules:echo",
     // "yappy-modules:chunker",
-    // "yappy-modules:tika-parser",
     // "yappy-modules:embedder",
     // "yappy-modules:s3-connector",
     // "yappy-modules:opensearch-sink",
     // "yappy-modules:yappy-connector-test-server"
     
-    // TODO: Add containers after modules are ready
-    // "yappy-containers",
+    // Containers
+    "yappy-containers:engine-tika-parser",
     
-    // TODO: Add integration tests last
-    // "yappy-integration-test"
+    // Integration tests
+    "yappy-integration-test"
 )

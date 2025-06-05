@@ -1,38 +1,104 @@
 plugins {
-    id("com.palantir.docker") version "0.36.0"
+    id("io.micronaut.application") version "4.5.3"
+    id("com.gradleup.shadow") version "8.3.6"
 }
 
-docker {
-    name = "yappy/engine-tika-parser:${project.version}"
-    
-    // Build context is the root project directory
-    setDockerfile(file("Dockerfile"))
-    buildContext(rootProject.projectDir)
-    
-    // Copy resources to build directory
-    files(
-        "src/main/resources/supervisord.conf",
-        "src/main/resources/application.yml",
-        "src/main/resources/module-application.yml",
-        "src/main/resources/start.sh"
-    )
-    
-    // Build args if needed
-    buildArgs(mapOf(
-        "ENGINE_JAR" to "yappy-engine/build/libs/yappy-engine-${project.version}-all.jar",
-        "MODULE_JAR" to "yappy-modules/tika-parser/build/libs/tika-parser-${project.version}-all.jar"
-    ))
-    
-    // Labels
-    labels(mapOf(
-        "maintainer" to "YAPPY Team",
-        "description" to "YAPPY Engine with Tika Parser module",
-        "version" to project.version.toString()
-    ))
+version = rootProject.version
+group = "com.krickert.yappy.containers"
+
+repositories {
+    mavenCentral()
 }
 
-// Task to ensure JARs are built before Docker image
-tasks.docker {
-    dependsOn(":yappy-engine:shadowJar")
+// Configuration to fetch the module JAR
+configurations {
+    create("moduleArtifact")
+}
+
+dependencies {
+    // Engine dependencies (inherit from engine project)
+    implementation(project(":yappy-engine"))
+    
+    // Module artifact - reference the module project
+    "moduleArtifact"(project(":yappy-modules:tika-parser"))
+}
+
+application {
+    mainClass.set("com.krickert.search.pipeline.Application")
+}
+
+micronaut {
+    runtime("netty")
+    processing {
+        incremental(true)
+    }
+}
+
+// Task to copy module files into docker build directory
+tasks.register<Copy>("copyModuleFiles") {
     dependsOn(":yappy-modules:tika-parser:shadowJar")
+    
+    // Find the shadow JAR from the tika-parser module
+    val tikaProject = project(":yappy-modules:tika-parser")
+    
+    from(tikaProject.tasks.named("shadowJar", Jar::class.java).map { it.archiveFile })
+    from("src/main/docker")
+    
+    into("build/docker/main/layers/modules")
+    
+    rename { filename ->
+        when {
+            filename.endsWith(".jar") -> "tika-parser.jar"
+            else -> filename
+        }
+    }
+}
+
+// Configure Docker build after Dockerfile is generated
+tasks.named("dockerfile") {
+    dependsOn("copyModuleFiles")
+    
+    doLast {
+        // Get the generated Dockerfile
+        val dockerFile = file("build/docker/main/Dockerfile")
+        val originalContent = dockerFile.readText()
+        
+        // Modify the Dockerfile
+        val modifiedContent = originalContent
+            .replace("FROM eclipse-temurin:21-jre", "FROM eclipse-temurin:21-jre-alpine")
+            .replace("EXPOSE 8080", "EXPOSE 8080 50051 50053")
+            .replace("ENTRYPOINT [\"java\", \"-jar\", \"/home/app/application.jar\"]", 
+                     "ENTRYPOINT [\"/home/app/start.sh\"]")
+        
+        // Add our custom instructions before the EXPOSE line
+        val customInstructions = """
+# Install supervisord
+RUN apk add --no-cache supervisor bash curl
+
+# Create directories
+RUN mkdir -p /var/log/supervisor /var/run
+
+# Copy module JAR and config files
+COPY --link layers/modules /home/app/modules
+
+# Set up startup script
+RUN echo '#!/bin/bash' > /home/app/start.sh && \
+    echo 'exec /usr/bin/supervisord -c /home/app/modules/supervisord.conf' >> /home/app/start.sh && \
+    chmod +x /home/app/start.sh
+
+"""
+        
+        // Insert custom instructions before EXPOSE
+        val finalContent = modifiedContent.replace("EXPOSE ", customInstructions + "EXPOSE ")
+        
+        // Write back
+        dockerFile.writeText(finalContent)
+    }
+}
+
+// Task to build Docker image
+tasks.register("buildDockerImage") {
+    group = "docker"
+    description = "Build Docker image for Engine with Tika Parser"
+    dependsOn("dockerBuild")
 }
