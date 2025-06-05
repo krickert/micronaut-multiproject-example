@@ -14,11 +14,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import java.util.List;
-import java.util.UUID;
+import java.time.Duration;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -68,6 +70,25 @@ class MicronautPipelineKafkaTopicServiceTest {
         }
     }
 
+    /**
+     * Waits for the specified topics to be created in Kafka using Reactor.
+     * @param topics Collection of topic names to wait for
+     * @param timeout Maximum time to wait
+     */
+    private void waitForTopics(Collection<String> topics, Duration timeout) {
+        Flux.fromIterable(topics)
+            .flatMap(topic -> 
+                // Poll until topic exists
+                Flux.interval(Duration.ZERO, Duration.ofMillis(100))
+                    .flatMap(i -> Mono.fromCallable(() -> kafkaAdminService.doesTopicExist(topic)))
+                    .filter(exists -> exists)
+                    .next() // Take the first 'true' result
+                    .timeout(timeout)
+                    .switchIfEmpty(Mono.error(new TimeoutException("Topic " + topic + " not created within timeout")))
+            )
+            .blockLast(timeout); // Block until all topics exist or timeout
+    }
+
     @Test
     @DisplayName("Should generate correct topic names")
     void testGenerateTopicName() {
@@ -81,7 +102,7 @@ class MicronautPipelineKafkaTopicServiceTest {
 
     @Test
     @DisplayName("Should create a topic with correct configuration")
-    void testCreateTopic() throws ExecutionException, InterruptedException, TimeoutException {
+    void testCreateTopic() {
         // Create a topic
         PipelineKafkaTopicService.TopicType topicType = PipelineKafkaTopicService.TopicType.INPUT;
         pipelineKafkaTopicService.createTopic(testPipelineName, testStepName, topicType);
@@ -127,6 +148,15 @@ class MicronautPipelineKafkaTopicServiceTest {
         // Create all topics for the pipeline step
         pipelineKafkaTopicService.createAllTopics(testPipelineName, testStepName);
 
+        // Generate expected topic names
+        List<String> expectedTopics = new ArrayList<>();
+        for (PipelineKafkaTopicService.TopicType topicType : PipelineKafkaTopicService.TopicType.values()) {
+            expectedTopics.add(pipelineKafkaTopicService.generateTopicName(testPipelineName, testStepName, topicType));
+        }
+        
+        // Wait for all topics to be created
+        waitForTopics(expectedTopics, Duration.ofSeconds(10));
+
         // Get the list of topics for the step
         List<String> topics = pipelineKafkaTopicService.listTopicsForStep(testPipelineName, testStepName);
         createdTopics = topics;
@@ -149,7 +179,16 @@ class MicronautPipelineKafkaTopicServiceTest {
         // Create all topics for the pipeline step
         pipelineKafkaTopicService.createAllTopics(testPipelineName, testStepName);
 
-        // Get the list of topics for the step
+        // Generate expected topic names
+        List<String> expectedTopics = new ArrayList<>();
+        for (PipelineKafkaTopicService.TopicType topicType : PipelineKafkaTopicService.TopicType.values()) {
+            expectedTopics.add(pipelineKafkaTopicService.generateTopicName(testPipelineName, testStepName, topicType));
+        }
+        
+        // Wait for all topics to be created
+        waitForTopics(expectedTopics, Duration.ofSeconds(10));
+        
+        // Now list the topics
         List<String> topics = pipelineKafkaTopicService.listTopicsForStep(testPipelineName, testStepName);
         createdTopics = topics;
 
@@ -186,6 +225,15 @@ class MicronautPipelineKafkaTopicServiceTest {
         // Create all topics asynchronously
         pipelineKafkaTopicService.createAllTopicsAsync(testPipelineName, testStepName)
                 .get(30, TimeUnit.SECONDS); // Wait for completion with timeout
+
+        // Generate expected topic names
+        List<String> expectedTopics = new ArrayList<>();
+        for (PipelineKafkaTopicService.TopicType topicType : PipelineKafkaTopicService.TopicType.values()) {
+            expectedTopics.add(pipelineKafkaTopicService.generateTopicName(testPipelineName, testStepName, topicType));
+        }
+        
+        // Wait for all topics to be created
+        waitForTopics(expectedTopics, Duration.ofSeconds(10));
 
         // Get the list of topics for the step
         List<String> topics = pipelineKafkaTopicService.listTopicsForStep(testPipelineName, testStepName);

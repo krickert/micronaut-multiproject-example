@@ -4,6 +4,7 @@ import com.krickert.search.config.consul.service.ConsulBusinessOperationsService
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineGraphConfig;
 import com.krickert.search.config.pipeline.model.PipelineModuleMap;
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.env.Environment;
 import io.micronaut.context.event.ApplicationEventListener;
@@ -17,6 +18,7 @@ import java.util.Collections;
 import java.util.Optional;
 
 @Singleton
+@Requires(property = "app.engine.bootstrapper.enabled", notEquals = "false")
 public class YappyEngineBootstrapper implements ApplicationEventListener<ApplicationStartupEvent> {
 
     private static final Logger LOG = LoggerFactory.getLogger(YappyEngineBootstrapper.class);
