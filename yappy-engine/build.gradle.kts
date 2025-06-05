@@ -79,8 +79,9 @@ dependencies {
     testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     testImplementation(project(":yappy-test-resources:moto-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:moto-test-resource"))
-    testImplementation(project(":yappy-modules:echo"))
-    testImplementation(project(":yappy-modules:chunker"))
+    // Module dependencies removed - engine tests should be self-contained
+    // testImplementation(project(":yappy-modules:echo"))
+    // testImplementation(project(":yappy-modules:chunker"))
     runtimeOnly("io.micronaut.discovery:micronaut-discovery-client")
 
 
