@@ -26,3 +26,5 @@ logger:
     org.testcontainers: INFO
     com.github.dockerjava: WARN
     docker.image.pull: WARN
+    io.micronaut.testresources: DEBUG
+    io.micronaut.testresources.client: TRACE

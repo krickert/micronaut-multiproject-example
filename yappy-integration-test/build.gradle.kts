@@ -19,49 +19,49 @@ dependencies {
     // Use BOM for version management
     testImplementation(platform(project(":bom")))
     testAnnotationProcessor(platform(project(":bom")))
-    
+
     // Annotation processors
     testAnnotationProcessor("io.micronaut:micronaut-inject-java")
-    
+
     // Test dependencies
     testImplementation("io.micronaut:micronaut-inject-java")
     testImplementation("io.micronaut.test:micronaut-test-junit5")
-    
+
     // Logging
     testImplementation(libs.logback.classic)
-    
+
     // JUnit
     testImplementation(libs.junit.jupiter.api)
     testRuntimeOnly(libs.junit.jupiter.engine)
     testImplementation("org.junit.jupiter:junit-jupiter-params")
-    
+
     // Assertions
     testImplementation("org.assertj:assertj-core")
     testImplementation("org.awaitility:awaitility")
-    
+
     // Testcontainers
     testImplementation("org.testcontainers:testcontainers")
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:kafka")
     testImplementation("org.testcontainers:consul")
-    
+
     // HTTP client for testing
     testImplementation("io.micronaut:micronaut-http-client")
-    
+
     // JSON processing
     testImplementation(libs.jackson.databind)
-    
+
     // Consul client
     testImplementation("io.micronaut.discovery:micronaut-discovery-client")
     testImplementation("com.orbitz.consul:consul-client:1.5.3")
-    
+
     // Kafka client
     testImplementation("org.apache.kafka:kafka-clients")
     testImplementation("io.micronaut.kafka:micronaut-kafka")
-    
+
     // Apicurio Registry
     testImplementation(libs.apicurio.serde)
-    
+
     // AWS Dependencies for test resources
     testImplementation("io.micronaut.aws:micronaut-aws-sdk-v2")
     testImplementation(libs.amazon.glue) {
@@ -69,15 +69,15 @@ dependencies {
     }
     testImplementation(libs.amazon.msk.iam)
     testImplementation(libs.amazon.connection.client)
-    
+
     // YAPPY dependencies for configuration management
     testImplementation(project(":yappy-consul-config"))
     testImplementation(project(":yappy-models:pipeline-config-models"))
     testImplementation(project(":yappy-models:pipeline-config-models-test-utils"))
-    
+
     // Reactive support
     testImplementation("io.projectreactor:reactor-core")
-    
+
     // YAPPY test resources - following the pattern from yappy-engine
     testImplementation(project(":yappy-test-resources:consul-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
@@ -92,8 +92,6 @@ dependencies {
 micronaut {
     testResources {
         enabled = true
-        sharedServer = true
-        clientTimeout = 300  // 5 minutes for container startup
     }
 }
 

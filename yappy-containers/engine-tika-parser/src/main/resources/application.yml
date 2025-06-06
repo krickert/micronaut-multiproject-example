@@ -4,6 +4,8 @@ micronaut:
   server:
     port: 8080
   environments: docker
+  config-client:
+    enabled: ${MICRONAUT_CONFIG_CLIENT_ENABLED:false}
 
 grpc:
   server:
@@ -44,13 +46,18 @@ health-check:
 consul:
   client:
     enabled: ${CONSUL_ENABLED:true}
-    host: ${CONSUL_HOST:localhost}
-    port: ${CONSUL_PORT:8500}
+    host: ${CONSUL_HOST}
+    port: ${CONSUL_PORT}
     registration:
       enabled: ${CONSUL_REGISTRATION_ENABLED:true}
       health-check-interval: 10s
       health-check-timeout: 5s
       deregister-critical-service-after: 30s
+    config:
+      enabled: ${CONSUL_CONFIG_ENABLED:false}
+      key:
+        prefix: /test/config
+  failFast: false
 
 # Kafka configuration
 kafka:

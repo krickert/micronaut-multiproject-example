@@ -20,6 +20,7 @@ COPY --link layers/modules/tika-parser.jar /app/modules/tika-parser.jar
 COPY --link layers/config/supervisord.conf /etc/supervisor/conf.d/
 COPY --link layers/config/application.yml /app/engine/
 COPY --link layers/config/module-application.yml /app/modules/application.yml
+COPY --link layers/config/module-application.yml /app/modules/module-application.yml
 COPY --link layers/config/start.sh /app/start.sh
 
 # Make start script executable
