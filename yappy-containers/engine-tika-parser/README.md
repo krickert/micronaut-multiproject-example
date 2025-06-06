@@ -1,49 +1,51 @@
 # YAPPY Engine with Tika Parser Module
 
-This container packages the YAPPY Engine with the Tika Parser module, running as two separate JVMs managed by supervisord.
+This container packages the YAPPY Engine with the Tika Parser module, running as two separate JVMs managed by `supervisord`. This architecture allows for independent resource management and process isolation while packaging a core service and its tightly coupled dependency into a single, deployable unit.
 
 ## Architecture
 
+The container uses `supervisord` to launch and manage two independent Java processes.
+
 ```
-┌─────────────────────────────────────┐
-│       Docker Container              │
-│                                     │
-│  ┌─────────────────┐  ┌──────────┐ │
-│  │  Tika Parser    │  │  Engine  │ │
-│  │  (JVM 1)        │  │  (JVM 2) │ │
-│  │  Port: 50053    │  │  Ports:  │ │
-│  │  gRPC Service   │  │  - 8080  │ │
-│  └────────┬────────┘  │  - 50051 │ │
-│           │           └─────┬────┘ │
-│           │                 │      │
-│           └─────────────────┘      │
-│              supervisord            │
-└─────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│       Docker Container               │
+│                                      │
+│  ┌───────────────────┐  ┌──────────┐ │
+│  │  Tika Parser      │  │  Engine  │ │
+│  │  (JVM 1)          │  │  (JVM 2) │ │
+│  │  gRPC Port: 50053 │  │  Ports:  │ │
+│  └────────┬──────────┘  │  - 8080  │ │
+│           │             │  - 50051 │ │
+│           │             └─────┬────┘ │
+│           └───────────────────┘      │
+│              supervisord             │
+└──────────────────────────────────────┘
 ```
 
 ## Build Process
 
-The build uses Micronaut's Docker plugin with custom extensions:
+The build is orchestrated by Gradle and uses the Micronaut Application plugin to create an optimized Docker image.
 
-1. **Module JAR Fetching**: The build fetches the Tika Parser shadow JAR as a Gradle dependency
-2. **Layered Build**: Micronaut creates optimized Docker layers for caching
-3. **Supervisord Integration**: Manages both JVMs with proper restart policies
+1.  **Dependency Assembly**: A custom Gradle task (`prepareDockerContext`) builds and collects the fat JARs for both the `:yappy-engine` and `:yappy-modules:tika-parser` projects.
+2.  **Configuration Assembly**: The same task copies the necessary configuration (`supervisord.conf`, `start.sh`, `application.yml`) from their single source of truth locations (`src/main/docker` and `src/main/resources`) into the Docker build context.
+3.  **Layered Image Build**: Micronaut creates an efficient Docker image with optimized layers for caching, using a custom `Dockerfile` that sets up `supervisord` and the application JARs.
 
 ### Building
 
+Because the build script correctly defines task dependencies, you can build the entire image from the project root with a single command:
+
 ```bash
-# From project root
+# From the project root directory
 ./gradlew :yappy-containers:engine-tika-parser:dockerBuild
 ```
+*(See the "Simpler Build Command" section below for how to make this even easier.)*
 
-Or use the convenience script:
-```bash
-./build-and-test.sh
-```
 
 ## Configuration
 
 ### Environment Variables
+
+The container's behavior is controlled via environment variables passed in the `docker run` command or from Testcontainers.
 
 #### Engine Configuration
 - `YAPPY_ENGINE_NAME`: Engine instance name (default: `yappy-engine-tika-parser`)
@@ -63,27 +65,6 @@ Or use the convenience script:
 - `TIKA_EXTRACT_CONTENT`: Extract text content (default: `true`)
 - `TIKA_DETECT_LANGUAGE`: Detect document language (default: `true`)
 
-### Local Service Discovery
-
-The engine is configured to find the Tika Parser module on localhost:
-
-```yaml
-local:
-  services:
-    ports:
-      tika-parser: 50053
-```
-
-### Health Check Backoff
-
-The engine implements a backoff strategy when health-checking the local module:
-
-1. First 5 attempts: Every 5 seconds
-2. Next 5 attempts: Every 10 seconds
-3. Next 5 attempts: Every 30 seconds
-4. Next 5 attempts: Every 60 seconds
-5. Then: Every 5 minutes
-
 ## Running
 
 ### Standalone Docker
@@ -91,14 +72,14 @@ The engine implements a backoff strategy when health-checking the local module:
 ```bash
 docker run -p 8080:8080 -p 50051:50051 -p 50053:50053 \
   -e YAPPY_CLUSTER_NAME=my-cluster \
-  -e CONSUL_HOST=consul.example.com \
-  -e KAFKA_BOOTSTRAP_SERVERS=kafka.example.com:9092 \
-  yappy/engine-tika-parser:latest
+  -e CONSUL_HOST=host.docker.internal \
+  -e KAFKA_BOOTSTRAP_SERVERS=host.docker.internal:9092 \
+  engine-tika-parser:latest
 ```
 
 ### Docker Compose
 
-See `docker-compose.test.yml` for a complete test environment with all dependencies.
+See `docker-compose.test.yml` for an example of running a complete test environment with all dependencies.
 
 ```bash
 docker-compose -f docker-compose.test.yml up
@@ -106,56 +87,47 @@ docker-compose -f docker-compose.test.yml up
 
 ## Ports
 
-- `8080`: Engine HTTP API and health endpoint
-- `50051`: Engine gRPC service
-- `50053`: Tika Parser gRPC service
+- **8080**: Engine HTTP API and health endpoint
+- **50051**: Engine gRPC service
+- **50053**: Tika Parser gRPC service
 
-## Health Checks
+## Health Checks & Logging
 
-- Engine health: `http://localhost:8080/health`
-- Tika Parser: gRPC health check on port 50053
+- **Engine health:** `http://localhost:8080/health`
+- **Tika Parser health:** Monitored internally via gRPC health check from the Engine.
+
+The `supervisord` configuration has been updated to stream all application logs directly to the container's standard output. This makes debugging much easier.
+
+```bash
+# View the combined, real-time logs from both JVMs
+docker logs -f <container-id>
+```
 
 ## Supervisord Management
 
-To interact with the processes inside the container:
+You can still interact with the `supervisorctl` command to manage the processes inside a running container.
 
 ```bash
 # Check process status
 docker exec <container-id> supervisorctl status
 
-# Restart a process
+# Restart a specific process
 docker exec <container-id> supervisorctl restart tika-parser
 docker exec <container-id> supervisorctl restart engine
-
-# View logs
-docker exec <container-id> tail -f /var/log/supervisor/tika-parser.log
-docker exec <container-id> tail -f /var/log/supervisor/engine.log
 ```
-
-## Extending for Other Languages
-
-This pattern supports modules in any language:
-
-- **Java**: Current implementation
-- **Python**: Replace module JAR with Python script
-- **Go**: Replace module JAR with compiled binary
-- **Any gRPC-capable language**: As long as it implements the PipeStepProcessor interface
-
-The supervisord configuration would be adjusted accordingly.
 
 ## Troubleshooting
 
-### Module Not Starting
-1. Check supervisord logs: `docker logs <container-id>`
-2. Check module logs: `docker exec <container-id> cat /var/log/supervisor/tika-parser.err.log`
-3. Verify port 50053 is available inside container
+- **Container Exits Immediately:** Use `docker logs <container-id>` to see the full output from both the engine and the module. The error message or stack trace should be visible there.
+- **Engine Can't Find Module:** Verify the module is listening on port 50053 by checking the logs from the `tika-parser` process. Review engine logs for connection attempts.
+- **Out of Memory:** Adjust the `-Xmx` heap sizes in your `supervisord.conf` file and rebuild the image.
 
-### Engine Can't Find Module
-1. Verify local service configuration in application.yml
-2. Check that module is listening on expected port
-3. Review engine logs for connection attempts
+## Shortcuts
 
-### Out of Memory
-Adjust JVM heap sizes in supervisord.conf:
-- Module: `-Xmx512m` (default)
-- Engine: Inherits from `JAVA_OPTS` environment variable
+From the project's root directory, simply run:
+
+```bash
+./gradlew dockerBuild
+```
+
+Gradle will automatically figure out the entire dependency chain, build the `tika-parser` JAR, build the `engine` JAR, and then build the final `engine-tika-parser` Docker image, all from that one command. This is the idiomatic Gradle way to handle complex, multi-project builds. 

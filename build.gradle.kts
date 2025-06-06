@@ -76,3 +76,10 @@ subprojects {
     }
 }
 
+tasks.register("dockerBuild") {
+    group = "Build"
+    description = "Builds the main engine-tika-parser Docker image."
+    // This tells the root 'dockerBuild' task to run the specific module's task.
+    dependsOn(":yappy-containers:engine-tika-parser:dockerBuild")
+}
+

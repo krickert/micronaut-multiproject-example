@@ -19,6 +19,11 @@ grpc:
 app:
   config:
     cluster-name: ${YAPPY_CLUSTER_NAME:default-cluster}
+    consul:
+      key-prefixes:
+        pipeline-clusters: "config/pipeline/clusters"
+        schema-versions: "config/pipeline/schemas"
+        whitelists: "config/pipeline/whitelists"
   engine:
     instance-id: ${HOSTNAME:${random.uuid}}
     bootstrapper:
@@ -56,8 +61,10 @@ consul:
     config:
       enabled: ${CONSUL_CONFIG_ENABLED:false}
       key:
-        prefix: /test/config
+        prefix: ${CONSUL_CONFIG_KEY_PREFIX:/test/config}
   failFast: false
+
+# Consul key prefixes for pipeline configuration are defined in the app.config.consul.key-prefixes section above
 
 # Kafka configuration
 kafka:
@@ -82,7 +89,10 @@ apicurio:
 # Logging
 logger:
   levels:
-    com.krickert: INFO
+    com.krickert: DEBUG
     com.krickert.search.pipeline.engine: DEBUG
-    io.micronaut.discovery: INFO
-    io.micronaut.health: INFO
+    com.krickert.search.config.consul: TRACE
+    io.micronaut.discovery: DEBUG
+    io.micronaut.health: DEBUG
+    io.micronaut.consul: TRACE
+    org.kiwiproject.consul: TRACE

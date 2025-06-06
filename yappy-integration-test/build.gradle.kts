@@ -15,7 +15,14 @@ repositories {
     mavenCentral()
 }
 
+
 dependencies {
+    // Test resources dependencies
+    "testResourcesImplementation"("io.micronaut.testresources:micronaut-test-resources-testcontainers")
+    "testResourcesImplementation"("org.testcontainers:testcontainers")
+
+    // Test resources are now in separate modules
+
     // Use BOM for version management
     testImplementation(platform(project(":bom")))
     testAnnotationProcessor(platform(project(":bom")))
@@ -87,6 +94,8 @@ dependencies {
     testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     testImplementation(project(":yappy-test-resources:moto-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:moto-test-resource"))
+    testImplementation(project(":yappy-test-resources:engine-tika-parser-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:engine-tika-parser-test-resource"))
 }
 
 micronaut {
