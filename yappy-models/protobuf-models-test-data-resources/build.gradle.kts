@@ -74,6 +74,11 @@ tasks.named<ProcessResources>("processResources") {
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 
+// Set duplicates strategy for sourcesJar
+tasks.named<Jar>("sourcesJar") {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
 // Publishing configuration
 publishing {
     publications {

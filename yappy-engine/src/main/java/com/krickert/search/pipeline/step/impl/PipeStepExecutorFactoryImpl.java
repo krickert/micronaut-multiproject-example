@@ -7,6 +7,7 @@ import com.krickert.search.pipeline.step.PipeStepExecutor;
 import com.krickert.search.pipeline.step.PipeStepExecutorFactory;
 import com.krickert.search.pipeline.step.exception.PipeStepExecutorNotFoundException;
 import com.krickert.search.pipeline.step.grpc.PipelineStepGrpcProcessor;
+import io.micronaut.context.annotation.Requires;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 
@@ -16,6 +17,7 @@ import java.util.Optional;
  * Implementation of PipeStepExecutorFactory that creates executors based on pipeline configuration.
  */
 @Singleton
+@Requires(property = "consul.enabled", value = "true", defaultValue = "true")
 public class PipeStepExecutorFactoryImpl implements PipeStepExecutorFactory {
     private final DynamicConfigurationManager configManager;
     private final PipelineStepGrpcProcessor grpcProcessor;

@@ -32,6 +32,7 @@ include(
     // Core dependencies
     "bom",
     "util",
+    "yappy-kafka-slot-manager",
 
     // Test resources (needed by consul-config and engine)
     "yappy-test-resources",
@@ -40,7 +41,6 @@ include(
     "yappy-test-resources:moto-test-resource",
     "yappy-test-resources:apache-kafka-test-resource",
     "yappy-test-resources:opensearch3-test-resource",
-    "yappy-test-resources:engine-tika-parser-test-resource",
 
     // Models
     "yappy-models",
@@ -57,18 +57,18 @@ include(
 
     // Modules - needed for container builds
     "yappy-modules:tika-parser",
+    "yappy-modules:chunker",
 
     // TODO: Add these back after engine is updated
     // "yappy-modules:echo",
-    // "yappy-modules:chunker",
     // "yappy-modules:embedder",
     // "yappy-modules:s3-connector",
     // "yappy-modules:opensearch-sink",
     // "yappy-modules:yappy-connector-test-server"
 
-    // Containers
-    "yappy-containers:engine-tika-parser",
-
     // Integration tests
-    "yappy-integration-test"
+    "yappy-integration-test",
+    
+    // Registration CLI
+    "yappy-registration-cli"
 )

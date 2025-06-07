@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package com.krickert.search.grpc;
+
+option java_package = "com.krickert.search.grpc";
+option java_outer_classname = "ModuleRegistrationProto";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// Service for module registration with the engine
+service ModuleRegistration {
+  // Register a module with the engine
+  rpc RegisterModule(ModuleInfo) returns (RegistrationStatus);
+  
+  // Unregister a module
+  rpc UnregisterModule(ModuleId) returns (UnregistrationStatus);
+  
+  // Heartbeat from module to engine
+  rpc Heartbeat(ModuleHeartbeat) returns (HeartbeatAck);
+  
+  // Get health status of a specific module
+  rpc GetModuleHealth(ModuleId) returns (ModuleHealthStatus);
+  
+  // List all registered modules
+  rpc ListModules(google.protobuf.Empty) returns (ModuleList);
+}
+
+// Information about a module registering with the engine
+message ModuleInfo {
+  string service_name = 1;  // Logical service name (e.g., "tika-parser", "chunker")
+  string service_id = 2;    // Unique instance ID
+  string host = 3;          // Host where module is running
+  int32 port = 4;           // gRPC port
+  string health_endpoint = 5;  // Health check endpoint path
+  map<string, string> metadata = 6;  // Additional metadata (version, capabilities, etc.)
+  repeated string tags = 7;  // Tags for service discovery
+}
+
+// Module identifier
+message ModuleId {
+  string service_id = 1;
+}
+
+// Registration status response
+message RegistrationStatus {
+  bool success = 1;
+  string message = 2;
+  google.protobuf.Timestamp registered_at = 3;
+  string consul_service_id = 4;  // Consul service ID if registered
+}
+
+// Unregistration status response
+message UnregistrationStatus {
+  bool success = 1;
+  string message = 2;
+  google.protobuf.Timestamp unregistered_at = 3;
+}
+
+// Heartbeat from module
+message ModuleHeartbeat {
+  string service_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  map<string, string> status_info = 3;  // Optional status information
+}
+
+// Heartbeat acknowledgment
+message HeartbeatAck {
+  bool acknowledged = 1;
+  google.protobuf.Timestamp server_time = 2;
+  string message = 3;
+}
+
+// Module health status
+message ModuleHealthStatus {
+  string service_id = 1;
+  string service_name = 2;
+  bool is_healthy = 3;
+  google.protobuf.Timestamp last_checked = 4;
+  string health_details = 5;
+  map<string, string> metadata = 6;
+}
+
+// List of registered modules
+message ModuleList {
+  repeated ModuleInfo modules = 1;
+  google.protobuf.Timestamp as_of = 2;
+}

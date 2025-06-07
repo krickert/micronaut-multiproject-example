@@ -4,7 +4,9 @@ plugins {
     `java-library`
     `maven-publish`
     id("io.micronaut.test-resources") version "4.5.3"
-    id("io.micronaut.library") version "4.5.3"
+    id("io.micronaut.application") version "4.5.3"
+    id("com.gradleup.shadow") version "8.3.6"
+    id("application")
 }
 
 group = rootProject.group
@@ -53,6 +55,7 @@ dependencies {
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.3")
 
     api(project(":yappy-consul-config"))
+    implementation(project(":yappy-kafka-slot-manager"))
 
     runtimeOnly(mn.logback.classic) // This line was missing from your provided snippet, re-add if it was there
     implementation(mn.micronaut.reactor.http.client)
@@ -160,4 +163,14 @@ publishing {
             }
         }
     }
+}
+
+application {
+    mainClass.set("com.krickert.yappy.bootstrap.EngineApplication")
+}
+
+tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
+    isZip64 = true
+    archiveBaseName.set("engine")
+    archiveClassifier.set("")
 }

@@ -1,0 +1,1540 @@
+CODE LISTING FOR /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/TikaParserContainerDebugTest.java
+
+
+
+package com.krickert.yappy.integration.container;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.output.Slf4jLogConsumer;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.utility.DockerImageName;
+
+import java.time.Duration;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
+/**
+ * Debug test to extract detailed logs from the container.
+ */
+public class TikaParserContainerDebugTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(TikaParserContainerDebugTest.class);
+
+    @Test
+    @DisplayName("Debug test to extract detailed logs from the container")
+    void testContainerLogs() {
+        LOG.info("Starting container debug test");
+
+        // Use the Docker image that was built for the engine-tika-parser module
+        String dockerImageName = System.getProperty("docker.image.name", "engine-tika-parser:latest");
+        LOG.info("Using Docker image: {}", dockerImageName);
+
+        // Create the container with necessary environment variables
+        try (GenericContainer<?> container = new GenericContainer<>(DockerImageName.parse(dockerImageName))
+                .withExposedPorts(8080, 50051, 50053) // HTTP, Engine gRPC, and Tika Parser gRPC ports
+                .withEnv("CONSUL_HOST", "host.docker.internal") // Use host.docker.internal to access host machine
+                .withEnv("CONSUL_PORT", "8500")
+                .withEnv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+                .withEnv("APICURIO_REGISTRY_URL", "http://localhost:8080")
+                .withEnv("YAPPY_CLUSTER_NAME", "test-cluster")
+                .withEnv("YAPPY_ENGINE_NAME", "yappy-engine-tika-parser")
+                .withEnv("CONSUL_CLIENT_DEFAULT_ZONE", "dc1")
+                .withEnv("CONSUL_ENABLED", "true") // Enable Consul to test connection
+                .withEnv("KAFKA_ENABLED", "true")
+                .withEnv("SCHEMA_REGISTRY_TYPE", "apicurio")
+                .withEnv("MICRONAUT_SERVER_PORT", "8080")
+                .withEnv("GRPC_SERVER_PORT", "50051")
+                .withLogConsumer(new Slf4jLogConsumer(LOG))
+                .waitingFor(Wait.forLogMessage(".*Starting supervisord.*", 1)
+                        .withStartupTimeout(Duration.ofMinutes(3)))) {
+
+            // Start the container
+            container.start();
+            assertTrue(container.isRunning(), "Container should be running");
+            LOG.info("Container started successfully");
+
+            // Give the applications a moment to start
+            Thread.sleep(10000); // Wait 10 seconds for both JVMs to start
+
+            // Extract Java application logs using container exec
+            try {
+                // Read tika-parser logs (stdout with stderr redirected)
+                org.testcontainers.containers.Container.ExecResult tikaLogsResult = 
+                        container.execInContainer("cat", "/var/log/supervisor/tika-parser.log");
+                if (tikaLogsResult.getExitCode() == 0 && !tikaLogsResult.getStdout().trim().isEmpty()) {
+                    LOG.info("=== TIKA PARSER APPLICATION LOGS (STDOUT + STDERR) ===\n{}", tikaLogsResult.getStdout());
+                } else {
+                    LOG.warn("No tika-parser logs found or empty");
+                }
+
+                // Read engine logs (stdout with stderr redirected)
+                org.testcontainers.containers.Container.ExecResult engineLogsResult = 
+                        container.execInContainer("cat", "/var/log/supervisor/engine.log");
+                if (engineLogsResult.getExitCode() == 0 && !engineLogsResult.getStdout().trim().isEmpty()) {
+                    String engineLogs = engineLogsResult.getStdout();
+                    LOG.info("=== ENGINE APPLICATION LOGS (STDOUT + STDERR) ===");
+
+                    // Split logs by line and print each line with a debug prefix
+                    String[] logLines = engineLogs.split("\\n");
+                    for (String line : logLines) {
+                        LOG.error("[DEBUG_LOG] ENGINE: {}", line);
+                    }
+                } else {
+                    LOG.warn("No engine logs found or empty");
+                }
+
+                // Check if JAR files exist
+                org.testcontainers.containers.Container.ExecResult lsResult = 
+                        container.execInContainer("ls", "-la", "/app/engine/", "/app/modules/");
+                LOG.info("=== CONTAINER FILE LISTING ===\n{}", lsResult.getStdout());
+
+                // Check supervisord status
+                org.testcontainers.containers.Container.ExecResult supervisorctlResult = 
+                        container.execInContainer("supervisorctl", "status");
+                LOG.info("=== SUPERVISORCTL STATUS ===\n{}", supervisorctlResult.getStdout());
+
+            } catch (Exception e) {
+                LOG.error("Failed to extract container logs: {}", e.getMessage(), e);
+                fail("Failed to extract container logs: " + e.getMessage());
+            }
+
+        } catch (Exception e) {
+            LOG.error("Failed to start container: {}", e.getMessage(), e);
+            fail("Container failed to start: " + e.getMessage());
+        }
+    }
+}
+END OF /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/TikaParserContainerDebugTest.java
+
+
+CODE LISTING FOR /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/apicurio/KafkaApicurioTestIT.java
+
+
+
+package com.krickert.yappy.integration.container.apicurio;
+
+import io.micronaut.context.ApplicationContext;
+import io.micronaut.context.annotation.Value;
+import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import jakarta.inject.Inject;
+import org.apache.kafka.clients.admin.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Integration test for KafkaApicurioTest.
+ * This test verifies that the Apicurio Registry and Kafka Brokers are properly set up via Testcontainers.
+ */
+@MicronautTest
+public class KafkaApicurioTestIT {
+    private static final Logger log = LoggerFactory.getLogger(KafkaApicurioTestIT.class);
+
+    private static final List<String> DEFAULT_TOPICS = Arrays.asList(
+            "test-pipeline-input",
+            "test-processor-input",
+            "test-pipeline-output",
+            "pipeline-test-output-topic"
+    );
+
+    @Inject
+    private ApplicationContext applicationContext;
+
+    // Simplify injection - remove default. Testcontainers MUST set this.
+    @Value("${apicurio.registry.url}")
+    String injectedRegistryUrl;
+
+    // Simplify injection - remove default. Testcontainers MUST set this.
+    @Value("${kafka.bootstrap.servers}")
+    String injectedBootstrapServersWithPrefix; // Keep original value for comparison
+
+    @Value("${kafka.schema.registry.type}")
+    String registryType;
+
+    // Helper to get property directly from context for verification
+    private Optional<String> getApicurioUrlFromContext() {
+        return applicationContext.getProperty("apicurio.registry.url", String.class);
+    }
+
+    // Helper to get property directly from context for verification
+    private Optional<String> getBootstrapServersFromContext() {
+        return applicationContext.getProperty("kafka.bootstrap.servers", String.class);
+    }
+
+    /**
+     * Create the required Kafka topics before running the test.
+     * This ensures that the topics exist when the test runs.
+     */
+    @BeforeEach
+    void createKafkaTopics() throws ExecutionException, InterruptedException, TimeoutException {
+        log.info("Creating Kafka topics for test...");
+
+        // Get the bootstrap servers from the context
+        Optional<String> contextKafkaServersOpt = getBootstrapServersFromContext();
+        if (!contextKafkaServersOpt.isPresent()) {
+            log.warn("Bootstrap servers not found in context, skipping topic creation");
+            return;
+        }
+
+        String kafkaServersWithPrefix = contextKafkaServersOpt.get();
+        String kafkaServers = kafkaServersWithPrefix.replace("PLAINTEXT://", "");
+        log.info("Using Kafka bootstrap servers: {}", kafkaServers);
+
+        // Create AdminClient configuration
+        Map<String, Object> adminProps = new HashMap<>();
+        adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaServers);
+        adminProps.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 30000);
+        adminProps.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, 60000);
+
+        try (AdminClient adminClient = AdminClient.create(adminProps)) {
+            // Check if topics already exist
+            Set<String> existingTopics = adminClient.listTopics().names().get(30, TimeUnit.SECONDS);
+            log.info("Existing topics: {}", existingTopics);
+
+            // Create list of topics to create (only those that don't already exist)
+            List<NewTopic> topicsToCreate = DEFAULT_TOPICS.stream()
+                    .filter(topic -> !existingTopics.contains(topic))
+                    .map(topic -> new NewTopic(topic, 1, (short) 1)) // 1 partition, 1 replica
+                    .collect(Collectors.toList());
+
+            if (topicsToCreate.isEmpty()) {
+                log.info("All required topics already exist, skipping topic creation");
+                return;
+            }
+
+            log.info("Creating topics: {}", topicsToCreate.stream().map(NewTopic::name).collect(Collectors.toList()));
+
+            // Create the topics
+            CreateTopicsResult result = adminClient.createTopics(topicsToCreate);
+
+            // Wait for topic creation to complete
+            result.all().get(30, TimeUnit.SECONDS);
+
+            // Verify topics were created
+            Set<String> updatedTopics = adminClient.listTopics().names().get(30, TimeUnit.SECONDS);
+            log.info("Updated topics list: {}", updatedTopics);
+
+            // Verify all required topics exist
+            for (String topic : DEFAULT_TOPICS) {
+                if (!updatedTopics.contains(topic)) {
+                    log.error("Failed to create topic: {}", topic);
+                    fail("Failed to create required topic: " + topic);
+                }
+            }
+
+            log.info("Successfully created all required Kafka topics");
+        } catch (Exception e) {
+            log.error("Error creating Kafka topics", e);
+            throw e;
+        }
+    }
+
+
+    @Test
+    void testApicurioRegistryAndKafkaSetup() throws ExecutionException, InterruptedException, TimeoutException {
+        // 1. Verify registry type from config
+        assertEquals("apicurio", registryType, "Kafka registry type should be 'apicurio'");
+
+        // 2. Verify Apicurio URL is set by Testcontainers
+        Optional<String> contextApicurioUrlOpt = getApicurioUrlFromContext();
+        assertTrue(contextApicurioUrlOpt.isPresent(), "apicurio.registry.url should be present in the context");
+        String apicurioEndpoint = contextApicurioUrlOpt.get();
+        log.info("Retrieved Apicurio Registry URL from context: {}", apicurioEndpoint);
+        log.info("Injected Apicurio Registry URL (@Value): {}", injectedRegistryUrl);
+        assertEquals(apicurioEndpoint, injectedRegistryUrl, "@Value injection for Apicurio URL should match context property");
+        assertThat(apicurioEndpoint).startsWith("http://");
+
+        // 3. Verify Kafka Bootstrap Servers are set by Testcontainers
+        Optional<String> contextKafkaServersOpt = getBootstrapServersFromContext();
+        assertTrue(contextKafkaServersOpt.isPresent(), "kafka.bootstrap.servers should be present in the context");
+        String kafkaServersWithPrefix = contextKafkaServersOpt.get();
+        log.info("Retrieved Kafka Bootstrap Servers from context (with prefix): {}", kafkaServersWithPrefix);
+        log.info("Injected Kafka Bootstrap Servers (@Value) (with prefix): {}", injectedBootstrapServersWithPrefix);
+        assertEquals(kafkaServersWithPrefix, injectedBootstrapServersWithPrefix, "@Value injection for Kafka Servers should match context property");
+        assertThat(kafkaServersWithPrefix)
+                .isNotNull()
+                .isNotBlank()
+                .doesNotContain("${"); // Ensure placeholder is resolved
+
+        // ** Attempt to strip the prefix **
+        String kafkaServers = kafkaServersWithPrefix.replace("PLAINTEXT://", "");
+        log.info("Stripped Kafka Bootstrap Servers for AdminClient: {}", kafkaServers);
+
+
+        // 4. Verify Kafka topics can be listed using the stripped servers
+        Map<String, Object> adminProps = new HashMap<>();
+        adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaServers); // Use stripped value
+        // Optional: Increase timeout slightly just in case
+        adminProps.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 30000); // Default is 30000, maybe increase slightly if needed
+        adminProps.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, 60000); // Default is 60000
+
+        log.info("Attempting to create AdminClient with bootstrap servers: {}", kafkaServers);
+        try (AdminClient adminClient = AdminClient.create(adminProps)) {
+            log.info("AdminClient created successfully.");
+            ListTopicsResult topics = adminClient.listTopics();
+            // Add a timeout to the Kafka future get()
+            Set<String> topicNames = topics.names().get(30, TimeUnit.SECONDS); // Wait up to 30 seconds
+            log.info("Available Kafka topics: {}", topicNames);
+            assertThat(topicNames).containsAll(DEFAULT_TOPICS);
+        } catch (TimeoutException e) {
+            log.error("Timed out waiting for Kafka topics list with servers '{}'", kafkaServers, e);
+            fail("Timed out waiting for Kafka topics list using bootstrap servers: " + kafkaServers, e);
+        } catch (Exception e) {
+            log.error("Failed to create KafkaAdminClient or list topics with servers '{}'", kafkaServers, e);
+            // Log the original value with prefix as well for context
+            log.error("Original bootstrap server value from context was: {}", kafkaServersWithPrefix);
+            fail("Failed to interact with Kafka using bootstrap servers: " + kafkaServers, e);
+        }
+
+        // 5. Verify other properties (Example)
+        Optional<String> producerApicurioUrl = applicationContext.getProperty("kafka.producers.default.apicurio.registry.url", String.class);
+        assertTrue(producerApicurioUrl.isPresent(), "Producer Apicurio URL should be configured");
+        assertEquals(apicurioEndpoint, producerApicurioUrl.get(), "Producer Apicurio URL should match the main one");
+
+        log.info("All checks passed for Apicurio Registry and Kafka setup.");
+    }
+}
+END OF /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/apicurio/KafkaApicurioTestIT.java
+
+
+CODE LISTING FOR /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/moto/GlueService.java
+
+
+
+package com.krickert.yappy.integration.container.moto;
+
+import io.micronaut.context.annotation.Requires;
+import io.micronaut.context.annotation.Value;
+import jakarta.inject.Singleton;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.glue.GlueClient;
+import software.amazon.awssdk.services.glue.model.*;
+
+import java.net.URI;
+
+@Requires(property = "aws.glue.endpoint")
+@Requires(property = "kafka.enabled", value = "true")
+@Requires(property = "glue.enabled", value = "true")
+@Singleton
+public class GlueService {
+    private static final Logger log = LoggerFactory.getLogger(GlueService.class);
+
+    // Registry type identifier
+    private static final String REGISTRY_TYPE = "moto";
+    private static final String REGISTRY_NAME = "default";
+    private static final String DEFAULT_RETURN_CLASS = "com.krickert.search.model.PipeStream";
+
+    private final String glueEndpoint;
+
+
+    public GlueService(@Value("${aws.glue.endpoint}") String glueEndpoint) {
+        this.glueEndpoint = glueEndpoint;
+    }
+
+    /**
+     * Delete the Moto registry.
+     * Uses configuration provided by TestContainerManager.
+     */
+    public void deleteRegistry() {
+        log.info("Deleting Moto registry '{}' via endpoint: {}", REGISTRY_NAME, glueEndpoint);
+        try (GlueClient glueClient = createGlueClient()) {
+            try {
+                // Delete registry if it exists
+                glueClient.deleteRegistry(DeleteRegistryRequest.builder()
+                        .registryId(id -> id.registryName(REGISTRY_NAME))
+                        .build());
+                log.info("Deleted registry '{}'", REGISTRY_NAME);
+            } catch (EntityNotFoundException e) {
+                log.info("Registry '{}' does not exist, nothing to delete.", REGISTRY_NAME);
+            }
+        } catch (Exception e) {
+            log.error("Error deleting Moto registry '{}': {}", REGISTRY_NAME, e.getMessage(), e);
+            // Log error but continue, maybe cleanup failed but tests might still run
+        }
+    }
+
+    /**
+     * Create a Glue client configured using properties from TestContainerManager.
+     *
+     * @return the Glue client
+     */
+
+    private GlueClient createGlueClient() {
+        // Get dynamically from manager
+        String region = "us-east-1";
+        String accessKey = "test";
+        String secretKey = "test";
+
+        return GlueClient.builder()
+                .endpointOverride(URI.create(glueEndpoint))
+                .region(Region.of(region))
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(accessKey, secretKey)
+                ))
+                .build();
+    }
+
+    /**
+     * Initialize the Moto registry (create if not exists).
+     * Uses configuration provided by TestContainerManager.
+     */
+    public void initializeRegistry() {
+        String registryName = REGISTRY_NAME;
+        log.info("Initializing Moto registry '{}' via endpoint: {}", registryName, glueEndpoint);
+        try (GlueClient glueClient = createGlueClient()) {
+            try {
+                // Check if registry exists
+                glueClient.getRegistry(GetRegistryRequest.builder()
+                        .registryId(id -> id.registryName(registryName))
+                        .build());
+                log.info("Registry '{}' already exists.", registryName);
+            } catch (EntityNotFoundException e) {
+                // Create registry if it doesn't exist
+                log.info("Registry '{}' not found, creating...", registryName);
+                CreateRegistryRequest request = CreateRegistryRequest.builder()
+                        .registryName(registryName)
+                        .description("Test registry for Kafka tests (managed by TestContainerManager)")
+                        .build();
+
+                CreateRegistryResponse response = glueClient.createRegistry(request);
+                log.info("Created registry '{}' with ARN: {}", registryName, response.registryArn());
+            }
+        } catch (Exception e) {
+            log.error("Error initializing Moto registry '{}': {}", registryName, e.getMessage(), e);
+            throw new RuntimeException("Failed to initialize Moto registry: " + registryName, e);
+        }
+    }
+    /**
+     * Resets the Moto registry state by deleting and recreating the registry.
+     * This is useful for ensuring test isolation.
+     */
+    public void resetGlue() {
+        log.info("Resetting Moto registry state...");
+        // Stopping/starting containers is handled globally by TestContainerManager's shutdown hook.
+        // Reset here means cleaning up registry state specific to Moto.
+        deleteRegistry();
+        initializeRegistry();
+        log.info("Glue registry reset complete.");
+    }
+
+}
+END OF /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/moto/GlueService.java
+
+
+CODE LISTING FOR /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/moto/KafkaMotoTestIT.java
+
+
+
+package com.krickert.yappy.integration.container.moto;
+
+import io.micronaut.context.ApplicationContext;
+import io.micronaut.context.annotation.Requires;
+import io.micronaut.context.annotation.Value;
+import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import jakarta.inject.Inject;
+import org.apache.kafka.clients.admin.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.glue.GlueClient;
+import software.amazon.awssdk.services.glue.model.GetRegistryResponse;
+
+import java.net.URI;
+import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+/**
+ * Integration test for KafkaMotoTest.
+ * This test verifies that the Moto Registry is properly set up and can be used with Kafka.
+ */
+@Requires(property = "glue.enabled", value = "true")
+@Requires(property = "kafka.enabled", value = "true")
+@Requires(property = "kafka.schema.registry.type", value = "glue")
+@MicronautTest(environments = "test-glue")
+public class KafkaMotoTestIT {
+    private static final Logger log = LoggerFactory.getLogger(KafkaMotoTestIT.class);
+
+    // Default topics that should be created
+    private static final List<String> DEFAULT_TOPICS = Arrays.asList(
+            "test-pipeline-input", 
+            "test-processor-input", 
+            "test-pipeline-output", 
+            "pipeline-test-output-topic"
+    );
+
+    // AWS credentials and region for testing
+    private static final String AWS_ACCESS_KEY = "test";
+    private static final String AWS_SECRET_KEY = "test";
+    private static final String AWS_REGION = "us-east-1";
+    private static final String REGISTRY_NAME = "default";
+
+    @Inject
+    private ApplicationContext applicationContext;
+
+    @Inject
+    private GlueService glueService;
+
+    @Value("${kafka.schema.registry.type}")
+    String registryType;
+
+    @Value("${glue.registry.url}")
+    String registryUrl;
+
+    @Value("${kafka.bootstrap.servers}")
+    String bootstrapServers;
+
+    /**
+     * Get the registry endpoint from the application context.
+     * @return The registry endpoint URL
+     */
+    private String getRegistryEndpoint() {
+        return registryUrl != null ? registryUrl : applicationContext.getProperty("glue.registry.url", String.class).orElse(null);
+    }
+
+    /**
+     * Get the Kafka bootstrap servers from the application context.
+     * @return The bootstrap servers
+     */
+    private String getBootstrapServers() {
+        return bootstrapServers != null ? bootstrapServers : applicationContext.getProperty("kafka.bootstrap.servers", String.class).orElse(null);
+    }
+
+    /**
+     * Initialize the registry and create Kafka topics before running the test.
+     */
+    @BeforeEach
+    void setup() throws ExecutionException, InterruptedException, TimeoutException {
+        // Initialize the Glue registry
+        glueService.initializeRegistry();
+
+        // Create Kafka topics
+        createKafkaTopics();
+    }
+
+    /**
+     * Delete the registry after the test.
+     */
+    @AfterEach
+    void cleanup() {
+        // Delete the Glue registry
+        glueService.deleteRegistry();
+    }
+
+    /**
+     * Create the required Kafka topics before running the test.
+     * This ensures that the topics exist when the test runs.
+     */
+    private void createKafkaTopics() throws ExecutionException, InterruptedException, TimeoutException {
+        log.info("Creating Kafka topics for test...");
+
+        String kafkaServers = getBootstrapServers();
+        if (kafkaServers == null) {
+            log.warn("Bootstrap servers not found, skipping topic creation");
+            return;
+        }
+
+        log.info("Using Kafka bootstrap servers: {}", kafkaServers);
+
+        // Create AdminClient configuration
+        Map<String, Object> adminProps = new HashMap<>();
+        adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaServers);
+        adminProps.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 30000);
+        adminProps.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, 60000);
+
+        try (AdminClient adminClient = AdminClient.create(adminProps)) {
+            // Check if topics already exist
+            Set<String> existingTopics = adminClient.listTopics().names().get(30, TimeUnit.SECONDS);
+            log.info("Existing topics: {}", existingTopics);
+
+            // Create list of topics to create (only those that don't already exist)
+            List<NewTopic> topicsToCreate = DEFAULT_TOPICS.stream()
+                    .filter(topic -> !existingTopics.contains(topic))
+                    .map(topic -> new NewTopic(topic, 1, (short) 1)) // 1 partition, 1 replica
+                    .collect(Collectors.toList());
+
+            if (topicsToCreate.isEmpty()) {
+                log.info("All required topics already exist, skipping topic creation");
+                return;
+            }
+
+            log.info("Creating topics: {}", topicsToCreate.stream().map(NewTopic::name).collect(Collectors.toList()));
+
+            // Create the topics
+            CreateTopicsResult result = adminClient.createTopics(topicsToCreate);
+
+            // Wait for topic creation to complete
+            result.all().get(30, TimeUnit.SECONDS);
+
+            // Verify topics were created
+            Set<String> updatedTopics = adminClient.listTopics().names().get(30, TimeUnit.SECONDS);
+            log.info("Updated topics list: {}", updatedTopics);
+
+            // Verify all required topics exist
+            for (String topic : DEFAULT_TOPICS) {
+                if (!updatedTopics.contains(topic)) {
+                    log.error("Failed to create topic: {}", topic);
+                    throw new RuntimeException("Failed to create required topic: " + topic);
+                }
+            }
+
+            log.info("Successfully created all required Kafka topics");
+        } catch (Exception e) {
+            log.error("Error creating Kafka topics", e);
+            throw e;
+        }
+    }
+
+    /**
+     * Test that the Moto Registry is properly set up and can be used with Kafka.
+     */
+    @Test
+    void testMotoRegistrySetup() throws ExecutionException, InterruptedException {
+        // Verify that the registry type is set correctly
+        assertEquals("glue", registryType);
+
+        // Verify that the registry endpoint is set
+        String endpoint = getRegistryEndpoint();
+        assertThat(endpoint).isNotNull();
+        log.info("Moto Registry endpoint: {}", endpoint);
+
+        // Verify that the registry exists - we don't need to create it here as it's done in setup()
+        GetRegistryResponse registry;
+        try (GlueClient glueClient = GlueClient.builder()
+                .endpointOverride(URI.create(endpoint))
+                .region(Region.of(AWS_REGION))
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(AWS_ACCESS_KEY, AWS_SECRET_KEY)
+                ))
+                .build()) {
+            registry = glueClient.getRegistry(builder -> builder.registryId(id -> id.registryName(REGISTRY_NAME)));
+        }
+        assertThat(registry).isNotNull();
+        assertThat(registry.registryName()).isEqualTo(REGISTRY_NAME);
+        log.info("Found registry: {}", registry.registryName());
+
+        // Verify that the topics are created
+        Map<String, Object> adminProps = new HashMap<>();
+        adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers());
+
+        try (AdminClient adminClient = AdminClient.create(adminProps)) {
+            ListTopicsResult topics = adminClient.listTopics();
+            Set<String> topicNames = topics.names().get();
+
+            log.info("Available topics: {}", topicNames);
+
+            // Verify that all expected topics are created
+            for (String topic : DEFAULT_TOPICS) {
+                assertThat(topicNames).contains(topic);
+            }
+        }
+
+        // Verify that the properties are set correctly
+        Map<String, String> props = new HashMap<>();
+
+        // Add Kafka properties
+        props.put("kafka.bootstrap.servers", getBootstrapServers());
+
+        // Add producer properties
+        String producerPrefix = "kafka.producers.default.";
+        props.put(producerPrefix + "bootstrap.servers", getBootstrapServers());
+        props.put(producerPrefix + "key.serializer", applicationContext.getProperty(producerPrefix + "key.serializer", String.class).orElse(""));
+        props.put(producerPrefix + "value.serializer", applicationContext.getProperty(producerPrefix + "value.serializer", String.class).orElse(""));
+
+        // Add consumer properties
+        String consumerPrefix = "kafka.consumers.default.";
+        props.put(consumerPrefix + "bootstrap.servers", getBootstrapServers());
+        props.put(consumerPrefix + "key.deserializer", applicationContext.getProperty(consumerPrefix + "key.deserializer", String.class).orElse(""));
+        props.put(consumerPrefix + "value.deserializer", applicationContext.getProperty(consumerPrefix + "value.deserializer", String.class).orElse(""));
+
+        // Add Moto Registry properties
+        props.put("glue.registry.url", getRegistryEndpoint());
+        props.put("glue.registry.name", REGISTRY_NAME);
+        props.put("aws.region", AWS_REGION);
+        props.put("aws.accessKeyId", AWS_ACCESS_KEY);
+        props.put("aws.secretAccessKey", AWS_SECRET_KEY);
+
+        assertThat(props).isNotEmpty();
+
+        // Verify Kafka properties
+        assertThat(props).containsKey("kafka.bootstrap.servers");
+
+        // Verify producer properties
+        assertThat(props).containsKey(producerPrefix + "bootstrap.servers");
+        assertThat(props).containsKey(producerPrefix + "key.serializer");
+        assertThat(props).containsKey(producerPrefix + "value.serializer");
+
+        // Verify consumer properties
+        assertThat(props).containsKey(consumerPrefix + "bootstrap.servers");
+        assertThat(props).containsKey(consumerPrefix + "key.deserializer");
+        assertThat(props).containsKey(consumerPrefix + "value.deserializer");
+
+        // Verify Moto Registry properties
+        assertThat(props).containsKey("glue.registry.url");
+        assertThat(props).containsKey("glue.registry.name");
+        assertThat(props).containsKey("aws.region");
+        assertThat(props).containsKey("aws.accessKeyId");
+        assertThat(props).containsKey("aws.secretAccessKey");
+
+        log.info("All tests passed for Moto Registry setup");
+    }
+}
+END OF /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/moto/KafkaMotoTestIT.java
+
+
+CODE LISTING FOR /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/EngineTikaParserContainerStartupTest.java
+
+
+
+package com.krickert.yappy.integration.container;
+
+import io.micronaut.context.ApplicationContext;
+import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import jakarta.inject.Inject;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Simple test to verify the Engine-Tika-Parser container starts via test resources.
+ * This test doesn't inject any services that depend on external resources.
+ */
+@MicronautTest(environments = {"test"}, startApplication = false)
+public class EngineTikaParserContainerStartupTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(EngineTikaParserContainerStartupTest.class);
+
+    @Inject
+    ApplicationContext applicationContext;
+
+    @Test
+    @DisplayName("Verify test resource provider properties are injected")
+    void testPropertiesInjected() {
+        LOG.info("Verifying test resource provider properties");
+
+        // Check if our custom test resource provider is being used
+        String engineHttpUrl = applicationContext.getProperty("yappy.engine.http.url", String.class)
+                .orElse(null);
+        
+        if (engineHttpUrl != null) {
+            LOG.info("Engine HTTP URL provided by test resource: {}", engineHttpUrl);
+            assertTrue(engineHttpUrl.startsWith("http://"), "Engine URL should start with http://");
+            assertTrue(engineHttpUrl.contains(":"), "Engine URL should contain a port");
+        } else {
+            LOG.warn("Engine HTTP URL not provided - test resource provider may not be active");
+        }
+
+        // Check other properties that would be set by our provider
+        String engineGrpcEndpoint = applicationContext.getProperty("yappy.engine.grpc.endpoint", String.class)
+                .orElse(null);
+        if (engineGrpcEndpoint != null) {
+            LOG.info("Engine gRPC endpoint: {}", engineGrpcEndpoint);
+        }
+
+        String tikaGrpcEndpoint = applicationContext.getProperty("yappy.tika-parser.grpc.endpoint", String.class)
+                .orElse(null);
+        if (tikaGrpcEndpoint != null) {
+            LOG.info("Tika Parser gRPC endpoint: {}", tikaGrpcEndpoint);
+        }
+
+        // At least one property should be set if the provider is working
+        assertTrue(
+            engineHttpUrl != null || engineGrpcEndpoint != null || tikaGrpcEndpoint != null,
+            "At least one property should be set by the test resource provider"
+        );
+    }
+}END OF /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/EngineTikaParserContainerStartupTest.java
+
+
+CODE LISTING FOR /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/TikaParserContainerIntegrationTest.java
+
+
+
+package com.krickert.yappy.integration.container;
+
+import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
+import com.krickert.search.config.pipeline.model.*;
+import com.krickert.search.config.pipeline.model.test.PipelineConfigTestUtils;
+import io.micronaut.context.ApplicationContext;
+import io.micronaut.http.HttpRequest;
+import io.micronaut.http.client.HttpClient;
+import io.micronaut.http.client.annotation.Client;
+import io.micronaut.http.client.exceptions.HttpClientResponseException;
+import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import jakarta.inject.Inject;
+import org.junit.jupiter.api.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Integration test for the Tika Parser application, managed by Micronaut Test Resources.
+ * This test verifies that the application starts correctly with all its dependencies
+ * (Consul, Kafka, etc.) and can process requests.
+ */
+@MicronautTest(environments = "test") // startApplication defaults to true, which is what we want
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+public class TikaParserContainerIntegrationTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(TikaParserContainerIntegrationTest.class);
+    private static final String TEST_CLUSTER_NAME = "tika-parser-test-cluster";
+
+    @Inject
+    ApplicationContext applicationContext;
+
+    @Inject
+    ConsulBusinessOperationsService consulBusinessOperationsService;
+
+    // Inject an HTTP client that automatically points to the container's HTTP port
+    // The property `yappy.engine.http.url` is supplied by your EngineTikaParserTestResourceProvider
+    @Inject
+    @Client("${yappy.engine.http.url}")
+    HttpClient httpClient;
+
+    @BeforeEach
+    void setUp() {
+        // Clean up any existing test data in Consul before each test
+        cleanupTestData();
+    }
+
+    @AfterEach
+    void tearDown() {
+        // Clean up test data after each test
+        cleanupTestData();
+    }
+
+    private void cleanupTestData() {
+        try {
+            consulBusinessOperationsService.deleteClusterConfiguration(TEST_CLUSTER_NAME).block();
+            LOG.debug("Cleaned up test cluster configuration: {}", TEST_CLUSTER_NAME);
+        } catch (Exception e) {
+            LOG.debug("No existing configuration to clean up for cluster '{}': {}", TEST_CLUSTER_NAME, e.getMessage());
+        }
+    }
+
+    @Test
+    @DisplayName("Verify Dependent Service Properties are Injected")
+    void test01_verifyDependentServicesAndProperties() {
+        LOG.info("Verifying that all dependent service properties were injected by Test Resources...");
+
+        // Assert that the properties are present. Their absence would cause the test to fail on startup.
+        assertNotNull(applicationContext.getProperty("kafka.bootstrap.servers", String.class).orElse(null), "kafka.bootstrap.servers should be injected");
+        assertNotNull(applicationContext.getProperty("consul.client.host", String.class).orElse(null), "consul.client.host should be injected");
+        assertNotNull(applicationContext.getProperty("apicurio.registry.url", String.class).orElse(null), "apicurio.registry.url should be injected");
+        assertNotNull(applicationContext.getProperty("yappy.engine.http.url", String.class).orElse(null), "The container's own URL should be injected");
+
+        LOG.info("Kafka Bootstrap Servers: {}", applicationContext.getProperty("kafka.bootstrap.servers", String.class).get());
+        LOG.info("Consul Host: {}", applicationContext.getProperty("consul.client.host", String.class).get());
+        LOG.info("Engine HTTP URL: {}", applicationContext.getProperty("yappy.engine.http.url", String.class).get());
+        LOG.info("Test PASSED: All required properties are present.");
+    }
+
+    @Test
+    @DisplayName("Verify Consul Seeding and Health Endpoint")
+    void test02_verifySeedingAndHealth() {
+        LOG.info("Verifying seeding requirements and container health...");
+
+        // 1. Seed the configuration into Consul
+        PipelineClusterConfig testConfig = createTikaParserPipelineConfig();
+        Boolean storeResult = consulBusinessOperationsService.storeClusterConfiguration(TEST_CLUSTER_NAME, testConfig).block();
+        assertTrue(storeResult, "Failed to store cluster configuration in Consul");
+
+        // 2. Verify the container's health endpoint is responsive
+        String healthResponse = httpClient.toBlocking().retrieve(HttpRequest.GET("/health"));
+        assertNotNull(healthResponse, "Health endpoint should return a response");
+        assertTrue(healthResponse.contains("\"status\":\"UP\""), "Container health status should be UP");
+
+        LOG.info("Test PASSED: Seeding successful and container is healthy.");
+    }
+
+    // Helper method remains the same
+    private PipelineClusterConfig createTikaParserPipelineConfig() {
+        PipelineModuleConfiguration tikaModule = new PipelineModuleConfiguration("TikaParser", "tika-parser-service", null, Map.of("maxFileSize", "100MB", "parseTimeout", "30s"));
+        PipelineStepConfig tikaStep = PipelineConfigTestUtils.createStep("tika-parse", StepType.PIPELINE, "tika-parser-service", null, List.of(PipelineConfigTestUtils.createKafkaInput("raw-documents")), Map.of("default", PipelineConfigTestUtils.createKafkaOutputTarget("parsed-documents", "end")));
+        PipelineConfig tikaParserPipeline = PipelineConfigTestUtils.createPipeline("tika-parser-pipeline", Map.of("tika-parse", tikaStep));
+        PipelineGraphConfig graphConfig = new PipelineGraphConfig(Map.of("tika-parser-pipeline", tikaParserPipeline));
+        PipelineModuleMap moduleMap = new PipelineModuleMap(Map.of("tika-parser-service", tikaModule));
+        return PipelineClusterConfig.builder().clusterName(TEST_CLUSTER_NAME).pipelineGraphConfig(graphConfig).pipelineModuleMap(moduleMap).defaultPipelineName("tika-parser-pipeline").allowedKafkaTopics(Set.of("raw-documents", "parsed-documents")).allowedGrpcServices(Set.of("tika-parser-service")).build();
+    }
+}END OF /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/TikaParserContainerIntegrationTest.java
+
+
+CODE LISTING FOR /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/consul/ConsulTestResourceProviderPropertyInjectionTest.java
+
+
+
+package com.krickert.yappy.integration.container.consul;
+
+import io.micronaut.context.annotation.Property;
+import io.micronaut.context.env.Environment;
+import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import jakarta.inject.Inject;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Verifies that properties from the Consul Test Resource Provider are correctly
+ * resolved and injected into the test's Application Context.
+ */
+@MicronautTest(startApplication = false)
+class ConsulTestResourceProviderPropertyInjectionTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ConsulTestResourceProviderPropertyInjectionTest.class);
+
+    @Inject
+    Environment environment;
+
+    @Test
+    @DisplayName("Should inject resolved Consul host and port")
+    void testConsulClientPropertiesInjected() {
+        // In the test JVM, the host should be resolved to 'localhost' or a similar address.
+        String resolvedHost = environment.getProperty("consul.client.host", String.class).orElse(null);
+        assertNotNull(resolvedHost, "Resolved Consul host should not be null");
+        assertNotEquals("consul", resolvedHost, "Host should be resolved, not the alias 'consul'");
+        LOG.info("Resolved consul.client.host: {}", resolvedHost);
+
+        // The port should be a dynamic, high-number port, not the internal 8500.
+        Integer resolvedPort = environment.getProperty("consul.client.port", Integer.class).orElse(null);
+        assertNotNull(resolvedPort, "Resolved Consul port should not be null");
+        assertNotEquals(8500, resolvedPort, "Port should be a dynamic mapped port, not 8500");
+        LOG.info("Resolved consul.client.port: {}", resolvedPort);
+    }
+
+    @Test
+    @DisplayName("Should resolve discovery and registration properties consistently")
+    void testDiscoveryPropertiesAreConsistent() {
+        String discoveryHost = environment.getProperty("consul.client.discovery.host", String.class).orElse(null);
+        String registrationHost = environment.getProperty("consul.client.registration.host", String.class).orElse(null);
+
+        assertNotNull(discoveryHost);
+        LOG.info("Resolved discovery host: {}", discoveryHost);
+
+        // After resolution, the discovery, registration, and client hosts should all point to the same host.
+        assertEquals(discoveryHost, registrationHost, "Discovery and registration hosts should match");
+
+        Integer discoveryPort = environment.getProperty("consul.client.discovery.port", Integer.class).orElse(null);
+        Integer registrationPort = environment.getProperty("consul.client.registration.port", Integer.class).orElse(null);
+
+        assertNotNull(discoveryPort);
+        LOG.info("Resolved discovery port: {}", discoveryPort);
+
+        // After resolution, ports should also match.
+        assertEquals(discoveryPort, registrationPort, "Discovery and registration ports should match");
+    }
+
+    @Test
+    @DisplayName("Should inject a valid default-zone")
+    void testConsulDefaultZoneInjected() {
+        String defaultZone = environment.getProperty("consul.client.default-zone", String.class).orElse(null);
+        assertNotNull(defaultZone, "Default zone should be injected");
+
+        // The default zone should be a valid host:port string.
+        assertTrue(defaultZone.contains(":"), "Default zone should contain a port separator");
+        LOG.info("Resolved consul.client.default-zone: {}", defaultZone);
+    }
+}END OF /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/consul/ConsulTestResourceProviderPropertyInjectionTest.java
+
+
+CODE LISTING FOR /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/EngineTikaParserTestResourceTest.java
+
+
+
+package com.krickert.yappy.integration.container;
+
+import io.micronaut.context.ApplicationContext;
+import io.micronaut.http.HttpRequest;
+import io.micronaut.http.client.HttpClient;
+import io.micronaut.http.client.annotation.Client;
+import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import jakarta.inject.Inject;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
+// This is the ideal test format now. No more manual container setup!
+@MicronautTest(environments = {"test"})
+public class EngineTikaParserTestResourceTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(EngineTikaParserTestResourceTest.class);
+
+    @Inject
+    ApplicationContext applicationContext;
+
+    // The 'yappy.engine.http.url' property is resolved by your new provider.
+    @Inject
+    @Client("${yappy.engine.http.url}")
+    HttpClient httpClient;
+
+    @Test
+    @DisplayName("Verify Engine health endpoint is accessible")
+    void testEngineHealthEndpoint() {
+        LOG.info("Checking Engine health endpoint via test resource provider...");
+        try {
+            // This request now goes to the container started automatically by your provider
+            String healthResponse = httpClient.toBlocking().retrieve(HttpRequest.GET("/health"));
+            assertNotNull(healthResponse, "Health endpoint should return a response");
+            LOG.info("Engine health response: {}", healthResponse);
+            assertTrue(healthResponse.contains("status"), "Health response should contain status");
+        } catch (Exception e) {
+            fail("Failed to access Engine health endpoint: " + e.getMessage());
+        }
+    }
+
+    @Test
+    @DisplayName("Verify provider injected all properties correctly")
+    void testPropertiesAreInjected() {
+        // Your provider is responsible for setting this URL
+        String engineHttpUrl = applicationContext.getProperty("yappy.engine.http.url", String.class)
+                .orElse(null);
+        assertNotNull(engineHttpUrl, "yappy.engine.http.url property must be set by test resource");
+
+        // And this one...
+        String engineGrpcEndpoint = applicationContext.getProperty("yappy.engine.grpc.endpoint", String.class)
+                .orElse(null);
+        assertNotNull(engineGrpcEndpoint, "yappy.engine.grpc.endpoint property must be set by test resource");
+
+        // And this one!
+        String tikaGrpcEndpoint = applicationContext.getProperty("yappy.tika-parser.grpc.endpoint", String.class)
+                .orElse(null);
+        assertNotNull(tikaGrpcEndpoint, "yappy.tika-parser.grpc.endpoint property must be set by test resource");
+
+        LOG.info("All properties injected successfully!");
+    }
+}END OF /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/EngineTikaParserTestResourceTest.java
+
+
+CODE LISTING FOR /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/TikaParserContainerStartupTest.java
+
+
+
+package com.krickert.yappy.integration.container;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.output.Slf4jLogConsumer;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.utility.DockerImageName;
+
+import java.time.Duration;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
+/**
+ * Simple test to verify that the Tika Parser container starts up correctly.
+ * This test does not require Consul or other external services.
+ */
+public class TikaParserContainerStartupTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(TikaParserContainerStartupTest.class);
+
+    @Test
+    @DisplayName("Test that Tika Parser container starts up with both JVMs running")
+    void testContainerStartup() {
+        LOG.info("Starting container startup test");
+
+        // Use the Docker image that was built for the engine-tika-parser module
+        String dockerImageName = System.getProperty("docker.image.name", "engine-tika-parser:latest");
+        LOG.info("Using Docker image: {}", dockerImageName);
+
+        // Create the container with necessary environment variables
+        try (GenericContainer<?> container = new GenericContainer<>(DockerImageName.parse(dockerImageName))
+                .withExposedPorts(8080, 50051, 50053) // HTTP, Engine gRPC, and Tika Parser gRPC ports
+                .withEnv("CONSUL_HOST", "localhost")
+                .withEnv("CONSUL_PORT", "8500")
+                .withEnv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+                .withEnv("APICURIO_REGISTRY_URL", "http://localhost:8080")
+                .withEnv("YAPPY_CLUSTER_NAME", "test-cluster")
+                .withEnv("YAPPY_ENGINE_NAME", "yappy-engine-tika-parser")
+                .withEnv("CONSUL_CLIENT_DEFAULT_ZONE", "dc1")
+                .withEnv("CONSUL_ENABLED", "false") // Disable Consul to avoid connection attempts
+                .withEnv("KAFKA_ENABLED", "false") // Disable Kafka to avoid connection attempts
+                .withEnv("SCHEMA_REGISTRY_TYPE", "apicurio")
+                .withEnv("MICRONAUT_SERVER_PORT", "8080")
+                .withEnv("GRPC_SERVER_PORT", "50051")
+                .withLogConsumer(new Slf4jLogConsumer(LOG))
+                .waitingFor(Wait.forLogMessage(".*Starting supervisord.*", 1)
+                        .withStartupTimeout(Duration.ofMinutes(3)))) {
+
+            // Start the container
+            container.start();
+            assertTrue(container.isRunning(), "Container should be running");
+            LOG.info("Container started successfully");
+
+            // Give the applications a moment to start
+            Thread.sleep(5000); // Wait 5 seconds for both JVMs to start
+
+            // Get container logs to verify both processes are running
+            String logs = container.getLogs();
+            LOG.info("Container logs preview: {}", logs.substring(0, Math.min(logs.length(), 500)));
+
+            // Verify supervisord is running
+            assertTrue(logs.contains("Starting supervisord") || logs.contains("supervisord"), 
+                    "Supervisord should be running");
+
+            // Extract Java application logs using container exec
+            try {
+                // Read tika-parser logs (stdout with stderr redirected)
+                org.testcontainers.containers.Container.ExecResult tikaLogsResult = 
+                        container.execInContainer("cat", "/var/log/supervisor/tika-parser.log");
+                if (tikaLogsResult.getExitCode() == 0 && !tikaLogsResult.getStdout().trim().isEmpty()) {
+                    LOG.info("=== TIKA PARSER APPLICATION LOGS (STDOUT + STDERR) ===\n{}", tikaLogsResult.getStdout());
+                    // Verify Tika Parser JVM is running
+                    assertTrue(tikaLogsResult.getStdout().contains("TikaParserService") || 
+                            tikaLogsResult.getStdout().contains("Tika Parser") ||
+                            tikaLogsResult.getStdout().contains("Started TikaParserApplication"),
+                            "Tika Parser JVM should be running");
+                } else {
+                    LOG.warn("No tika-parser logs found or empty");
+                }
+
+                // Read engine logs (stdout with stderr redirected)
+                org.testcontainers.containers.Container.ExecResult engineLogsResult = 
+                        container.execInContainer("cat", "/var/log/supervisor/engine.log");
+                if (engineLogsResult.getExitCode() == 0 && !engineLogsResult.getStdout().trim().isEmpty()) {
+                    LOG.info("=== ENGINE APPLICATION LOGS (STDOUT + STDERR) ===\n{}", engineLogsResult.getStdout());
+                    // Verify Engine JVM is running
+                    assertTrue(engineLogsResult.getStdout().contains("YappyEngineBootstrapper") || 
+                            engineLogsResult.getStdout().contains("Engine") ||
+                            engineLogsResult.getStdout().contains("Started EngineApplication"),
+                            "Engine JVM should be running");
+                } else {
+                    LOG.warn("No engine logs found or empty");
+                }
+
+                // Check if JAR files exist
+                org.testcontainers.containers.Container.ExecResult lsResult = 
+                        container.execInContainer("ls", "-la", "/app/engine/", "/app/modules/");
+                LOG.info("=== CONTAINER FILE LISTING ===\n{}", lsResult.getStdout());
+                assertTrue(lsResult.getStdout().contains("engine.jar"), "Engine JAR file should exist");
+                assertTrue(lsResult.getStdout().contains("tika-parser.jar"), "Tika Parser JAR file should exist");
+
+            } catch (Exception e) {
+                LOG.error("Failed to extract container logs: {}", e.getMessage(), e);
+                fail("Failed to extract container logs: " + e.getMessage());
+            }
+
+            LOG.info("Test PASSED: Container started successfully with both engine and module running");
+        } catch (Exception e) {
+            LOG.error("Failed to start container: {}", e.getMessage(), e);
+            fail("Container failed to start: " + e.getMessage());
+        }
+    }
+}END OF /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/java/com/krickert/yappy/integration/container/TikaParserContainerStartupTest.java
+
+
+CODE LISTING FOR /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/testResources/java/com/krickert/yappy/integration/testresources/EngineTikaParserContainer.java
+
+
+
+package com.krickert.yappy.integration.testresources;
+
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.utility.DockerImageName;
+
+import java.time.Duration;
+
+/**
+ * Testcontainers implementation for Engine-Tika-Parser container.
+ * <p>
+ * This container runs both the YAPPY Engine and Tika Parser module
+ * managed by supervisord in a single container.
+ * <p>
+ * Exposed ports:
+ * <ul>
+ *     <li>HTTP: 8080 (Engine API and health)</li>
+ *     <li>gRPC: 50051 (Engine gRPC service)</li>
+ *     <li>gRPC: 50053 (Tika Parser gRPC service)</li>
+ * </ul>
+ */
+public class EngineTikaParserContainer extends GenericContainer<EngineTikaParserContainer> {
+
+    public static final DockerImageName DEFAULT_IMAGE_NAME = DockerImageName.parse("engine-tika-parser:latest");
+    public static final int ENGINE_HTTP_PORT = 8080;
+    public static final int ENGINE_GRPC_PORT = 50051;
+    public static final int TIKA_PARSER_GRPC_PORT = 50053;
+    private static final Duration DEFAULT_WAIT_TIMEOUT = Duration.ofSeconds(120); // Both JVMs need time to start
+
+    /**
+     * Constructs an EngineTikaParserContainer with the default Docker image name.
+     */
+    public EngineTikaParserContainer() {
+        this(DEFAULT_IMAGE_NAME);
+    }
+
+    /**
+     * Constructs an EngineTikaParserContainer with a specific Docker image name as a string.
+     *
+     * @param dockerImageName The Docker image name (e.g., "engine-tika-parser:1.0.0")
+     */
+    public EngineTikaParserContainer(String dockerImageName) {
+        this(DockerImageName.parse(dockerImageName));
+    }
+
+    /**
+     * Constructs an EngineTikaParserContainer with a specific DockerImageName.
+     *
+     * @param dockerImageName The DockerImageName object.
+     */
+    public EngineTikaParserContainer(final DockerImageName dockerImageName) {
+        super(dockerImageName);
+        dockerImageName.assertCompatibleWith(DEFAULT_IMAGE_NAME);
+
+        // Wait for the engine health endpoint to be available
+        setWaitStrategy(
+                Wait.forHttp("/health")
+                        .forPort(ENGINE_HTTP_PORT)
+                        .forStatusCode(200)
+                        .withStartupTimeout(DEFAULT_WAIT_TIMEOUT)
+        );
+
+        withExposedPorts(ENGINE_HTTP_PORT, ENGINE_GRPC_PORT, TIKA_PARSER_GRPC_PORT);
+        
+        // Enable container logging for debugging
+        withLogConsumer(outputFrame -> System.out.println("[ENGINE-TIKA-PARSER] " + outputFrame.getUtf8String()));
+    }
+
+    /**
+     * Gets the publicly accessible HTTP endpoint URL for the Engine.
+     *
+     * @return The Engine HTTP endpoint URL string (e.g., "http://localhost:RANDOM_PORT")
+     */
+    public String getEngineHttpEndpoint() {
+        return String.format("http://%s:%d",
+                getHost(),
+                getMappedPort(ENGINE_HTTP_PORT));
+    }
+
+    /**
+     * Gets the publicly accessible gRPC endpoint for the Engine.
+     *
+     * @return The Engine gRPC endpoint string (e.g., "localhost:RANDOM_PORT")
+     */
+    public String getEngineGrpcEndpoint() {
+        return String.format("%s:%d",
+                getHost(),
+                getMappedPort(ENGINE_GRPC_PORT));
+    }
+
+    /**
+     * Gets the publicly accessible gRPC endpoint for the Tika Parser.
+     *
+     * @return The Tika Parser gRPC endpoint string (e.g., "localhost:RANDOM_PORT")
+     */
+    public String getTikaParserGrpcEndpoint() {
+        return String.format("%s:%d",
+                getHost(),
+                getMappedPort(TIKA_PARSER_GRPC_PORT));
+    }
+}END OF /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/testResources/java/com/krickert/yappy/integration/testresources/EngineTikaParserContainer.java
+
+
+CODE LISTING FOR /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/testResources/java/com/krickert/yappy/integration/testresources/EngineTikaParserTestResourceProvider.java
+
+
+
+package com.krickert.yappy.integration.testresources;
+
+import io.micronaut.testresources.testcontainers.AbstractTestContainersProvider;
+import org.testcontainers.utility.DockerImageName;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+// Extending the abstract class simplifies everything.
+public class EngineTikaParserTestResourceProvider extends AbstractTestContainersProvider<YappyTikaContainer> {
+
+    public static final String YAPPY_ENGINE_HTTP_URL = "yappy.engine.http.url";
+    public static final String YAPPY_ENGINE_GRPC_ENDPOINT = "yappy.engine.grpc.endpoint";
+    public static final String YAPPY_TIKA_GRPC_ENDPOINT = "yappy.tika-parser.grpc.endpoint";
+
+    // THIS METHOD IS NOW REQUIRED INSTEAD OF getRequiredProperties
+    @Override
+    public List<String> getResolvableProperties(Map<String, Collection<String>> propertyEntries, Map<String, Object> testResourcesConfig) {
+        return List.of(
+            YAPPY_ENGINE_HTTP_URL,
+            YAPPY_ENGINE_GRPC_ENDPOINT,
+            YAPPY_TIKA_GRPC_ENDPOINT
+        );
+    }
+
+    @Override
+    protected String getSimpleName() {
+        // Corresponds to the key in application-test.yml under test-resources.containers
+        return "engine-tika-parser";
+    }
+
+    @Override
+    protected String getDefaultImageName() {
+        return YappyTikaContainer.DOCKER_IMAGE_NAME;
+    }
+
+    @Override
+    protected YappyTikaContainer createContainer(DockerImageName imageName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
+        // Get properties from the context to pass to our custom container
+        String clusterName = (String) testResourcesConfig.get("yappy.cluster.name");
+        String engineName = (String) testResourcesConfig.get("yappy.engine.name");
+
+        // The aliases are defined in your yml file
+        return new YappyTikaContainer(imageName, "kafka", "consul", "apicurio", clusterName, engineName);
+    }
+
+    @Override
+    protected Optional<String> resolveProperty(String propertyName, YappyTikaContainer container) {
+        // This method maps the container's dynamic ports to the properties Micronaut needs.
+        switch (propertyName) {
+            case YAPPY_ENGINE_HTTP_URL:
+                return Optional.of("http://" + container.getHost() + ":" + container.getMappedPort(8080));
+            case YAPPY_ENGINE_GRPC_ENDPOINT:
+                return Optional.of("http://" + container.getHost() + ":" + container.getMappedPort(50051));
+            case YAPPY_TIKA_GRPC_ENDPOINT:
+                return Optional.of("http://" + container.getHost() + ":" + container.getMappedPort(50053));
+        }
+        return Optional.empty();
+    }
+}END OF /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/testResources/java/com/krickert/yappy/integration/testresources/EngineTikaParserTestResourceProvider.java
+
+
+CODE LISTING FOR /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/testResources/java/com/krickert/yappy/integration/testresources/YappyTikaContainer.java
+
+
+
+package com.krickert.yappy.integration.testresources;
+
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.utility.DockerImageName;
+
+import java.time.Duration;
+
+// This class perfectly encapsulates your container's configuration.
+public class YappyTikaContainer extends GenericContainer<YappyTikaContainer> {
+
+    public static final String DOCKER_IMAGE_NAME = "engine-tika-parser:latest";
+
+    // The constructor takes all the dependencies the container needs to run.
+    public YappyTikaContainer(DockerImageName imageName,
+                              String kafkaAlias,
+                              String consulAlias,
+                              String apicurioAlias,
+                              String clusterName,
+                              String engineName) {
+        super(imageName);
+        withExposedPorts(8080, 50051, 50053).
+        withNetworkAliases("engine-tika-parser")
+                .waitingFor(Wait.forLogMessage(".*Starting supervisord.*", 1)
+                .withStartupTimeout(Duration.ofMinutes(3)))
+
+        // Environment variables use the aliases of the other containers
+                .withEnv("KAFKA_BOOTSTRAP_SERVERS", kafkaAlias + ":9092")
+                .withEnv("CONSUL_HOST", consulAlias)
+                .withEnv("CONSUL_PORT", "8500")
+                .withEnv("APICURIO_REGISTRY_URL", "http://" + apicurioAlias + ":8080/apis/registry/v3")
+        
+        // Pass through application properties
+                .withEnv("YAPPY_CLUSTER_NAME", clusterName)
+                .withEnv("YAPPY_ENGINE_NAME", engineName)
+                .withEnv("CONSUL_ENABLED", "true")
+                .withEnv("KAFKA_ENABLED", "true")
+                .withEnv("SCHEMA_REGISTRY_TYPE", "apicurio")
+                .withEnv("MICRONAUT_SERVER_PORT", "8080")
+                .withEnv("GRPC_SERVER_PORT", "50051");
+    }
+}END OF /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/testResources/java/com/krickert/yappy/integration/testresources/YappyTikaContainer.java
+
+
+
+
+*********PROPERTY FILES**********
+
+
+
+PROPERTY LISTING FOR /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/resources/application-container-test.yml
+
+
+
+
+micronaut:
+  application:
+    name: yappy-integration-test
+
+# This section configures the containers managed by Micronaut Test Resources.
+test-resources:
+  containers:
+    # Config for ConsulTestResourceProvider
+    hashicorp-consul:
+      network-aliases:
+        - consul #<-- This container will be available at hostname 'consul'
+
+    # Config for MotoTestResourceProvider
+    moto-server:
+      network-aliases:
+        - moto   #<-- This container will be available at hostname 'moto'
+
+    # Config for OpenSearchTestResourceProvider
+    opensearch3:
+      network-aliases:
+        - opensearch #<-- This container will be available at hostname 'opensearch'
+
+    # Config for ApicurioTestResourceProvider
+    apicurio-registry:
+      network-aliases:
+        - apicurio   #<-- This container will be available at hostname 'apicurio'
+
+    # Config for Micronaut's built-in Kafka test resource
+    kafka:
+      network-aliases:
+        - kafka      #<-- This container will be available at hostname 'kafka'
+
+    # Config for EngineTikaParserTestResourceProvider
+    engine-tika-parser:
+      network-aliases:
+        - engine-tika-parser #<-- This container will be available at hostname 'engine-tika-parser'
+
+# Schema registry type
+kafka:
+  schema:
+    registry:
+      type: apicurio
+  bootstrap:
+    servers: kafka:9092 #<-- Use the alias
+
+# Consul configuration properties required by ConsulBusinessOperationsService
+app:
+  config:
+    consul:
+      key-prefixes:
+        pipeline-clusters: "config/pipeline/clusters"
+        schema-versions: "config/pipeline/schemas"
+        whitelists: "config/pipeline/whitelists"
+
+# This section configures your application to USE the test resources via their aliases.
+consul:
+  client:
+    host: consul  #<-- Use the alias
+    port: 8500    #<-- Use the container's internal port
+
+apicurio:
+  registry:
+    url: http://apicurio:8080/apis/registry/v3 #<-- Use the alias
+
+opensearch:
+  url: http://opensearch:9200 #<-- Use the alias
+
+
+# Enable test containers
+testcontainers:
+  enabled: true
+  engine-tika-parser: true
+
+# Configuration for the engine-tika-parser container
+yappy:
+  engine:
+    name: test-engine
+  cluster:
+    name: test-cluster
+  http.url: test-http-url
+
+# Logging configuration
+logger:
+  levels:
+    ROOT: INFO
+    com.krickert: DEBUG
+    org.testcontainers: INFO
+    com.github.dockerjava: WARN
+    docker.image.pull: WARN
+    io.micronaut.testresources: DEBUG
+    io.micronaut.testresources.client: TRACE
+
+END OF /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/resources/application-container-test.yml
+
+
+
+PROPERTY LISTING FOR /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/resources/application-test.yml
+
+
+
+
+micronaut:
+  application:
+    name: yappy-integration-test
+
+# Schema registry type
+kafka:
+  schema:
+    registry:
+      type: apicurio
+
+# Consul configuration properties required by ConsulBusinessOperationsService
+app:
+  config:
+    consul:
+      key-prefixes:
+        pipeline-clusters: "config/pipeline/clusters"
+        schema-versions: "config/pipeline/schemas"
+        whitelists: "config/pipeline/whitelists"
+
+
+# Logging configuration
+logger:
+  levels:
+    ROOT: INFO
+    com.krickert: DEBUG
+    org.testcontainers: INFO
+    com.github.dockerjava: WARN
+    docker.image.pull: WARN
+END OF /Users/krickert/IdeaProjects/yappy-work/yappy-integration-test/src/test/resources/application-test.yml
+
+

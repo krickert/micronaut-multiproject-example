@@ -8,7 +8,6 @@ import java.util.zip.ZipInputStream
 plugins {
     id("io.micronaut.minimal.application") version "4.5.3"
     id("io.micronaut.test-resources") version "4.5.3"
-    id("com.gradleup.shadow") version "8.3.6"
 }
 
 version = "1.0.0-SNAPSHOT"
@@ -81,7 +80,7 @@ dependencies {
 }
 
 application {
-    mainClass = "com.krickert.yappy.modules.opensearchsink.Application"
+    mainClass = "com.krickert.yappy.modules.opensearchsink.OpensearchSinkApplication"
 }
 
 java {

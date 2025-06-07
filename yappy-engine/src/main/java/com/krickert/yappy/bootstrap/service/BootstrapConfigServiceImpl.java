@@ -6,6 +6,7 @@ import com.krickert.yappy.bootstrap.api.*;
 import io.grpc.stub.StreamObserver;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value; // Micronaut @Value
 import io.micronaut.grpc.annotation.GrpcService; // Micronaut GrpcService
 import io.micronaut.context.ApplicationContext; // For ApplicationContext injection
@@ -35,6 +36,7 @@ import org.slf4j.LoggerFactory;
 
 @Singleton
 @GrpcService // Using Micronaut's GrpcService
+@Requires(property = "consul.client.enabled", value = "true", defaultValue = "true")
 public class BootstrapConfigServiceImpl extends BootstrapConfigServiceGrpc.BootstrapConfigServiceImplBase {
 
     private static final Logger LOG = LoggerFactory.getLogger(BootstrapConfigServiceImpl.class);

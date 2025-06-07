@@ -11,6 +11,7 @@ import com.krickert.search.model.SemanticProcessingResult;
 import com.krickert.search.model.mapper.MappingException;
 import com.krickert.search.sdk.*;
 import io.grpc.stub.StreamObserver;
+import com.google.protobuf.Empty;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.grpc.annotation.GrpcService;
 import jakarta.inject.Inject;
@@ -42,6 +43,19 @@ public class ChunkerServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessorI
         this.metadataExtractor = metadataExtractor;
     }
 
+
+    @Override
+    public void getServiceRegistration(Empty request, StreamObserver<ServiceRegistrationData> responseObserver) {
+        ServiceRegistrationData registration = ServiceRegistrationData.newBuilder()
+                .setModuleName("chunker")
+                .setJsonConfigSchema(ChunkerOptions.getJsonV7Schema())
+                .build();
+        
+        responseObserver.onNext(registration);
+        responseObserver.onCompleted();
+        
+        log.info("Returned service registration for chunker module");
+    }
 
     @Override
     public void processData(ProcessRequest request, StreamObserver<ProcessResponse> responseObserver) {

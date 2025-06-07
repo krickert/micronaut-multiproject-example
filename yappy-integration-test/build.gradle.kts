@@ -81,6 +81,13 @@ dependencies {
     testImplementation(project(":yappy-consul-config"))
     testImplementation(project(":yappy-models:pipeline-config-models"))
     testImplementation(project(":yappy-models:pipeline-config-models-test-utils"))
+    testImplementation(project(":yappy-models:protobuf-models"))
+    
+    // gRPC dependencies
+    testImplementation("io.grpc:grpc-stub")
+    testImplementation("io.grpc:grpc-protobuf")
+    testImplementation("io.grpc:grpc-netty-shaded")
+    testImplementation("io.micronaut.grpc:micronaut-grpc-runtime")
 
     // Reactive support
     testImplementation("io.projectreactor:reactor-core")
@@ -94,8 +101,6 @@ dependencies {
     testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     testImplementation(project(":yappy-test-resources:moto-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:moto-test-resource"))
-    testImplementation(project(":yappy-test-resources:engine-tika-parser-test-resource"))
-    testResourcesImplementation(project(":yappy-test-resources:engine-tika-parser-test-resource"))
 }
 
 micronaut {

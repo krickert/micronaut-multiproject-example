@@ -1,7 +1,7 @@
 plugins {
-    id("io.micronaut.minimal.application") version "4.5.3"
-    id("io.micronaut.test-resources") version "4.5.3"
+    id("io.micronaut.application") version "4.5.3"
     id("com.gradleup.shadow") version "8.3.6"
+    id("io.micronaut.test-resources") version "4.5.3"
 }
 
 version = "1.0.0-SNAPSHOT"
@@ -12,6 +12,12 @@ repositories {
 }
 
 dependencies {
+    // Apply BOM/platform dependencies
+    implementation(platform(project(":bom")))
+    annotationProcessor(platform(project(":bom")))
+    testImplementation(platform(project(":bom")))
+    testAnnotationProcessor(platform(project(":bom")))
+
     testAnnotationProcessor(mn.micronaut.inject.java)
     annotationProcessor(mn.micronaut.serde.processor)
     implementation(mn.micronaut.grpc.runtime)
@@ -26,7 +32,7 @@ dependencies {
     implementation(mn.grpc.services)
     implementation(mn.grpc.stub)
     implementation(mn.micronaut.http.client.core)
-    implementation("io.micronaut.grpc:micronaut-protobuff-support")
+    implementation(mn.micronaut.protobuff.support)
     // https://mvnrepository.com/artifact/org.apache.tika/tika-core
     implementation("org.apache.tika:tika-core:3.1.0")
     // https://mvnrepository.com/artifact/org.apache.tika/tika-parsers
@@ -50,6 +56,8 @@ java {
 }
 
 
+// graalvmNative.toolchainDetection = false
+
 sourceSets {
     main {
         java {
@@ -60,9 +68,19 @@ sourceSets {
 }
 
 micronaut {
+    runtime("netty")
     testRuntime("junit5")
     processing {
         incremental(true)
         annotations("com.krickert.yappy.modules.tikaparser.*")
     }
+    testResources {
+        sharedServer = true
+    }
+}
+
+tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
+    isZip64 = true
+    archiveBaseName.set("tika-parser")
+    archiveClassifier.set("")
 }

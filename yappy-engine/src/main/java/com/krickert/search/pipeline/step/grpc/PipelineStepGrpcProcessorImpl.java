@@ -13,6 +13,7 @@ import com.krickert.search.sdk.ProcessConfiguration;
 import com.krickert.search.sdk.ServiceMetadata;
 import io.grpc.ManagedChannel;
 // Removed ManagedChannelBuilder, DiscoveryClient, ServiceInstance, Mono, Duration, List, Map, ConcurrentHashMap
+import io.micronaut.context.annotation.Requires;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 
@@ -20,6 +21,7 @@ import java.util.Optional;
 
 
 @Singleton
+@Requires(property = "consul.enabled", value = "true", defaultValue = "true")
 public class PipelineStepGrpcProcessorImpl implements PipelineStepGrpcProcessor {
     private final DynamicConfigurationManager configManager;
     private final GrpcChannelManager channelManager; // Use the new manager

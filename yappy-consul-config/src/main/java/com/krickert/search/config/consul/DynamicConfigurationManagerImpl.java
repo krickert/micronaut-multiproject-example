@@ -9,6 +9,7 @@ import com.krickert.search.config.consul.exception.ConfigurationManagerInitializ
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
 import com.krickert.search.config.pipeline.model.*;
 import com.krickert.search.config.schema.model.SchemaVersionData;
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.event.ApplicationEventPublisher;
 import jakarta.annotation.PostConstruct;
@@ -29,6 +30,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 @Singleton
+@Requires(property = "consul.enabled", value = "true", defaultValue = "true")
 public class DynamicConfigurationManagerImpl implements DynamicConfigurationManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(DynamicConfigurationManagerImpl.class);

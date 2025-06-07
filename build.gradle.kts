@@ -2,6 +2,8 @@ import org.asciidoctor.gradle.jvm.AsciidoctorTask
 
 plugins {
     id("org.asciidoctor.jvm.convert") version "4.0.4"
+    id("com.bmuschko.docker-remote-api") version "9.4.0" apply false
+    idea
 }
 
 repositories {
@@ -76,10 +78,4 @@ subprojects {
     }
 }
 
-tasks.register("dockerBuild") {
-    group = "Build"
-    description = "Builds the main engine-tika-parser Docker image."
-    // This tells the root 'dockerBuild' task to run the specific module's task.
-    dependsOn(":yappy-containers:engine-tika-parser:dockerBuild")
-}
 

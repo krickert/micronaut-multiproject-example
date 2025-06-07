@@ -9,6 +9,7 @@ import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.config.pipeline.model.PipelineModuleConfiguration;
 import com.krickert.search.config.service.model.ServiceAggregatedStatus;
 import com.krickert.search.config.service.model.ServiceOperationalStatus;
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.scheduling.annotation.Scheduled;
 import jakarta.inject.Singleton;
 import org.kiwiproject.consul.model.catalog.CatalogService; // Import for CatalogService
@@ -21,6 +22,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Singleton
+@Requires(property = "consul.client.enabled", value = "true", defaultValue = "true")
 public class ServiceStatusAggregator {
 
     private static final Logger LOG = LoggerFactory.getLogger(ServiceStatusAggregator.class);

@@ -22,6 +22,7 @@ import com.krickert.search.pipeline.step.PipeStepExecutor;
 import com.krickert.search.pipeline.step.PipeStepExecutorFactory;
 import com.krickert.search.pipeline.step.exception.PipeStepExecutionException;
 import io.grpc.stub.StreamObserver;
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.grpc.annotation.GrpcService;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -38,6 +39,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Singleton
 @GrpcService
+@Requires(property = "consul.enabled", value = "true", defaultValue = "true")
 public class ConnectorEngineImpl extends ConnectorEngineGrpc.ConnectorEngineImplBase {
     private static final Logger log = LoggerFactory.getLogger(ConnectorEngineImpl.class);
 

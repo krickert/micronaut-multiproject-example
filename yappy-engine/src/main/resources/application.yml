@@ -1,3 +1,13 @@
+# gRPC configuration
+grpc:
+  server:
+    port: ${GRPC_SERVER_PORT:50050}
+    keep-alive-time: 30s
+  client:
+    plaintext: ${GRPC_CLIENT_PLAINTEXT:true}
+    max-retry-attempts: ${GRPC_CLIENT_MAX_RETRY_ATTEMPTS:5}
+
+# Kafka configuration
 kafka:
   enabled: true
   producers:
@@ -11,4 +21,19 @@ kafka:
       # max.in.flight.requests.per.connection: 5 # If idempotence is enabled
       # You can add other standard Kafka producer properties here
       # Example: compression.type: snappy
+
+# Application configuration
+app:
+  kafka:
+    slot-management:
+      enabled: ${KAFKA_SLOT_MANAGEMENT_ENABLED:false}
+      consul:
+        # Consul key prefix for slot management
+        key-prefix: ${KAFKA_SLOT_CONSUL_PREFIX:yappy/kafka/slots}
+        # How often to send heartbeats for acquired slots
+        heartbeat-interval: ${KAFKA_SLOT_HEARTBEAT_INTERVAL:30s}
+        # Time before a slot without heartbeat is considered expired
+        slot-expiration-time: ${KAFKA_SLOT_EXPIRATION_TIME:2m}
+      # Maximum slots per engine instance
+      max-slots-per-engine: ${KAFKA_MAX_SLOTS_PER_ENGINE:100}
 

@@ -11,13 +11,23 @@ option java_outer_classname = "PipeStepProcessorServiceProto";
 // Import definitions from your core types file
 import "yappy_core_types.proto"; // This file should contain PipeDoc, Blob, StepExecutionRecord, ErrorData etc.
 import "google/protobuf/struct.proto"; // For custom_json_config
+import "google/protobuf/empty.proto"; // Import for the Empty message
 
 // Service definition for a pipeline step processor.
 // This interface is implemented by developer-created gRPC modules/services.
 service PipeStepProcessor {
   // Processes a document according to the step's configuration and logic.
   rpc ProcessData(ProcessRequest) returns (ProcessResponse);
+  
+  // Returns static registration information about this module
+  rpc GetServiceRegistration (google.protobuf.Empty) returns (ServiceRegistrationData);
 }
+
+message ServiceRegistrationData {
+  string module_name = 1;
+  optional string json_config_schema = 2;
+}
+
 
 // Contains metadata provided by the pipeline engine for context.
 // This data is generally for informational purposes, logging, tracing, or advanced conditional logic.

@@ -5,6 +5,7 @@ import com.google.protobuf.Value;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.sdk.*;
 import io.grpc.stub.StreamObserver;
+import com.google.protobuf.Empty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +33,47 @@ public class DummyPipeStepProcessor extends PipeStepProcessorGrpc.PipeStepProces
     public DummyPipeStepProcessor(String defaultBehavior, String defaultSuffix) {
         this.defaultBehavior = defaultBehavior;
         this.defaultSuffix = defaultSuffix;
+    }
+    
+    @Override
+    public void getServiceRegistration(Empty request, StreamObserver<ServiceRegistrationData> responseObserver) {
+        // Return dummy module registration info
+        String configSchema = """
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "DummyProcessorConfig",
+              "description": "Configuration for the dummy test processor",
+              "type": "object",
+              "properties": {
+                "behavior": {
+                  "type": "string",
+                  "enum": ["echo", "append", "uppercase", "clear"],
+                  "default": "append",
+                  "description": "Processing behavior: echo (no change), append (add suffix), uppercase (convert to uppercase), clear (empty body)"
+                },
+                "simulate_error": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "If true, processor will simulate an error"
+                },
+                "delay_ms": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 0,
+                  "description": "Artificial delay in milliseconds to simulate slow processing"
+                }
+              }
+            }
+            """;
+        
+        ServiceRegistrationData registration = ServiceRegistrationData.newBuilder()
+                .setModuleName("dummy-processor")
+                .setJsonConfigSchema(configSchema)
+                .build();
+        
+        LOG.info("Returning service registration for dummy-processor");
+        responseObserver.onNext(registration);
+        responseObserver.onCompleted();
     }
     
     @Override

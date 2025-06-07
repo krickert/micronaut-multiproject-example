@@ -1,5 +1,5 @@
 plugins {
-    id("io.micronaut.minimal.application") version "4.5.3"
+    id("io.micronaut.application") version "4.5.3"
     id("com.gradleup.shadow") version "8.3.6"
     id("io.micronaut.test-resources") version "4.5.3"
 }
@@ -12,6 +12,12 @@ repositories {
 }
 
 dependencies {
+    // Apply BOM/platform dependencies
+    implementation(platform(project(":bom")))
+    annotationProcessor(platform(project(":bom")))
+    testImplementation(platform(project(":bom")))
+    testAnnotationProcessor(platform(project(":bom")))
+
     annotationProcessor(mn.micronaut.serde.processor)
     implementation(mn.micronaut.grpc.runtime)
     implementation(mn.micronaut.protobuff.support)
@@ -28,20 +34,18 @@ dependencies {
     runtimeOnly(mn.snakeyaml)
     implementation(project(":yappy-models:protobuf-models"))
 
-    annotationProcessor(mn.micronaut.serde.processor)
-    implementation(mn.micronaut.grpc.runtime)
-    implementation(mn.micronaut.serde.jackson)
-    implementation(mn.javax.annotation.api)
-    runtimeOnly(mn.logback.classic)
-    runtimeOnly(mn.snakeyaml)
     implementation("io.micronaut.reactor:micronaut-reactor")
     implementation("io.micronaut.reactor:micronaut-reactor-http-client")
 
     implementation(mn.grpc.services)
     implementation(mn.grpc.stub)
     implementation(mn.micronaut.http.client.core)
-    implementation("io.micronaut.grpc:micronaut-protobuff-support")
 
+    // Test dependencies
+    testImplementation(mn.micronaut.test.junit5)
+    testImplementation("org.junit.jupiter:junit-jupiter-api")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
+    testImplementation("org.mockito:mockito-core")
 }
 
 
@@ -54,22 +58,25 @@ java {
 }
 
 
-sourceSets {
-    main {
-        java {
-            srcDirs("build/generated/source/proto/main/grpc")
-            srcDirs("build/generated/source/proto/main/java")
-        }
-    }
-}
+// graalvmNative.toolchainDetection = false
+
 
 micronaut {
+    runtime("netty")
+
     testRuntime("junit5")
     processing {
         incremental(true)
         annotations("com.krickert.yappy.modules.chunker.*")
     }
+    testResources {
+        sharedServer = true
+    }
+
+
 }
 
-
-
+// Docker configuration for native image
+tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative") {
+    jdkVersion = "21"
+}

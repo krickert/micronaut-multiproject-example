@@ -8,6 +8,7 @@ import com.krickert.search.config.consul.schema.exception.SchemaLoadException;
 import com.krickert.search.config.consul.schema.exception.SchemaNotFoundException;
 import com.krickert.search.config.consul.service.ConsulKvService;
 import com.networknt.schema.*;
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.core.annotation.NonNull;
 import io.micronaut.core.util.StringUtils;
@@ -25,6 +26,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Singleton
+@Requires(property = "consul.client.enabled", value = "true", defaultValue = "true")
 public class ConsulSchemaRegistryDelegate {
 
     private static final Logger log = LoggerFactory.getLogger(ConsulSchemaRegistryDelegate.class);

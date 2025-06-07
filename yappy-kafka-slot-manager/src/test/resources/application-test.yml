@@ -1,0 +1,38 @@
+# Test configuration for Kafka Slot Manager
+micronaut:
+  application:
+    name: kafka-slot-manager-test
+  config-client:
+    enabled: true
+
+# Consul configuration
+consul:
+  client:
+    enabled: true
+    defaultZone: "${CONSUL_HOST:localhost}:${CONSUL_PORT:8500}"
+    registration:
+      enabled: false # We don't need service registration for tests
+    config:
+      enabled: true # Enable Consul for configuration in integration tests
+      format: YAML
+
+# These will be provided by test resources
+# kafka.bootstrap.servers from KafkaTestResourceProvider
+# consul.client properties from ConsulTestResourceProvider
+
+# Slot management configuration
+app:
+  kafka:
+    slot:
+      engine-instance-id: test-engine-instance
+      heartbeat-timeout-seconds: 3  # Short timeout for tests
+      cleanup-interval-seconds: 2  # Short interval for tests
+      heartbeat-interval-seconds: 1  # Short interval for tests
+
+# Logging
+logger:
+  levels:
+    com.krickert.yappy.kafka: DEBUG
+    org.kiwiproject.consul: INFO
+    io.micronaut.testresources: DEBUG
+    com.krickert.testcontainers: DEBUG

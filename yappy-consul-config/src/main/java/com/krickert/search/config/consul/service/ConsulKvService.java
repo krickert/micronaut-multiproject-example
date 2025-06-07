@@ -1,5 +1,6 @@
 package com.krickert.search.config.consul.service;
 
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value;
 import jakarta.inject.Singleton;
 import org.kiwiproject.consul.KeyValueClient;
@@ -28,6 +29,7 @@ import java.util.Optional;
  * Uses transactions for batch operations.
  */
 @Singleton
+@Requires(property = "consul.client.enabled", value = "true", defaultValue = "true")
 public class ConsulKvService {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConsulKvService.class);

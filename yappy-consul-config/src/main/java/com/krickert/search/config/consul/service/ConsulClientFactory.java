@@ -5,6 +5,7 @@ import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.context.annotation.Value;
 import jakarta.annotation.PreDestroy;
+import io.micronaut.context.annotation.Requires;
 import jakarta.inject.Singleton; // It's good practice to be explicit for singleton beans
 import okhttp3.ConnectionPool;
 import org.kiwiproject.consul.*;
@@ -16,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import java.util.concurrent.TimeUnit;
 
 @Factory
+@Requires(property = "consul.client.enabled", value = "true", defaultValue = "true")
 public class ConsulClientFactory {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConsulClientFactory.class);

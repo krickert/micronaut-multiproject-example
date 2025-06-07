@@ -10,6 +10,7 @@ import com.krickert.yappy.registration.api.RegisterModuleRequest;
 import com.krickert.yappy.registration.api.RegisterModuleResponse;
 import com.krickert.yappy.registration.api.YappyModuleRegistrationServiceGrpc;
 import io.grpc.stub.StreamObserver;
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.grpc.annotation.GrpcService;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -30,6 +31,7 @@ import java.util.UUID;
 
 @Singleton
 @GrpcService
+@Requires(property = "consul.client.enabled", value = "true", defaultValue = "true")
 public class YappyModuleRegistrationServiceImpl extends YappyModuleRegistrationServiceGrpc.YappyModuleRegistrationServiceImplBase {
 
     private static final Logger LOG = LoggerFactory.getLogger(YappyModuleRegistrationServiceImpl.class);

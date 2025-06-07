@@ -18,6 +18,8 @@ import com.krickert.search.sdk.ProcessConfiguration;
 import com.krickert.search.sdk.ProcessRequest;
 import com.krickert.search.sdk.ProcessResponse;
 import com.krickert.search.sdk.ServiceMetadata;
+import com.krickert.search.sdk.ServiceRegistrationData;
+import com.google.protobuf.Empty;
 
 import io.grpc.stub.StreamObserver;
 import io.micronaut.context.annotation.Property;
@@ -427,6 +429,82 @@ public class TikaParserService extends PipeStepProcessorGrpc.PipeStepProcessorIm
 
         responseObserver.onNext(response);
         responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getServiceRegistration(Empty request, StreamObserver<ServiceRegistrationData> responseObserver) {
+        LOG.info("GetServiceRegistration called");
+        
+        // Build the registration data
+        ServiceRegistrationData registration = ServiceRegistrationData.newBuilder()
+                .setModuleName("tika-parser")
+                .setJsonConfigSchema(getConfigSchema())
+                .build();
+        
+        responseObserver.onNext(registration);
+        responseObserver.onCompleted();
+    }
+    
+    /**
+     * Returns the JSON schema for this module's configuration.
+     * This schema defines what configuration options the module accepts.
+     */
+    private String getConfigSchema() {
+        // This is a simplified schema - you could load this from a resource file
+        return """
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "type": "object",
+              "properties": {
+                "log_prefix": {
+                  "type": "string",
+                  "description": "Prefix for log messages"
+                },
+                "parsingOptions": {
+                  "type": "object",
+                  "properties": {
+                    "maxContentLength": {
+                      "type": "integer",
+                      "description": "Maximum content length to extract"
+                    },
+                    "extractMetadata": {
+                      "type": "boolean",
+                      "description": "Whether to extract metadata"
+                    }
+                  }
+                },
+                "features": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["GEO_TOPIC_PARSER", "OCR", "LANGUAGE_DETECTION"]
+                  },
+                  "description": "Features to enable"
+                },
+                "parsers": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "description": "Parser configurations"
+                },
+                "detectors": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "description": "Detector configurations"
+                },
+                "translators": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "description": "Translator configurations"
+                }
+              }
+            }
+            """;
     }
 
     /**

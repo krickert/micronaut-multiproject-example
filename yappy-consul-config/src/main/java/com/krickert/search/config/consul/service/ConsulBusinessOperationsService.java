@@ -7,6 +7,7 @@ import com.krickert.search.config.pipeline.model.PipelineConfig;
 import com.krickert.search.config.pipeline.model.PipelineGraphConfig;
 import com.krickert.search.config.pipeline.model.PipelineModuleConfiguration;
 import com.krickert.search.config.pipeline.model.PipelineModuleMap;
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value;
 // import io.micronaut.core.util.CollectionUtils; // Not used directly in this snippet
 import jakarta.inject.Singleton;
@@ -41,6 +42,7 @@ import java.util.stream.Collectors;
 // import java.util.stream.Collectors; // Not used directly in this snippet
 
 @Singleton
+@Requires(property = "consul.client.enabled", value = "true", defaultValue = "true")
 public class ConsulBusinessOperationsService {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConsulBusinessOperationsService.class);

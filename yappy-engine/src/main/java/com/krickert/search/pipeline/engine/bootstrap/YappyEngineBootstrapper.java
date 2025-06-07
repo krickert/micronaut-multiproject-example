@@ -19,6 +19,7 @@ import java.util.Optional;
 
 @Singleton
 @Requires(property = "app.engine.bootstrapper.enabled", notEquals = "false")
+@Requires(property = "consul.client.enabled", value = "true", defaultValue = "true")
 public class YappyEngineBootstrapper implements ApplicationEventListener<ApplicationStartupEvent> {
 
     private static final Logger LOG = LoggerFactory.getLogger(YappyEngineBootstrapper.class);

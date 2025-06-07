@@ -8,6 +8,7 @@ import com.krickert.search.schema.registry.*;
 import com.networknt.schema.ValidationMessage;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.grpc.annotation.GrpcService;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -16,6 +17,7 @@ import org.slf4j.LoggerFactory;
 
 @Singleton
 @GrpcService
+@Requires(property = "consul.client.enabled", value = "true", defaultValue = "true")
 public class SchemaRegistryServiceImpl extends SchemaRegistryServiceGrpc.SchemaRegistryServiceImplBase {
 
     private static final Logger log = LoggerFactory.getLogger(SchemaRegistryServiceImpl.class);
