@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Example showing how to use the registration CLI in a docker-compose setup
+  
+  # Register tika-parser module
+  register-tika-parser:
+    build: .
+    command: >
+      --module-endpoint tika-parser:50051
+      --engine-endpoint engine:50050
+      --instance-name tika-parser-docker
+      --health-type GRPC
+      --version 1.0.0
+    depends_on:
+      - engine
+      - tika-parser
+    networks:
+      - yappy-network
+    restart: "no"  # Run once and exit
+
+  # Register chunker module
+  register-chunker:
+    build: .
+    command: >
+      --module-endpoint chunker:50052
+      --engine-endpoint engine:50050
+      --instance-name chunker-docker
+      --health-type GRPC
+      --version 1.0.0
+    depends_on:
+      - engine
+      - chunker
+    networks:
+      - yappy-network
+    restart: "no"  # Run once and exit
+
+  # Example module services (not included in this repo)
+  # These would be defined in your main docker-compose.yml
+  # engine:
+  #   image: yappy/engine:latest
+  #   ports:
+  #     - "50050:50050"
+  #   networks:
+  #     - yappy-network
+  
+  # tika-parser:
+  #   image: yappy/tika-parser:latest
+  #   ports:
+  #     - "50051:50051"
+  #   networks:
+  #     - yappy-network
+  
+  # chunker:
+  #   image: yappy/chunker:latest
+  #   ports:
+  #     - "50052:50052"
+  #   networks:
+  #     - yappy-network
+
+networks:
+  yappy-network:
+    external: true

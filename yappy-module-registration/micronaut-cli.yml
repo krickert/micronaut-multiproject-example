@@ -1,0 +1,6 @@
+applicationType: cli
+defaultPackage: com.krickert.yappy.registration
+testFramework: junit
+sourceLanguage: java
+buildTool: gradle_kotlin
+features: [picocli, grpc-client, jackson-databind, reactor, lombok]

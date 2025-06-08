@@ -1,0 +1,6 @@
+applicationType: default
+defaultPackage: com.krickert.search.pipeline
+testFramework: junit
+sourceLanguage: java
+buildTool: gradle_kotlin
+features: [app-name, assertj, awaitility, aws-v2-sdk, config-consul, consul, control-panel, crac, discovery-client, discovery-consul, discovery-core, gradle, http-client, http-client-test, jackson-databind, java, java-application, junit, junit-params, junit-platform-suite-engine, kafka, langchain4j-openai, logback, lombok, management, micrometer, micrometer-jmx, micrometer-observation, micrometer-statsd, micronaut-aot, micronaut-build, micronaut-http-validation, mockito, netty-server, openapi, openapi-explorer, reactor, reactor-http-client, readme, shade, static-resources, test-resources, testcontainers, yaml, yaml-build]
