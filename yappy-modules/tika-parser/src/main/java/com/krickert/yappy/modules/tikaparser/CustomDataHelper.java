@@ -12,9 +12,20 @@ import java.util.Map;
 
 /**
  * Utility class for working with PipeDoc's custom_data field.
+ * 
+ * <p>This helper class provides methods to merge metadata into and extract metadata from
+ * the Protocol Buffers Struct field (custom_data) in PipeDoc messages. It handles the
+ * conversion between Java Maps and Protocol Buffer Struct types.</p>
  */
 public class CustomDataHelper {
     private static final Logger LOG = LoggerFactory.getLogger(CustomDataHelper.class);
+    
+    /**
+     * Private constructor to prevent instantiation of this utility class.
+     */
+    private CustomDataHelper() {
+        // Utility class
+    }
 
     /**
      * Merges metadata into a PipeDoc's custom_data field.

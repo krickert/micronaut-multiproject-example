@@ -35,9 +35,24 @@ import org.w3c.dom.Element;
 
 /**
  * Utility class for parsing documents using Apache Tika.
+ * 
+ * <p>This class provides static methods to parse various document formats using Apache Tika.
+ * It supports custom parser configurations, metadata extraction, and content length limits.
+ * The parser can handle various document formats including PDF, Microsoft Office documents,
+ * HTML, XML, and plain text files.</p>
+ * 
+ * <p>The parser can be configured to disable specific parsers (like EMF) for problematic
+ * file types, or enable special parsers (like GeoTopicParser) for enhanced functionality.</p>
  */
 public class DocumentParser {
     private static final Logger LOG = LoggerFactory.getLogger(DocumentParser.class);
+    
+    /**
+     * Private constructor to prevent instantiation of this utility class.
+     */
+    private DocumentParser() {
+        // Utility class
+    }
 
     /**
      * Parses a document and returns the parsed information in a document reply.

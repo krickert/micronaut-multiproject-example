@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 @Singleton
-@Requires(property = "consul.enabled", value = "true", defaultValue = "true")
+@Requires(property = "consul.client.enabled", value = "true", defaultValue = "true")
 public class DynamicConfigurationManagerImpl implements DynamicConfigurationManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(DynamicConfigurationManagerImpl.class);

@@ -13,10 +13,10 @@ repositories {
 
 dependencies {
     // Apply BOM/platform dependencies
-    implementation(platform(project(":bom")))
-    annotationProcessor(platform(project(":bom")))
-    testImplementation(platform(project(":bom")))
-    testAnnotationProcessor(platform(project(":bom")))
+    implementation(platform("com.krickert.yappy:bom:1.0.0-SNAPSHOT"))
+    annotationProcessor(platform("com.krickert.yappy:bom:1.0.0-SNAPSHOT"))
+    testImplementation(platform("com.krickert.yappy:bom:1.0.0-SNAPSHOT"))
+    testAnnotationProcessor(platform("com.krickert.yappy:bom:1.0.0-SNAPSHOT"))
 
     annotationProcessor(mn.micronaut.serde.processor)
     implementation(mn.micronaut.grpc.runtime)
@@ -32,7 +32,7 @@ dependencies {
 
     runtimeOnly(mn.logback.classic)
     runtimeOnly(mn.snakeyaml)
-    implementation(project(":yappy-models:protobuf-models"))
+    implementation("com.krickert.yappy:protobuf-models:1.0.0-SNAPSHOT")
 
     implementation("io.micronaut.reactor:micronaut-reactor")
     implementation("io.micronaut.reactor:micronaut-reactor-http-client")
@@ -72,7 +72,6 @@ micronaut {
     testResources {
         sharedServer = true
     }
-
 
 }
 

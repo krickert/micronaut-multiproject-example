@@ -43,7 +43,7 @@ import java.util.stream.Collectors;
 
 @Singleton
 @Requires(property = "consul.client.enabled", value = "true", defaultValue = "true")
-public class ConsulBusinessOperationsService {
+public class ConsulBusinessOperationsService implements BusinessOperationsService {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConsulBusinessOperationsService.class);
     private final ConsulKvService consulKvService;
@@ -84,6 +84,7 @@ public class ConsulBusinessOperationsService {
 
     // --- KV Store Operations ---
 
+    @Override
     public Mono<Boolean> deleteClusterConfiguration(String clusterName) {
         validateClusterName(clusterName);
         String fullClusterKey = getFullClusterKey(clusterName);
@@ -91,6 +92,7 @@ public class ConsulBusinessOperationsService {
         return consulKvService.deleteKey(fullClusterKey);
     }
 
+    @Override
     public Mono<Boolean> deleteSchemaVersion(String subject, int version) {
         validateSchemaSubject(subject);
         validateSchemaVersion(version);
@@ -99,6 +101,7 @@ public class ConsulBusinessOperationsService {
         return consulKvService.deleteKey(fullSchemaKey);
     }
 
+    @Override
     public Mono<Boolean> putValue(String key, Object value) {
         validateKey(key);
         Objects.requireNonNull(value, "Value cannot be null");
@@ -118,6 +121,7 @@ public class ConsulBusinessOperationsService {
         }
     }
 
+    @Override
     public Mono<Boolean> storeClusterConfiguration(String clusterName, Object clusterConfig) {
         validateClusterName(clusterName);
         Objects.requireNonNull(clusterConfig, "Cluster configuration cannot be null");
@@ -128,6 +132,7 @@ public class ConsulBusinessOperationsService {
         return putValue(fullClusterKey, clusterConfig);
     }
 
+    @Override
     public Mono<Boolean> storeSchemaVersion(String subject, int version, Object schemaData) {
         validateSchemaSubject(subject);
         validateSchemaVersion(version);
@@ -139,6 +144,7 @@ public class ConsulBusinessOperationsService {
 
     // --- Service Registry and Discovery Operations ---
 
+    @Override
     public Mono<Void> registerService(Registration registration) {
         Objects.requireNonNull(registration, "Registration details cannot be null");
         LOG.info("Registering service with Consul: id='{}', name='{}', address='{}', port={}",
@@ -149,6 +155,7 @@ public class ConsulBusinessOperationsService {
                 .then();
     }
 
+    @Override
     public Mono<Void> deregisterService(String serviceId) {
         validateKey(serviceId);
         LOG.info("Deregistering service with ID: {}", serviceId);
@@ -158,6 +165,7 @@ public class ConsulBusinessOperationsService {
                 .then();
     }
 
+    @Override
     public Mono<Map<String, List<String>>> listServices() {
         LOG.debug("Listing all services from Consul catalog.");
         return Mono.fromCallable(() -> {
@@ -174,6 +182,7 @@ public class ConsulBusinessOperationsService {
         });
     }
 
+    @Override
     public Mono<List<CatalogService>> getServiceInstances(String serviceName) {
         validateKey(serviceName);
         LOG.debug("Getting all instances for service: {}", serviceName);
@@ -191,6 +200,7 @@ public class ConsulBusinessOperationsService {
         });
     }
 
+    @Override
     public Mono<List<ServiceHealth>> getHealthyServiceInstances(String serviceName) {
         validateKey(serviceName);
         LOG.debug("Getting healthy instances for service: {}", serviceName);
@@ -208,6 +218,7 @@ public class ConsulBusinessOperationsService {
         });
     }
 
+    @Override
     public Mono<Boolean> isConsulAvailable() {
         LOG.debug("Checking Consul availability by attempting to get leader.");
         return Mono.fromCallable(() -> {
@@ -226,6 +237,7 @@ public class ConsulBusinessOperationsService {
 
     // --- NEWLY ADDED/EXPANDED METHODS for Pipeline and Whitelist Configurations ---
 
+    @Override
     public Mono<Optional<PipelineClusterConfig>> getPipelineClusterConfig(String clusterName) {
         validateClusterName(clusterName);
         String keyForKvRead = getFullClusterKey(clusterName);
@@ -254,26 +266,31 @@ public class ConsulBusinessOperationsService {
                 });
     }
 
+    @Override
     public Mono<Optional<PipelineGraphConfig>> getPipelineGraphConfig(String clusterName) {
         return getPipelineClusterConfig(clusterName)
                 .map(clusterConfigOpt -> clusterConfigOpt.map(PipelineClusterConfig::pipelineGraphConfig));
     }
 
+    @Override
     public Mono<Optional<PipelineModuleMap>> getPipelineModuleMap(String clusterName) {
         return getPipelineClusterConfig(clusterName)
                 .map(clusterConfigOpt -> clusterConfigOpt.map(PipelineClusterConfig::pipelineModuleMap));
     }
 
+    @Override
     public Mono<Set<String>> getAllowedKafkaTopics(String clusterName) {
         return getPipelineClusterConfig(clusterName)
                 .map(clusterConfigOpt -> clusterConfigOpt.map(PipelineClusterConfig::allowedKafkaTopics).orElse(Collections.emptySet()));
     }
 
+    @Override
     public Mono<Set<String>> getAllowedGrpcServices(String clusterName) {
         return getPipelineClusterConfig(clusterName)
                 .map(clusterConfigOpt -> clusterConfigOpt.map(PipelineClusterConfig::allowedGrpcServices).orElse(Collections.emptySet()));
     }
 
+    @Override
     public Mono<Optional<PipelineConfig>> getSpecificPipelineConfig(String clusterName, String pipelineName) {
         return getPipelineGraphConfig(clusterName)
                 .map(graphConfigOpt -> graphConfigOpt.flatMap(graph ->
@@ -281,6 +298,7 @@ public class ConsulBusinessOperationsService {
                 ));
     }
 
+    @Override
     public Mono<List<String>> listPipelineNames(String clusterName) {
         return getPipelineGraphConfig(clusterName)
                 .map(graphConfigOpt -> graphConfigOpt
@@ -290,6 +308,7 @@ public class ConsulBusinessOperationsService {
                         .orElseGet(ArrayList::new)); // Use orElseGet for new collections
     }
 
+    @Override
     public Mono<Optional<PipelineModuleConfiguration>> getSpecificPipelineModuleConfiguration(String clusterName, String implementationId) {
         return getPipelineModuleMap(clusterName)
                 .map(moduleMapOpt -> moduleMapOpt.flatMap(map ->
@@ -297,6 +316,7 @@ public class ConsulBusinessOperationsService {
                 ));
     }
 
+    @Override
     public Mono<List<PipelineModuleConfiguration>> listAvailablePipelineModuleImplementations(String clusterName) {
         return getPipelineModuleMap(clusterName)
                 .map(moduleMapOpt -> moduleMapOpt
@@ -306,6 +326,7 @@ public class ConsulBusinessOperationsService {
                         .orElseGet(ArrayList::new)); // Use orElseGet for new collections
     }
 
+    @Override
     public Mono<List<String>> getServiceWhitelist() {
         String serviceWhitelistKey = whitelistsKeyPrefix.endsWith("/") ? whitelistsKeyPrefix + "services" : whitelistsKeyPrefix + "/services";
         LOG.debug("Fetching service whitelist from key: {}", serviceWhitelistKey);
@@ -325,6 +346,7 @@ public class ConsulBusinessOperationsService {
                 });
     }
 
+    @Override
     public Mono<List<String>> getTopicWhitelist() {
         String topicWhitelistKey = whitelistsKeyPrefix.endsWith("/") ? whitelistsKeyPrefix + "topics" : whitelistsKeyPrefix + "/topics";
         LOG.debug("Fetching topic whitelist from key: {}", topicWhitelistKey);
@@ -344,6 +366,7 @@ public class ConsulBusinessOperationsService {
                 });
     }
 
+    @Override
     public Mono<List<HealthCheck>> getServiceChecks(String serviceName) {
         validateKey(serviceName);
         LOG.debug("Getting all health checks for service: {}", serviceName);
@@ -368,6 +391,7 @@ public class ConsulBusinessOperationsService {
      * @param serviceId The ID of the service instance.
      * @return A Mono emitting an Optional of {@link FullService}.
      */
+    @Override
     public Mono<Optional<FullService>> getAgentServiceDetails(String serviceId) {
         validateKey(serviceId);
         LOG.debug("Attempting to get agent details for service instance ID: {}", serviceId);
@@ -402,6 +426,7 @@ public class ConsulBusinessOperationsService {
 
     // --- Helper and Validation Methods ---
 
+    @Override
     public String getFullClusterKey(String clusterName) {
         // Ensure prefix always ends with a slash if it's not empty
         String prefix = clusterConfigKeyPrefix.isEmpty() || clusterConfigKeyPrefix.endsWith("/")
@@ -450,6 +475,7 @@ public class ConsulBusinessOperationsService {
      *
      * @return A Mono emitting a list of distinct cluster names.
      */
+    @Override
     public Mono<List<String>> listAvailableClusterNames() {
         // Ensure the prefix ends with a "/" for listing "subdirectories" or keys within it.
         String queryPrefix = clusterConfigKeyPrefix.endsWith("/") ? clusterConfigKeyPrefix : clusterConfigKeyPrefix + "/";
@@ -491,6 +517,7 @@ public class ConsulBusinessOperationsService {
                 });
     }
 
+    @Override
     public Mono<Void> cleanupTestResources(Iterable<String> clusterNames, Iterable<String> schemaSubjects, Iterable<String> serviceIds) {
         LOG.info("Cleaning up test resources: clusters, schemas, and services.");
         Mono<Void> deleteClustersMono = Mono.empty();

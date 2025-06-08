@@ -20,10 +20,14 @@ public class MetadataMapper {
      * Represents a mapping operation to perform on a metadata field.
      */
     public enum Operation {
-        KEEP,       // Keep the field as is
-        DELETE,     // Delete the field
-        COPY,       // Copy the field to a new name
-        REGEX       // Apply a regex transformation to the field
+        /** Keep the field as is without any transformation. */
+        KEEP,
+        /** Delete the field from the output metadata. */
+        DELETE,
+        /** Copy the field to a new field name in the output metadata. */
+        COPY,
+        /** Apply a regex transformation to the field value. */
+        REGEX
     }
 
     /**
@@ -65,26 +69,56 @@ public class MetadataMapper {
             }
         }
 
+        /**
+         * Gets the source field name.
+         *
+         * @return the source field name
+         */
         public String getSourceField() {
             return sourceField;
         }
 
+        /**
+         * Gets the destination field name.
+         *
+         * @return the destination field name, or null for DELETE operations
+         */
         public String getDestinationField() {
             return destinationField;
         }
 
+        /**
+         * Gets the operation to perform.
+         *
+         * @return the operation
+         */
         public Operation getOperation() {
             return operation;
         }
 
+        /**
+         * Gets the regex pattern for REGEX operations.
+         *
+         * @return the regex pattern, or null for non-REGEX operations
+         */
         public String getRegexPattern() {
             return regexPattern;
         }
 
+        /**
+         * Gets the replacement string for REGEX operations.
+         *
+         * @return the replacement string, or null for non-REGEX operations
+         */
         public String getReplacement() {
             return replacement;
         }
 
+        /**
+         * Gets the compiled regex pattern for REGEX operations.
+         *
+         * @return the compiled pattern, or null for non-REGEX operations
+         */
         public Pattern getCompiledPattern() {
             return compiledPattern;
         }

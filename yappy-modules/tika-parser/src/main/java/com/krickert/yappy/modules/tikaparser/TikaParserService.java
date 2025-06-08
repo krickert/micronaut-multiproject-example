@@ -35,6 +35,19 @@ import org.xml.sax.SAXException;
 import java.io.IOException;
 import java.util.HashMap;
 
+/**
+ * gRPC service implementation for the Tika Parser module.
+ * 
+ * <p>This service implements the PipeStepProcessor interface and provides document
+ * parsing functionality using Apache Tika. It processes documents from various formats
+ * (PDF, Word, Excel, etc.) and extracts text content and metadata. The service supports
+ * custom configuration options including content length limits, metadata extraction,
+ * and specific parser features.</p>
+ * 
+ * <p>The service can be configured with custom options through the ProcessConfiguration,
+ * including enabling special parsers (like GeoTopicParser), setting content length limits,
+ * and controlling metadata extraction behavior.</p>
+ */
 @Singleton
 @GrpcService
 @Requires(property = "grpc.services.tika-parser.enabled", value = "true", defaultValue = "true")
@@ -50,6 +63,9 @@ public class TikaParserService extends PipeStepProcessorGrpc.PipeStepProcessorIm
 
     private final ProcessingBuffer<PipeDoc> pipeDocBuffer;
 
+    /**
+     * Constructs a new TikaParserService with the configured test data buffer settings.
+     */
     public TikaParserService() {
         this.pipeDocBuffer = ProcessingBufferFactory.createBuffer(dataBufferEnabled, dataBufferPrecision, PipeDoc.class);
         LOG.info("TikaParserService initialized with test data buffer enabled: {}, precision: {}", dataBufferEnabled, dataBufferPrecision);

@@ -10,9 +10,39 @@ import java.util.Map;
 
 /**
  * Factory class for creating MetadataMapper instances from JSON configuration.
+ * 
+ * <p>This factory reads metadata mapping rules from a Protocol Buffers Struct
+ * configuration and creates a MetadataMapper instance with the appropriate rules.
+ * The configuration should contain a "mappers" field with mapping rules for each
+ * metadata field to be transformed.</p>
+ * 
+ * <p>Example configuration structure:</p>
+ * <pre>
+ * {
+ *   "mappers": {
+ *     "dc:title": {
+ *       "operation": "COPY",
+ *       "destination": "title"
+ *     },
+ *     "author": {
+ *       "operation": "REGEX",
+ *       "destination": "formatted_author",
+ *       "pattern": "^(.+), (.+)$",
+ *       "replacement": "$2 $1"
+ *     }
+ *   }
+ * }
+ * </pre>
  */
 public class MetadataMapperFactory {
     private static final Logger LOG = LoggerFactory.getLogger(MetadataMapperFactory.class);
+    
+    /**
+     * Private constructor to prevent instantiation of this utility class.
+     */
+    private MetadataMapperFactory() {
+        // Utility class
+    }
 
     /**
      * Creates a MetadataMapper from a Struct configuration.

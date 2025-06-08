@@ -53,7 +53,18 @@ include(
     "yappy-consul-config",
 
     // Engine (no longer depends on modules)
-    "yappy-engine",
+    // "yappy-engine", // DISABLED - replaced by yappy-orchestrator
+    
+    // New orchestrator - clean architecture
+    "yappy-orchestrator",
+    "yappy-orchestrator:engine-core",
+    "yappy-orchestrator:engine-bootstrap",
+    "yappy-orchestrator:engine-registration",
+    "yappy-orchestrator:engine-health",
+    "yappy-orchestrator:engine-kafka",
+    "yappy-orchestrator:engine-pipeline",
+    "yappy-orchestrator:engine-grpc",
+    "yappy-orchestrator:engine-config",
 
     // Modules - needed for container builds
     "yappy-modules:tika-parser",
@@ -69,6 +80,6 @@ include(
     // Integration tests
     "yappy-integration-test",
     
-    // Registration CLI
-    "yappy-registration-cli"
+    // Module Registration (renamed from yappy-registration-cli)
+    "yappy-module-registration"
 )
