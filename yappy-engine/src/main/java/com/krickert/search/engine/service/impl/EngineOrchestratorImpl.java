@@ -1,6 +1,6 @@
 package com.krickert.search.engine.service.impl;
 
-import com.krickert.search.engine.grpc.IModuleRegistrationService;
+import com.krickert.search.engine.grpc.ModuleRegistrationMetrics;
 import com.krickert.search.engine.kafka.KafkaConsumerService;
 import com.krickert.search.engine.service.EngineHealthStatus;
 import com.krickert.search.engine.service.EngineOrchestrator;
@@ -23,15 +23,15 @@ public class EngineOrchestratorImpl implements EngineOrchestrator {
     
     private static final Logger LOG = LoggerFactory.getLogger(EngineOrchestratorImpl.class);
     
-    private final IModuleRegistrationService registrationService;
+    private final ModuleRegistrationMetrics registrationMetrics;
     private final KafkaConsumerService kafkaConsumerService;
     private final AtomicBoolean running = new AtomicBoolean(false);
     
     @Inject
     public EngineOrchestratorImpl(
-            IModuleRegistrationService registrationService,
+            ModuleRegistrationMetrics registrationMetrics,
             KafkaConsumerService kafkaConsumerService) {
-        this.registrationService = registrationService;
+        this.registrationMetrics = registrationMetrics;
         this.kafkaConsumerService = kafkaConsumerService;
     }
     
@@ -94,7 +94,7 @@ public class EngineOrchestratorImpl implements EngineOrchestrator {
             "Module Registration Service",
             EngineHealthStatus.Status.HEALTHY,
             "Service is available",
-            Map.of("registeredModules", registrationService.getRegisteredModuleCount())
+            Map.of("registeredModules", registrationMetrics.getRegisteredModuleCount())
         ));
         
         // Determine overall status

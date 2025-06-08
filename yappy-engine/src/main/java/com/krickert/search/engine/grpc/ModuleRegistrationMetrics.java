@@ -1,9 +1,9 @@
 package com.krickert.search.engine.grpc;
 
 /**
- * Interface for module registration service operations.
+ * Interface for module registration metrics and monitoring.
  */
-public interface IModuleRegistrationService {
+public interface ModuleRegistrationMetrics {
     
     /**
      * Gets the count of registered modules.

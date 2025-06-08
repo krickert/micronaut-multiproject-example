@@ -1,6 +1,6 @@
 package com.krickert.search.engine.integration;
 
-import com.krickert.search.engine.grpc.MockModuleRegistrationService;
+import com.krickert.search.engine.grpc.mock.MockModuleRegistrationService;
 import com.krickert.search.engine.kafka.MockKafkaConsumerService;
 import com.krickert.search.engine.pipeline.PipelineExecutionService;
 import com.krickert.search.engine.service.EngineOrchestrator;

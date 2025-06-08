@@ -3,8 +3,10 @@ package com.krickert.search.engine.registration.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
+import com.krickert.search.engine.health.ModuleHealthMonitor;
 import com.krickert.search.engine.registration.ModuleRegistrationService;
 import com.krickert.search.engine.registration.ModuleRegistrationValidator;
+import com.krickert.search.grpc.ModuleInfo;
 import com.krickert.yappy.registration.api.RegisterModuleRequest;
 import com.krickert.yappy.registration.api.RegisterModuleResponse;
 import io.micronaut.context.annotation.Requires;
@@ -43,14 +45,17 @@ public class GrpcRegistrationService implements ModuleRegistrationService {
     private final ConsulBusinessOperationsService consulBusinessOpsService;
     private final ModuleRegistrationValidator validator;
     private final ObjectMapper digestObjectMapper;
+    private final ModuleHealthMonitor healthMonitor;
     
     @Inject
     public GrpcRegistrationService(
             ConsulBusinessOperationsService consulBusinessOpsService,
             ModuleRegistrationValidator validator,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            ModuleHealthMonitor healthMonitor) {
         this.consulBusinessOpsService = consulBusinessOpsService;
         this.validator = validator;
+        this.healthMonitor = healthMonitor;
         
         // ObjectMapper for canonical JSON serialization
         this.digestObjectMapper = new ObjectMapper();
@@ -123,6 +128,7 @@ public class GrpcRegistrationService implements ModuleRegistrationService {
             return Mono.just(responseBuilder)
                     .flatMap(builder -> 
                         consulBusinessOpsService.registerService(registration)
+                            .then(startHealthMonitoring(request, serviceId))
                             .then(Mono.fromCallable(() -> {
                                 LOG.info("Module instance registered successfully with Consul. Service ID: {}", serviceId);
                                 return builder
@@ -133,6 +139,28 @@ public class GrpcRegistrationService implements ModuleRegistrationService {
                     );
         })
         .flatMap(responseMono -> responseMono);
+    }
+    
+    private Mono<Void> startHealthMonitoring(RegisterModuleRequest request, String serviceId) {
+        // Create ModuleInfo for health monitoring
+        ModuleInfo moduleInfo = ModuleInfo.newBuilder()
+                .setServiceId(serviceId)
+                .setServiceName(request.getInstanceServiceName())
+                .setHost(request.getHost())
+                .setPort(request.getPort())
+                .build();
+                
+        return healthMonitor.startMonitoring(
+                moduleInfo, 
+                request.getHealthCheckType(),
+                request.getHealthCheckEndpoint()
+        ).doOnSuccess(v -> LOG.info("Started health monitoring for module: {}", serviceId))
+          .doOnError(error -> LOG.error("Failed to start health monitoring for module: {}", serviceId, error))
+          .onErrorResume(error -> {
+              // Don't fail registration if health monitoring fails to start
+              LOG.warn("Health monitoring could not be started for module: {}, but registration will continue", serviceId);
+              return Mono.empty();
+          });
     }
     
     private String generateServiceId(RegisterModuleRequest request) {
@@ -233,24 +261,35 @@ public class GrpcRegistrationService implements ModuleRegistrationService {
     @Override
     public Mono<Void> deregisterModule(String serviceId) {
         LOG.info("Deregistering module with service ID: {}", serviceId);
-        return consulBusinessOpsService.deregisterService(serviceId)
+        
+        // Stop health monitoring first
+        return healthMonitor.stopMonitoring(serviceId)
+                .doOnSuccess(v -> LOG.info("Stopped health monitoring for module: {}", serviceId))
+                .doOnError(error -> LOG.warn("Error stopping health monitoring for module: {}", serviceId, error))
+                .onErrorResume(error -> {
+                    // Continue with deregistration even if health monitor fails
+                    return Mono.empty();
+                })
+                .then(consulBusinessOpsService.deregisterService(serviceId))
                 .doOnSuccess(v -> LOG.info("Module {} deregistered successfully", serviceId))
                 .doOnError(error -> LOG.error("Failed to deregister module {}", serviceId, error));
     }
     
     @Override
     public Mono<Boolean> isModuleHealthy(String serviceId) {
-        // For now, just check if the service exists in the agent
-        // In the future, we could enhance this to check actual health status
-        return consulBusinessOpsService.getAgentServiceDetails(serviceId)
-                .map(optionalService -> {
-                    boolean exists = optionalService.isPresent();
-                    LOG.debug("Module {} health check: {}", serviceId, exists ? "exists" : "not found");
-                    return exists;
-                })
+        // Use the health monitor to get the cached health status
+        return healthMonitor.getCachedHealthStatus(serviceId)
+                .map(status -> status.getIsHealthy())
                 .onErrorResume(error -> {
                     LOG.error("Error checking health for module {}", serviceId, error);
                     return Mono.just(false);
-                });
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    // If not found in health monitor, fall back to Consul check
+                    LOG.debug("Module {} not found in health monitor, checking Consul directly", serviceId);
+                    return consulBusinessOpsService.getAgentServiceDetails(serviceId)
+                            .map(optionalService -> optionalService.isPresent())
+                            .onErrorResume(e -> Mono.just(false));
+                }));
     }
 }

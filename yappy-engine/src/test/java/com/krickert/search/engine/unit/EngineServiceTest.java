@@ -4,7 +4,7 @@ import com.krickert.search.engine.service.EngineHealthStatus;
 import com.krickert.search.engine.service.EngineOrchestrator;
 import com.krickert.search.engine.service.impl.EngineOrchestratorImpl;
 import com.krickert.search.engine.kafka.KafkaConsumerService;
-import com.krickert.search.engine.grpc.IModuleRegistrationService;
+import com.krickert.search.engine.grpc.ModuleRegistrationMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -20,7 +20,7 @@ import static org.mockito.Mockito.*;
 public class EngineServiceTest {
     
     @Mock
-    private IModuleRegistrationService registrationService;
+    private ModuleRegistrationMetrics registrationMetrics;
     
     @Mock
     private KafkaConsumerService kafkaConsumerService;
@@ -30,7 +30,7 @@ public class EngineServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        orchestrator = new EngineOrchestratorImpl(registrationService, kafkaConsumerService);
+        orchestrator = new EngineOrchestratorImpl(registrationMetrics, kafkaConsumerService);
     }
     
     @Test
@@ -61,7 +61,7 @@ public class EngineServiceTest {
         // Setup mocks
         when(kafkaConsumerService.isHealthy()).thenReturn(true);
         when(kafkaConsumerService.getActiveConsumerCount()).thenReturn(3);
-        when(registrationService.getRegisteredModuleCount()).thenReturn(2);
+        when(registrationMetrics.getRegisteredModuleCount()).thenReturn(2);
         
         // Get health status
         EngineHealthStatus health = orchestrator.getHealthStatus();
@@ -77,7 +77,7 @@ public class EngineServiceTest {
         // Setup mocks - Kafka unhealthy
         when(kafkaConsumerService.isHealthy()).thenReturn(false);
         when(kafkaConsumerService.getActiveConsumerCount()).thenReturn(0);
-        when(registrationService.getRegisteredModuleCount()).thenReturn(2);
+        when(registrationMetrics.getRegisteredModuleCount()).thenReturn(2);
         
         // Get health status
         EngineHealthStatus health = orchestrator.getHealthStatus();

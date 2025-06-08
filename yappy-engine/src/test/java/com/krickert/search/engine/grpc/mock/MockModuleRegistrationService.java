@@ -1,4 +1,6 @@
-package com.krickert.search.engine.grpc;
+package com.krickert.search.engine.grpc.mock;
+
+import com.krickert.search.engine.grpc.ModuleRegistrationMetrics;
 
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Secondary;
@@ -14,7 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Singleton
 @Secondary
 @Requires(property = "consul.client.enabled", value = "false")
-public class MockModuleRegistrationService implements IModuleRegistrationService {
+public class MockModuleRegistrationService implements ModuleRegistrationMetrics {
     
     private static final Logger LOG = LoggerFactory.getLogger(MockModuleRegistrationService.class);
     

@@ -3,6 +3,7 @@ package com.krickert.search.engine.pipeline.impl;
 import com.krickert.search.config.pipeline.model.PipelineConfig;
 import com.krickert.search.engine.pipeline.PipelineExecutionService;
 import com.krickert.search.engine.pipeline.PipelineStatistics;
+import com.krickert.search.engine.service.MessageRoutingService;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeStream;
 import jakarta.inject.Inject;
@@ -28,10 +29,11 @@ public class PipelineExecutionServiceImpl implements PipelineExecutionService {
     
     private final Map<String, PipelineConfig> pipelines = new ConcurrentHashMap<>();
     private final Map<String, PipelineExecutionStats> pipelineStats = new ConcurrentHashMap<>();
+    private final MessageRoutingService messageRoutingService;
     
     @Inject
-    public PipelineExecutionServiceImpl() {
-        // Constructor for dependency injection
+    public PipelineExecutionServiceImpl(MessageRoutingService messageRoutingService) {
+        this.messageRoutingService = messageRoutingService;
     }
     
     @Override
@@ -88,9 +90,28 @@ public class PipelineExecutionServiceImpl implements PipelineExecutionService {
                 return Mono.error(new IllegalArgumentException("Pipeline not found: " + pipelineId));
             }
             
-            // For now, just return the stream as-is
-            // In a real implementation, this would process the stream through the pipeline
-            return Mono.just(stream);
+            PipelineExecutionStats stats = pipelineStats.get(pipelineId);
+            long startTime = System.currentTimeMillis();
+            
+            // Update the stream with the pipeline name
+            PipeStream updatedStream = stream.toBuilder()
+                .setCurrentPipelineName(pipelineId)
+                .build();
+            
+            // Route the message through the pipeline using MessageRoutingService
+            return messageRoutingService.routeMessage(updatedStream, pipelineId)
+                .doOnSuccess(processedStream -> {
+                    long duration = System.currentTimeMillis() - startTime;
+                    stats.recordSuccess(duration);
+                    LOG.debug("Pipeline {} successfully processed stream {} in {}ms", 
+                        pipelineId, processedStream.getStreamId(), duration);
+                })
+                .doOnError(error -> {
+                    long duration = System.currentTimeMillis() - startTime;
+                    stats.recordFailure(duration);
+                    LOG.error("Pipeline {} failed to process stream {}: {}", 
+                        pipelineId, stream.getStreamId(), error.getMessage());
+                });
         });
     }
     
@@ -127,10 +148,17 @@ public class PipelineExecutionServiceImpl implements PipelineExecutionService {
     }
     
     private Mono<PipeDoc> executePipeline(String pipelineId, PipeDoc document) {
-        // For now, this is a simple implementation that just returns the document
-        // In a real implementation, this would execute all pipeline steps
-        return Mono.just(document)
-            .delayElement(Duration.ofMillis(10)); // Simulate some processing time
+        // Create a PipeStream from the document
+        PipeStream stream = PipeStream.newBuilder()
+            .setStreamId("doc-" + document.getId() + "-" + System.currentTimeMillis())
+            .setDocument(document)
+            .setCurrentPipelineName(pipelineId)
+            .setCurrentHopNumber(0)
+            .build();
+        
+        // Process through the pipeline and extract the document
+        return processStream(pipelineId, stream)
+            .map(PipeStream::getDocument);
     }
     
     private static class PipelineExecutionStats {
