@@ -11,6 +11,9 @@
 .mtj.tmp/
 
 *.iml
+*.ipr
+*.iws
+*.jar
 
 # Package Files #
 

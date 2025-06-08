@@ -1,3 +1,5 @@
+import com.google.protobuf.gradle.id
+
 var grpcVersion = libs.versions.grpc.get()
 var protobufVersion = libs.versions.protobuf.get()
 
@@ -28,8 +30,9 @@ dependencies {
     // Use the alias from libs.versions.toml
     implementation(libs.protobufcommon)
     implementation(libs.protobuf.util)
-    implementation(mn.grpc.protobuf)
-    implementation(mn.grpc.stub)
+    api(mn.grpc.protobuf)
+    api(mn.grpc.stub)
+    api(mn.grpc.services)
     implementation(mn.slf4j.api)
     implementation(mn.logback.classic)
     implementation(mn.javax.annotation.api)
@@ -41,32 +44,29 @@ dependencies {
     testImplementation("com.google.jimfs:jimfs:1.3.0")
 }
 
-// Simplified protobuf configuration
-// Inform IDEs like IntelliJ IDEA, Eclipse or NetBeans about the generated code.
-sourceSets {
-    main {
-        java {
-            srcDirs("build/generated/sources/proto/main/grpc")
-            srcDirs("build/generated/sources/proto/main/java")
-            srcDirs("build/generated/sources/proto/main/python")
-        }
-    }
-}
+
+// In build.gradle.kts
+// In build.gradle.kts
 
 protobuf {
     protoc {
+        // This sets the protoc compiler artifact
         artifact = "com.google.protobuf:protoc:$protobufVersion"
     }
+
     plugins {
-        create("grpc") {
+        // Define the gRPC plugin; Micronaut doesn't add this automatically
+        id("grpc") {
             artifact = "io.grpc:protoc-gen-grpc-java:$grpcVersion"
         }
     }
+
     generateProtoTasks {
         all().forEach { task ->
+            // The Micronaut plugin automatically adds the java builtin.
+            // We only need to add the grpc plugin.
             task.plugins {
-                create("grpc")
-                create("python")
+                id("grpc")
             }
         }
     }

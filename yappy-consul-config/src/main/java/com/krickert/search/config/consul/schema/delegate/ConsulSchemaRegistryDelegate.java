@@ -3,10 +3,12 @@ package com.krickert.search.config.consul.schema.delegate;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.krickert.search.config.consul.ValidationResult;
 import com.krickert.search.config.consul.schema.exception.SchemaDeleteException;
 import com.krickert.search.config.consul.schema.exception.SchemaLoadException;
 import com.krickert.search.config.consul.schema.exception.SchemaNotFoundException;
 import com.krickert.search.config.consul.service.ConsulKvService;
+import com.krickert.search.config.consul.service.SchemaValidationService;
 import com.networknt.schema.*;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value;
@@ -34,6 +36,7 @@ public class ConsulSchemaRegistryDelegate {
 
     private final ConsulKvService consulKvService;
     private final ObjectMapper objectMapper;
+    private final SchemaValidationService schemaValidationService;
     private final JsonSchemaFactory schemaFactory;
     private final JsonSchema metaSchema;
 
@@ -41,9 +44,11 @@ public class ConsulSchemaRegistryDelegate {
     public ConsulSchemaRegistryDelegate(
             ConsulKvService consulKvService,
             ObjectMapper objectMapper, // Micronaut will inject its configured ObjectMapper
+            SchemaValidationService schemaValidationService,
             @Value("${consul.client.config.path:config/pipeline}") String baseConfigPath) {
         this.consulKvService = consulKvService;
         this.objectMapper = objectMapper;
+        this.schemaValidationService = schemaValidationService;
 
         SchemaValidatorsConfig metaSchemaLoadingConfig = getSchemaValidationConfig();
 
@@ -198,49 +203,56 @@ public class ConsulSchemaRegistryDelegate {
     }
 
     public Mono<Set<ValidationMessage>> validateSchemaSyntax(@NonNull String schemaContent) {
-        return Mono.fromCallable(() -> {
-            if (StringUtils.isEmpty(schemaContent)) {
-                return Set.of(ValidationMessage.builder().message("Schema content cannot be empty.").build());
-            }
-
-            try {
-                JsonNode schemaNodeToValidate = objectMapper.readTree(schemaContent);
-
-                // Use the pre-loaded this.metaSchema to validate the user's schema (schemaNodeToValidate)
-                ExecutionContext executionContext = this.metaSchema.createExecutionContext();
-
-                ValidationContext metaSchemaVC = this.metaSchema.getValidationContext();
-                PathType pathTypeForRoot = metaSchemaVC.getConfig().getPathType();
-                if (pathTypeForRoot == null) {
-                    pathTypeForRoot = PathType.LEGACY; // Fallback, should be set by metaSchemaLoadingConfig
-                }
-
-                Set<ValidationMessage> messages = this.metaSchema.validate(
-                        executionContext,
-                        schemaNodeToValidate,      // The node to validate (the user's schema)
-                        schemaNodeToValidate,      // The root node of the instance (which is the user's schema itself)
-                        new JsonNodePath(pathTypeForRoot) // Instance location starts at root
-                );
-
-                if (messages.isEmpty()) {
-                    log.trace("Schema syntax appears valid and compliant with meta-schema.");
-                    return Collections.emptySet();
-                } else {
-                    String errors = messages.stream()
-                            .map(ValidationMessage::getMessage)
-                            .collect(Collectors.joining("; "));
-                    log.warn("Invalid JSON Schema structure (failed meta-schema validation) for content. Errors: {}", errors);
-                    return messages;
-                }
-
-            } catch (JsonProcessingException e) {
-                log.warn("Invalid JSON syntax: {}", e.getMessage());
-                return Set.of(ValidationMessage.builder().message("Invalid JSON syntax: " + e.getMessage()).build());
-            } catch (Exception e) {
-                log.warn("Error during schema syntax validation: {}", e.getMessage(), e);
-                return Set.of(ValidationMessage.builder().message("Error during schema syntax validation: " + e.getMessage()).build());
-            }
-        });
+        if (StringUtils.isEmpty(schemaContent)) {
+            return Mono.just(Set.of(ValidationMessage.builder().message("Schema content cannot be empty.").build()));
+        }
+        
+        // First check if it's valid JSON
+        return schemaValidationService.isValidJson(schemaContent)
+                .flatMap(isValid -> {
+                    if (!isValid) {
+                        return Mono.just(Set.of(ValidationMessage.builder().message("Invalid JSON syntax").build()));
+                    }
+                    
+                    // Now validate it as a JSON Schema using the centralized service
+                    // We need to check if it's a valid JSON Schema v7
+                    return Mono.fromCallable(() -> {
+                        try {
+                            JsonNode schemaNodeToValidate = objectMapper.readTree(schemaContent);
+                            
+                            // Use the pre-loaded this.metaSchema to validate the user's schema (schemaNodeToValidate)
+                            ExecutionContext executionContext = this.metaSchema.createExecutionContext();
+                            
+                            ValidationContext metaSchemaVC = this.metaSchema.getValidationContext();
+                            PathType pathTypeForRoot = metaSchemaVC.getConfig().getPathType();
+                            if (pathTypeForRoot == null) {
+                                pathTypeForRoot = PathType.LEGACY; // Fallback, should be set by metaSchemaLoadingConfig
+                            }
+                            
+                            Set<ValidationMessage> messages = this.metaSchema.validate(
+                                    executionContext,
+                                    schemaNodeToValidate,      // The node to validate (the user's schema)
+                                    schemaNodeToValidate,      // The root node of the instance (which is the user's schema itself)
+                                    new JsonNodePath(pathTypeForRoot) // Instance location starts at root
+                            );
+                            
+                            if (messages.isEmpty()) {
+                                log.trace("Schema syntax appears valid and compliant with meta-schema.");
+                                return Collections.<ValidationMessage>emptySet();
+                            } else {
+                                String errors = messages.stream()
+                                        .map(ValidationMessage::getMessage)
+                                        .collect(Collectors.joining("; "));
+                                log.warn("Invalid JSON Schema structure (failed meta-schema validation) for content. Errors: {}", errors);
+                                return messages;
+                            }
+                            
+                        } catch (Exception e) {
+                            log.warn("Error during schema syntax validation: {}", e.getMessage(), e);
+                            return Set.of(ValidationMessage.builder().message("Error during schema syntax validation: " + e.getMessage()).build());
+                        }
+                    });
+                });
     }
 
     /**

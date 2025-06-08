@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.consul.schema.exception.SchemaDeleteException;
 import com.krickert.search.config.consul.schema.exception.SchemaNotFoundException;
 import com.krickert.search.config.consul.service.ConsulKvService;
+import com.krickert.search.config.consul.service.SchemaValidationService;
 import com.networknt.schema.ValidationMessage;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
@@ -37,6 +38,7 @@ class ConsulSchemaRegistryDelegateTest {
     private final String STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_REF = "{\"$ref\": \"#/definitions/nonExistent\"}"; // Unresolvable local ref, but networknt is lenient on this during syntax check
     private final String SCHEMA_WITH_UNKNOWN_KEYWORD = "{\"invalid_prop\": \"object\", \"type\": \"object\"}"; // Unknown keyword, networknt is lenient on this during syntax check
     ConsulKvService mockConsulKvService;
+    SchemaValidationService mockSchemaValidationService;
     @Inject
     ObjectMapper objectMapper;
     @Inject
@@ -48,8 +50,18 @@ class ConsulSchemaRegistryDelegateTest {
     @BeforeEach
     void setUp() {
         mockConsulKvService = Mockito.mock(ConsulKvService.class);
+        mockSchemaValidationService = Mockito.mock(SchemaValidationService.class);
+        
+        // Mock isValidJson method - returns true for valid JSON, false for invalid
+        when(mockSchemaValidationService.isValidJson(eq(VALID_SCHEMA_CONTENT_MINIMAL))).thenReturn(Mono.just(true));
+        when(mockSchemaValidationService.isValidJson(eq(INVALID_JSON_CONTENT))).thenReturn(Mono.just(false));
+        when(mockSchemaValidationService.isValidJson(eq(STRUCTURALLY_INVALID_TYPE_VALUE))).thenReturn(Mono.just(true));
+        when(mockSchemaValidationService.isValidJson(eq(STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_PATTERN))).thenReturn(Mono.just(true));
+        when(mockSchemaValidationService.isValidJson(eq(STRUCTURALLY_INVALID_SCHEMA_WITH_BAD_REF))).thenReturn(Mono.just(true));
+        when(mockSchemaValidationService.isValidJson(eq(SCHEMA_WITH_UNKNOWN_KEYWORD))).thenReturn(Mono.just(true));
+        
         // Re-initialize delegate for each test to ensure clean state and reflect any @BeforeEach changes to mocks
-        delegate = new ConsulSchemaRegistryDelegate(mockConsulKvService, objectMapper, baseConfigPath);
+        delegate = new ConsulSchemaRegistryDelegate(mockConsulKvService, objectMapper, mockSchemaValidationService, baseConfigPath);
         expectedFullSchemaPrefix = (baseConfigPath.endsWith("/") ? baseConfigPath : baseConfigPath + "/") + "schemas/";
     }
 

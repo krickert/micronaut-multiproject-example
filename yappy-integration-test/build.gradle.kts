@@ -82,10 +82,12 @@ dependencies {
     testImplementation(project(":yappy-models:pipeline-config-models"))
     testImplementation(project(":yappy-models:pipeline-config-models-test-utils"))
     testImplementation(project(":yappy-models:protobuf-models"))
-    
+    testImplementation(project(":yappy-registration-cli"))
+
     // gRPC dependencies
     testImplementation("io.grpc:grpc-stub")
     testImplementation("io.grpc:grpc-protobuf")
+    testImplementation("io.grpc:grpc-services")
     testImplementation("io.grpc:grpc-netty-shaded")
     testImplementation("io.micronaut.grpc:micronaut-grpc-runtime")
 

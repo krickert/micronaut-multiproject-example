@@ -16,34 +16,39 @@ dependencies {
     implementation("io.micronaut:micronaut-inject")
     implementation("io.micronaut.picocli:micronaut-picocli")
     implementation("info.picocli:picocli")
-    
+
     // gRPC dependencies
     implementation("io.micronaut.grpc:micronaut-grpc-runtime")
     implementation("io.grpc:grpc-stub")
     implementation("io.grpc:grpc-protobuf")
+    // https://mvnrepository.com/artifact/io.grpc/grpc-api
+    implementation("io.grpc:grpc-api")
     implementation("io.grpc:grpc-netty-shaded")
-    
+
     // Protobuf models
     implementation(project(":yappy-models:protobuf-models"))
-    
+
     // yappy-consul-config for validation and config management
     implementation(project(":yappy-consul-config"))
     implementation(project(":yappy-models:pipeline-config-models"))
-    
+
     // JSON Schema validation
     implementation("com.networknt:json-schema-validator:1.5.6")
     implementation("com.fasterxml.jackson.core:jackson-databind")
     
+    // Reactive support for using SchemaValidationService
+    implementation("io.projectreactor:reactor-core")
+
     // Logging
     runtimeOnly("ch.qos.logback:logback-classic")
-    
+
     // Annotation processing
     annotationProcessor("io.micronaut:micronaut-inject-java")
     annotationProcessor("io.micronaut.serde:micronaut-serde-processor")
     annotationProcessor("info.picocli:picocli-codegen")
     annotationProcessor("org.projectlombok:lombok")
     compileOnly("org.projectlombok:lombok")
-    
+
     // Testing
     testImplementation("io.micronaut.test:micronaut-test-junit5")
     testImplementation("org.junit.jupiter:junit-jupiter-api")
@@ -58,6 +63,16 @@ application {
 java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
+}
+
+sourceSets {
+    main {
+        java {
+            // Add the directories where protoc generates the .java files
+            srcDir(layout.buildDirectory.dir("generated/source/proto/main/java"))
+            srcDir(layout.buildDirectory.dir("generated/source/proto/main/grpc"))
+        }
+    }
 }
 
 micronaut {

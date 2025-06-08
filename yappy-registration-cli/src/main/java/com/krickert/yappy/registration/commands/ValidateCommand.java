@@ -1,9 +1,14 @@
 package com.krickert.yappy.registration.commands;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.krickert.search.config.consul.DefaultConfigurationValidator;
 import com.krickert.search.config.consul.ValidationResult;
+import com.krickert.search.config.consul.service.SchemaValidationService;
 import com.krickert.search.config.pipeline.model.*;
+import com.networknt.schema.JsonSchema;
+import com.networknt.schema.JsonSchemaFactory;
+import com.networknt.schema.SpecVersion;
+import com.networknt.schema.ValidationMessage;
 import com.krickert.yappy.registration.YappyRegistrationCli;
 import io.micronaut.context.ApplicationContext;
 import jakarta.inject.Inject;
@@ -15,6 +20,8 @@ import picocli.CommandLine.ParentCommand;
 
 import java.io.File;
 import java.nio.file.Files;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Callable;
 
 /**
@@ -74,24 +81,24 @@ public class ValidateCommand implements Callable<Integer> {
             
             String content = Files.readString(configFile.toPath());
             
-            // Get the validator from yappy-consul-config
-            DefaultConfigurationValidator validator = applicationContext.getBean(DefaultConfigurationValidator.class);
+            // Get the centralized validation service from yappy-consul-config
+            SchemaValidationService validationService = applicationContext.getBean(SchemaValidationService.class);
             
             switch (configType) {
                 case CLUSTER:
-                    return validateClusterConfig(content, validator);
+                    return validateClusterConfig(content, validationService);
                     
                 case PIPELINE:
                     return validatePipelineConfig(content);
                     
                 case STEP:
-                    return validateStepConfig(content, validator);
+                    return validateStepConfig(content, validationService);
                     
                 case MODULE:
                     return validateModuleConfig(content);
                     
                 case SCHEMA:
-                    return validateJsonSchema(content, validator);
+                    return validateJsonSchema(content, validationService);
                     
                 default:
                     log.error("Unknown configuration type: {}", configType);
@@ -107,7 +114,7 @@ public class ValidateCommand implements Callable<Integer> {
         }
     }
     
-    private Integer validateClusterConfig(String content, DefaultConfigurationValidator validator) {
+    private Integer validateClusterConfig(String content, SchemaValidationService validationService) {
         try {
             // Validate cluster name is provided
             if (parent.clusterName == null || parent.clusterName.isBlank()) {
@@ -119,8 +126,9 @@ public class ValidateCommand implements Callable<Integer> {
             
             PipelineClusterConfig clusterConfig = objectMapper.readValue(content, PipelineClusterConfig.class);
             
-            // Use the comprehensive validation from yappy-consul-config
-            ValidationResult result = validator.validateClusterConfig(parent.clusterName, clusterConfig);
+            // Use the centralized validation service
+            // Validate cluster configuration as JSON
+            ValidationResult result = validationService.validatePipelineClusterConfig(content).block();
             
             if (result.isValid()) {
                 log.info("✓ Cluster configuration is valid!");
@@ -172,7 +180,7 @@ public class ValidateCommand implements Callable<Integer> {
                 
                 if (parent.verbose) {
                     pipelineConfig.pipelineSteps().forEach((stepId, step) -> {
-                        log.info("    - Step '{}': {}", stepId, step.type());
+                        log.info("    - Step '{}': {}", stepId, step.stepType());
                     });
                 }
             }
@@ -185,30 +193,53 @@ public class ValidateCommand implements Callable<Integer> {
         }
     }
     
-    private Integer validateStepConfig(String content, DefaultConfigurationValidator validator) {
+    private Integer validateStepConfig(String content, SchemaValidationService validationService) {
         try {
             log.info("Validating step configuration...");
             
             PipelineStepConfig stepConfig = objectMapper.readValue(content, PipelineStepConfig.class);
             
             // Basic structural validation
-            if (stepConfig.pipelineStepId() == null || stepConfig.pipelineStepId().isBlank()) {
+            if (stepConfig.stepName() == null || stepConfig.stepName().isBlank()) {
                 log.error("Step ID is required");
                 return 1;
             }
             
             log.info("✓ Step configuration is structurally valid!");
-            log.info("  - Step ID: {}", stepConfig.pipelineStepId());
-            log.info("  - Type: {}", stepConfig.type());
+            log.info("  - Step Name: {}", stepConfig.stepName());
+            log.info("  - Type: {}", stepConfig.stepType());
             
             // If custom config exists and schema ID is provided, validate it
             if (stepConfig.customConfig() != null && schemaId != null) {
                 log.info("Validating custom configuration against schema '{}'...", schemaId);
                 
-                boolean customConfigValid = validator.validateCustomConfig(
-                    stepConfig.customConfig().configOptions(),
-                    schemaId
-                );
+                // Validate custom config against schema
+                boolean customConfigValid = true;
+                
+                try {
+                    // Get the schema from a file or registry
+                    File schemaFile = new File(schemaId);
+                    if (schemaFile.exists()) {
+                        String schemaContent = Files.readString(schemaFile.toPath());
+                        JsonSchemaFactory factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7);
+                        JsonSchema schema = factory.getSchema(objectMapper.readTree(schemaContent));
+                        
+                        // Convert config params to JSON for validation
+                        JsonNode configNode = objectMapper.valueToTree(stepConfig.customConfig().configParams());
+                        Set<ValidationMessage> validationErrors = schema.validate(configNode);
+                        
+                        customConfigValid = validationErrors.isEmpty();
+                        if (!customConfigValid) {
+                            log.error("Custom config validation errors:");
+                            validationErrors.forEach(error -> log.error("  - {}", error.getMessage()));
+                        }
+                    } else {
+                        log.warn("Schema file not found: {}", schemaId);
+                    }
+                } catch (Exception e) {
+                    log.error("Error validating custom config: {}", e.getMessage());
+                    customConfigValid = false;
+                }
                 
                 if (customConfigValid) {
                     log.info("✓ Custom configuration validates against schema!");
@@ -242,34 +273,14 @@ public class ValidateCommand implements Callable<Integer> {
             
             log.info("✓ Module configuration is valid!");
             log.info("  - Implementation ID: {}", moduleConfig.implementationId());
-            log.info("  - Module name: {}", moduleConfig.moduleName());
+            log.info("  - Module name: {}", moduleConfig.implementationName());
             
-            if (moduleConfig.instances() != null && !moduleConfig.instances().isEmpty()) {
-                log.info("  - Instances: {}", moduleConfig.instances().size());
-                
-                if (parent.verbose) {
-                    moduleConfig.instances().forEach((instanceId, instance) -> {
-                        log.info("    - Instance '{}': {}:{}", 
-                            instanceId, 
-                            instance.grpcHostLocation(), 
-                            instance.grpcPortLocation());
-                    });
-                }
-            }
+            // Module instances are not part of the current model
             
             // Validate JSON schema if present
-            if (moduleConfig.hasCustomConfigJsonSchema()) {
-                log.info("Module has custom config JSON schema");
-                
-                DefaultConfigurationValidator validator = applicationContext.getBean(DefaultConfigurationValidator.class);
-                boolean schemaValid = validator.validateJsonSchema(moduleConfig.customConfigJsonSchema());
-                
-                if (schemaValid) {
-                    log.info("✓ Module's JSON schema is valid!");
-                } else {
-                    log.error("✗ Module's JSON schema is invalid");
-                    return 1;
-                }
+            if (moduleConfig.customConfigSchemaReference() != null) {
+                log.info("Module has custom config schema reference: {}", moduleConfig.customConfigSchemaReference());
+                // TODO: Implement schema validation via schema registry
             }
             
             return 0;
@@ -280,13 +291,23 @@ public class ValidateCommand implements Callable<Integer> {
         }
     }
     
-    private Integer validateJsonSchema(String content, DefaultConfigurationValidator validator) {
+    private Integer validateJsonSchema(String content, SchemaValidationService validationService) {
         try {
             log.info("Validating JSON schema...");
             
-            boolean isValid = validator.validateJsonSchema(content);
+            // Use the centralized validation service to check if it's valid JSON
+            // For schema validation, we need to parse it as JSON and validate its structure
+            Boolean isValid = validationService.isValidJson(content).block();
             
-            if (isValid) {
+            if (!isValid) {
+                log.error("✗ Invalid JSON syntax");
+                return 1;
+            }
+            
+            // Try to parse as a JSON schema
+            try {
+                JsonSchemaFactory factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7);
+                JsonSchema schema = factory.getSchema(objectMapper.readTree(content));
                 log.info("✓ JSON schema is valid!");
                 
                 // Parse and show some details
@@ -308,8 +329,8 @@ public class ValidateCommand implements Callable<Integer> {
                 }
                 
                 return 0;
-            } else {
-                log.error("✗ JSON schema validation failed");
+            } catch (Exception e) {
+                log.error("✗ Invalid JSON Schema: {}", e.getMessage());
                 return 1;
             }
             

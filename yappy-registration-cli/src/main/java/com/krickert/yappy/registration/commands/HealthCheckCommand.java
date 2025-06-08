@@ -83,9 +83,7 @@ public class HealthCheckCommand implements Callable<Integer> {
             
         } catch (Exception e) {
             log.error("Health check error: {}", e.getMessage());
-            if (parent.verbose) {
-                log.error("Stack trace:", e);
-            }
+            log.error("Stack trace:", e);
             return 1;
         }
     }

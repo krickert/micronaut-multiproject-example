@@ -3,11 +3,9 @@ package com.krickert.search.config.consul.validator;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.krickert.search.config.consul.ValidationResult;
+import com.krickert.search.config.consul.service.SchemaValidationService;
 import com.krickert.search.config.pipeline.model.*;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
-import com.networknt.schema.ValidationMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
@@ -15,18 +13,17 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Singleton
 public class CustomConfigSchemaValidator implements ClusterValidationRule {
     private static final Logger LOG = LoggerFactory.getLogger(CustomConfigSchemaValidator.class);
     private final ObjectMapper objectMapper;
-    private final JsonSchemaFactory schemaFactory;
+    private final SchemaValidationService schemaValidationService;
 
     @Inject
-    public CustomConfigSchemaValidator(ObjectMapper objectMapper) {
+    public CustomConfigSchemaValidator(ObjectMapper objectMapper, SchemaValidationService schemaValidationService) {
         this.objectMapper = objectMapper;
-        this.schemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7);
+        this.schemaValidationService = schemaValidationService;
     }
 
     @Override
@@ -130,18 +127,19 @@ public class CustomConfigSchemaValidator implements ClusterValidationRule {
                 LOG.warn("Schema content for {} (step '{}') not found via provider.", schemaSourceDescription, step.stepName());
             } else {
                 try {
-                    JsonSchema schema = schemaFactory.getSchema(schemaStringOpt.get());
-                    Set<ValidationMessage> validationMessages = schema.validate(configNodeToValidate);
+                    // Use SchemaValidationService for validation
+                    ValidationResult validationResult = schemaValidationService.validateJson(
+                            configNodeToValidate, 
+                            objectMapper.readTree(schemaStringOpt.get())
+                    ).block();
 
-                    if (!validationMessages.isEmpty()) {
-                        String errorDetails = validationMessages.stream()
-                                .map(ValidationMessage::getMessage)
-                                .collect(Collectors.joining("; "));
+                    if (validationResult != null && !validationResult.isValid()) {
+                        String errorMessage = String.join("; ", validationResult.errors());
                         errors.add(String.format("Step '%s' custom config failed schema validation against %s: %s",
-                                step.stepName(), schemaSourceDescription, errorDetails));
+                                step.stepName(), schemaSourceDescription, errorMessage));
                         LOG.warn("Custom config validation failed for step '{}' against {}. Errors: {}",
-                                step.stepName(), schemaSourceDescription, errorDetails);
-                    } else {
+                                step.stepName(), schemaSourceDescription, errorMessage);
+                    } else if (validationResult != null && validationResult.isValid()) {
                         LOG.info("Custom configuration for step '{}' is VALID against {}.",
                                 step.stepName(), schemaSourceDescription);
                     }

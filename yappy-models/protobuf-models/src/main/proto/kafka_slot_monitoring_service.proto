@@ -1,0 +1,245 @@
+syntax = "proto3";
+
+package com.krickert.search.model;
+
+option java_multiple_files = true;
+option java_package = "com.krickert.search.model";
+option java_outer_classname = "KafkaSlotMonitoringProto";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// Service for monitoring Kafka slot assignments and rebalancing events
+service KafkaSlotMonitoringService {
+  // Stream real-time rebalancing events
+  rpc StreamRebalancingEvents(StreamRebalancingRequest) returns (stream RebalancingEvent);
+  
+  // Get current slot distribution snapshot
+  rpc GetSlotDistribution(google.protobuf.Empty) returns (SlotDistributionSnapshot);
+  
+  // Stream periodic metrics updates
+  rpc StreamMetrics(StreamMetricsRequest) returns (stream SlotMetrics);
+  
+  // Get historical rebalancing events
+  rpc GetRebalancingHistory(RebalancingHistoryRequest) returns (RebalancingHistoryResponse);
+}
+
+message StreamRebalancingRequest {
+  // Filter events for specific engines (empty = all engines)
+  repeated string engine_ids = 1;
+  
+  // Include initial state snapshot
+  bool include_initial_state = 2;
+}
+
+message RebalancingEvent {
+  // Unique event ID
+  string event_id = 1;
+  
+  // Engine that experienced the change
+  string engine_id = 2;
+  
+  // Timestamp of the event
+  google.protobuf.Timestamp timestamp = 3;
+  
+  // Type of rebalancing event
+  enum EventType {
+    UNSPECIFIED = 0;
+    ENGINE_REGISTERED = 1;
+    ENGINE_UNREGISTERED = 2;
+    SLOTS_ACQUIRED = 3;
+    SLOTS_RELEASED = 4;
+    REBALANCE_TRIGGERED = 5;
+    HEARTBEAT_EXPIRED = 6;
+  }
+  EventType event_type = 4;
+  
+  // Partitions before the event
+  repeated int32 previous_partitions = 5;
+  
+  // Partitions after the event
+  repeated int32 new_partitions = 6;
+  
+  // Topic and group information
+  string topic = 7;
+  string group_id = 8;
+  
+  // Additional event metadata
+  map<string, string> metadata = 9;
+}
+
+message SlotDistributionSnapshot {
+  // Timestamp of the snapshot
+  google.protobuf.Timestamp timestamp = 1;
+  
+  // Total number of partitions across all topics
+  int32 total_partitions = 2;
+  
+  // Number of active engines
+  int32 active_engines = 3;
+  
+  // Per-engine distribution
+  map<string, EngineSlots> engine_distributions = 4;
+  
+  // Distribution statistics
+  DistributionStats stats = 5;
+}
+
+message EngineSlots {
+  // Engine ID
+  string engine_id = 1;
+  
+  // Number of slots assigned
+  int32 slot_count = 2;
+  
+  // Topics and partitions
+  map<string, PartitionList> topic_partitions = 3;
+  
+  // Last heartbeat time
+  google.protobuf.Timestamp last_heartbeat = 4;
+  
+  // Engine status
+  bool active = 5;
+}
+
+message PartitionList {
+  repeated int32 partitions = 1;
+}
+
+message DistributionStats {
+  // Average partitions per engine
+  double average_partitions = 1;
+  
+  // Standard deviation of distribution
+  double std_deviation = 2;
+  
+  // Imbalance ratio (max-min)/avg
+  double imbalance_ratio = 3;
+  
+  // Min partitions assigned to any engine
+  int32 min_partitions = 4;
+  
+  // Max partitions assigned to any engine
+  int32 max_partitions = 5;
+}
+
+message StreamMetricsRequest {
+  // Metrics update interval in seconds
+  int32 interval_seconds = 1;
+  
+  // Include per-topic metrics
+  bool include_topic_metrics = 2;
+  
+  // Include per-engine metrics
+  bool include_engine_metrics = 3;
+}
+
+message SlotMetrics {
+  // Timestamp of metrics
+  google.protobuf.Timestamp timestamp = 1;
+  
+  // Global metrics
+  GlobalMetrics global = 2;
+  
+  // Per-engine metrics
+  map<string, EngineMetrics> engine_metrics = 3;
+  
+  // Per-topic metrics
+  map<string, TopicMetrics> topic_metrics = 4;
+}
+
+message GlobalMetrics {
+  int32 total_slots = 1;
+  int32 assigned_slots = 2;
+  int32 available_slots = 3;
+  int32 active_engines = 4;
+  int32 total_topics = 5;
+  
+  // Rebalancing metrics
+  int64 rebalance_events_total = 6;
+  int64 slots_acquired_total = 7;
+  int64 slots_released_total = 8;
+  
+  // Health indicators
+  bool system_healthy = 9;
+  string last_error = 10;
+}
+
+message EngineMetrics {
+  string engine_id = 1;
+  int32 current_slots = 2;
+  int32 max_slots = 3;
+  int64 uptime_seconds = 4;
+  
+  // Performance metrics
+  int64 partitions_gained = 5;
+  int64 partitions_lost = 6;
+  int64 rebalance_count = 7;
+  
+  // Heartbeat metrics
+  int64 heartbeats_sent = 8;
+  int64 heartbeats_missed = 9;
+  google.protobuf.Timestamp last_heartbeat = 10;
+}
+
+message TopicMetrics {
+  string topic = 1;
+  string group_id = 2;
+  int32 partition_count = 3;
+  int32 assigned_partitions = 4;
+  int32 engines_consuming = 5;
+  
+  // Distribution metrics for this topic
+  DistributionStats distribution = 6;
+}
+
+message RebalancingHistoryRequest {
+  // Time range for history
+  google.protobuf.Timestamp start_time = 1;
+  google.protobuf.Timestamp end_time = 2;
+  
+  // Filter by engine IDs (empty = all)
+  repeated string engine_ids = 3;
+  
+  // Filter by event types (empty = all)
+  repeated RebalancingEvent.EventType event_types = 4;
+  
+  // Maximum number of events to return
+  int32 limit = 5;
+}
+
+message RebalancingHistoryResponse {
+  // Historical events in chronological order
+  repeated RebalancingEvent events = 1;
+  
+  // Whether more events exist beyond the limit
+  bool has_more = 2;
+  
+  // Summary statistics for the time period
+  HistorySummary summary = 3;
+}
+
+message HistorySummary {
+  // Total events in the time period
+  int32 total_events = 1;
+  
+  // Events by type
+  map<string, int32> events_by_type = 2;
+  
+  // Most active engines
+  repeated EngineActivity top_engines = 3;
+  
+  // Time periods with most activity
+  repeated ActivityPeriod peak_periods = 4;
+}
+
+message EngineActivity {
+  string engine_id = 1;
+  int32 event_count = 2;
+}
+
+message ActivityPeriod {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+  int32 event_count = 3;
+}

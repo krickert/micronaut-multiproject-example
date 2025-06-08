@@ -701,4 +701,129 @@ public class ConsulKafkaSlotManager implements KafkaSlotManager {
             }
         });
     }
+    
+    @Override
+    public Flux<EngineInfo> getRegisteredEngines() {
+        return Flux.defer(() -> {
+            try {
+                KeyValueClient kvClient = consul.keyValueClient();
+                List<String> engineKeys = kvClient.getKeys(ENGINE_PREFIX);
+                
+                return Flux.fromIterable(engineKeys)
+                        .filter(key -> !key.endsWith("/"))
+                        .flatMap(key -> {
+                            String engineId = key.substring(ENGINE_PREFIX.length());
+                            return getEngineInfo(engineId);
+                        });
+            } catch (Exception e) {
+                LOG.error("Failed to get registered engines", e);
+                return Flux.error(e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+    
+    @Override
+    public Mono<Map<String, List<KafkaSlot>>> getAllSlots() {
+        return Mono.defer(() -> {
+            try {
+                KeyValueClient kvClient = consul.keyValueClient();
+                List<String> slotKeys = kvClient.getKeys(SLOT_PREFIX);
+                
+                Map<String, List<KafkaSlot>> allSlots = new HashMap<>();
+                
+                for (String key : slotKeys) {
+                    if (!key.endsWith("/")) {
+                        Optional<String> value = kvClient.getValueAsString(key);
+                        if (value.isPresent()) {
+                            KafkaSlot slot = objectMapper.readValue(value.get(), KafkaSlot.class);
+                            String topicGroup = slot.getTopic() + ":" + slot.getGroupId();
+                            allSlots.computeIfAbsent(topicGroup, k -> new ArrayList<>()).add(slot);
+                        }
+                    }
+                }
+                
+                return Mono.just(allSlots);
+            } catch (Exception e) {
+                LOG.error("Failed to get all slots", e);
+                return Mono.error(e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+    
+    @Override
+    public Mono<Map<String, Integer>> getSlotDistribution() {
+        return Mono.defer(() -> {
+            try {
+                Map<String, Integer> distribution = new HashMap<>();
+                
+                // Count slots per engine from assignments
+                KeyValueClient kvClient = consul.keyValueClient();
+                List<String> assignmentKeys = kvClient.getKeys(ASSIGNMENT_PREFIX);
+                
+                for (String key : assignmentKeys) {
+                    if (!key.endsWith("/")) {
+                        String engineId = key.substring(ASSIGNMENT_PREFIX.length());
+                        Optional<String> value = kvClient.getValueAsString(key);
+                        if (value.isPresent()) {
+                            SlotAssignment assignment = objectMapper.readValue(value.get(), SlotAssignment.class);
+                            distribution.put(engineId, assignment.assignedSlots().size());
+                        }
+                    }
+                }
+                
+                return Mono.just(distribution);
+            } catch (Exception e) {
+                LOG.error("Failed to get slot distribution", e);
+                return Mono.error(e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+    
+    private Mono<EngineInfo> getEngineInfo(String engineId) {
+        return Mono.defer(() -> {
+            try {
+                KeyValueClient kvClient = consul.keyValueClient();
+                String engineKey = ENGINE_PREFIX + engineId;
+                Optional<String> engineData = kvClient.getValueAsString(engineKey);
+                
+                if (engineData.isPresent()) {
+                    EngineRegistration registration = objectMapper.readValue(engineData.get(), EngineRegistration.class);
+                    
+                    // Get current slot count
+                    String assignmentKey = ASSIGNMENT_PREFIX + engineId;
+                    Optional<String> assignmentData = kvClient.getValueAsString(assignmentKey);
+                    int currentSlots = 0;
+                    if (assignmentData.isPresent()) {
+                        SlotAssignment assignment = objectMapper.readValue(assignmentData.get(), SlotAssignment.class);
+                        currentSlots = assignment.assignedSlots().size();
+                    }
+                    
+                    // For heartbeat, we need to check the last assignment update time
+                    // since EngineRegistration only has registeredAt
+                    Instant lastHeartbeat = registration.registeredAt();
+                    if (assignmentData.isPresent()) {
+                        SlotAssignment assignment = objectMapper.readValue(assignmentData.get(), SlotAssignment.class);
+                        if (assignment.lastUpdated() != null) {
+                            lastHeartbeat = assignment.lastUpdated();
+                        }
+                    }
+                    
+                    boolean isActive = Duration.between(lastHeartbeat, Instant.now()).getSeconds() < heartbeatTimeoutSeconds;
+                    
+                    return Mono.just(new EngineInfo(
+                            engineId,
+                            registration.maxSlots(),
+                            currentSlots,
+                            lastHeartbeat,
+                            isActive
+                    ));
+                }
+                
+                return Mono.empty();
+            } catch (Exception e) {
+                LOG.error("Failed to get engine info for {}", engineId, e);
+                return Mono.error(e);
+            }
+        });
+    }
 }

@@ -3,7 +3,9 @@ package com.krickert.search.config.consul.validator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.krickert.search.config.consul.ValidationResult;
 import com.krickert.search.config.consul.schema.delegate.ConsulSchemaRegistryDelegate;
+import com.krickert.search.config.consul.service.SchemaValidationService;
 import com.krickert.search.config.pipeline.model.*;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig.JsonConfigOptions;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig.ProcessorInfo;
@@ -55,6 +57,8 @@ class CustomConfigSchemaValidatorTest {
     private Map<SchemaReference, String> schemaContentsMap; // Renamed for clarity
     @Mock
     private ConsulSchemaRegistryDelegate schemaRegistryDelegate;
+    @Mock
+    private SchemaValidationService schemaValidationService;
 
     // Helper to create ProcessorInfo for internal beans
     private ProcessorInfo internalBeanProcessor(String beanImplementationId) {
@@ -105,8 +109,23 @@ class CustomConfigSchemaValidatorTest {
             Set<ValidationMessage> messages = SchemaValidator.validateContent(jsonContent, schemaContent);
             return Mono.just(messages);
         });
+        
+        // Configure schemaValidationService to delegate to SchemaValidator
+        when(schemaValidationService.validateJson(any(JsonNode.class), any(JsonNode.class))).thenAnswer(invocation -> {
+            JsonNode jsonNode = invocation.getArgument(0);
+            JsonNode schemaNode = invocation.getArgument(1);
+            Set<ValidationMessage> messages = SchemaValidator.validateContent(jsonNode.toString(), schemaNode.toString());
+            if (messages.isEmpty()) {
+                return Mono.just(ValidationResult.valid());
+            } else {
+                List<String> errors = messages.stream()
+                        .map(ValidationMessage::getMessage)
+                        .toList();
+                return Mono.just(ValidationResult.invalid(errors));
+            }
+        });
 
-        validator = new CustomConfigSchemaValidator(objectMapper);
+        validator = new CustomConfigSchemaValidator(objectMapper, schemaValidationService);
 
         // Register test schemas with the mock schemaRegistryDelegate
         for (Map.Entry<SchemaReference, String> entry : schemaContentsMap.entrySet()) {

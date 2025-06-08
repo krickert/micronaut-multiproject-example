@@ -1,0 +1,35 @@
+micronaut:
+  application:
+    name: yappy-engine-test
+  server:
+    port: -1
+
+grpc:
+  server:
+    port: ${random.port}
+    keep-alive-time: 30s
+
+yappy:
+  cluster:
+    name: test-bootstrap-cluster
+  engine:
+    bootstrapper:
+      enabled: false  # Disable old bootstrap
+    bootstrap:
+      enabled: true   # Enable new bootstrap
+    seeding:
+      enabled: true   # Enable seeding for test
+      template: test  # Use test template
+
+consul:
+  client:
+    enabled: false  # Use in-memory implementation for test
+
+kafka:
+  enabled: false
+
+# Disable slot management for test
+app:
+  kafka:
+    slot-management:
+      enabled: false

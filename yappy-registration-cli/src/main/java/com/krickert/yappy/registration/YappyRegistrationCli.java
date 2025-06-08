@@ -31,14 +31,14 @@ public class YappyRegistrationCli implements Runnable {
         description = "Enable verbose logging",
         scope = CommandLine.ScopeType.INHERIT
     )
-    boolean verbose;
+    public boolean verbose;
     
     @Option(
         names = {"-c", "--cluster"},
         description = "Cluster name (required for most operations)",
         scope = CommandLine.ScopeType.INHERIT
     )
-    String clusterName;
+    public String clusterName;
     
     @Option(
         names = {"--consul-host"},
@@ -46,7 +46,7 @@ public class YappyRegistrationCli implements Runnable {
         defaultValue = "${CONSUL_HOST:localhost}",
         scope = CommandLine.ScopeType.INHERIT
     )
-    String consulHost;
+    public String consulHost;
     
     @Option(
         names = {"--consul-port"},
@@ -54,7 +54,7 @@ public class YappyRegistrationCli implements Runnable {
         defaultValue = "${CONSUL_PORT:8500}",
         scope = CommandLine.ScopeType.INHERIT
     )
-    int consulPort;
+    public int consulPort;
     
     public static void main(String[] args) {
         PicocliRunner.run(YappyRegistrationCli.class, args);

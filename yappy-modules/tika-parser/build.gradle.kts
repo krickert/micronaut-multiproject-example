@@ -48,7 +48,7 @@ dependencies {
 
 
 application {
-    mainClass = "com.krickert.yappy.modules.tikaparser.Application"
+    mainClass = "com.krickert.yappy.modules.tikaparser.TikaParserApplication"
 }
 java {
     sourceCompatibility = JavaVersion.toVersion("21")
@@ -83,4 +83,9 @@ tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
     isZip64 = true
     archiveBaseName.set("tika-parser")
     archiveClassifier.set("")
+}
+
+// Docker configuration for native image
+tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative") {
+    jdkVersion = "21"
 }

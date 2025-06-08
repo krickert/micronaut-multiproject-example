@@ -6,6 +6,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Manages Kafka consumer slot assignments using Consul for coordination.
@@ -109,6 +110,35 @@ public interface KafkaSlotManager {
     Mono<SlotManagerHealth> getHealth();
     
     /**
+     * Get all registered engines and their information.
+     * 
+     * @return Flux of engine information
+     */
+    Flux<EngineInfo> getRegisteredEngines();
+    
+    /**
+     * Get all slots across all topics and groups.
+     * 
+     * @return Map of topic:group to list of slots
+     */
+    Mono<Map<String, List<KafkaSlot>>> getAllSlots();
+    
+    /**
+     * Get current slot distribution across engines.
+     * 
+     * @return Map of engineId to slot count
+     */
+    Mono<Map<String, Integer>> getSlotDistribution();
+    
+    /**
+     * Clean up expired slots and engines.
+     * Used for maintenance and testing.
+     * 
+     * @return Mono indicating completion
+     */
+    Mono<Void> cleanup();
+    
+    /**
      * Health status for the slot manager.
      */
     record SlotManagerHealth(
@@ -118,5 +148,16 @@ public interface KafkaSlotManager {
             int availableSlots,
             int registeredEngines,
             String lastError
+    ) {}
+    
+    /**
+     * Information about a registered engine.
+     */
+    record EngineInfo(
+            String engineId,
+            int maxSlots,
+            int currentSlots,
+            java.time.Instant lastHeartbeat,
+            boolean active
     ) {}
 }

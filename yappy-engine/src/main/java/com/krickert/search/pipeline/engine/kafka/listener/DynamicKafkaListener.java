@@ -4,6 +4,9 @@ package com.krickert.search.pipeline.engine.kafka.listener;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.krickert.search.model.PipeStream;
 import com.krickert.search.pipeline.engine.PipeStreamEngine;
+import com.krickert.yappy.kafka.slot.KafkaSlotManager;
+import com.krickert.yappy.kafka.slot.model.KafkaSlot;
+import com.krickert.yappy.kafka.slot.model.SlotAssignment;
 import io.apicurio.registry.serde.config.SerdeConfig; // Keep for logging
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -12,26 +15,32 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Disposable;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 /**
  * A dynamic Kafka consumer that can be created, paused, resumed, and shut down at runtime.
  * <br/>
  * This class is responsible for:
- * 1. Creating and managing a Kafka consumer
- * 2. Polling for messages from a Kafka topic
- * 3. Processing messages by forwarding them to the PipeStreamEngine
- * 4. Supporting pause and resume operations
- * 5. Providing clean shutdown
+ * 1. Creating and managing a Kafka consumer with slot-based partition assignment
+ * 2. Requesting and managing partition slots through KafkaSlotManager
+ * 3. Polling for messages only from assigned partitions
+ * 4. Maintaining slot ownership through heartbeats
+ * 5. Processing messages by forwarding them to the PipeStreamEngine
+ * 6. Supporting pause and resume operations
+ * 7. Providing clean shutdown with slot release
  * <br/>
- * The DynamicKafkaListener runs in its own thread and can be paused and resumed
- * without stopping the thread.
+ * The DynamicKafkaListener runs in its own thread and integrates with KafkaSlotManager
+ * for coordinated partition assignment across multiple engine instances.
  */
 @SuppressWarnings("LombokGetterMayBeUsed")
 public class DynamicKafkaListener {
@@ -45,6 +54,16 @@ public class DynamicKafkaListener {
     private final String pipelineName;
     private final String stepName;
     private final PipeStreamEngine pipeStreamEngine;
+    
+    // Mandatory slot management
+    private final KafkaSlotManager slotManager;
+    private final String engineInstanceId;
+    private final int requestedSlots;
+    private Disposable slotWatcher;
+    private volatile Set<Integer> assignedPartitions = Collections.emptySet();
+    private volatile List<KafkaSlot> currentSlots = Collections.emptyList();
+    private final Object partitionLock = new Object();
+    private ScheduledExecutorService heartbeatExecutor;
 
     private KafkaConsumer<UUID, PipeStream> consumer;
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -52,7 +71,12 @@ public class DynamicKafkaListener {
     private final AtomicBoolean pauseRequested = new AtomicBoolean(false);
     private final AtomicBoolean resumeRequested = new AtomicBoolean(false);
     private ExecutorService executorService;
+    private static final Duration HEARTBEAT_INTERVAL = Duration.ofSeconds(30);
+    private static final Duration SLOT_REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
+    /**
+     * Constructor with mandatory slot management
+     */
     public DynamicKafkaListener(
             String listenerId,
             String topic,
@@ -61,7 +85,10 @@ public class DynamicKafkaListener {
             Map<String, String> originalConsumerPropertiesFromStep, // NEW: Pass original properties
             String pipelineName,
             String stepName,
-            PipeStreamEngine pipeStreamEngine) {
+            PipeStreamEngine pipeStreamEngine,
+            KafkaSlotManager slotManager,
+            String engineInstanceId,
+            int requestedSlots) {
 
         this.listenerId = Objects.requireNonNull(listenerId, "Listener ID cannot be null");
         this.topic = Objects.requireNonNull(topic, "Topic cannot be null");
@@ -74,6 +101,11 @@ public class DynamicKafkaListener {
         this.pipelineName = Objects.requireNonNull(pipelineName, "Pipeline name cannot be null");
         this.stepName = Objects.requireNonNull(stepName, "Step name cannot be null");
         this.pipeStreamEngine = Objects.requireNonNull(pipeStreamEngine, "PipeStreamEngine cannot be null");
+        
+        // Slot management is now mandatory
+        this.slotManager = Objects.requireNonNull(slotManager, "KafkaSlotManager cannot be null");
+        this.engineInstanceId = Objects.requireNonNull(engineInstanceId, "Engine instance ID cannot be null");
+        this.requestedSlots = Math.max(requestedSlots, 0); // 0 means as many as possible
 
         // Essential Kafka properties that are not schema-registry specific
         // These should have been added by KafkaListenerManager to finalConsumerConfig
@@ -120,6 +152,10 @@ public class DynamicKafkaListener {
 
 
         log.debug("Listener {}: Final consumer config being passed to KafkaConsumer: {}", listenerId, this.consumerConfig);
+        
+        // Don't auto-subscribe in consumer config - we'll manage partitions manually
+        this.consumerConfig.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+        
         initialize();
     }
 
@@ -138,39 +174,87 @@ public class DynamicKafkaListener {
     }
 
     private void initialize() {
+        // Create consumer but don't subscribe yet - we need slots first
         consumer = new KafkaConsumer<>(this.consumerConfig);
-        consumer.subscribe(Collections.singletonList(topic));
+        
+        // Request slots before starting
+        try {
+            log.info("Listener {}: Requesting {} slots for topic: {}, group: {}", 
+                    listenerId, requestedSlots == 0 ? "all available" : requestedSlots, topic, groupId);
+            
+            SlotAssignment assignment = slotManager.acquireSlots(engineInstanceId, topic, groupId, requestedSlots)
+                    .block(SLOT_REQUEST_TIMEOUT);
+            
+            if (assignment == null || assignment.isEmpty()) {
+                log.warn("Listener {}: No slots available for topic: {}, group: {}. Will watch for assignments.",
+                        listenerId, topic, groupId);
+                currentSlots = Collections.emptyList();
+                assignedPartitions = Collections.emptySet();
+            } else {
+                handleSlotAssignment(assignment);
+            }
+            
+            // Set up slot watcher for dynamic reassignment
+            setupSlotWatcher();
+            
+            // Set up heartbeat executor
+            heartbeatExecutor = Executors.newSingleThreadScheduledExecutor(
+                    new ThreadFactoryBuilder()
+                            .setNameFormat("kafka-listener-heartbeat-" + listenerId + "-%d")
+                            .setDaemon(true)
+                            .build());
+            
+            // Schedule heartbeat task
+            heartbeatExecutor.scheduleWithFixedDelay(
+                    this::sendHeartbeat,
+                    HEARTBEAT_INTERVAL.toSeconds(),
+                    HEARTBEAT_INTERVAL.toSeconds(),
+                    TimeUnit.SECONDS
+            );
+            
+        } catch (Exception e) {
+            log.error("Listener {}: Failed to acquire initial slots", listenerId, e);
+            throw new RuntimeException("Failed to initialize listener with slot management", e);
+        }
 
         executorService = Executors.newSingleThreadExecutor(
                 new ThreadFactoryBuilder()
-                        .setNameFormat("kafka-listener-" + listenerId + "-%d") // More specific name
+                        .setNameFormat("kafka-listener-" + listenerId + "-%d")
                         .setDaemon(true)
                         .build());
 
         running.set(true);
         executorService.submit(this::pollLoop);
 
-        log.info("Initialized Kafka listener: {} for topic: {}, group: {}",
-                listenerId, topic, groupId);
+        log.info("Initialized Kafka listener: {} for topic: {}, group: {} with {} assigned partitions",
+                listenerId, topic, groupId, assignedPartitions.size());
     }
 
     private void pollLoop() {
         try {
             while (running.get()) {
+                // Check if we have assigned partitions
+                synchronized (partitionLock) {
+                    if (assignedPartitions.isEmpty()) {
+                        log.debug("Listener {}: No partitions assigned, waiting for slot assignment", listenerId);
+                        Thread.sleep(1000); // Wait for slot assignment
+                        continue;
+                    }
+                }
+                
                 // Check if pause was requested
                 if (pauseRequested.compareAndSet(true, false)) {
                     try {
                         Set<TopicPartition> partitions = consumer.assignment();
                         if (!partitions.isEmpty()) {
                             consumer.pause(partitions);
-                            // Set the paused flag to true after actually pausing the consumer
                             paused.set(true);
                             log.info("Paused Kafka listener: {}", listenerId);
                         } else {
                             log.warn("Kafka listener {} has no assigned partitions to pause.", listenerId);
                         }
                     } catch (IllegalStateException e) {
-                        log.warn("Kafka listener {} could not be paused, possibly not subscribed or consumer closed: {}", listenerId, e.getMessage());
+                        log.warn("Kafka listener {} could not be paused: {}", listenerId, e.getMessage());
                     }
                 }
 
@@ -180,34 +264,51 @@ public class DynamicKafkaListener {
                         Set<TopicPartition> partitions = consumer.assignment();
                         if (!partitions.isEmpty()) {
                             consumer.resume(partitions);
-                            // Set the paused flag to false after actually resuming the consumer
                             paused.set(false);
                             log.info("Resumed Kafka listener: {}", listenerId);
                         } else {
                             log.warn("Kafka listener {} has no assigned partitions to resume.", listenerId);
                         }
                     } catch (IllegalStateException e) {
-                        log.warn("Kafka listener {} could not be resumed, possibly not subscribed or consumer closed: {}", listenerId, e.getMessage());
+                        log.warn("Kafka listener {} could not be resumed: {}", listenerId, e.getMessage());
                     }
                 }
 
                 if (!paused.get()) {
-                    log.debug("Listener {} is not paused, polling for records", listenerId);
+                    log.debug("Listener {} polling for records from {} partitions", listenerId, assignedPartitions.size());
                     ConsumerRecords<UUID, PipeStream> records = consumer.poll(Duration.ofMillis(100));
-                    int recordCount = records.count();
-                    if (recordCount > 0) {
-                        log.debug("Listener {} received {} records", listenerId, recordCount);
-                    }
+                    
+                    // Only process records from our assigned partitions
+                    int processedCount = 0;
                     for (ConsumerRecord<UUID, PipeStream> record : records) {
+                        synchronized (partitionLock) {
+                            if (!assignedPartitions.contains(record.partition())) {
+                                log.warn("Listener {}: Received record from unassigned partition {}. Skipping.",
+                                        listenerId, record.partition());
+                                continue;
+                            }
+                        }
+                        
                         try {
-                            log.debug("Listener {} processing record with streamId: {}", listenerId,
+                            log.debug("Listener {} processing record from partition {} with streamId: {}", 
+                                    listenerId, record.partition(),
                                     record.value() != null ? record.value().getStreamId() : "null");
                             processRecord(record);
+                            processedCount++;
                         } catch (Exception e) {
                             log.error("Error processing record from topic {}, partition {}, offset {}: {}",
                                     record.topic(), record.partition(), record.offset(), e.getMessage(), e);
-                            // Consider how to handle individual record processing errors (e.g., DLQ)
                         }
+                    }
+                    
+                    if (processedCount > 0) {
+                        log.debug("Listener {} processed {} records", listenerId, processedCount);
+                        // Commit offsets after processing
+                        consumer.commitAsync((offsets, exception) -> {
+                            if (exception != null) {
+                                log.error("Listener {}: Failed to commit offsets", listenerId, exception);
+                            }
+                        });
                     }
                 } else {
                     log.debug("Listener {} is paused, not polling for records", listenerId);
@@ -217,13 +318,12 @@ public class DynamicKafkaListener {
         } catch (InterruptedException e) {
             log.warn("Kafka listener {} poll loop interrupted.", listenerId);
             Thread.currentThread().interrupt();
-        } catch (Exception e) { // Catch other potential exceptions from poll() or consumer operations
+        } catch (Exception e) {
             log.error("Error in Kafka consumer {} poll loop: {}", listenerId, e.getMessage(), e);
-            // Consider more robust error handling, e.g., attempting to re-initialize the consumer
         } finally {
             try {
                 if (consumer != null) {
-                    consumer.close(Duration.ofSeconds(5)); // Close with a timeout
+                    consumer.close(Duration.ofSeconds(5));
                 }
             } catch (Exception e) {
                 log.error("Error closing Kafka consumer for listener {}: {}", listenerId, e.getMessage(), e);
@@ -290,17 +390,52 @@ public class DynamicKafkaListener {
 
     /**
      * Shuts down the consumer.
-     * This method stops the polling thread and closes the consumer.
+     * This method stops the polling thread, releases slots, and closes the consumer.
      */
     public void shutdown() {
-        if (running.compareAndSet(true, false)) { // Ensure shutdown logic runs only once
+        if (running.compareAndSet(true, false)) {
             log.info("Shutting down Kafka listener: {}", listenerId);
+            
+            // Stop slot watcher
+            if (slotWatcher != null && !slotWatcher.isDisposed()) {
+                slotWatcher.dispose();
+            }
+            
+            // Stop heartbeat executor
+            if (heartbeatExecutor != null) {
+                heartbeatExecutor.shutdown();
+                try {
+                    if (!heartbeatExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                        heartbeatExecutor.shutdownNow();
+                    }
+                } catch (InterruptedException e) {
+                    heartbeatExecutor.shutdownNow();
+                    Thread.currentThread().interrupt();
+                }
+            }
+            
+            // Release slots
+            synchronized (partitionLock) {
+                if (!currentSlots.isEmpty()) {
+                    try {
+                        log.info("Listener {}: Releasing {} slots", listenerId, currentSlots.size());
+                        slotManager.releaseSlots(engineInstanceId, currentSlots)
+                                .block(Duration.ofSeconds(5));
+                    } catch (Exception e) {
+                        log.error("Listener {}: Error releasing slots during shutdown", listenerId, e);
+                    }
+                    currentSlots = Collections.emptyList();
+                    assignedPartitions = Collections.emptySet();
+                }
+            }
+            
+            // Shutdown poll loop executor
             if (executorService != null) {
                 executorService.shutdown();
                 try {
                     if (!executorService.awaitTermination(5, TimeUnit.SECONDS)) {
                         executorService.shutdownNow();
-                        log.warn("Executor service for listener {} did not terminate gracefully, forced shutdown.", listenerId);
+                        log.warn("Executor service for listener {} did not terminate gracefully", listenerId);
                     }
                 } catch (InterruptedException e) {
                     executorService.shutdownNow();
@@ -308,7 +443,8 @@ public class DynamicKafkaListener {
                     log.warn("Interrupted while waiting for executor service of listener {} to terminate.", listenerId);
                 }
             }
-            log.info("Kafka listener {} shutdown process initiated.", listenerId);
+            
+            log.info("Kafka listener {} shutdown complete.", listenerId);
         }
     }
 
@@ -364,5 +500,97 @@ public class DynamicKafkaListener {
      */
     public String getStepName() {
         return stepName;
+    }
+    
+    /**
+     * Gets the currently assigned partitions.
+     *
+     * @return Set of assigned partition numbers
+     */
+    public Set<Integer> getAssignedPartitions() {
+        synchronized (partitionLock) {
+            return new HashSet<>(assignedPartitions);
+        }
+    }
+    
+    /**
+     * Gets the current slot count.
+     *
+     * @return Number of assigned slots
+     */
+    public int getSlotCount() {
+        synchronized (partitionLock) {
+            return currentSlots.size();
+        }
+    }
+    
+    /**
+     * Handle slot assignment changes.
+     */
+    private void handleSlotAssignment(SlotAssignment assignment) {
+        synchronized (partitionLock) {
+            List<KafkaSlot> topicSlots = assignment.getSlotsForTopic(topic);
+            if (topicSlots.isEmpty()) {
+                log.warn("Listener {}: No slots assigned for topic {}", listenerId, topic);
+                currentSlots = Collections.emptyList();
+                assignedPartitions = Collections.emptySet();
+                // Unassign from consumer
+                consumer.assign(Collections.emptyList());
+                return;
+            }
+            
+            currentSlots = new ArrayList<>(topicSlots);
+            Set<Integer> newPartitions = topicSlots.stream()
+                    .map(KafkaSlot::getPartition)
+                    .collect(Collectors.toSet());
+            
+            if (!newPartitions.equals(assignedPartitions)) {
+                log.info("Listener {}: Partition assignment changed from {} to {}", 
+                        listenerId, assignedPartitions, newPartitions);
+                
+                assignedPartitions = newPartitions;
+                
+                // Update consumer assignment
+                List<TopicPartition> topicPartitions = newPartitions.stream()
+                        .map(partition -> new TopicPartition(topic, partition))
+                        .collect(Collectors.toList());
+                
+                consumer.assign(topicPartitions);
+                log.info("Listener {}: Consumer assigned to partitions: {}", listenerId, topicPartitions);
+            }
+        }
+    }
+    
+    /**
+     * Set up watcher for slot assignment changes.
+     */
+    private void setupSlotWatcher() {
+        slotWatcher = slotManager.watchAssignments(engineInstanceId)
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe(
+                        this::handleSlotAssignment,
+                        error -> log.error("Listener {}: Error watching slot assignments", listenerId, error),
+                        () -> log.info("Listener {}: Slot watcher completed", listenerId)
+                );
+    }
+    
+    /**
+     * Send heartbeat for assigned slots.
+     */
+    private void sendHeartbeat() {
+        synchronized (partitionLock) {
+            if (currentSlots.isEmpty()) {
+                return;
+            }
+            
+            try {
+                log.debug("Listener {}: Sending heartbeat for {} slots", listenerId, currentSlots.size());
+                slotManager.heartbeatSlots(engineInstanceId, currentSlots)
+                        .doOnError(error -> log.error("Listener {}: Failed to send heartbeat", listenerId, error))
+                        .subscribe();
+            } catch (Exception e) {
+                log.error("Listener {}: Error sending heartbeat", listenerId, e);
+            }
+        }
     }
 }

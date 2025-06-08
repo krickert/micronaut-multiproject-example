@@ -6,7 +6,6 @@ plugins {
     id("io.micronaut.test-resources") version "4.5.3"
     id("io.micronaut.application") version "4.5.3"
     id("com.gradleup.shadow") version "8.3.6"
-    id("application")
 }
 
 group = rootProject.group
@@ -30,6 +29,7 @@ micronaut {
     testResources {
         enabled.set(true)
         inferClasspath.set(true)
+        additionalModules.add(KnownModules.TESTCONTAINERS)
         clientTimeout.set(60)
         sharedServer.set(true)
     }
@@ -75,6 +75,7 @@ dependencies {
     implementation(project(":yappy-models:protobuf-models"))
 
     testImplementation(project(":yappy-test-resources:consul-test-resource"))
+    testResourcesImplementation(mn.testcontainers.consul)
     testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
     testImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
@@ -98,6 +99,12 @@ dependencies {
     runtimeOnly("io.micronaut.discovery:micronaut-discovery-client")
     testImplementation(mn.micronaut.http.client.core)
     testImplementation(mn.micronaut.grpc.client.runtime)
+    testImplementation("io.grpc:grpc-testing")
+    // https://mvnrepository.com/artifact/io.grpc/grpc-inprocess
+    testImplementation("io.grpc:grpc-inprocess:1.73.0")
+    // Testcontainers for integration tests
+    testImplementation("org.testcontainers:testcontainers:1.20.4")
+    testImplementation("org.testcontainers:junit-jupiter:1.20.4")
     // https://mvnrepository.com/artifact/com.networknt/json-schema-validator
     implementation("com.networknt:json-schema-validator:1.5.6")
     // https://mvnrepository.com/artifact/org.jgrapht/jgrapht-core

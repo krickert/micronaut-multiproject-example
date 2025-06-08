@@ -1,0 +1,263 @@
+package com.krickert.search.engine.kafka;
+
+import com.krickert.yappy.kafka.slot.KafkaSlotManager;
+import com.krickert.yappy.kafka.slot.model.KafkaSlot;
+import com.krickert.yappy.kafka.slot.model.SlotAssignment;
+import io.micronaut.test.annotation.MockBean;
+import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import jakarta.inject.Inject;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.mockito.ArgumentCaptor;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+/**
+ * Unit tests for KafkaConsumerService.
+ */
+@MicronautTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class KafkaConsumerServiceTest {
+    
+    @Inject
+    KafkaConsumerService consumerService;
+    
+    @Inject
+    KafkaSlotManager slotManager;
+    
+    @Inject
+    KafkaMessageProcessor messageProcessor;
+    
+    @MockBean(KafkaSlotManager.class)
+    KafkaSlotManager mockSlotManager() {
+        return mock(KafkaSlotManager.class);
+    }
+    
+    @MockBean(KafkaMessageProcessor.class)
+    KafkaMessageProcessor mockMessageProcessor() {
+        return mock(KafkaMessageProcessor.class);
+    }
+    
+    @MockBean(KafkaConsumerConfiguration.class)
+    KafkaConsumerConfiguration mockConfiguration() {
+        KafkaConsumerConfiguration config = mock(KafkaConsumerConfiguration.class);
+        when(config.getBootstrapServers()).thenReturn("localhost:9092");
+        when(config.getMaxPollRecords()).thenReturn(500);
+        when(config.getMaxPollInterval()).thenReturn(Duration.ofMinutes(5));
+        when(config.getSessionTimeout()).thenReturn(Duration.ofSeconds(30));
+        when(config.getHeartbeatInterval()).thenReturn(Duration.ofSeconds(3));
+        when(config.getRequestTimeout()).thenReturn(Duration.ofSeconds(30));
+        when(config.getFetchMinBytes()).thenReturn(1);
+        when(config.getFetchMaxWait()).thenReturn(Duration.ofMillis(500));
+        when(config.isEnableAutoCommit()).thenReturn(false);
+        when(config.getIsolationLevel()).thenReturn("read_uncommitted");
+        when(config.isPauseOnError()).thenReturn(true);
+        when(config.getErrorPauseDuration()).thenReturn(Duration.ofSeconds(30));
+        return config;
+    }
+    
+    @BeforeEach
+    void setUp() {
+        reset(slotManager, messageProcessor);
+    }
+    
+    @Test
+    void testServiceStartup() {
+        // Given
+        String engineId = "test-engine-1";
+        when(slotManager.registerEngine(anyString(), anyInt()))
+                .thenReturn(Mono.empty());
+        when(slotManager.watchAssignments(anyString()))
+                .thenReturn(Flux.empty());
+        
+        // When service starts (happens automatically with @MicronautTest)
+        
+        // Then
+        verify(slotManager).registerEngine(anyString(), eq(100));
+        verify(slotManager).watchAssignments(anyString());
+        assertTrue(consumerService.isRunning());
+    }
+    
+    @Test
+    void testRequestSlots() {
+        // Given
+        String topic = "test-topic";
+        String groupId = "test-group";
+        int requestedSlots = 5;
+        
+        List<KafkaSlot> slots = createSlots(topic, groupId, 0, 5);
+        SlotAssignment assignment = new SlotAssignment(
+                "test-engine-1", 
+                slots, 
+                Instant.now(), 
+                Instant.now());
+        
+        when(slotManager.acquireSlots(anyString(), eq(topic), eq(groupId), eq(requestedSlots)))
+                .thenReturn(Mono.just(assignment));
+        
+        // When
+        StepVerifier.create(consumerService.requestSlots(topic, groupId, requestedSlots))
+                .verifyComplete();
+        
+        // Then
+        verify(slotManager).acquireSlots(anyString(), eq(topic), eq(groupId), eq(requestedSlots));
+        assertEquals(assignment, consumerService.getCurrentAssignment());
+    }
+    
+    @Test
+    void testReleaseSlots() {
+        // Given
+        String topic = "test-topic";
+        String groupId = "test-group";
+        
+        List<KafkaSlot> slots = createSlots(topic, groupId, 0, 3);
+        SlotAssignment assignment = new SlotAssignment(
+                "test-engine-1", 
+                slots, 
+                Instant.now(), 
+                Instant.now());
+        
+        // Set up initial assignment
+        when(slotManager.acquireSlots(anyString(), eq(topic), eq(groupId), anyInt()))
+                .thenReturn(Mono.just(assignment));
+        consumerService.requestSlots(topic, groupId, 3).block();
+        
+        when(slotManager.releaseSlots(anyString(), anyList()))
+                .thenReturn(Mono.empty());
+        
+        // When
+        StepVerifier.create(consumerService.releaseSlots(topic))
+                .verifyComplete();
+        
+        // Then
+        verify(slotManager).releaseSlots(anyString(), argThat(list -> 
+                list.size() == 3 && list.stream().allMatch(slot -> slot.getTopic().equals(topic))));
+    }
+    
+    @Test
+    void testHeartbeatSlots() {
+        // Given
+        String topic = "test-topic";
+        String groupId = "test-group";
+        
+        List<KafkaSlot> slots = createSlots(topic, groupId, 0, 2);
+        SlotAssignment assignment = new SlotAssignment(
+                "test-engine-1", 
+                slots, 
+                Instant.now(), 
+                Instant.now());
+        
+        // Set up initial assignment
+        when(slotManager.acquireSlots(anyString(), eq(topic), eq(groupId), anyInt()))
+                .thenReturn(Mono.just(assignment));
+        consumerService.requestSlots(topic, groupId, 2).block();
+        
+        when(slotManager.heartbeatSlots(anyString(), anyList()))
+                .thenReturn(Mono.empty());
+        
+        // When
+        consumerService.sendHeartbeats();
+        
+        // Then
+        verify(slotManager).heartbeatSlots(anyString(), eq(slots));
+    }
+    
+    @Test
+    void testAssignmentUpdate() {
+        // Given
+        String topic = "test-topic";
+        String groupId = "test-group";
+        
+        List<KafkaSlot> initialSlots = createSlots(topic, groupId, 0, 2);
+        List<KafkaSlot> updatedSlots = createSlots(topic, groupId, 0, 3);
+        
+        SlotAssignment initialAssignment = new SlotAssignment(
+                "test-engine-1", 
+                initialSlots, 
+                Instant.now(), 
+                Instant.now());
+        
+        SlotAssignment updatedAssignment = new SlotAssignment(
+                "test-engine-1", 
+                updatedSlots, 
+                Instant.now(), 
+                Instant.now());
+        
+        // Set up watch stream
+        when(slotManager.registerEngine(anyString(), anyInt()))
+                .thenReturn(Mono.empty());
+        when(slotManager.watchAssignments(anyString()))
+                .thenReturn(Flux.just(initialAssignment, updatedAssignment));
+        
+        // Start service
+        consumerService.start();
+        
+        // Give time for async processing
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        
+        // Then
+        assertEquals(updatedAssignment, consumerService.getCurrentAssignment());
+        verify(messageProcessor, atLeast(2)).onConsumerStart(eq(topic), eq(groupId), anyList());
+    }
+    
+    @Test
+    void testConsumerActiveCount() {
+        // Given
+        String topic1 = "topic-1";
+        String topic2 = "topic-2";
+        String groupId = "test-group";
+        
+        List<KafkaSlot> slots1 = createSlots(topic1, groupId, 0, 2);
+        List<KafkaSlot> slots2 = createSlots(topic2, groupId, 0, 2);
+        
+        SlotAssignment assignment = new SlotAssignment(
+                "test-engine-1",
+                List.of(slots1.get(0), slots1.get(1), slots2.get(0), slots2.get(1)),
+                Instant.now(),
+                Instant.now());
+        
+        // Set up watch stream
+        when(slotManager.registerEngine(anyString(), anyInt()))
+                .thenReturn(Mono.empty());
+        when(slotManager.watchAssignments(anyString()))
+                .thenReturn(Flux.just(assignment));
+        
+        // Start service
+        consumerService.start();
+        
+        // Give time for async processing
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        
+        // Then - should have 2 active consumers (one per topic)
+        assertEquals(2, consumerService.getActiveConsumerCount());
+    }
+    
+    private List<KafkaSlot> createSlots(String topic, String groupId, int startPartition, int count) {
+        List<KafkaSlot> slots = new java.util.ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            KafkaSlot slot = new KafkaSlot(topic, startPartition + i, groupId);
+            slot.assign("test-engine-1");
+            slots.add(slot);
+        }
+        return slots;
+    }
+}
