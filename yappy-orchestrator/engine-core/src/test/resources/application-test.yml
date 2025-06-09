@@ -40,6 +40,7 @@ health:
 logger:
   levels:
     com.krickert.search.engine.core: DEBUG
+    com.krickert.search.config.consul: DEBUG
     io.micronaut.test: DEBUG
     io.micronaut.testresources: DEBUG
     org.testcontainers: INFO
@@ -71,4 +72,4 @@ app:
       key-prefixes:
         pipeline-clusters: configs/
         schema-versions: schema-versions/
-      watch-seconds: 30
+      watch-seconds: 5

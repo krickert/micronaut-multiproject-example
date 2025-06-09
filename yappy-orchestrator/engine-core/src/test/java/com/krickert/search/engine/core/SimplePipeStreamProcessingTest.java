@@ -11,8 +11,6 @@ import com.krickert.search.config.consul.DynamicConfigurationManager;
 import com.krickert.search.config.pipeline.model.*;
 import com.krickert.search.model.*;
 import com.krickert.search.sdk.*;
-import com.krickert.search.config.pipeline.model.GrpcTransportConfig;
-import com.krickert.search.config.pipeline.model.TransportType;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.stub.StreamObserver;
@@ -25,13 +23,16 @@ import org.slf4j.LoggerFactory;
 import reactor.test.StepVerifier;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Simplified integration test for PipeStream processing through the engine.
@@ -42,7 +43,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class SimplePipeStreamProcessingTest {
     
     private static final Logger logger = LoggerFactory.getLogger(SimplePipeStreamProcessingTest.class);
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = new ObjectMapper()
+        .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+        .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     
     @Inject
     ApplicationContext applicationContext;
@@ -129,6 +132,11 @@ public class SimplePipeStreamProcessingTest {
     
     @Test
     void testCompleteDocumentProcessingPipeline() {
+        // Ensure configuration is available before test
+        var configOpt = configManager.getCurrentPipelineClusterConfig();
+        assertThat(configOpt).isPresent();
+        logger.info("Configuration available: {}", configOpt.get().clusterName());
+        
         // Create a test document
         PipeDoc document = PipeDoc.newBuilder()
             .setId("test-doc-001")
@@ -247,6 +255,9 @@ public class SimplePipeStreamProcessingTest {
     
     private void setupPipelineConfiguration() {
         try {
+            // First, register schemas in Consul
+            registerSchemasInConsul();
+            
             // Create pipeline steps
             var tikaStep = createTikaStep();
             var chunkerStep = createChunkerStep();
@@ -264,37 +275,186 @@ public class SimplePipeStreamProcessingTest {
                 pipelineSteps
             );
             
+            // Create pipeline graph config containing the pipeline
+            var pipelineGraphConfig = new PipelineGraphConfig(
+                Map.of("document-processing-pipeline", pipeline)
+            );
+            
+            // Create module configurations for the pipeline with schema references
+            var tikaModule = new PipelineModuleConfiguration(
+                "tika-parser",
+                "tika-parser",
+                new com.krickert.search.config.pipeline.model.SchemaReference("tika-parser-schema", 1),
+                null   // No custom config at module level
+            );
+            
+            var chunkerModule = new PipelineModuleConfiguration(
+                "chunker",
+                "chunker",
+                new com.krickert.search.config.pipeline.model.SchemaReference("chunker-schema", 1),
+                null
+            );
+            
+            var embedderModule = new PipelineModuleConfiguration(
+                "embedder",
+                "embedder",
+                new com.krickert.search.config.pipeline.model.SchemaReference("embedder-schema", 1),
+                null
+            );
+            
+            // Create module map
+            var moduleMap = new PipelineModuleMap(Map.of(
+                "tika-parser", tikaModule,
+                "chunker", chunkerModule,
+                "embedder", embedderModule
+            ));
+            
+            // Create cluster config
+            var clusterConfig = new PipelineClusterConfig(
+                testClusterName,
+                pipelineGraphConfig,
+                moduleMap,
+                "document-processing-pipeline",
+                Set.of(),  // No Kafka topics for this test
+                Set.of("tika-parser", "chunker", "embedder")  // gRPC services
+            );
+            
             // Store in Consul
-            String key = String.format("configs/%s/pipelines/%s", testClusterName, pipeline.name());
-            consulClient.setKVValue(key, objectMapper.writeValueAsString(pipeline));
+            String key = String.format("configs/%s", testClusterName);
+            String configJson = objectMapper.writeValueAsString(clusterConfig);
+            logger.info("Storing pipeline configuration at key: {} with content: {}", key, configJson);
+            consulClient.setKVValue(key, configJson);
+            
+            // Verify the value was stored
+            var storedValue = consulClient.getKVValue(key);
+            assertThat(storedValue.getValue()).isNotNull();
+            logger.info("Verified configuration stored in Consul");
             
             // Initialize config manager
+            logger.info("Initializing config manager for cluster: {}", testClusterName);
             configManager.initialize(testClusterName);
             
-            logger.info("Pipeline configuration setup complete");
+            // Wait for the configuration to be picked up by the watch
+            await().atMost(Duration.ofSeconds(30))
+                .pollInterval(Duration.ofMillis(500))
+                .untilAsserted(() -> {
+                    // Check if the pipeline configuration is available
+                    var loadedConfigOpt = configManager.getCurrentPipelineClusterConfig();
+                    logger.debug("Config manager returned: {}", loadedConfigOpt);
+                    assertThat(loadedConfigOpt).isPresent();
+                    
+                    var loadedConfig = loadedConfigOpt.get();
+                    assertThat(loadedConfig.clusterName()).isEqualTo(testClusterName);
+                    assertThat(loadedConfig.pipelineGraphConfig()).isNotNull();
+                    assertThat(loadedConfig.pipelineGraphConfig().pipelines())
+                        .containsKey("document-processing-pipeline");
+                });
+            
+            logger.info("Pipeline configuration setup complete and verified");
             
         } catch (Exception e) {
             throw new RuntimeException("Failed to setup pipeline configuration", e);
         }
     }
     
+    private void registerSchemasInConsul() throws Exception {
+        // Create simple test schemas for each module
+        ObjectNode tikaSchema = objectMapper.createObjectNode();
+        tikaSchema.put("$schema", "http://json-schema.org/draft-07/schema#");
+        tikaSchema.put("type", "object");
+        ObjectNode tikaProps = objectMapper.createObjectNode();
+        ObjectNode parsingOptionsSchema = objectMapper.createObjectNode();
+        parsingOptionsSchema.put("type", "object");
+        ObjectNode parsingOptionsProps = objectMapper.createObjectNode();
+        parsingOptionsProps.set("maxContentLength", objectMapper.createObjectNode().put("type", "integer"));
+        parsingOptionsProps.set("extractMetadata", objectMapper.createObjectNode().put("type", "boolean"));
+        parsingOptionsSchema.set("properties", parsingOptionsProps);
+        tikaProps.set("parsingOptions", parsingOptionsSchema);
+        tikaSchema.set("properties", tikaProps);
+        
+        ObjectNode chunkerSchema = objectMapper.createObjectNode();
+        chunkerSchema.put("$schema", "http://json-schema.org/draft-07/schema#");
+        chunkerSchema.put("type", "object");
+        ObjectNode chunkerProps = objectMapper.createObjectNode();
+        chunkerProps.set("chunk_size", objectMapper.createObjectNode().put("type", "integer"));
+        chunkerProps.set("chunk_overlap", objectMapper.createObjectNode().put("type", "integer"));
+        chunkerProps.set("source_field", objectMapper.createObjectNode().put("type", "string"));
+        chunkerProps.set("chunk_config_id", objectMapper.createObjectNode().put("type", "string"));
+        chunkerSchema.set("properties", chunkerProps);
+        
+        ObjectNode embedderSchema = objectMapper.createObjectNode();
+        embedderSchema.put("$schema", "http://json-schema.org/draft-07/schema#");
+        embedderSchema.put("type", "object");
+        ObjectNode embedderProps = objectMapper.createObjectNode();
+        embedderProps.set("model", objectMapper.createObjectNode().put("type", "string"));
+        embedderProps.set("dimension", objectMapper.createObjectNode().put("type", "integer"));
+        embedderSchema.set("properties", embedderProps);
+        
+        // Store schemas in Consul at the correct path that the system expects
+        // The system looks for schemas at schema-versions/{subject}/{version}
+        String schemaPrefix = "schema-versions/";
+        
+        // Create SchemaVersionData objects that the system expects
+        var tikaSchemaVersion = new com.krickert.search.config.schema.model.SchemaVersionData(
+            1L, // globalId
+            "tika-parser-schema", // subject
+            1, // version
+            tikaSchema.toString(), // schemaContent
+            com.krickert.search.config.schema.model.SchemaType.JSON_SCHEMA,
+            com.krickert.search.config.schema.model.SchemaCompatibility.NONE,
+            java.time.Instant.now(),
+            "Test schema for tika-parser"
+        );
+        
+        var chunkerSchemaVersion = new com.krickert.search.config.schema.model.SchemaVersionData(
+            2L, // globalId
+            "chunker-schema", // subject
+            1, // version
+            chunkerSchema.toString(), // schemaContent
+            com.krickert.search.config.schema.model.SchemaType.JSON_SCHEMA,
+            com.krickert.search.config.schema.model.SchemaCompatibility.NONE,
+            java.time.Instant.now(),
+            "Test schema for chunker"
+        );
+        
+        var embedderSchemaVersion = new com.krickert.search.config.schema.model.SchemaVersionData(
+            3L, // globalId
+            "embedder-schema", // subject
+            1, // version
+            embedderSchema.toString(), // schemaContent
+            com.krickert.search.config.schema.model.SchemaType.JSON_SCHEMA,
+            com.krickert.search.config.schema.model.SchemaCompatibility.NONE,
+            java.time.Instant.now(),
+            "Test schema for embedder"
+        );
+        
+        // Store as JSON
+        consulClient.setKVValue(schemaPrefix + "tika-parser-schema/1", objectMapper.writeValueAsString(tikaSchemaVersion));
+        consulClient.setKVValue(schemaPrefix + "chunker-schema/1", objectMapper.writeValueAsString(chunkerSchemaVersion));
+        consulClient.setKVValue(schemaPrefix + "embedder-schema/1", objectMapper.writeValueAsString(embedderSchemaVersion));
+        
+        logger.info("Registered test schemas in Consul");
+    }
+    
     private PipelineStepConfig createTikaStep() {
+        // Create valid tika configuration
         ObjectNode tikaConfig = objectMapper.createObjectNode();
-        ObjectNode parsingOptions = tikaConfig.putObject("parsingOptions");
+        ObjectNode parsingOptions = objectMapper.createObjectNode();
         parsingOptions.put("maxContentLength", -1);
         parsingOptions.put("extractMetadata", true);
+        tikaConfig.set("parsingOptions", parsingOptions);
         
         return new PipelineStepConfig(
             "tika-parser",
             StepType.PIPELINE,
             "Extract text and metadata from documents",
-            null,
+            null,  // Schema ID not needed at step level when module has schema reference
             new PipelineStepConfig.JsonConfigOptions(tikaConfig, Map.of()),
             null,
             Map.of("default", new PipelineStepConfig.OutputTarget(
                 "chunker", 
                 TransportType.GRPC,
-                new GrpcTransportConfig(null, Map.of()),
+                new GrpcTransportConfig("chunker", Map.of()),
                 null)),
             null, null, null, null, null,
             new PipelineStepConfig.ProcessorInfo("tika-parser", null)
@@ -302,6 +462,7 @@ public class SimplePipeStreamProcessingTest {
     }
     
     private PipelineStepConfig createChunkerStep() {
+        // Create valid chunker configuration
         ObjectNode chunkerConfig = objectMapper.createObjectNode();
         chunkerConfig.put("source_field", "body");
         chunkerConfig.put("chunk_size", 500);
@@ -312,13 +473,13 @@ public class SimplePipeStreamProcessingTest {
             "chunker",
             StepType.PIPELINE,
             "Split text into semantic chunks",
-            null,
+            null,  // Schema ID not needed at step level when module has schema reference
             new PipelineStepConfig.JsonConfigOptions(chunkerConfig, Map.of()),
             null,
             Map.of("default", new PipelineStepConfig.OutputTarget(
                 "embedder", 
                 TransportType.GRPC,
-                new GrpcTransportConfig(null, Map.of()),
+                new GrpcTransportConfig("embedder", Map.of()),
                 null)),
             null, null, null, null, null,
             new PipelineStepConfig.ProcessorInfo("chunker", null)
@@ -326,6 +487,7 @@ public class SimplePipeStreamProcessingTest {
     }
     
     private PipelineStepConfig createEmbedderStep() {
+        // Create valid embedder configuration
         ObjectNode embedderConfig = objectMapper.createObjectNode();
         embedderConfig.put("model", "test-embedding-model");
         embedderConfig.put("dimension", 384);
@@ -334,7 +496,7 @@ public class SimplePipeStreamProcessingTest {
             "embedder",
             StepType.SINK,
             "Generate embeddings for chunks",
-            null,
+            null,  // Schema ID not needed at step level when module has schema reference
             new PipelineStepConfig.JsonConfigOptions(embedderConfig, Map.of()),
             null,
             Map.of(),  // Final step, no outputs
@@ -385,11 +547,28 @@ public class SimplePipeStreamProcessingTest {
             Map.of("module-type", "embedding-generator")
         );
         
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        // Wait for services to be registered and discoverable
+        await().atMost(Duration.ofSeconds(5))
+            .pollInterval(Duration.ofMillis(200))
+            .untilAsserted(() -> {
+                // Check that all services are registered
+                var allServices = consulClient.getAgentServices().getValue();
+                
+                // Count services for this cluster
+                long tikaCount = allServices.values().stream()
+                    .filter(s -> s.getId().equals(testClusterName + "-tika-1"))
+                    .count();
+                long chunkerCount = allServices.values().stream()
+                    .filter(s -> s.getId().equals(testClusterName + "-chunker-1"))
+                    .count();
+                long embedderCount = allServices.values().stream()
+                    .filter(s -> s.getId().equals(testClusterName + "-embedder-1"))
+                    .count();
+                
+                assertThat(tikaCount).isEqualTo(1);
+                assertThat(chunkerCount).isEqualTo(1);
+                assertThat(embedderCount).isEqualTo(1);
+            });
     }
     
     /**

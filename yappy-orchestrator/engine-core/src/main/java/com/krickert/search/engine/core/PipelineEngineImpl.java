@@ -282,9 +282,6 @@ public class PipelineEngineImpl implements PipelineEngine {
     
     private Mono<PipelineConfig> getPipelineConfig(String pipelineName) {
         return Mono.fromCallable(() -> {
-            // Initialize config manager for cluster if not done
-            configManager.initialize(clusterName);
-            
             // Get pipeline config
             return configManager.getPipelineConfig(pipelineName)
                 .orElseThrow(() -> new IllegalStateException(
