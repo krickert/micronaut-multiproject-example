@@ -56,3 +56,19 @@ engine:
     pipeline:
       max-queue-size: 100
       worker-threads: 2
+
+# Application configuration
+app:
+  config:
+    cluster-name: test-cluster-${random.uuid}
+    cluster-configs:
+      key-prefix: configs/
+    schema-versions:
+      key-prefix: schema-versions/
+    watch:
+      seconds: 30
+    consul:
+      key-prefixes:
+        pipeline-clusters: configs/
+        schema-versions: schema-versions/
+      watch-seconds: 30

@@ -20,9 +20,20 @@ dependencies {
     implementation("io.micronaut.reactor:micronaut-reactor")
     implementation("io.projectreactor:reactor-core")
     
+    // Consul client
+    implementation("com.ecwid.consul:consul-api:1.4.5")
+    
+    // gRPC dependencies
+    implementation("io.micronaut.grpc:micronaut-grpc-client-runtime")
+    implementation("io.grpc:grpc-stub")
+    implementation("io.grpc:grpc-protobuf")
+    implementation("javax.annotation:javax.annotation-api")
+    implementation("com.google.protobuf:protobuf-java-util:3.24.4")
+    
     // Project dependencies
     api(project(":yappy-models:protobuf-models"))
     api(project(":yappy-models:pipeline-config-models"))
+    implementation(project(":yappy-consul-config"))
     
     // Utility dependencies
     implementation(libs.guava)
