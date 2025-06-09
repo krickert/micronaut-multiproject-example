@@ -1,0 +1,68 @@
+micronaut:
+  application:
+    name: engine-core-glue-test
+  config-client:
+    enabled: false
+
+# Consul configuration for test environment
+consul:
+  client:
+    registration:
+      enabled: false  # Disable auto-registration in tests
+    discovery:
+      enabled: true
+  config:
+    enabled: true
+    format: YAML
+
+# Kafka configuration for test environment with Glue Schema Registry
+kafka:
+  enabled: true
+  schema:
+    registry:
+      type: glue  # Use AWS Glue Schema Registry instead of Apicurio
+  consumers:
+    default:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+  producers:
+    default:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer
+      acks: all
+      retries: 3
+
+# AWS configuration for Glue Schema Registry (will be mocked by Moto)
+aws:
+  region: us-east-1
+  # Moto test resource will inject the endpoint
+
+# Health check configuration for tests
+health:
+  enabled: true
+  sensitive: false
+
+# Logging configuration for tests
+logger:
+  levels:
+    com.krickert.search.engine.core: DEBUG
+    io.micronaut.test: DEBUG
+    io.micronaut.testresources: DEBUG
+    org.testcontainers: INFO
+    com.amazonaws: INFO
+    software.amazon.awssdk: INFO
+
+# Mock configurations for testing
+engine:
+  core:
+    # Use mock implementations in test environment when needed
+    use-mock-service-discovery: false
+    health-check:
+      initial-delay: 1s
+      interval: 5s
+      timeout: 3s
+    pipeline:
+      max-queue-size: 100
+      worker-threads: 2

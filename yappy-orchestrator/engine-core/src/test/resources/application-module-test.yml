@@ -1,0 +1,57 @@
+micronaut:
+  application:
+    name: engine-core-module-test
+  server:
+    port: -1
+
+# Configure test containers for module services
+test-resources:
+  containers:
+    chunker:
+      image-name: com.krickert.search/chunker:latest
+      hostnames:
+        - chunker.host
+      exposed-ports:
+        - chunker.grpc.port: 50051
+        - chunker.http.port: 8080
+      wait-strategy:
+        log:
+          regex: ".*Server Started.*"
+        port:
+      startup-timeout: 60s
+      env:
+        - GRPC_SERVER_PORT: "50051"
+        - MICRONAUT_SERVER_PORT: "8080"
+    tika-parser:
+      image-name: com.krickert.search/tika-parser:latest
+      hostnames:
+        - tika.host
+      exposed-ports:
+        - tika.grpc.port: 50051
+        - tika.http.port: 8080
+      wait-strategy:
+        log:
+          regex: ".*Server Started.*"
+        port:
+      startup-timeout: 60s
+      env:
+        - GRPC_SERVER_PORT: "50051"
+        - MICRONAUT_SERVER_PORT: "8080"
+
+# gRPC client configuration will be injected from test containers
+grpc:
+  client:
+    chunker:
+      address: "${chunker.host}:${chunker.grpc.port}"
+      plaintext: true
+    tika:
+      address: "${tika.host}:${tika.grpc.port}"
+      plaintext: true
+
+# Logging
+logger:
+  levels:
+    io.micronaut.test: DEBUG
+    com.krickert.search.engine.core: DEBUG
+    io.micronaut.testresources: DEBUG
+    org.testcontainers: INFO

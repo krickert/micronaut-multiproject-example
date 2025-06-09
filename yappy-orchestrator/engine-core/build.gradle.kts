@@ -57,25 +57,48 @@ dependencies {
     testImplementation(mn.micronaut.kafka)
     testImplementation("org.apache.kafka:kafka-clients")
     
+    // gRPC support for module integration tests
+    testImplementation("io.micronaut.grpc:micronaut-grpc-client-runtime")
+    testImplementation("io.grpc:grpc-stub")
+    testImplementation("io.grpc:grpc-protobuf")
+    testImplementation("javax.annotation:javax.annotation-api")
+    
+    // Consul client for service discovery tests
+    testImplementation("com.ecwid.consul:consul-api:1.4.5")
+    
     // Project test resources - handle both root project and standalone builds
     if (rootProject.name == "yappy-platform-build") {
         // Building from root project
         testImplementation(project(":yappy-test-resources:consul-test-resource"))
         testImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
+        testImplementation(project(":yappy-test-resources:apicurio-test-resource"))
+        testImplementation(project(":yappy-test-resources:moto-test-resource"))
         testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
         testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
+        testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
+        testResourcesImplementation(project(":yappy-test-resources:moto-test-resource"))
     } else {
         // Building from yappy-orchestrator directory
         testImplementation("com.krickert.search:consul-test-resource")
         testImplementation("com.krickert.search:apache-kafka-test-resource")
+        testImplementation("com.krickert.search:apicurio-test-resource")
+        testImplementation("com.krickert.search:moto-test-resource")
         testResourcesImplementation("com.krickert.search:consul-test-resource")
         testResourcesImplementation("com.krickert.search:apache-kafka-test-resource")
+        testResourcesImplementation("com.krickert.search:apicurio-test-resource")
+        testResourcesImplementation("com.krickert.search:moto-test-resource")
     }
 }
 
 java {
     sourceCompatibility = JavaVersion.toVersion("21")
     targetCompatibility = JavaVersion.toVersion("21")
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
+    // Disable CDS to prevent JVM crashes
+    jvmArgs("-XX:+UnlockDiagnosticVMOptions", "-XX:-UseSharedSpaces", "-Xshare:off")
 }
 
 micronaut {
@@ -86,5 +109,6 @@ micronaut {
     testResources {
         enabled = true
         sharedServer = true
+        clientTimeout = 60
     }
 }
