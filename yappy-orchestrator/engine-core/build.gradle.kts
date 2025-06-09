@@ -50,6 +50,9 @@ dependencies {
     testImplementation(mn.mockito.core)
     testImplementation("io.projectreactor:reactor-test")
     
+    // Module registration for integration tests
+    testImplementation(project(":yappy-module-registration"))
+    
     // Test resources support
     testImplementation("io.micronaut.testresources:micronaut-test-resources-client")
     

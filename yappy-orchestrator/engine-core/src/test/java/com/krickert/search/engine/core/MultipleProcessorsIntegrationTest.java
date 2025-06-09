@@ -1,7 +1,8 @@
 package com.krickert.search.engine.core;
 
 import com.ecwid.consul.v1.ConsulClient;
-import com.ecwid.consul.v1.agent.model.NewService;
+import io.micronaut.context.annotation.Property;
+import com.krickert.yappy.registration.RegistrationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.protobuf.Timestamp;
@@ -14,13 +15,8 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.DockerComposeContainer;
-import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.test.StepVerifier;
 
-import java.io.File;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -33,9 +29,7 @@ import static org.awaitility.Awaitility.await;
  * Integration test demonstrating multiple processors with different configurations.
  * This test runs real Docker containers for tika-parser, two chunkers, and two embedders.
  */
-@MicronautTest
-@Testcontainers
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@MicronautTest(environments = "multiprocessor")
 @Tag("integration")
 public class MultipleProcessorsIntegrationTest {
 
@@ -44,17 +38,6 @@ public class MultipleProcessorsIntegrationTest {
         .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
         .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-    @Container
-    private static final DockerComposeContainer<?> environment = 
-        new DockerComposeContainer<>(new File("docker-compose-integration-test.yml"))
-            .withExposedService("consul", 8500, Wait.forHealthcheck())
-            .withExposedService("tika-parser", 50053, Wait.forHealthcheck())
-            .withExposedService("chunker-small", 50054, Wait.forHealthcheck())
-            .withExposedService("chunker-large", 50055, Wait.forHealthcheck())
-            .withExposedService("embedder-minilm", 50056, Wait.forHealthcheck())
-            .withExposedService("embedder-multilingual", 50057, Wait.forHealthcheck())
-            .withLocalCompose(true)
-            .withOptions("--compatibility");
 
     @Inject
     ApplicationContext applicationContext;
@@ -62,25 +45,26 @@ public class MultipleProcessorsIntegrationTest {
     @Inject
     DynamicConfigurationManager configManager;
     
-    private ConsulClient consulClient;
-    private String testClusterName;
+    @Inject
+    ConsulClient consulClient;
+    
+    @Property(name = "grpc.server.port")
+    Integer engineGrpcPort;
+    
     private PipelineEngineImpl pipelineEngine;
 
-    @BeforeAll
+    
+    @Property(name = "app.config.cluster-name")
+    String clusterName;
+    
+    @BeforeEach
     void setup() throws Exception {
-        // Wait for all services to be healthy
-        Thread.sleep(10000); // Give services time to start
+        // Services should already be running thanks to Test Resources
         
-        // Get Consul connection details
-        String consulHost = environment.getServiceHost("consul", 8500);
-        Integer consulPort = environment.getServicePort("consul", 8500);
-        consulClient = new ConsulClient(consulHost, consulPort);
+        // Use the cluster name from configuration
         
-        // Create test cluster
-        testClusterName = TestClusterHelper.createTestCluster("multi-processor-test");
-        
-        // Wait for services to register themselves in Consul
-        waitForServicesToRegister();
+        // Register all modules using the engine's registration service
+        registerModulesWithEngine();
         
         // Setup pipeline configuration in Consul
         setupPipelineConfiguration();
@@ -89,7 +73,7 @@ public class MultipleProcessorsIntegrationTest {
         pipelineEngine = new PipelineEngineImpl(
             consulClient, 
             configManager,
-            testClusterName,
+            clusterName,
             true,  // Enable buffer
             100,   // Capacity
             3,     // Precision
@@ -97,14 +81,14 @@ public class MultipleProcessorsIntegrationTest {
         );
     }
 
-    @AfterAll
+    @AfterEach
     void cleanup() {
         if (pipelineEngine != null) {
             pipelineEngine.shutdown();
         }
         
-        if (consulClient != null && testClusterName != null) {
-            TestClusterHelper.cleanupTestCluster(consulClient, testClusterName);
+        if (consulClient != null && clusterName != null) {
+            TestClusterHelper.cleanupTestCluster(consulClient, clusterName);
         }
     }
 
@@ -160,31 +144,36 @@ public class MultipleProcessorsIntegrationTest {
         logger.info("Multi-processor pipeline test completed successfully");
     }
 
-    private void waitForServicesToRegister() {
-        await().atMost(Duration.ofSeconds(30))
-            .pollInterval(Duration.ofSeconds(1))
-            .untilAsserted(() -> {
-                var services = consulClient.getAgentServices().getValue();
-                
-                // Check for all required services
-                assertThat(services.values().stream()
-                    .anyMatch(s -> s.getService().equals("tika-parser")))
-                    .isTrue();
-                assertThat(services.values().stream()
-                    .anyMatch(s -> s.getService().equals("chunker-small")))
-                    .isTrue();
-                assertThat(services.values().stream()
-                    .anyMatch(s -> s.getService().equals("chunker-large")))
-                    .isTrue();
-                assertThat(services.values().stream()
-                    .anyMatch(s -> s.getService().equals("embedder-minilm")))
-                    .isTrue();
-                assertThat(services.values().stream()
-                    .anyMatch(s -> s.getService().equals("embedder-multilingual")))
-                    .isTrue();
-            });
+    private void registerModulesWithEngine() {
+        // Create registration service
+        RegistrationService registrationService = new RegistrationService();
         
-        logger.info("All services registered in Consul");
+        // Engine endpoint
+        String engineEndpoint = "localhost:" + engineGrpcPort;
+        logger.info("Registering modules with engine at {}", engineEndpoint);
+        
+        // Get container host/port information from test resources
+        String tikaHost = applicationContext.getProperty("tika-parser.host", String.class).orElse("localhost");
+        Integer tikaPort = applicationContext.getProperty("tika-parser.grpc.port", Integer.class).orElse(50053);
+        registrationService.registerModule(tikaHost, tikaPort, engineEndpoint, "tika-parser-1", "GRPC", "grpc.health.v1.Health/Check", "1.0.0");
+        
+        String chunkerSmallHost = applicationContext.getProperty("chunker-small.host", String.class).orElse("localhost");
+        Integer chunkerSmallPort = applicationContext.getProperty("chunker-small.grpc.port", Integer.class).orElse(50054);
+        registrationService.registerModule(chunkerSmallHost, chunkerSmallPort, engineEndpoint, "chunker-small-1", "GRPC", "grpc.health.v1.Health/Check", "1.0.0");
+        
+        String chunkerLargeHost = applicationContext.getProperty("chunker-large.host", String.class).orElse("localhost");
+        Integer chunkerLargePort = applicationContext.getProperty("chunker-large.grpc.port", Integer.class).orElse(50055);
+        registrationService.registerModule(chunkerLargeHost, chunkerLargePort, engineEndpoint, "chunker-large-1", "GRPC", "grpc.health.v1.Health/Check", "1.0.0");
+        
+        String embedderMinilmHost = applicationContext.getProperty("embedder-minilm.host", String.class).orElse("localhost");
+        Integer embedderMinilmPort = applicationContext.getProperty("embedder-minilm.grpc.port", Integer.class).orElse(50056);
+        registrationService.registerModule(embedderMinilmHost, embedderMinilmPort, engineEndpoint, "embedder-minilm-1", "GRPC", "grpc.health.v1.Health/Check", "1.0.0");
+        
+        String embedderMultilingualHost = applicationContext.getProperty("embedder-multilingual.host", String.class).orElse("localhost");
+        Integer embedderMultilingualPort = applicationContext.getProperty("embedder-multilingual.grpc.port", Integer.class).orElse(50057);
+        registrationService.registerModule(embedderMultilingualHost, embedderMultilingualPort, engineEndpoint, "embedder-multilingual-1", "GRPC", "grpc.health.v1.Health/Check", "1.0.0");
+        
+        logger.info("All modules registered with engine successfully");
     }
 
     private void setupPipelineConfiguration() throws Exception {
@@ -231,7 +220,7 @@ public class MultipleProcessorsIntegrationTest {
         
         // Create cluster config
         var clusterConfig = new PipelineClusterConfig(
-            testClusterName,
+            clusterName,
             pipelineGraphConfig,
             moduleMap,
             "multi-processor-pipeline",
@@ -240,19 +229,19 @@ public class MultipleProcessorsIntegrationTest {
         );
         
         // Store in Consul
-        String key = String.format("configs/%s", testClusterName);
+        String key = String.format("configs/%s", clusterName);
         String configJson = objectMapper.writeValueAsString(clusterConfig);
         consulClient.setKVValue(key, configJson);
         
         // Initialize config manager
-        configManager.initialize(testClusterName);
+        configManager.initialize(clusterName);
         
         // Wait for configuration to be loaded
         await().atMost(Duration.ofSeconds(10))
             .untilAsserted(() -> {
                 var config = configManager.getCurrentPipelineClusterConfig();
                 assertThat(config).isPresent();
-                assertThat(config.get().clusterName()).isEqualTo(testClusterName);
+                assertThat(config.get().clusterName()).isEqualTo(clusterName);
             });
         
         logger.info("Pipeline configuration setup complete");

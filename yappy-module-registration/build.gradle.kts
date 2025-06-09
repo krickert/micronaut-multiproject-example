@@ -1,6 +1,7 @@
 plugins {
     id("io.micronaut.application") version "4.5.3"
     id("com.gradleup.shadow") version "8.3.6"
+    id("io.micronaut.test-resources") version "4.5.3"
 }
 
 version = "1.0.0-SNAPSHOT"
@@ -54,6 +55,12 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-api")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
     testImplementation("org.mockito:mockito-core")
+    
+    // Test Resources support
+    testImplementation(project(":yappy-test-resources:consul-test-resource"))
+    
+    // Consul client for verification in tests
+    testImplementation("com.ecwid.consul:consul-api:1.4.5")
 }
 
 application {
@@ -81,6 +88,9 @@ micronaut {
     processing {
         incremental(true)
         annotations("com.krickert.yappy.registration.*")
+    }
+    testResources {
+        sharedServer = true
     }
 }
 

@@ -142,8 +142,8 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
                                  String pipeStepName) {
         boolean chunksProcessed = false;
 
-        // Clear existing semantic results - we'll replace them with ones that have embeddings
-        outputDocBuilder.clearSemanticResults();
+        // DO NOT clear existing semantic results - we want to ADD new ones with embeddings
+        // This allows multiple embedders to run in sequence, each adding their own embeddings
 
         // Process each semantic result
         for (int i = 0; i < inputDoc.getSemanticResultsCount(); i++) {

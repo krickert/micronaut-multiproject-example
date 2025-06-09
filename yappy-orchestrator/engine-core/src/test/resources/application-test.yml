@@ -1,3 +1,22 @@
+# IMPORTANT: Test Resources Configuration Notes
+# ===========================================
+# Test Resources automatically provides these services:
+# - Consul (via consul-test-resource)
+# - Kafka (via kafka-test-resource)
+# - Apicurio Schema Registry (via apicurio-test-resource)
+# - Moto (AWS mock, via moto-test-resource)
+# - OpenSearch (via opensearch3-test-resource)
+#
+# DO NOT:
+# - Define containers for these services in test-resources.containers
+# - Set host/port properties for these services (they are auto-injected)
+# - Set consul.client.enabled: false (it prevents bean creation)
+#
+# DO:
+# - Only define containers for your custom test modules
+# - Use ${property.name} placeholders for auto-injected properties
+# - Disable registration/discovery features that aren't needed in tests
+
 micronaut:
   application:
     name: engine-core-test
@@ -7,15 +26,18 @@ micronaut:
 # Consul configuration for test environment
 consul:
   client:
+    # IMPORTANT: DO NOT set enabled: false here
+    # Test Resources provides consul.client.host and consul.client.port automatically
     registration:
-      enabled: false  # Disable auto-registration in tests
+      enabled: true  # NOTE: if you make this false, stop coding and learn about consul because you are going to break everything.
     discovery:
-      enabled: true
+      enabled: true # Note: if you try to make this false, stop coding beucase you are "fixing" something wrong.
   config:
     enabled: true
     format: YAML
 
 # Kafka configuration for test environment
+# IMPORTANT: kafka.bootstrap.servers is automatically provided by Test Resources
 kafka:
   enabled: true
   consumers:

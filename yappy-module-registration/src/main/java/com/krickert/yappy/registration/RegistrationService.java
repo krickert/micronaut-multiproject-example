@@ -6,7 +6,7 @@ import com.krickert.search.sdk.ServiceRegistrationData;
 import com.krickert.yappy.registration.api.HealthCheckType;
 import com.krickert.yappy.registration.api.RegisterModuleRequest;
 import com.krickert.yappy.registration.api.RegisterModuleResponse;
-import com.krickert.yappy.registration.api.YappyModuleRegistrationServiceGrpc;
+import com.krickert.yappy.registration.api.ModuleRegistrationServiceGrpc;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
@@ -55,8 +55,8 @@ public class RegistrationService {
                     .build();
             
             try {
-                YappyModuleRegistrationServiceGrpc.YappyModuleRegistrationServiceBlockingStub engineStub =
-                        YappyModuleRegistrationServiceGrpc.newBlockingStub(engineChannel);
+                ModuleRegistrationServiceGrpc.ModuleRegistrationServiceBlockingStub engineStub =
+                        ModuleRegistrationServiceGrpc.newBlockingStub(engineChannel);
                 
                 // Build registration request
                 RegisterModuleRequest.Builder requestBuilder = RegisterModuleRequest.newBuilder()

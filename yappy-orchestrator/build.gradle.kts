@@ -33,6 +33,10 @@ dependencies {
     implementation(project(":yappy-orchestrator:engine-grpc"))
     implementation(project(":yappy-orchestrator:engine-config"))
 
+    // gRPC dependencies
+    implementation(mn.micronaut.grpc.server.runtime)
+    implementation("io.grpc:grpc-services")
+    
     // Implementation dependencies
     implementation(mn.micrometer.context.propagation)
     implementation(mn.micronaut.discovery.core)

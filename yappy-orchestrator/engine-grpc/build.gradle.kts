@@ -16,8 +16,13 @@ dependencies {
     implementation(project(":yappy-orchestrator:engine-core"))
     implementation(project(":yappy-orchestrator:engine-registration"))
     implementation(project(":yappy-orchestrator:engine-pipeline"))
+    implementation(project(":yappy-models:protobuf-models"))
     implementation(mn.micronaut.inject)
     implementation(mn.micronaut.context)
+    
+    // Consul dependencies
+    implementation(mn.micronaut.discovery.client)
+    implementation("com.ecwid.consul:consul-api:1.4.5")
     
     // gRPC dependencies
     implementation(mn.micronaut.grpc.runtime)

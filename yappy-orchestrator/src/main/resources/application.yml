@@ -20,3 +20,11 @@ micronaut:
         paths: classpath:META-INF/swagger/views/openapi-explorer
         mapping: /openapi-explorer/**
 consul.client.registration.enabled: true
+
+# Enable gRPC server for module registration
+grpc:
+  server:
+    enabled: true
+    port: ${grpc.server.port:50051}
+    keep-alive-time: 3h
+    max-inbound-message-size: 10485760  # 10MB

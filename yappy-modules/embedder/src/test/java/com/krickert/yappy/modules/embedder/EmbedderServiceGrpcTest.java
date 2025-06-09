@@ -98,17 +98,22 @@ public class EmbedderServiceGrpcTest {
         assertNotNull(outputDoc);
 
         // Verify that we have semantic results with embeddings
-        assertTrue(outputDoc.getSemanticResultsCount() > 0);
+        // With the new behavior, we keep the original and add new ones with embeddings
+        assertEquals(2, outputDoc.getSemanticResultsCount(), "Should have original + embedded result");
 
-        // Verify that the chunks have embeddings
-        SemanticProcessingResult result = outputDoc.getSemanticResults(0);
+        // The first result is the original without embeddings
+        SemanticProcessingResult originalResult = outputDoc.getSemanticResults(0);
+        assertEquals("", originalResult.getEmbeddingConfigId(), "Original result should not have embedding config");
+        
+        // The second result should have embeddings
+        SemanticProcessingResult embeddedResult = outputDoc.getSemanticResults(1);
+        assertEquals(EmbeddingModel.ALL_MINILM_L6_V2.name(), embeddedResult.getEmbeddingConfigId());
 
-        // Verify that each chunk has embeddings
-        for (SemanticChunk chunk : result.getChunksList()) {
+        // Verify that each chunk has embeddings in the embedded result
+        for (SemanticChunk chunk : embeddedResult.getChunksList()) {
             ChunkEmbedding embedding = chunk.getEmbeddingInfo();
-            assertTrue(embedding.getVectorCount() > 0);
+            assertTrue(embedding.getVectorCount() > 0, "Chunks in embedded result should have vectors");
         }
-        assertEquals(EmbeddingModel.ALL_MINILM_L6_V2.name(), result.getEmbeddingConfigId());
 
     }
 
