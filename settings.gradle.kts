@@ -69,10 +69,10 @@ include(
     // Modules - needed for container builds
     "yappy-modules:tika-parser",
     "yappy-modules:chunker",
+    "yappy-modules:embedder",
 
     // TODO: Add these back after engine is updated
     // "yappy-modules:echo",
-    // "yappy-modules:embedder",
     // "yappy-modules:s3-connector",
     // "yappy-modules:opensearch-sink",
     // "yappy-modules:yappy-connector-test-server"

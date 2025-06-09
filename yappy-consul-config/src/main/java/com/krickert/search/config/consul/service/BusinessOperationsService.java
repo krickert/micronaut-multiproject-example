@@ -256,4 +256,49 @@ public interface BusinessOperationsService {
      * @return a Mono indicating completion
      */
     Mono<Void> cleanupTestResources(Iterable<String> clusterNames, Iterable<String> schemaSubjects, Iterable<String> serviceIds);
+    
+    // --- Cluster Management Operations ---
+    
+    /**
+     * Creates a new cluster with the given name and optional metadata.
+     * This is useful for test setup or cluster initialization.
+     * 
+     * @param clusterName the name of the cluster to create
+     * @param metadata optional metadata to associate with the cluster
+     * @return a Mono that completes with true if successful
+     */
+    Mono<Boolean> createCluster(String clusterName, Map<String, String> metadata);
+    
+    /**
+     * Sets the active cluster ID for the current context.
+     * This is used to specify which cluster configuration should be active.
+     * 
+     * @param clusterId the ID of the cluster to set as active
+     * @return a Mono that completes with true if successful
+     */
+    Mono<Boolean> setActiveCluster(String clusterId);
+    
+    /**
+     * Gets the currently active cluster ID.
+     * 
+     * @return a Mono emitting the active cluster ID, or empty if none is set
+     */
+    Mono<Optional<String>> getActiveCluster();
+    
+    /**
+     * Stores metadata for a specific cluster.
+     * 
+     * @param clusterName the name of the cluster
+     * @param metadata the metadata to store
+     * @return a Mono that completes with true if successful
+     */
+    Mono<Boolean> storeClusterMetadata(String clusterName, Map<String, String> metadata);
+    
+    /**
+     * Retrieves metadata for a specific cluster.
+     * 
+     * @param clusterName the name of the cluster
+     * @return a Mono emitting the cluster metadata, or empty map if none exists
+     */
+    Mono<Map<String, String>> getClusterMetadata(String clusterName);
 }

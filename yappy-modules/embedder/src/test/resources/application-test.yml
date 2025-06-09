@@ -1,0 +1,23 @@
+micronaut:
+  application:
+    name: embedder
+grpc:
+  server:
+    port: ${random.port}
+  client:
+    plaintext: true
+    discovery:
+      enabled: true
+
+# Test configuration for vectorizers
+vectorizer:
+  default:
+    model: ALL_MINILM_L6_V2
+    pool-size: 2
+    query-prefix: "query: "
+    document-prefix: "passage: "
+  multilingual:
+    model: PARAPHRASE_MULTILINGUAL_MINILM_L12_V2
+    pool-size: 1
+    query-prefix: "query: "
+    document-prefix: "passage: "

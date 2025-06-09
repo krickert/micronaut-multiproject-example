@@ -546,4 +546,88 @@ public class ConsulBusinessOperationsService implements BusinessOperationsServic
                 .doOnSuccess(v -> LOG.info("Test resources cleanup completed."))
                 .doOnError(e -> LOG.error("Error during test resources cleanup.", e));
     }
+    
+    // --- Cluster Management Operations ---
+    
+    @Override
+    public Mono<Boolean> createCluster(String clusterName, Map<String, String> metadata) {
+        validateClusterName(clusterName);
+        String clusterMetadataKey = getClusterMetadataKey(clusterName);
+        
+        Map<String, String> clusterInfo = new java.util.HashMap<>();
+        clusterInfo.put("clusterName", clusterName);
+        clusterInfo.put("createdAt", java.time.Instant.now().toString());
+        clusterInfo.put("status", "active");
+        
+        if (metadata != null) {
+            clusterInfo.putAll(metadata);
+        }
+        
+        LOG.info("Creating cluster '{}' with metadata: {}", clusterName, clusterInfo);
+        return putValue(clusterMetadataKey, clusterInfo);
+    }
+    
+    @Override
+    public Mono<Boolean> setActiveCluster(String clusterId) {
+        validateClusterName(clusterId);
+        String activeClusterKey = "active-cluster";
+        LOG.info("Setting active cluster to: {}", clusterId);
+        return putValue(activeClusterKey, clusterId);
+    }
+    
+    @Override
+    public Mono<Optional<String>> getActiveCluster() {
+        String activeClusterKey = "active-cluster";
+        LOG.debug("Getting active cluster from key: {}", activeClusterKey);
+        return consulKvService.getValue(activeClusterKey)
+            .map(optValue -> optValue.map(String::trim))
+            .onErrorResume(e -> {
+                LOG.error("Error getting active cluster", e);
+                return Mono.just(Optional.empty());
+            });
+    }
+    
+    @Override
+    public Mono<Boolean> storeClusterMetadata(String clusterName, Map<String, String> metadata) {
+        validateClusterName(clusterName);
+        Objects.requireNonNull(metadata, "Metadata cannot be null");
+        String clusterMetadataKey = getClusterMetadataKey(clusterName);
+        LOG.info("Storing metadata for cluster '{}': {}", clusterName, metadata);
+        return putValue(clusterMetadataKey, metadata);
+    }
+    
+    @Override
+    public Mono<Map<String, String>> getClusterMetadata(String clusterName) {
+        validateClusterName(clusterName);
+        String clusterMetadataKey = getClusterMetadataKey(clusterName);
+        LOG.debug("Getting metadata for cluster '{}' from key: {}", clusterName, clusterMetadataKey);
+        
+        return consulKvService.getValue(clusterMetadataKey)
+            .flatMap(optJson -> {
+                if (optJson.isPresent()) {
+                    try {
+                        Map<String, String> metadata = objectMapper.readValue(
+                            optJson.get(), 
+                            new TypeReference<Map<String, String>>() {}
+                        );
+                        return Mono.just(metadata);
+                    } catch (IOException e) {
+                        LOG.error("Failed to deserialize cluster metadata for '{}': {}", clusterName, e.getMessage());
+                        return Mono.just(Collections.<String, String>emptyMap());
+                    }
+                }
+                LOG.debug("No metadata found for cluster '{}'", clusterName);
+                return Mono.just(Collections.<String, String>emptyMap());
+            })
+            .onErrorResume(e -> {
+                LOG.error("Error getting cluster metadata for '{}': {}", clusterName, e.getMessage());
+                return Mono.just(Collections.<String, String>emptyMap());
+            });
+    }
+    
+    private String getClusterMetadataKey(String clusterName) {
+        // Store cluster metadata under a dedicated path
+        String prefix = "cluster-metadata/";
+        return prefix + clusterName;
+    }
 }

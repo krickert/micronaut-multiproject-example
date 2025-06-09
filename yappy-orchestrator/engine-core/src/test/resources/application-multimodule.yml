@@ -1,0 +1,77 @@
+micronaut:
+  application:
+    name: engine-core-test
+  test:
+    resources:
+      server:
+        client:
+          read-timeout: 300s  # 5 minutes timeout for test resources
+
+# Configure test resources for containers
+test-resources:
+  enabled: true
+  containers:
+    # Tika parser service
+    tika-parser:
+      image-name: tika-parser:latest
+      hostnames:
+        - tika.host
+      exposed-ports:
+        - tika.grpc.port: 50051
+      wait-strategy:
+        port:  # Just wait for the port to be available
+      startup-timeout: 120s
+
+    # First chunker - small chunks configuration
+    chunker-small:
+      image-name: chunker:latest
+      hostnames:
+        - chunker.small.host
+      exposed-ports:
+        - chunker.small.grpc.port: 50051
+      env:
+        CHUNKER_DEFAULT_SIZE: "300"
+        CHUNKER_DEFAULT_OVERLAP: "30"
+      wait-strategy:
+        port:
+      startup-timeout: 120s
+
+    # Second chunker - large chunks configuration
+    chunker-large:
+      image-name: chunker:latest
+      hostnames:
+        - chunker.large.host
+      exposed-ports:
+        - chunker.large.grpc.port: 50051
+      env:
+        CHUNKER_DEFAULT_SIZE: "1000"
+        CHUNKER_DEFAULT_OVERLAP: "200"
+      wait-strategy:
+        port:
+      startup-timeout: 120s
+
+    # Single embedder instance that supports multiple models
+    embedder:
+      image-name: embedder:latest
+      hostnames:
+        - embedder.host
+      exposed-ports:
+        - embedder.grpc.port: 50051
+      env:
+        JAVA_OPTS: "-Xmx4g -Xms1g"  # Give embedder 4GB max heap
+      wait-strategy:
+        port:
+          port: 50051
+      startup-timeout: 300s  # Embedder may take longer to start due to model loading
+      # Add resource limits for the container
+      labels:
+        memory: "5g"  # Total container memory limit
+        memory-swap: "5g"  # Same as memory to disable swap
+
+# Consul configuration (we're using the existing test resources Consul)
+consul:
+  client:
+    registration:
+      enabled: false  # We'll manually register services
+  config:
+    enabled: false

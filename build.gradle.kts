@@ -86,7 +86,8 @@ tasks.register("dockerBuildAll") {
     // Build modules first
     dependsOn(
         ":yappy-modules:chunker:dockerBuild",
-        ":yappy-modules:tika-parser:dockerBuild"
+        ":yappy-modules:tika-parser:dockerBuild",
+        ":yappy-modules:embedder:dockerBuild"
     )
     
     // Then build orchestrator
@@ -100,7 +101,8 @@ tasks.register("dockerBuildModules") {
     
     dependsOn(
         ":yappy-modules:chunker:dockerBuild",
-        ":yappy-modules:tika-parser:dockerBuild"
+        ":yappy-modules:tika-parser:dockerBuild",
+        ":yappy-modules:embedder:dockerBuild"
     )
 }
 
@@ -112,6 +114,7 @@ tasks.register<Exec>("dockerCleanAll") {
     commandLine("bash", "-c", """
         docker rmi chunkerapplication:latest chunkerapplication:1.0.0-SNAPSHOT \
                    tika-parser:latest tika-parser:1.0.0-SNAPSHOT \
+                   embedder:latest embedder:1.0.0-SNAPSHOT \
                    yappy-orchestrator:latest yappy-orchestrator:1.0.0-SNAPSHOT \
         2>/dev/null || true
     """.trimIndent())

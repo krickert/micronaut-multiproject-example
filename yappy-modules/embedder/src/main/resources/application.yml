@@ -2,7 +2,7 @@ micronaut:
   application:
     name: embedder
   server:
-    port: 50051
+    enabled: false  # Disable HTTP server, we only need gRPC
   metrics:
     enabled: true
   http:
@@ -13,6 +13,8 @@ micronaut:
       port: 50051
       keep-alive-time: 3h
       max-inbound-message-size: 20971520 # 20MB
+      health:
+        enabled: true
     services:
       embedder:
         enabled: true
