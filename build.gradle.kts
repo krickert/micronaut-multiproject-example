@@ -78,4 +78,41 @@ subprojects {
     }
 }
 
+// Task to build all Docker images in the correct order
+tasks.register("dockerBuildAll") {
+    group = "docker"
+    description = "Builds all Docker images for modules and orchestrator"
+    
+    // Build modules first
+    dependsOn(
+        ":yappy-modules:chunker:dockerBuild",
+        ":yappy-modules:tika-parser:dockerBuild"
+    )
+    
+    // Then build orchestrator
+    finalizedBy(":yappy-orchestrator:dockerBuild")
+}
 
+// Task to just build module containers
+tasks.register("dockerBuildModules") {
+    group = "docker"
+    description = "Builds Docker images for all modules"
+    
+    dependsOn(
+        ":yappy-modules:chunker:dockerBuild",
+        ":yappy-modules:tika-parser:dockerBuild"
+    )
+}
+
+// Clean all Docker images
+tasks.register<Exec>("dockerCleanAll") {
+    group = "docker"
+    description = "Removes all project Docker images"
+    
+    commandLine("bash", "-c", """
+        docker rmi chunkerapplication:latest chunkerapplication:1.0.0-SNAPSHOT \
+                   tika-parser:latest tika-parser:1.0.0-SNAPSHOT \
+                   yappy-orchestrator:latest yappy-orchestrator:1.0.0-SNAPSHOT \
+        2>/dev/null || true
+    """.trimIndent())
+}

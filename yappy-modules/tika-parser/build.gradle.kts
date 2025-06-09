@@ -2,12 +2,14 @@ plugins {
     id("io.micronaut.application") version "4.5.3"
     id("com.gradleup.shadow") version "8.3.6"
     id("io.micronaut.test-resources") version "4.5.3"
+    id("com.bmuschko.docker-remote-api") version "9.4.0"
 }
 
 version = "1.0.0-SNAPSHOT"
 group = "com.krickert.yappy.modules.tikaparser"
 
 repositories {
+    mavenLocal()
     mavenCentral()
 }
 
@@ -88,4 +90,22 @@ tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
 // Docker configuration for native image
 tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative") {
     jdkVersion = "21"
+}
+
+// Configure Docker build to handle larger contexts
+docker {
+    // Use environment variable or default socket
+    url = System.getenv("DOCKER_HOST") ?: "unix:///var/run/docker.sock"
+    
+    // API version compatibility
+    apiVersion = "1.41"
+}
+
+// Configure the dockerBuild task
+tasks.named<com.bmuschko.gradle.docker.tasks.image.DockerBuildImage>("dockerBuild") {
+    val imageName = project.name.lowercase()
+    images.set(listOf(
+        "${imageName}:${project.version}",
+        "${imageName}:latest"
+    ))
 }

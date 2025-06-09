@@ -2,21 +2,23 @@ plugins {
     id("io.micronaut.application") version "4.5.3"
     id("com.gradleup.shadow") version "8.3.6"
     id("io.micronaut.test-resources") version "4.5.3"
+    id("com.bmuschko.docker-remote-api") version "9.4.0"
 }
 
 version = "1.0.0-SNAPSHOT"
 group = "com.krickert.yappy.modules.chunker"
 
 repositories {
+    mavenLocal()
     mavenCentral()
 }
 
 dependencies {
     // Apply BOM/platform dependencies
-    implementation(platform("com.krickert.yappy:bom:1.0.0-SNAPSHOT"))
-    annotationProcessor(platform("com.krickert.yappy:bom:1.0.0-SNAPSHOT"))
-    testImplementation(platform("com.krickert.yappy:bom:1.0.0-SNAPSHOT"))
-    testAnnotationProcessor(platform("com.krickert.yappy:bom:1.0.0-SNAPSHOT"))
+    implementation(platform(project(":bom")))
+    annotationProcessor(platform(project(":bom")))
+    testImplementation(platform(project(":bom")))
+    testAnnotationProcessor(platform(project(":bom")))
 
     annotationProcessor(mn.micronaut.serde.processor)
     implementation(mn.micronaut.grpc.runtime)
@@ -32,7 +34,7 @@ dependencies {
 
     runtimeOnly(mn.logback.classic)
     runtimeOnly(mn.snakeyaml)
-    implementation("com.krickert.yappy:protobuf-models:1.0.0-SNAPSHOT")
+    implementation(project(":yappy-models:protobuf-models"))
 
     implementation("io.micronaut.reactor:micronaut-reactor")
     implementation("io.micronaut.reactor:micronaut-reactor-http-client")
@@ -72,10 +74,27 @@ micronaut {
     testResources {
         sharedServer = true
     }
-
 }
 
 // Docker configuration for native image
 tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative") {
     jdkVersion = "21"
+}
+
+// Configure Docker build to handle larger contexts
+docker {
+    // Use environment variable or default socket
+    url = System.getenv("DOCKER_HOST") ?: "unix:///var/run/docker.sock"
+    
+    // API version compatibility
+    apiVersion = "1.41"
+}
+
+// Configure the dockerBuild task
+tasks.named<com.bmuschko.gradle.docker.tasks.image.DockerBuildImage>("dockerBuild") {
+    val imageName = project.name.lowercase()
+    images.set(listOf(
+        "${imageName}:${project.version}",
+        "${imageName}:latest"
+    ))
 }
