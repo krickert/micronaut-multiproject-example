@@ -27,6 +27,9 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -50,10 +53,10 @@ public class PipelineEngineImpl implements PipelineEngine {
     private final Map<String, ManagedChannel> channelCache = new ConcurrentHashMap<>();
     private final DynamicConfigurationManager configManager;
     
-    // Processing buffers for capturing test data
-    private final ProcessingBuffer<ProcessRequest> requestBuffer;
-    private final ProcessingBuffer<ProcessResponse> responseBuffer;
-    private final ProcessingBuffer<com.krickert.search.model.PipeDoc> pipeDocBuffer;
+    // Processing buffers for capturing test data - one set per pipeline step
+    private final Map<String, ProcessingBuffer<ProcessRequest>> requestBuffers = new ConcurrentHashMap<>();
+    private final Map<String, ProcessingBuffer<ProcessResponse>> responseBuffers = new ConcurrentHashMap<>();
+    private final Map<String, ProcessingBuffer<com.krickert.search.model.PipeDoc>> pipeDocBuffers = new ConcurrentHashMap<>();
     
     // Sampling configuration
     private final boolean bufferEnabled;
@@ -78,13 +81,7 @@ public class PipelineEngineImpl implements PipelineEngine {
         this.bufferPrecision = bufferPrecision;
         this.sampleRate = sampleRate;
         
-        // Initialize buffers
-        this.requestBuffer = ProcessingBufferFactory.createBuffer(
-            bufferEnabled, bufferCapacity, ProcessRequest.class);
-        this.responseBuffer = ProcessingBufferFactory.createBuffer(
-            bufferEnabled, bufferCapacity, ProcessResponse.class);
-        this.pipeDocBuffer = ProcessingBufferFactory.createBuffer(
-            bufferEnabled, bufferCapacity, com.krickert.search.model.PipeDoc.class);
+        // Buffers will be created per step as needed
             
         logger.info("PipelineEngineImpl initialized for cluster: {} with buffer={}, capacity={}, sample-rate={}", 
             clusterName, bufferEnabled, bufferCapacity, sampleRate);
@@ -262,18 +259,20 @@ public class PipelineEngineImpl implements PipelineEngine {
                 .setMetadata(metadata)
                 .build();
             
+            String stepName = "direct-test-" + clusterName; // For direct test calls
+            
             // Sample and buffer request if enabled
             if (shouldSample()) {
-                requestBuffer.add(request);
-                pipeDocBuffer.add(document);
+                getRequestBuffer(stepName).add(request);
+                getPipeDocBuffer(stepName).add(document);
             }
             
             ProcessResponse response = stub.processData(request);
             
             // Sample and buffer response if enabled
             if (shouldSample() && response.getSuccess() && response.hasOutputDoc()) {
-                responseBuffer.add(response);
-                pipeDocBuffer.add(response.getOutputDoc());
+                getResponseBuffer(stepName).add(response);
+                getPipeDocBuffer(stepName).add(response.getOutputDoc());
             }
             
             return response;
@@ -401,18 +400,20 @@ public class PipelineEngineImpl implements PipelineEngine {
             PipeStepProcessorGrpc.PipeStepProcessorBlockingStub stub = 
                 PipeStepProcessorGrpc.newBlockingStub(channel);
             
+            String stepName = request.getMetadata().getPipeStepName();
+            
             // Sample and buffer request if enabled
             if (shouldSample()) {
-                requestBuffer.add(request);
-                pipeDocBuffer.add(request.getDocument());
+                getRequestBuffer(stepName).add(request);
+                getPipeDocBuffer(stepName).add(request.getDocument());
             }
             
             ProcessResponse response = stub.processData(request);
             
             // Sample and buffer response if enabled
             if (shouldSample() && response.getSuccess() && response.hasOutputDoc()) {
-                responseBuffer.add(response);
-                pipeDocBuffer.add(response.getOutputDoc());
+                getResponseBuffer(stepName).add(response);
+                getPipeDocBuffer(stepName).add(response.getOutputDoc());
             }
             
             return response;
@@ -473,6 +474,22 @@ public class PipelineEngineImpl implements PipelineEngine {
         return bufferEnabled && ThreadLocalRandom.current().nextDouble() < sampleRate;
     }
     
+    // Helper methods to get or create buffers for a specific step
+    private ProcessingBuffer<ProcessRequest> getRequestBuffer(String stepName) {
+        return requestBuffers.computeIfAbsent(stepName, k -> 
+            ProcessingBufferFactory.createBuffer(bufferEnabled, bufferCapacity, ProcessRequest.class));
+    }
+    
+    private ProcessingBuffer<ProcessResponse> getResponseBuffer(String stepName) {
+        return responseBuffers.computeIfAbsent(stepName, k -> 
+            ProcessingBufferFactory.createBuffer(bufferEnabled, bufferCapacity, ProcessResponse.class));
+    }
+    
+    private ProcessingBuffer<com.krickert.search.model.PipeDoc> getPipeDocBuffer(String stepName) {
+        return pipeDocBuffers.computeIfAbsent(stepName, k -> 
+            ProcessingBufferFactory.createBuffer(bufferEnabled, bufferCapacity, com.krickert.search.model.PipeDoc.class));
+    }
+    
     /**
      * Cleanup method to close all gRPC channels and save buffered data.
      */
@@ -497,12 +514,45 @@ public class PipelineEngineImpl implements PipelineEngine {
             logger.info("Saving buffered test data to disk...");
             String timestamp = String.valueOf(System.currentTimeMillis());
             
-            requestBuffer.saveToDisk("engine-requests-" + timestamp, bufferPrecision);
-            responseBuffer.saveToDisk("engine-responses-" + timestamp, bufferPrecision);
-            pipeDocBuffer.saveToDisk("engine-pipedocs-" + timestamp, bufferPrecision);
+            // Save buffers for each step in its own directory
+            requestBuffers.forEach((stepName, buffer) -> {
+                if (buffer.size() > 0) {
+                    Path stepDir = Path.of("buffer-dumps", stepName);
+                    try {
+                        Files.createDirectories(stepDir);
+                        buffer.saveToDisk(stepDir, "requests-" + timestamp, bufferPrecision);
+                        logger.info("Saved {} requests for step {}", buffer.size(), stepName);
+                    } catch (IOException e) {
+                        logger.error("Failed to save requests for step {}", stepName, e);
+                    }
+                }
+            });
             
-            logger.info("Saved {} requests, {} responses, {} docs to disk", 
-                requestBuffer.size(), responseBuffer.size(), pipeDocBuffer.size());
+            responseBuffers.forEach((stepName, buffer) -> {
+                if (buffer.size() > 0) {
+                    Path stepDir = Path.of("buffer-dumps", stepName);
+                    try {
+                        Files.createDirectories(stepDir);
+                        buffer.saveToDisk(stepDir, "responses-" + timestamp, bufferPrecision);
+                        logger.info("Saved {} responses for step {}", buffer.size(), stepName);
+                    } catch (IOException e) {
+                        logger.error("Failed to save responses for step {}", stepName, e);
+                    }
+                }
+            });
+            
+            pipeDocBuffers.forEach((stepName, buffer) -> {
+                if (buffer.size() > 0) {
+                    Path stepDir = Path.of("buffer-dumps", stepName);
+                    try {
+                        Files.createDirectories(stepDir);
+                        buffer.saveToDisk(stepDir, "pipedocs-" + timestamp, bufferPrecision);
+                        logger.info("Saved {} docs for step {}", buffer.size(), stepName);
+                    } catch (IOException e) {
+                        logger.error("Failed to save pipedocs for step {}", stepName, e);
+                    }
+                }
+            });
         }
     }
 }

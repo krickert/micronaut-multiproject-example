@@ -42,3 +42,6 @@ docs/.asciidoctor
 OLD_PROJECTS
 
 .DS_Store
+
+# Buffer dumps from pipeline testing
+buffer-dumps/

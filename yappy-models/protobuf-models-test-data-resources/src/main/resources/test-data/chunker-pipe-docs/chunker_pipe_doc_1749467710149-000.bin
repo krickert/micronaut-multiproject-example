@@ -1,0 +1,22 @@
+
+test-doc-multi-001#test://documents/multi-test-001.txt
+text/plain"$Multi-Module Container Test Document*Ñ	This is a comprehensive test document designed to demonstrate the power of the Yappy
+pipeline processing system with multiple processors running in real Docker containers.
+
+The document contains enough text to be meaningfully chunked at different sizes.
+In the first section, we explore how different chunking strategies can affect the
+downstream processing. Smaller chunks (300 tokens) provide more granular semantic
+understanding, while larger chunks (1000 tokens) maintain more context.
+
+The second section discusses embedding models. The ALL_MINILM_L6_V2 model is optimized
+for English text and provides fast, efficient embeddings. The multilingual model
+supports multiple languages and is better for international content.
+
+By processing this document through two different chunking strategies and two different
+embedding models sequentially, we accumulate chunks from both chunkers and embeddings
+from both models, demonstrating the pipeline's ability to enrich documents progressively.
+
+This test validates that our Consul-based service discovery and configuration management
+correctly handles multiple processing steps with different configurations,
+all running in real Docker containers managed by Micronaut test resources.
+J½„›Â

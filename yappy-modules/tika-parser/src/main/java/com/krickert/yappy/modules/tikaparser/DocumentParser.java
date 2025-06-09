@@ -46,7 +46,7 @@ import org.w3c.dom.Element;
  */
 public class DocumentParser {
     private static final Logger LOG = LoggerFactory.getLogger(DocumentParser.class);
-    
+
     /**
      * Private constructor to prevent instantiation of this utility class.
      */
@@ -183,8 +183,14 @@ public class DocumentParser {
             }
         }
 
+        // Build the parsed document
+        ParsedDocument parsedDoc = docBuilder.build();
+
+        // Apply post-processing based on document type
+        parsedDoc = postProcessParsedDocument(parsedDoc, config);
+
         return ParsedDocumentReply.newBuilder()
-                .setDoc(docBuilder.build())
+                .setDoc(parsedDoc)
                 .build();
     }
 
@@ -339,6 +345,465 @@ public class DocumentParser {
         transformer.transform(new DOMSource(doc), new StreamResult(writer));
 
         return writer.toString();
+    }
+
+    /**
+     * Post-processes a parsed document based on its content type.
+     * This method applies document type-specific mappings for null fields.
+     *
+     * @param parsedDoc The parsed document to post-process.
+     * @param config The configuration for the parser.
+     * @return The post-processed document.
+     */
+    private static ParsedDocument postProcessParsedDocument(ParsedDocument parsedDoc, Map<String, String> config) {
+        // If both title and body are non-empty, no need for post-processing
+        if (!parsedDoc.getTitle().isEmpty() && !parsedDoc.getBody().isEmpty()) {
+            return parsedDoc;
+        }
+
+        // Get the content type from metadata
+        String contentType = parsedDoc.getMetadataOrDefault("Content-Type", "");
+        if (contentType.isEmpty()) {
+            // Try to infer content type from filename if available
+            if (config.containsKey("filename")) {
+                String filename = config.get("filename").toLowerCase();
+                contentType = inferContentTypeFromFilename(filename);
+            }
+        }
+
+        LOG.debug("Post-processing document with content type: {}", contentType);
+
+        // Create a builder from the parsed document
+        ParsedDocument.Builder builder = parsedDoc.toBuilder();
+
+        // Apply document type-specific processing
+        if (contentType.startsWith("application/pdf")) {
+            processPdfDocument(parsedDoc, builder);
+        } else if (contentType.startsWith("application/vnd.openxmlformats-officedocument.presentationml") || 
+                   contentType.startsWith("application/vnd.ms-powerpoint") ||
+                   contentType.startsWith("application/vnd.oasis.opendocument.presentation")) {
+            processPresentationDocument(parsedDoc, builder);
+        } else if (contentType.startsWith("application/vnd.openxmlformats-officedocument.wordprocessingml") || 
+                   contentType.startsWith("application/msword") ||
+                   contentType.startsWith("application/vnd.oasis.opendocument.text") ||
+                   contentType.startsWith("application/rtf")) {
+            processWordDocument(parsedDoc, builder);
+        } else if (contentType.startsWith("application/vnd.openxmlformats-officedocument.spreadsheetml") || 
+                   contentType.startsWith("application/vnd.ms-excel") ||
+                   contentType.startsWith("application/vnd.oasis.opendocument.spreadsheet") ||
+                   contentType.startsWith("text/csv")) {
+            processSpreadsheetDocument(parsedDoc, builder);
+        } else if (contentType.startsWith("text/html")) {
+            processHtmlDocument(parsedDoc, builder);
+        } else if (contentType.startsWith("image/")) {
+            processImageDocument(parsedDoc, builder);
+        } else if (contentType.startsWith("video/")) {
+            processVideoDocument(parsedDoc, builder);
+        } else if (contentType.startsWith("text/plain")) {
+            processTextDocument(parsedDoc, builder);
+        } else if (contentType.startsWith("application/json")) {
+            processJsonDocument(parsedDoc, builder);
+        }
+
+        return builder.build();
+    }
+
+    /**
+     * Infers the content type from a filename.
+     *
+     * @param filename The filename to infer the content type from.
+     * @return The inferred content type, or an empty string if it couldn't be inferred.
+     */
+    private static String inferContentTypeFromFilename(String filename) {
+        if (filename.endsWith(".pdf")) {
+            return "application/pdf";
+        } else if (filename.endsWith(".pptx")) {
+            return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+        } else if (filename.endsWith(".ppt")) {
+            return "application/vnd.ms-powerpoint";
+        } else if (filename.endsWith(".odp")) {
+            return "application/vnd.oasis.opendocument.presentation";
+        } else if (filename.endsWith(".docx")) {
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        } else if (filename.endsWith(".doc")) {
+            return "application/msword";
+        } else if (filename.endsWith(".odt")) {
+            return "application/vnd.oasis.opendocument.text";
+        } else if (filename.endsWith(".rtf")) {
+            return "application/rtf";
+        } else if (filename.endsWith(".xlsx")) {
+            return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        } else if (filename.endsWith(".xls")) {
+            return "application/vnd.ms-excel";
+        } else if (filename.endsWith(".ods")) {
+            return "application/vnd.oasis.opendocument.spreadsheet";
+        } else if (filename.endsWith(".csv")) {
+            return "text/csv";
+        } else if (filename.endsWith(".html") || filename.endsWith(".htm")) {
+            return "text/html";
+        } else if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")) {
+            return "image/jpeg";
+        } else if (filename.endsWith(".png")) {
+            return "image/png";
+        } else if (filename.endsWith(".gif")) {
+            return "image/gif";
+        } else if (filename.endsWith(".mp4")) {
+            return "video/mp4";
+        } else if (filename.endsWith(".txt")) {
+            return "text/plain";
+        } else if (filename.endsWith(".json")) {
+            return "application/json";
+        }
+        return "";
+    }
+
+    /**
+     * Processes a PDF document, mapping appropriate content to null fields.
+     *
+     * @param parsedDoc The parsed document.
+     * @param builder The builder to update.
+     */
+    private static void processPdfDocument(ParsedDocument parsedDoc, ParsedDocument.Builder builder) {
+        // If title is empty, try to get it from metadata
+        if (parsedDoc.getTitle().isEmpty()) {
+            // Try to get title from metadata
+            String title = parsedDoc.getMetadataOrDefault("title", "");
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("dc:title", "");
+            }
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("Title", "");
+            }
+
+            // If still empty, try to extract from the first line of the body
+            if (title.isEmpty() && !parsedDoc.getBody().isEmpty()) {
+                String body = parsedDoc.getBody();
+                int endOfFirstLine = body.indexOf('\n');
+                if (endOfFirstLine > 0 && endOfFirstLine < 100) {  // Reasonable title length
+                    title = body.substring(0, endOfFirstLine).trim();
+                }
+            }
+
+            if (!title.isEmpty()) {
+                builder.setTitle(title);
+                LOG.debug("Set PDF title from metadata or first line: {}", title);
+            }
+        }
+    }
+
+    /**
+     * Processes a presentation document, mapping appropriate content to null fields.
+     *
+     * @param parsedDoc The parsed document.
+     * @param builder The builder to update.
+     */
+    private static void processPresentationDocument(ParsedDocument parsedDoc, ParsedDocument.Builder builder) {
+        // If title is empty, try to get it from metadata
+        if (parsedDoc.getTitle().isEmpty()) {
+            // Try to get title from metadata
+            String title = parsedDoc.getMetadataOrDefault("title", "");
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("dc:title", "");
+            }
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("Title", "");
+            }
+
+            // For presentations, the first slide title is often a good title
+            if (title.isEmpty() && !parsedDoc.getBody().isEmpty()) {
+                String body = parsedDoc.getBody();
+                int endOfFirstLine = body.indexOf('\n');
+                if (endOfFirstLine > 0) {
+                    title = body.substring(0, endOfFirstLine).trim();
+                }
+            }
+
+            if (!title.isEmpty()) {
+                builder.setTitle(title);
+                LOG.debug("Set presentation title from metadata or first slide: {}", title);
+            }
+        }
+
+        // For presentations, if body is empty, try to extract text from slide notes or content
+        if (parsedDoc.getBody().isEmpty()) {
+            String slideContent = parsedDoc.getMetadataOrDefault("slide-content", "");
+            if (!slideContent.isEmpty()) {
+                builder.setBody(slideContent);
+                LOG.debug("Set presentation body from slide content");
+            }
+        }
+    }
+
+    /**
+     * Processes a word processing document, mapping appropriate content to null fields.
+     *
+     * @param parsedDoc The parsed document.
+     * @param builder The builder to update.
+     */
+    private static void processWordDocument(ParsedDocument parsedDoc, ParsedDocument.Builder builder) {
+        // If title is empty, try to get it from metadata
+        if (parsedDoc.getTitle().isEmpty()) {
+            // Try to get title from metadata
+            String title = parsedDoc.getMetadataOrDefault("title", "");
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("dc:title", "");
+            }
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("Title", "");
+            }
+
+            // For word documents, the first heading is often a good title
+            if (title.isEmpty() && !parsedDoc.getBody().isEmpty()) {
+                String body = parsedDoc.getBody();
+                int endOfFirstLine = body.indexOf('\n');
+                if (endOfFirstLine > 0 && endOfFirstLine < 100) {  // Reasonable title length
+                    title = body.substring(0, endOfFirstLine).trim();
+                }
+            }
+
+            if (!title.isEmpty()) {
+                builder.setTitle(title);
+                LOG.debug("Set word document title from metadata or first heading: {}", title);
+            }
+        }
+    }
+
+    /**
+     * Processes a spreadsheet document, mapping appropriate content to null fields.
+     *
+     * @param parsedDoc The parsed document.
+     * @param builder The builder to update.
+     */
+    private static void processSpreadsheetDocument(ParsedDocument parsedDoc, ParsedDocument.Builder builder) {
+        // If title is empty, try to get it from metadata
+        if (parsedDoc.getTitle().isEmpty()) {
+            // Try to get title from metadata
+            String title = parsedDoc.getMetadataOrDefault("title", "");
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("dc:title", "");
+            }
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("Title", "");
+            }
+
+            // For spreadsheets, the sheet name or workbook name can be a good title
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("sheetName", "");
+            }
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("workbookName", "");
+            }
+
+            if (!title.isEmpty()) {
+                builder.setTitle(title);
+                LOG.debug("Set spreadsheet title from metadata: {}", title);
+            }
+        }
+
+        // For spreadsheets, if body is empty, try to extract text from cell data
+        if (parsedDoc.getBody().isEmpty()) {
+            String cellData = parsedDoc.getMetadataOrDefault("cell-data", "");
+            if (!cellData.isEmpty()) {
+                builder.setBody(cellData);
+                LOG.debug("Set spreadsheet body from cell data");
+            }
+        }
+    }
+
+    /**
+     * Processes an HTML document, mapping appropriate content to null fields.
+     *
+     * @param parsedDoc The parsed document.
+     * @param builder The builder to update.
+     */
+    private static void processHtmlDocument(ParsedDocument parsedDoc, ParsedDocument.Builder builder) {
+        // If title is empty, try to get it from metadata
+        if (parsedDoc.getTitle().isEmpty()) {
+            // Try to get title from metadata
+            String title = parsedDoc.getMetadataOrDefault("title", "");
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("dc:title", "");
+            }
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("Title", "");
+            }
+
+            // For HTML, the HTML title tag is a good source
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("og:title", "");
+            }
+
+            if (!title.isEmpty()) {
+                builder.setTitle(title);
+                LOG.debug("Set HTML title from metadata: {}", title);
+            }
+        }
+    }
+
+    /**
+     * Processes an image document, mapping appropriate content to null fields.
+     *
+     * @param parsedDoc The parsed document.
+     * @param builder The builder to update.
+     */
+    private static void processImageDocument(ParsedDocument parsedDoc, ParsedDocument.Builder builder) {
+        // If title is empty, try to get it from metadata
+        if (parsedDoc.getTitle().isEmpty()) {
+            // Try to get title from metadata
+            String title = parsedDoc.getMetadataOrDefault("title", "");
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("dc:title", "");
+            }
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("Title", "");
+            }
+
+            // For images, EXIF data can provide a title
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("Exif.Image.ImageDescription", "");
+            }
+
+            if (!title.isEmpty()) {
+                builder.setTitle(title);
+                LOG.debug("Set image title from metadata: {}", title);
+            }
+        }
+
+        // For images, if body is empty, try to use image description or alt text
+        if (parsedDoc.getBody().isEmpty()) {
+            String description = parsedDoc.getMetadataOrDefault("Exif.Image.ImageDescription", "");
+            if (description.isEmpty()) {
+                description = parsedDoc.getMetadataOrDefault("alt", "");
+            }
+            if (!description.isEmpty()) {
+                builder.setBody(description);
+                LOG.debug("Set image body from description");
+            } else {
+                // If no description, create a basic one with image dimensions
+                String width = parsedDoc.getMetadataOrDefault("Image Width", "");
+                String height = parsedDoc.getMetadataOrDefault("Image Height", "");
+                if (!width.isEmpty() && !height.isEmpty()) {
+                    String imageInfo = "Image dimensions: " + width + " x " + height;
+                    builder.setBody(imageInfo);
+                    LOG.debug("Set image body from dimensions");
+                }
+            }
+        }
+    }
+
+    /**
+     * Processes a video document, mapping appropriate content to null fields.
+     *
+     * @param parsedDoc The parsed document.
+     * @param builder The builder to update.
+     */
+    private static void processVideoDocument(ParsedDocument parsedDoc, ParsedDocument.Builder builder) {
+        // If title is empty, try to get it from metadata
+        if (parsedDoc.getTitle().isEmpty()) {
+            // Try to get title from metadata
+            String title = parsedDoc.getMetadataOrDefault("title", "");
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("dc:title", "");
+            }
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("Title", "");
+            }
+
+            if (!title.isEmpty()) {
+                builder.setTitle(title);
+                LOG.debug("Set video title from metadata: {}", title);
+            }
+        }
+
+        // For videos, if body is empty, try to use video description or create one with video info
+        if (parsedDoc.getBody().isEmpty()) {
+            String description = parsedDoc.getMetadataOrDefault("description", "");
+            if (!description.isEmpty()) {
+                builder.setBody(description);
+                LOG.debug("Set video body from description");
+            } else {
+                // If no description, create a basic one with video dimensions and duration
+                StringBuilder videoInfo = new StringBuilder();
+                String width = parsedDoc.getMetadataOrDefault("width", "");
+                String height = parsedDoc.getMetadataOrDefault("height", "");
+                if (!width.isEmpty() && !height.isEmpty()) {
+                    videoInfo.append("Video dimensions: ").append(width).append(" x ").append(height).append("\n");
+                }
+
+                String duration = parsedDoc.getMetadataOrDefault("duration", "");
+                if (!duration.isEmpty()) {
+                    videoInfo.append("Duration: ").append(duration);
+                }
+
+                if (videoInfo.length() > 0) {
+                    builder.setBody(videoInfo.toString());
+                    LOG.debug("Set video body from dimensions and duration");
+                }
+            }
+        }
+    }
+
+    /**
+     * Processes a plain text document, mapping appropriate content to null fields.
+     *
+     * @param parsedDoc The parsed document.
+     * @param builder The builder to update.
+     */
+    private static void processTextDocument(ParsedDocument parsedDoc, ParsedDocument.Builder builder) {
+        // If title is empty, try to get it from metadata or first line
+        if (parsedDoc.getTitle().isEmpty() && !parsedDoc.getBody().isEmpty()) {
+            String body = parsedDoc.getBody();
+            int endOfFirstLine = body.indexOf('\n');
+            if (endOfFirstLine > 0 && endOfFirstLine < 100) {  // Reasonable title length
+                String title = body.substring(0, endOfFirstLine).trim();
+                builder.setTitle(title);
+                LOG.debug("Set text document title from first line: {}", title);
+            }
+        }
+    }
+
+    /**
+     * Processes a JSON document, mapping appropriate content to null fields.
+     *
+     * @param parsedDoc The parsed document.
+     * @param builder The builder to update.
+     */
+    private static void processJsonDocument(ParsedDocument parsedDoc, ParsedDocument.Builder builder) {
+        // If title is empty, try to get it from metadata
+        if (parsedDoc.getTitle().isEmpty()) {
+            // Try to get title from metadata
+            String title = parsedDoc.getMetadataOrDefault("title", "");
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("dc:title", "");
+            }
+            if (title.isEmpty()) {
+                title = parsedDoc.getMetadataOrDefault("Title", "");
+            }
+
+            // For JSON, we might find a title field in the JSON itself
+            if (title.isEmpty() && !parsedDoc.getBody().isEmpty()) {
+                String body = parsedDoc.getBody();
+                // Simple check for "title" field in JSON
+                int titleIndex = body.indexOf("\"title\"");
+                if (titleIndex >= 0) {
+                    int valueStart = body.indexOf(":", titleIndex);
+                    if (valueStart >= 0) {
+                        valueStart = body.indexOf("\"", valueStart);
+                        if (valueStart >= 0) {
+                            int valueEnd = body.indexOf("\"", valueStart + 1);
+                            if (valueEnd >= 0) {
+                                title = body.substring(valueStart + 1, valueEnd);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!title.isEmpty()) {
+                builder.setTitle(title);
+                LOG.debug("Set JSON title from metadata or content: {}", title);
+            }
+        }
     }
 
     /**

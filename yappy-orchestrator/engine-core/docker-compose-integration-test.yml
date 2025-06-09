@@ -7,8 +7,7 @@ networks:
 services:
   # Test infrastructure
   consul:
-    image: consul:latest
-    container_name: test-consul
+    image: hashicorp/consul:latest
     ports:
       - "8500:8500"
     command: agent -server -ui -node=server-1 -bootstrap-expect=1 -client=0.0.0.0 -log-level=warn
@@ -23,7 +22,6 @@ services:
   # Tika Parser - single instance
   tika-parser:
     image: tika-parser:latest
-    container_name: test-tika-parser
     depends_on:
       consul:
         condition: service_healthy
@@ -46,7 +44,6 @@ services:
   # First Chunker - small chunks (300 tokens, 30 overlap)
   chunker-small:
     image: chunker:latest
-    container_name: test-chunker-small
     depends_on:
       consul:
         condition: service_healthy
@@ -72,7 +69,6 @@ services:
   # Second Chunker - large chunks (1000 tokens, 200 overlap)
   chunker-large:
     image: chunker:latest
-    container_name: test-chunker-large
     depends_on:
       consul:
         condition: service_healthy
@@ -98,7 +94,6 @@ services:
   # First Embedder - minilm model
   embedder-minilm:
     image: embedder:latest
-    container_name: test-embedder-minilm
     depends_on:
       consul:
         condition: service_healthy
@@ -122,7 +117,6 @@ services:
   # Second Embedder - multilingual model
   embedder-multilingual:
     image: embedder:latest
-    container_name: test-embedder-multilingual
     depends_on:
       consul:
         condition: service_healthy

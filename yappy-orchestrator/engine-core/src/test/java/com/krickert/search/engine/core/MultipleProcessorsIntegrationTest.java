@@ -51,8 +51,8 @@ public class MultipleProcessorsIntegrationTest {
             .withExposedService("tika-parser", 50053, Wait.forHealthcheck())
             .withExposedService("chunker-small", 50054, Wait.forHealthcheck())
             .withExposedService("chunker-large", 50055, Wait.forHealthcheck())
-            .withExposedService("embedder-minilm", 50051, Wait.forHealthcheck())
-            .withExposedService("embedder-multilingual", 50051, Wait.forHealthcheck())
+            .withExposedService("embedder-minilm", 50056, Wait.forHealthcheck())
+            .withExposedService("embedder-multilingual", 50057, Wait.forHealthcheck())
             .withLocalCompose(true)
             .withOptions("--compatibility");
 

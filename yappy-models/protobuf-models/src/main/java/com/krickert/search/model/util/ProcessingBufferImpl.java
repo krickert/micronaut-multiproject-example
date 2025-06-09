@@ -129,7 +129,8 @@ public class ProcessingBufferImpl<T extends Message> implements ProcessingBuffer
             // Save each message to disk
             for (int i = 0; i < messages.size(); i++) {
                 T message = messages.get(i);
-                String fileName = String.format("%s%0" + numberPrecision + "d.bin", 
+                // Fix: Use proper suffix format with dash separator
+                String fileName = String.format("%s-%0" + numberPrecision + "d.bin", 
                         fileNamePrefix, i);
                 Path filePath = location.resolve(fileName);
 

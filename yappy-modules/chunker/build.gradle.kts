@@ -48,6 +48,7 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-api")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
     testImplementation("org.mockito:mockito-core")
+    testImplementation(project(":yappy-models:protobuf-models-test-data-resources"))
 }
 
 
