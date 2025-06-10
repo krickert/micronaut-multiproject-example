@@ -26,6 +26,10 @@ dependencies {
     // Sub-module dependencies
     implementation(project(":yappy-orchestrator:engine-core"))
 
+    // gRPC dependencies
+    implementation(mn.micronaut.grpc.server.runtime)
+    implementation("io.grpc:grpc-services")
+    
     // Implementation dependencies
     implementation(mn.micrometer.context.propagation)
     implementation(mn.micronaut.discovery.core)

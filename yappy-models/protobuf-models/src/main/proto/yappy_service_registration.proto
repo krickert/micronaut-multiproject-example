@@ -5,10 +5,10 @@ package com.krickert.yappy.registration.api;
 // Consider standardizing your Java package options across all Yappy protos
 option java_package = "com.krickert.yappy.registration.api";
 option java_multiple_files = true;
-option java_outer_classname = "YappyModuleRegistrationProto"; // Or similar
+option java_outer_classname = "ModuleRegistrationProto";
 
-// Service definition for modules to register with the Yappy platform
-service YappyModuleRegistrationService {
+// Service definition for modules to register with the platform
+service ModuleRegistrationService {
   // Allows a module instance to register itself with the Yappy platform.
   // The platform will then handle the actual registration with Consul.
   rpc RegisterModule (RegisterModuleRequest) returns (RegisterModuleResponse);

@@ -1,0 +1,134 @@
+micronaut:
+  application:
+    name: engine-core-multiprocessor-test
+  server:
+    port: ${random.port}
+  config-client:
+    enabled: false
+
+# Enable gRPC server for the engine
+grpc:
+  server:
+    enabled: true
+    port: ${random.port}
+
+# Configure test containers for all module services
+test-resources:
+  containers:
+    tika-parser:
+      image-name: tika-parser:latest
+      hostnames:
+        - tika-parser.host
+      exposed-ports:
+        - tika-parser.grpc.port: 50053
+        - tika-parser.http.port: 8080
+      wait-strategy:
+        http:
+          path: /health
+          port: 8080
+          status-code: 200
+      startup-timeout: 60s
+      env:
+        - GRPC_SERVER_PORT: "50053"
+        - MICRONAUT_SERVER_PORT: "8080"
+
+    chunker-small:
+      image-name: chunker:latest
+      hostnames:
+        - chunker-small.host
+      exposed-ports:
+        - chunker-small.grpc.port: 50054
+        - chunker-small.http.port: 8080
+      wait-strategy:
+        http:
+          path: /health
+          port: 8080
+          status-code: 200
+      startup-timeout: 60s
+      env:
+        - GRPC_SERVER_PORT: "50054"
+        - MICRONAUT_SERVER_PORT: "8080"
+        - CHUNKER_DEFAULT_SIZE: "300"
+        - CHUNKER_DEFAULT_OVERLAP: "30"
+
+    chunker-large:
+      image-name: chunker:latest
+      hostnames:
+        - chunker-large.host
+      exposed-ports:
+        - chunker-large.grpc.port: 50055
+        - chunker-large.http.port: 8080
+      wait-strategy:
+        http:
+          path: /health
+          port: 8080
+          status-code: 200
+      startup-timeout: 60s
+      env:
+        - GRPC_SERVER_PORT: "50055"
+        - MICRONAUT_SERVER_PORT: "8080"
+        - CHUNKER_DEFAULT_SIZE: "1000"
+        - CHUNKER_DEFAULT_OVERLAP: "200"
+
+    embedder-minilm:
+      image-name: embedder:latest
+      hostnames:
+        - embedder-minilm.host
+      exposed-ports:
+        - embedder-minilm.grpc.port: 50056
+        - embedder-minilm.http.port: 8080
+      wait-strategy:
+        http:
+          path: /health
+          port: 8080
+          status-code: 200
+      startup-timeout: 120s  # Embedders may take longer to start
+      env:
+        - GRPC_SERVER_PORT: "50056"
+        - MICRONAUT_SERVER_PORT: "8080"
+        - VECTORIZER_DEFAULT_MODEL: "ALL_MINILM_L6_V2"
+
+    embedder-multilingual:
+      image-name: embedder:latest
+      hostnames:
+        - embedder-multilingual.host
+      exposed-ports:
+        - embedder-multilingual.grpc.port: 50057
+        - embedder-multilingual.http.port: 8080
+      wait-strategy:
+        http:
+          path: /health
+          port: 8080
+          status-code: 200
+      startup-timeout: 120s  # Embedders may take longer to start
+      env:
+        - GRPC_SERVER_PORT: "50057"
+        - MICRONAUT_SERVER_PORT: "8080"
+        - VECTORIZER_DEFAULT_MODEL: "PARAPHRASE_MULTILINGUAL_MINILM_L12_V2"
+
+# Consul is provided by consul-test-resource automatically
+# Kafka is provided by apache-kafka-test-resource automatically
+
+# Consul configuration
+consul:
+  client:
+    registration:
+      enabled: false  # We'll manually register services
+    discovery:
+      enabled: true
+  config:
+    enabled: true
+    format: YAML
+
+# Application configuration
+app:
+  config:
+    cluster-name: multiprocessor-test-${random.uuid}
+
+# Logging
+logger:
+  levels:
+    io.micronaut.test: DEBUG
+    com.krickert.search.engine.core: DEBUG
+    io.micronaut.testresources: DEBUG
+    org.testcontainers: INFO

@@ -29,6 +29,7 @@ public class ProtobufTestDataHelper {
     private static final String CHUNKER_PIPE_STREAM_DIRECTORY = "/test-data/chunker-pipe-streams";
     private static final String SAMPLE_PIPE_DOC_DIRECTORY = "/test-data/sample-documents/pipe-docs";
     private static final String SAMPLE_PIPE_STREAM_DIRECTORY = "/test-data/sample-documents/pipe-streams";
+    private static final String PIPELINE_GENERATED_DIRECTORY = "/test-data/pipeline-generated";
     private static final String FILE_EXTENSION = ".bin";
 
     // Lazy-loaded collections and maps
@@ -53,6 +54,9 @@ public class ProtobufTestDataHelper {
     // Lazy-loaded ordered lists for sample documents
     private static volatile List<PipeDoc> orderedSamplePipeDocs;
     private static volatile List<PipeStream> orderedSamplePipeStreams;
+    
+    // Pipeline generated data
+    private static volatile Map<String, Collection<PipeDoc>> pipelineGeneratedDocs;
 
     /**
      * Retrieves a collection of PipeDoc objects.
@@ -372,6 +376,40 @@ public class ProtobufTestDataHelper {
     }
 
     /**
+     * Retrieves pipeline generated documents for a specific stage.
+     * Stages include: "after-chunker1", "after-chunker2", "after-embedder1", "after-embedder2"
+     *
+     * @param stage The pipeline stage to retrieve documents from
+     * @return A collection of PipeDoc objects from that stage
+     */
+    public static Collection<PipeDoc> getPipelineGeneratedDocuments(String stage) {
+        if (pipelineGeneratedDocs == null) {
+            synchronized (ProtobufTestDataHelper.class) {
+                if (pipelineGeneratedDocs == null) {
+                    pipelineGeneratedDocs = loadPipelineGeneratedDocuments();
+                }
+            }
+        }
+        return pipelineGeneratedDocs.getOrDefault(stage, Collections.emptyList());
+    }
+    
+    /**
+     * Retrieves all pipeline stages available.
+     *
+     * @return A set of stage names
+     */
+    public static Set<String> getPipelineStages() {
+        if (pipelineGeneratedDocs == null) {
+            synchronized (ProtobufTestDataHelper.class) {
+                if (pipelineGeneratedDocs == null) {
+                    pipelineGeneratedDocs = loadPipelineGeneratedDocuments();
+                }
+            }
+        }
+        return pipelineGeneratedDocs.keySet();
+    }
+    
+    /**
      * Retrieves a specific PipeStream object from the Sample Documents by index.
      *
      * @param index The index of the PipeStream object to retrieve (0-98).
@@ -663,5 +701,50 @@ public class ProtobufTestDataHelper {
             throw new IOException(e);
         }
         return walk;
+    }
+    
+    /**
+     * Loads pipeline generated documents from all stages.
+     *
+     * @return A map of stage name to collection of PipeDoc objects
+     */
+    private static Map<String, Collection<PipeDoc>> loadPipelineGeneratedDocuments() {
+        Map<String, Collection<PipeDoc>> result = new HashMap<>();
+        
+        try {
+            URI uri = ProtobufTestDataHelper.class.getResource(PIPELINE_GENERATED_DIRECTORY).toURI();
+            Path pipelineDir;
+            
+            if (uri.getScheme().equals("jar")) {
+                FileSystem fileSystem;
+                try {
+                    fileSystem = FileSystems.getFileSystem(uri);
+                } catch (Exception e) {
+                    fileSystem = FileSystems.newFileSystem(uri, Collections.emptyMap());
+                }
+                pipelineDir = fileSystem.getPath(PIPELINE_GENERATED_DIRECTORY);
+            } else {
+                pipelineDir = Paths.get(uri);
+            }
+            
+            // List all subdirectories (stages)
+            try (Stream<Path> stages = Files.list(pipelineDir)) {
+                stages.filter(Files::isDirectory).forEach(stageDir -> {
+                    String stageName = stageDir.getFileName().toString();
+                    try {
+                        Collection<PipeDoc> docs = loadPipeDocsFromDirectory(stageDir.toString());
+                        result.put(stageName, docs);
+                    } catch (IOException e) {
+                        // Skip this stage on error
+                        result.put(stageName, Collections.emptyList());
+                    }
+                });
+            }
+        } catch (Exception e) {
+            // Return empty map on any error
+            return Collections.emptyMap();
+        }
+        
+        return result;
     }
 }

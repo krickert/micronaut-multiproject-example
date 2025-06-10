@@ -1,0 +1,23 @@
+micronaut:
+  application:
+    name: engine-grpc-test
+  server:
+    port: ${random.port}
+
+grpc:
+  server:
+    enabled: true
+    port: ${random.port}
+
+# IMPORTANT: Test Resources Configuration
+# DO NOT define consul containers here - they are automatically provided by consul-test-resource
+# The consul.client.host and consul.client.port properties will be automatically injected
+# by Test Resources when tests run
+
+# Consul client configuration for tests
+consul:
+  client:
+    # DO NOT set enabled: false here - it will prevent the ConsulClient bean from being created
+    registration:
+      enabled: false  # Disable auto-registration in tests only
+    # DO NOT set host/port here - Test Resources will provide these automatically

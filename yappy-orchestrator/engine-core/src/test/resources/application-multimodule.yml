@@ -72,6 +72,6 @@ test-resources:
 consul:
   client:
     registration:
-      enabled: false  # We'll manually register services
+      enabled: true  # We'll manually register services
   config:
-    enabled: false
+    enabled: true
