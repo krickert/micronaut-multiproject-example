@@ -8,35 +8,53 @@ micronaut:
 test-resources:
   containers:
     chunker:
-      image-name: com.krickert.search/chunker:latest
+      image-name: chunker:latest
       hostnames:
         - chunker.host
       exposed-ports:
         - chunker.grpc.port: 50051
         - chunker.http.port: 8080
       wait-strategy:
-        log:
-          regex: ".*Server Started.*"
         port:
+          port: 50051
       startup-timeout: 60s
       env:
-        - GRPC_SERVER_PORT: "50051"
-        - MICRONAUT_SERVER_PORT: "8080"
+        GRPC_SERVER_PORT: "50051"
+        GRPC_SERVER_HOST: "0.0.0.0"
+        MICRONAUT_SERVER_PORT: "8080"
+        MICRONAUT_SERVER_HOST: "0.0.0.0"
+        JAVA_OPTS: "-Xmx1g -Xms1g"
     tika-parser:
-      image-name: com.krickert.search/tika-parser:latest
+      image-name: tika-parser:latest
       hostnames:
         - tika.host
       exposed-ports:
         - tika.grpc.port: 50051
         - tika.http.port: 8080
       wait-strategy:
-        log:
-          regex: ".*Server Started.*"
         port:
+          port: 50051
       startup-timeout: 60s
       env:
-        - GRPC_SERVER_PORT: "50051"
-        - MICRONAUT_SERVER_PORT: "8080"
+        GRPC_SERVER_PORT: "50051"
+        GRPC_SERVER_HOST: "0.0.0.0"
+        MICRONAUT_SERVER_PORT: "8080"
+        MICRONAUT_SERVER_HOST: "0.0.0.0"
+        JAVA_OPTS: "-Xmx1g -Xms1g"
+    embedder:
+      image-name: embedder:latest
+      hostnames:
+        - embedder.host
+      exposed-ports:
+        - embedder.grpc.port: 50051
+      wait-strategy:
+        port:
+          port: 50051
+      startup-timeout: 120s
+      env:
+        GRPC_SERVER_PORT: "50051"
+        GRPC_SERVER_HOST: "0.0.0.0"
+        JAVA_OPTS: "-Xmx2g -Xms1g"
 
 # gRPC client configuration will be injected from test containers
 grpc:
@@ -47,6 +65,9 @@ grpc:
     tika:
       address: "${tika.host}:${tika.grpc.port}"
       plaintext: true
+    embedder:
+      address: "${embedder.host}:${embedder.grpc.port}"
+      plaintext: true
 
 # Logging
 logger:
@@ -55,3 +76,33 @@ logger:
     com.krickert.search.engine.core: DEBUG
     io.micronaut.testresources: DEBUG
     org.testcontainers: INFO
+
+# Yappy configuration  
+yappy:
+  cluster:
+    name: module-test-cluster
+  engine:
+    buffer:
+      enabled: false
+      capacity: 100
+      precision: 10
+      sampleRate: 0.1
+
+# Engine configuration
+engine:
+  cluster:
+    name: module-test-cluster
+
+# App configuration for DynamicConfigurationManager
+app:
+  config:
+    cluster-name: module-test-cluster
+    cluster-configs:
+      key-prefix: configs/
+    schema-versions:
+      key-prefix: schema-versions/
+    consul:
+      key-prefixes:
+        pipeline-clusters: configs/
+        schema-versions: schema-versions/
+      watch-seconds: 1

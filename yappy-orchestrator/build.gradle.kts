@@ -25,13 +25,6 @@ dependencies {
 
     // Sub-module dependencies
     implementation(project(":yappy-orchestrator:engine-core"))
-    implementation(project(":yappy-orchestrator:engine-bootstrap"))
-    implementation(project(":yappy-orchestrator:engine-registration"))
-    implementation(project(":yappy-orchestrator:engine-health"))
-    implementation(project(":yappy-orchestrator:engine-kafka"))
-    implementation(project(":yappy-orchestrator:engine-pipeline"))
-    implementation(project(":yappy-orchestrator:engine-grpc"))
-    implementation(project(":yappy-orchestrator:engine-config"))
 
     // Implementation dependencies
     implementation(mn.micrometer.context.propagation)
@@ -52,42 +45,27 @@ dependencies {
     implementation(mn.micronaut.reactor.http.client)
 
     // Project dependencies - handle both root project and standalone builds
-    if (rootProject.name == "yappy-platform-build") {
-        // Building from root project
-        implementation(project(":yappy-test-resources"))
-        implementation(project(":yappy-models:protobuf-models"))
-        implementation(project(":yappy-models:pipeline-config-models"))
-        implementation(project(":yappy-consul-config"))
-        implementation(project(":yappy-kafka-slot-manager"))
+    // Building from root project
+    implementation(project(":yappy-test-resources"))
+    implementation(project(":yappy-models:protobuf-models"))
+    implementation(project(":yappy-models:pipeline-config-models"))
+    implementation(project(":yappy-consul-config"))
+    implementation(project(":yappy-kafka-slot-manager"))
 
-        // Test resources
-        testImplementation(project(":yappy-test-resources:consul-test-resource"))
+    // Test resources
+    testImplementation(project(":yappy-test-resources:consul-test-resource"))
 
-        // Test dependencies
-        testImplementation(project(":yappy-models:pipeline-config-models-test-utils"))
-        testImplementation(project(":yappy-models:protobuf-models-test-data-resources"))
-    } else {
-        // Building from yappy-orchestrator directory
-        implementation("com.krickert.search:yappy-test-resources")
-        implementation("com.krickert.search:protobuf-models")
-        implementation("com.krickert.search:pipeline-config-models")
-        implementation("com.krickert.search:yappy-consul-config")
-        implementation("com.krickert.search:yappy-kafka-slot-manager")
+    // Test dependencies
+    testImplementation(project(":yappy-models:pipeline-config-models-test-utils"))
+    testImplementation(project(":yappy-models:protobuf-models-test-data-resources"))
 
-        // Test resources
-        testImplementation("com.krickert.search:consul-test-resource")
-
-        // Test dependencies
-        testImplementation("com.krickert.search:pipeline-config-models-test-utils")
-        testImplementation("com.krickert.search:protobuf-models-test-data-resources")
-    }
 
     // Compile-only dependencies
     compileOnly(mn.micronaut.openapi.annotations)
     compileOnly(libs.lombok)
 
     // Runtime dependencies
-    runtimeOnly(libs.logback.classic)
+    runtimeOnly(mn.logback.classic)
     runtimeOnly(mn.snakeyaml)
 
     // Test dependencies

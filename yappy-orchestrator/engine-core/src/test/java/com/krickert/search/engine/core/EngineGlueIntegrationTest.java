@@ -46,7 +46,7 @@ class EngineGlueIntegrationTest implements TestPropertyProvider {
     @Property(name = "kafka.bootstrap.servers")
     String kafkaBootstrapServers;
     
-    @Value("${aws.glue.endpoint:#{null}}")
+    @Value("${aws.glue.endpoint}")
     String glueEndpoint;
     
     @Value("${aws.region}")

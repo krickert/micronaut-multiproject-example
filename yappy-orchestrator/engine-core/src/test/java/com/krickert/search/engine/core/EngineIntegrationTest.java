@@ -46,7 +46,7 @@ class EngineIntegrationTest implements TestPropertyProvider {
     @Property(name = "kafka.bootstrap.servers")
     String kafkaBootstrapServers;
     
-    @Value("${apicurio.registry.url:#{null}}")
+    @Value("${apicurio.registry.url}")
     String apicurioRegistryUrl;
     
     @Value("${kafka.schema.registry.type}")

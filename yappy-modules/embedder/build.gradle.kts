@@ -14,11 +14,12 @@ repositories {
 }
 
 dependencies {
-    // Apply BOM/platform dependencies
+    // When building from the root project
     implementation(platform(project(":bom")))
     annotationProcessor(platform(project(":bom")))
     testImplementation(platform(project(":bom")))
     testAnnotationProcessor(platform(project(":bom")))
+
 
     annotationProcessor(mn.micronaut.serde.processor)
     implementation(mn.micronaut.grpc.runtime)
@@ -33,12 +34,12 @@ dependencies {
     implementation("ai.djl.huggingface:tokenizers:0.33.0")
     implementation("ai.djl.pytorch:pytorch-model-zoo:0.33.0")
     implementation("ai.djl.pytorch:pytorch-jni:2.5.1-0.33.0")
-    
+
     // Add GPU support for x86_64 architecture
     if (System.getProperty("os.arch") == "amd64") {
         implementation("ai.djl.pytorch:pytorch-native-cu124:2.5.1")
     }
-    
+
     // Apache Commons dependencies
     implementation("org.apache.commons:commons-lang3:3.14.0")
     implementation("org.apache.commons:commons-text:1.12.0")
@@ -60,7 +61,7 @@ dependencies {
     implementation(mn.grpc.stub)
     implementation(mn.micronaut.http.client.core)
     implementation("io.micronaut.grpc:micronaut-protobuff-support")
-    
+
     // Test dependencies
     testImplementation(mn.micronaut.test.junit5)
     testImplementation("org.junit.jupiter:junit-jupiter-api")
@@ -102,7 +103,7 @@ micronaut {
 docker {
     // Use environment variable or default socket
     url = System.getenv("DOCKER_HOST") ?: "unix:///var/run/docker.sock"
-    
+
     // API version compatibility
     apiVersion = "1.41"
 }

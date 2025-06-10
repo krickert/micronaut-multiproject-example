@@ -21,8 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * for Consul is active.
  */
 @MicronautTest(startApplication = false, environments = {"test"}) // We don't need the full app, just property resolution
-// You can also use your application.properties or a test-specific one
-// @Property(name = "micronaut.config-client.enabled", value = "false") // Good to keep this off
+@Property(name = "micronaut.test.resources.enabled", value = "true")
 class ConsulTestResourceProviderPropertyInjectionTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConsulTestResourceProviderPropertyInjectionTest.class);

@@ -1,8 +1,6 @@
 package com.krickert.search.engine.core;
 
-import com.ecwid.consul.v1.ConsulClient;
-import com.ecwid.consul.v1.agent.model.NewService;
-import com.ecwid.consul.v1.health.model.HealthService;
+import com.krickert.search.config.consul.service.BusinessOperationsService;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
@@ -10,8 +8,6 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -29,71 +25,55 @@ public class ModuleDiscoveryConceptTest {
     @Inject
     ApplicationContext applicationContext;
     
+    @Inject
+    BusinessOperationsService businessOpsService;
+    
+    @Inject
+    TestClusterHelper testClusterHelper;
+    
     @Test
     void demonstrateModuleRegistrationAndDiscovery() {
-        // Get Consul configuration from test resources
-        String consulHost = applicationContext.getProperty("consul.client.host", String.class).orElse("localhost");
-        Integer consulPort = applicationContext.getProperty("consul.client.port", Integer.class).orElse(8500);
-        
-        logger.info("Using Consul at {}:{}", consulHost, consulPort);
-        
-        // Create Consul client
-        ConsulClient consulClient = new ConsulClient(consulHost, consulPort);
+        // Create a test cluster
+        String clusterName = testClusterHelper.createTestCluster("module-discovery-test");
         
         // Simulate registering a chunker module
         String chunkerId = "chunker-" + UUID.randomUUID().toString().substring(0, 8);
-        NewService chunkerService = new NewService();
-        chunkerService.setId(chunkerId);
-        chunkerService.setName("yappy-chunker");
-        chunkerService.setAddress("chunker.example.com");
-        chunkerService.setPort(50051);
-        chunkerService.setTags(Arrays.asList("grpc", "module", "v1"));
-        chunkerService.setMeta(Map.of(
-            "module-type", "chunker",
-            "grpc-service", "PipeStepProcessor",
-            "config-schema", "chunker-config-v1"
-        ));
-        
-        // Add a health check
-        NewService.Check check = new NewService.Check();
-        check.setGrpc("chunker.example.com:50051");
-        check.setInterval("10s");
-        chunkerService.setCheck(check);
-        
-        // Register the service
-        consulClient.agentServiceRegister(chunkerService);
+        testClusterHelper.registerServiceInCluster(
+            clusterName,
+            "chunker",
+            chunkerId,
+            "chunker.example.com",
+            50051,
+            Map.of(
+                "module-type", "chunker",
+                "grpc-service", "PipeStepProcessor",
+                "config-schema", "chunker-config-v1"
+            )
+        ).block();
         logger.info("Registered chunker service: {}", chunkerId);
         
         // Simulate registering a tika-parser module
         String tikaId = "tika-parser-" + UUID.randomUUID().toString().substring(0, 8);
-        NewService tikaService = new NewService();
-        tikaService.setId(tikaId);
-        tikaService.setName("yappy-tika-parser");
-        tikaService.setAddress("tika.example.com");
-        tikaService.setPort(50051);
-        tikaService.setTags(Arrays.asList("grpc", "module", "v1"));
-        tikaService.setMeta(Map.of(
-            "module-type", "parser",
-            "grpc-service", "PipeStepProcessor",
-            "config-schema", "tika-config-v1"
-        ));
-        
-        // Add a health check
-        NewService.Check tikaCheck = new NewService.Check();
-        tikaCheck.setGrpc("tika.example.com:50051");
-        tikaCheck.setInterval("10s");
-        tikaService.setCheck(tikaCheck);
-        
-        // Register the service
-        consulClient.agentServiceRegister(tikaService);
+        testClusterHelper.registerServiceInCluster(
+            clusterName,
+            "tika-parser",
+            tikaId,
+            "tika.example.com",
+            50051,
+            Map.of(
+                "module-type", "parser",
+                "grpc-service", "PipeStepProcessor",
+                "config-schema", "tika-config-v1"
+            )
+        ).block();
         logger.info("Registered tika-parser service: {}", tikaId);
         
         // Now demonstrate discovery
         // The engine would query for all modules with the "module" tag
-        List<HealthService> modules = consulClient.getHealthServices("yappy-chunker", false, null).getValue();
+        var modules = businessOpsService.getServiceInstances(clusterName + "-chunker").block();
         
         assertThat(modules).isNotNull();
-        logger.info("Found {} chunker services", modules.size());
+        logger.info("Found {} chunker services", modules != null ? modules.size() : 0);
         
         // In a real scenario, the engine would:
         // 1. Query for healthy services by name (e.g., "yappy-chunker")
@@ -101,19 +81,20 @@ public class ModuleDiscoveryConceptTest {
         // 3. Create a gRPC channel to the selected instance
         // 4. Call the PipeStepProcessor service
         
-        for (HealthService module : modules) {
-            logger.info("Module: {} at {}:{}", 
-                module.getService().getId(),
-                module.getService().getAddress(), 
-                module.getService().getPort());
-            logger.info("  Tags: {}", module.getService().getTags());
-            logger.info("  Meta: {}", module.getService().getMeta());
+        if (modules != null) {
+            for (var module : modules) {
+                logger.info("Module: {} at {}:{}", 
+                    module.getServiceId(),
+                    module.getAddress(), 
+                    module.getServicePort());
+                logger.info("  Tags: {}", module.getServiceTags());
+                logger.info("  Meta: {}", module.getServiceMeta());
+            }
         }
         
-        // Cleanup - deregister services
-        consulClient.agentServiceDeregister(chunkerId);
-        consulClient.agentServiceDeregister(tikaId);
-        logger.info("Deregistered test services");
+        // Cleanup - use TestClusterHelper
+        testClusterHelper.cleanupTestCluster(clusterName).block();
+        logger.info("Cleaned up test cluster");
     }
     
     @Test

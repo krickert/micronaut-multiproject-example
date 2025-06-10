@@ -19,4 +19,3 @@ micronaut:
       openapi-explorer:
         paths: classpath:META-INF/swagger/views/openapi-explorer
         mapping: /openapi-explorer/**
-consul.client.registration.enabled: true

@@ -1,7 +1,6 @@
 package com.krickert.search.engine.core;
 
-import com.ecwid.consul.v1.ConsulClient;
-import com.ecwid.consul.v1.health.model.HealthService;
+import com.krickert.search.config.consul.service.BusinessOperationsService;
 import com.google.protobuf.Empty;
 import com.krickert.search.grpc.ModuleInfo;
 import com.krickert.search.grpc.ModuleRegistrationGrpc;
@@ -19,7 +18,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -33,7 +31,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 3. Module discovery and registration in Consul
  */
 @MicronautTest
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ModuleRegistrationIntegrationTest {
     
     private static final Logger logger = LoggerFactory.getLogger(ModuleRegistrationIntegrationTest.class);
@@ -42,23 +39,23 @@ public class ModuleRegistrationIntegrationTest {
     @Inject
     ApplicationContext applicationContext;
     
-    private ConsulClient consulClient;
+    @Inject
+    BusinessOperationsService businessOpsService;
+    
+    @Inject
+    TestClusterHelper testClusterHelper;
+    
     private String testClusterName;
     private Server grpcServer;
     private MockModuleRegistrationService registrationService;
     
-    @BeforeAll
+    @BeforeEach
     void setupTestCluster() throws IOException {
-        // Get Consul configuration
-        String consulHost = applicationContext.getProperty("consul.client.host", String.class).orElse("localhost");
-        Integer consulPort = applicationContext.getProperty("consul.client.port", Integer.class).orElse(8500);
-        consulClient = new ConsulClient(consulHost, consulPort);
-        
         // Create unique test cluster
-        testClusterName = TestClusterHelper.createTestCluster("module-reg-test");
+        testClusterName = testClusterHelper.createTestCluster("module-reg-test");
         
         // Start mock engine registration service
-        registrationService = new MockModuleRegistrationService(consulClient, testClusterName);
+        registrationService = new MockModuleRegistrationService(businessOpsService, testClusterHelper, testClusterName);
         grpcServer = ServerBuilder.forPort(ENGINE_GRPC_PORT)
                 .addService(registrationService)
                 .build()
@@ -67,15 +64,15 @@ public class ModuleRegistrationIntegrationTest {
         logger.info("Started mock engine registration service on port {}", ENGINE_GRPC_PORT);
     }
     
-    @AfterAll
+    @AfterEach
     void cleanupTestCluster() throws InterruptedException {
         if (grpcServer != null) {
             grpcServer.shutdown();
             grpcServer.awaitTermination(5, TimeUnit.SECONDS);
         }
         
-        if (consulClient != null && testClusterName != null) {
-            TestClusterHelper.cleanupTestCluster(consulClient, testClusterName);
+        if (testClusterName != null) {
+            testClusterHelper.cleanupTestCluster(testClusterName).block();
         }
     }
     
@@ -125,25 +122,24 @@ public class ModuleRegistrationIntegrationTest {
             Thread.sleep(500); // Give Consul time to update
             
             // Query for services in our test cluster
-            List<HealthService> services = consulClient.getHealthServices(
-                testClusterName + "-" + moduleName, 
-                false, 
-                null
-            ).getValue();
+            var services = businessOpsService.getServiceInstances(
+                testClusterName + "-" + moduleName
+            ).block();
             
             assertThat(services).isNotEmpty();
             
-            HealthService registeredService = services.get(0);
-            assertThat(registeredService.getService().getAddress()).isEqualTo(moduleHost);
-            assertThat(registeredService.getService().getPort()).isEqualTo(modulePort);
-            assertThat(registeredService.getService().getMeta())
+            var registeredService = services.getFirst();
+            // Consul might resolve the hostname to an IP, so we just check it's not empty
+            assertThat(registeredService.getAddress()).isNotEmpty();
+            assertThat(registeredService.getServicePort()).isEqualTo(modulePort);
+            assertThat(registeredService.getServiceMeta())
                 .containsEntry("cluster", testClusterName)
                 .containsEntry("module-type", "text-processor");
             
             logger.info("Verified module in Consul: {} at {}:{}", 
-                registeredService.getService().getId(),
-                registeredService.getService().getAddress(),
-                registeredService.getService().getPort());
+                registeredService.getServiceId(),
+                registeredService.getAddress(),
+                registeredService.getServicePort());
             
         } finally {
             channel.shutdown();
@@ -209,11 +205,13 @@ public class ModuleRegistrationIntegrationTest {
      */
     static class MockModuleRegistrationService extends ModuleRegistrationGrpc.ModuleRegistrationImplBase {
         
-        private final ConsulClient consulClient;
+        private final BusinessOperationsService businessOpsService;
+        private final TestClusterHelper testClusterHelper;
         private final String clusterName;
         
-        MockModuleRegistrationService(ConsulClient consulClient, String clusterName) {
-            this.consulClient = consulClient;
+        MockModuleRegistrationService(BusinessOperationsService businessOpsService, TestClusterHelper testClusterHelper, String clusterName) {
+            this.businessOpsService = businessOpsService;
+            this.testClusterHelper = testClusterHelper;
             this.clusterName = clusterName;
         }
         
@@ -221,15 +219,14 @@ public class ModuleRegistrationIntegrationTest {
         public void registerModule(ModuleInfo request, StreamObserver<RegistrationStatus> responseObserver) {
             try {
                 // Register in Consul using our test cluster helper
-                TestClusterHelper.registerServiceInCluster(
-                    consulClient,
+                testClusterHelper.registerServiceInCluster(
                     clusterName,
                     request.getServiceName(),
                     request.getServiceId(),
                     request.getHost(),
                     request.getPort(),
                     request.getMetadataMap()
-                );
+                ).block();
                 
                 RegistrationStatus status = RegistrationStatus.newBuilder()
                     .setSuccess(true)
@@ -258,20 +255,31 @@ public class ModuleRegistrationIntegrationTest {
             try {
                 var moduleListBuilder = com.krickert.search.grpc.ModuleList.newBuilder();
                 
-                // Get all services in this cluster
-                consulClient.getAgentServices().getValue().forEach((id, service) -> {
-                    if (service.getMeta() != null && clusterName.equals(service.getMeta().get("cluster"))) {
-                        ModuleInfo moduleInfo = ModuleInfo.newBuilder()
-                            .setServiceId(id)
-                            .setServiceName(service.getService())
-                            .setHost(service.getAddress())
-                            .setPort(service.getPort())
-                            .putAllMetadata(service.getMeta())
-                            .build();
-                        
-                        moduleListBuilder.addModules(moduleInfo);
-                    }
-                });
+                // Get all service types for this cluster and collect modules
+                businessOpsService.listServices()
+                    .flatMapMany(services -> {
+                        // Get instances for common service types in this cluster
+                        return reactor.core.publisher.Flux.merge(
+                            businessOpsService.getServiceInstances(clusterName + "-chunker"),
+                            businessOpsService.getServiceInstances(clusterName + "-tika-parser"),
+                            businessOpsService.getServiceInstances(clusterName + "-embedder")
+                        );
+                    })
+                    .flatMap(catalogServices -> reactor.core.publisher.Flux.fromIterable(catalogServices))
+                    .doOnNext(service -> {
+                        if (service.getServiceId().startsWith(clusterName + "-")) {
+                            ModuleInfo moduleInfo = ModuleInfo.newBuilder()
+                                .setServiceId(service.getServiceId())
+                                .setServiceName(service.getServiceName())
+                                .setHost(service.getAddress())
+                                .setPort(service.getServicePort())
+                                .putAllMetadata(service.getServiceMeta() != null ? service.getServiceMeta() : Map.of())
+                                .build();
+                            
+                            moduleListBuilder.addModules(moduleInfo);
+                        }
+                    })
+                    .blockLast();
                 
                 responseObserver.onNext(moduleListBuilder.build());
                 responseObserver.onCompleted();

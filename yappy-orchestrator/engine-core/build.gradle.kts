@@ -20,8 +20,7 @@ dependencies {
     implementation("io.micronaut.reactor:micronaut-reactor")
     implementation("io.projectreactor:reactor-core")
     
-    // Consul client
-    implementation("com.ecwid.consul:consul-api:1.4.5")
+    // Consul functionality is provided by yappy-consul-config
     
     // gRPC dependencies
     implementation("io.micronaut.grpc:micronaut-grpc-client-runtime")
@@ -57,6 +56,7 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers")
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:kafka")
+    testImplementation("org.testcontainers:consul:1.20.6")
     
     // Additional test utilities
     testImplementation("org.awaitility:awaitility:4.2.0")
@@ -75,30 +75,21 @@ dependencies {
     testImplementation("javax.annotation:javax.annotation-api")
     
     // Consul client for service discovery tests
-    testImplementation("com.ecwid.consul:consul-api:1.4.5")
+    // Consul API provided transitively through yappy-consul-config
     
     // Project test resources - handle both root project and standalone builds
-    if (rootProject.name == "yappy-platform-build") {
-        // Building from root project
-        testImplementation(project(":yappy-test-resources:consul-test-resource"))
-        testImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
-        testImplementation(project(":yappy-test-resources:apicurio-test-resource"))
-        testImplementation(project(":yappy-test-resources:moto-test-resource"))
-        testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
-        testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
-        testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
-        testResourcesImplementation(project(":yappy-test-resources:moto-test-resource"))
-    } else {
-        // Building from yappy-orchestrator directory
-        testImplementation("com.krickert.search:consul-test-resource")
-        testImplementation("com.krickert.search:apache-kafka-test-resource")
-        testImplementation("com.krickert.search:apicurio-test-resource")
-        testImplementation("com.krickert.search:moto-test-resource")
-        testResourcesImplementation("com.krickert.search:consul-test-resource")
-        testResourcesImplementation("com.krickert.search:apache-kafka-test-resource")
-        testResourcesImplementation("com.krickert.search:apicurio-test-resource")
-        testResourcesImplementation("com.krickert.search:moto-test-resource")
-    }
+    // Building from root project
+    testImplementation(project(":yappy-test-resources:consul-test-resource"))
+    testImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
+    testImplementation(project(":yappy-test-resources:apicurio-test-resource"))
+    testImplementation(project(":yappy-test-resources:moto-test-resource"))
+    testResourcesImplementation("org.testcontainers:consul:1.20.6")
+    testResourcesImplementation("org.testcontainers:kafka:1.21.0")
+    testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:moto-test-resource"))
+
 }
 
 java {

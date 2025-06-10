@@ -1,7 +1,8 @@
 package com.krickert.search.engine.core;
 
-import com.ecwid.consul.v1.ConsulClient;
+import com.krickert.search.config.consul.service.BusinessOperationsService;
 import com.krickert.search.config.consul.DynamicConfigurationManager;
+import com.krickert.search.engine.core.routing.Router;
 import com.krickert.search.sdk.PipeStepProcessorGrpc;
 import com.krickert.search.sdk.ProcessRequest;
 import com.krickert.search.sdk.ProcessResponse;
@@ -13,6 +14,8 @@ import io.micronaut.context.ApplicationContext;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.*;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.test.StepVerifier;
@@ -36,7 +39,15 @@ public class PipelineEngineImplTest {
     @Inject
     ApplicationContext applicationContext;
     
-    private ConsulClient consulClient;
+    @Inject
+    BusinessOperationsService businessOpsService;
+    
+    @Inject
+    TestClusterHelper testClusterHelper;
+    
+    @Mock
+    Router router;
+    
     private String testClusterName;
     private PipelineEngineImpl pipelineEngine;
     private Server mockChunkerServer;
@@ -44,19 +55,18 @@ public class PipelineEngineImplTest {
     
     @BeforeAll
     void setup() throws IOException {
-        // Get Consul configuration
-        String consulHost = applicationContext.getProperty("consul.client.host", String.class).orElse("localhost");
-        Integer consulPort = applicationContext.getProperty("consul.client.port", Integer.class).orElse(8500);
-        consulClient = new ConsulClient(consulHost, consulPort);
+        MockitoAnnotations.openMocks(this);
+        
+        // Get test cluster helper
+        testClusterHelper = applicationContext.getBean(TestClusterHelper.class);
         
         // Create test cluster
-        testClusterName = TestClusterHelper.createTestCluster("pipeline-engine-test");
+        testClusterName = testClusterHelper.createTestCluster("pipeline-engine-test");
         
         // Create pipeline engine for this cluster
-        DynamicConfigurationManager configManager = applicationContext.getBean(DynamicConfigurationManager.class);
         pipelineEngine = new PipelineEngineImpl(
-            consulClient, 
-            configManager,
+            businessOpsService,
+            router,
             testClusterName,
             false,  // Disable buffer for this test
             100,   // Default capacity
@@ -89,8 +99,8 @@ public class PipelineEngineImplTest {
         }
         
         // Cleanup test cluster
-        if (consulClient != null && testClusterName != null) {
-            TestClusterHelper.cleanupTestCluster(consulClient, testClusterName);
+        if (testClusterName != null) {
+            testClusterHelper.cleanupTestCluster(testClusterName).block();
         }
     }
     
@@ -183,39 +193,39 @@ public class PipelineEngineImplTest {
     
     private void registerMockServices() {
         // Register chunker
-        TestClusterHelper.registerServiceInCluster(
-            consulClient,
+        testClusterHelper.registerServiceInCluster(
             testClusterName,
             "chunker",
             "chunker-test-1",
             "localhost",
             mockChunkerServer.getPort(),
             Map.of("module-type", "text-processor", "test-service", "true")
-        );
+        ).block();
         
         // Register tika-parser
-        TestClusterHelper.registerServiceInCluster(
-            consulClient,
+        testClusterHelper.registerServiceInCluster(
             testClusterName,
             "tika-parser",
             "tika-test-1",
             "localhost",
             mockTikaServer.getPort(),
             Map.of("module-type", "document-parser", "test-service", "true")
-        );
+        ).block();
         
         // Wait for services to be registered and verify
         try {
             Thread.sleep(1000);
             
-            // Verify services are registered
-            var chunkerServices = consulClient.getHealthServices(
-                testClusterName + "-chunker", false, null).getValue();
-            logger.info("Found {} chunker services in cluster {}", chunkerServices.size(), testClusterName);
+            // Verify services are registered using BusinessOperationsService
+            var chunkerServices = businessOpsService.getServiceInstances(
+                testClusterName + "-chunker").block();
+            logger.info("Found {} chunker services in cluster {}", 
+                chunkerServices != null ? chunkerServices.size() : 0, testClusterName);
             
-            var tikaServices = consulClient.getHealthServices(
-                testClusterName + "-tika-parser", false, null).getValue();
-            logger.info("Found {} tika-parser services in cluster {}", tikaServices.size(), testClusterName);
+            var tikaServices = businessOpsService.getServiceInstances(
+                testClusterName + "-tika-parser").block();
+            logger.info("Found {} tika-parser services in cluster {}", 
+                tikaServices != null ? tikaServices.size() : 0, testClusterName);
             
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

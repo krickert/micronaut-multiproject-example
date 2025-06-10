@@ -3,6 +3,7 @@ package com.krickert.search.engine.core;
 import com.google.protobuf.Timestamp;
 import com.krickert.search.config.consul.DynamicConfigurationManager;
 import com.krickert.search.config.pipeline.model.*;
+import com.krickert.search.engine.core.routing.Router;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeStream;
 import com.krickert.search.model.util.ProcessingBuffer;
@@ -30,10 +31,13 @@ import static org.mockito.Mockito.when;
 public class BufferEnhancementTest {
 
     @Mock
-    private com.ecwid.consul.v1.ConsulClient consulClient;
+    private com.krickert.search.config.consul.service.BusinessOperationsService businessOpsService;
     
     @Mock
     private DynamicConfigurationManager configManager;
+    
+    @Mock
+    Router router;
     
     @TempDir
     Path tempDir;
@@ -60,8 +64,8 @@ public class BufferEnhancementTest {
         
         // Create engine with buffering enabled
         pipelineEngine = new PipelineEngineImpl(
-            consulClient,
-            configManager,
+            businessOpsService,
+            router,
             "test-cluster",
             true,  // Enable buffer
             10,    // Small capacity for testing

@@ -15,10 +15,12 @@ repositories {
 
 dependencies {
     // Apply BOM/platform dependencies
+    // When building from the root project
     implementation(platform(project(":bom")))
     annotationProcessor(platform(project(":bom")))
     testImplementation(platform(project(":bom")))
     testAnnotationProcessor(platform(project(":bom")))
+
 
     annotationProcessor(mn.micronaut.serde.processor)
     implementation(mn.micronaut.grpc.runtime)
@@ -86,7 +88,7 @@ tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative"
 docker {
     // Use environment variable or default socket
     url = System.getenv("DOCKER_HOST") ?: "unix:///var/run/docker.sock"
-    
+
     // API version compatibility
     apiVersion = "1.41"
 }

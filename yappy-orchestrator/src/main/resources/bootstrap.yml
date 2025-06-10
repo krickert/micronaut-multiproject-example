@@ -1,6 +1,3 @@
 micronaut:
   application:
     name: orchestrator
-  config-client:
-    enabled: true
-consul.client.defaultZone: ${CONSUL_HOST:localhost}:${CONSUL_PORT:8500}

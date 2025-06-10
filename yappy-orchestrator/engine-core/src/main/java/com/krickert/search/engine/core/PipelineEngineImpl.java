@@ -1,7 +1,9 @@
 package com.krickert.search.engine.core;
 
-import com.ecwid.consul.v1.ConsulClient;
-import com.ecwid.consul.v1.health.model.HealthService;
+import com.krickert.search.config.consul.service.BusinessOperationsService;
+import com.krickert.search.engine.core.routing.Router;
+import org.kiwiproject.consul.model.health.ServiceHealth;
+import org.kiwiproject.consul.model.catalog.CatalogService;
 import com.krickert.search.model.PipeStream;
 import com.krickert.search.sdk.PipeStepProcessorGrpc;
 import com.krickert.search.sdk.ProcessRequest;
@@ -10,12 +12,6 @@ import com.krickert.search.sdk.ProcessConfiguration;
 import com.krickert.search.sdk.ServiceMetadata;
 import com.krickert.search.model.util.ProcessingBuffer;
 import com.krickert.search.model.util.ProcessingBufferFactory;
-import com.krickert.search.config.consul.DynamicConfigurationManager;
-import com.krickert.search.config.pipeline.model.PipelineConfig;
-import com.krickert.search.config.pipeline.model.PipelineStepConfig;
-import com.krickert.search.model.StepExecutionRecord;
-import com.google.protobuf.Struct;
-import com.google.protobuf.util.JsonFormat;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.micronaut.context.annotation.Value;
@@ -48,10 +44,10 @@ public class PipelineEngineImpl implements PipelineEngine {
     
     private static final Logger logger = LoggerFactory.getLogger(PipelineEngineImpl.class);
     
-    private final ConsulClient consulClient;
+    private final BusinessOperationsService businessOperationsService;
     private final String clusterName;
     private final Map<String, ManagedChannel> channelCache = new ConcurrentHashMap<>();
-    private final DynamicConfigurationManager configManager;
+    private final Router router;
     
     // Processing buffers for capturing test data - one set per pipeline step
     private final Map<String, ProcessingBuffer<ProcessRequest>> requestBuffers = new ConcurrentHashMap<>();
@@ -66,15 +62,15 @@ public class PipelineEngineImpl implements PipelineEngine {
     
     @Inject
     public PipelineEngineImpl(
-            ConsulClient consulClient,
-            DynamicConfigurationManager configManager,
+            BusinessOperationsService businessOperationsService,
+            Router router,
             @Value("${engine.cluster.name:default-cluster}") String clusterName,
             @Value("${engine.test-data-buffer.enabled:false}") boolean bufferEnabled,
             @Value("${engine.test-data-buffer.capacity:200}") int bufferCapacity,
             @Value("${engine.test-data-buffer.precision:3}") int bufferPrecision,
             @Value("${engine.test-data-buffer.sample-rate:0.1}") double sampleRate) {
-        this.consulClient = consulClient;
-        this.configManager = configManager;
+        this.businessOperationsService = businessOperationsService;
+        this.router = router;
         this.clusterName = clusterName;
         this.bufferEnabled = bufferEnabled;
         this.bufferCapacity = bufferCapacity;
@@ -94,42 +90,20 @@ public class PipelineEngineImpl implements PipelineEngine {
                 pipeStream.getStreamId(), 
                 pipeStream.getCurrentPipelineName(),
                 pipeStream.getCurrentHopNumber());
-                
-            // Get pipeline configuration
-            return getPipelineConfig(pipeStream.getCurrentPipelineName())
-                .flatMap(config -> {
-                    // Determine next step based on current position
-                    String nextStepName = determineNextStep(pipeStream, config);
-                    
-                    if (nextStepName == null) {
-                        logger.info("Pipeline {} completed for stream {}", 
-                            pipeStream.getCurrentPipelineName(), pipeStream.getStreamId());
-                        return Mono.empty();
-                    }
-                    
-                    // Find step configuration
-                    PipelineStepConfig stepConfig = findStepConfig(config, nextStepName);
-                    if (stepConfig == null) {
-                        return Mono.error(new IllegalStateException(
-                            "Step not found in pipeline config: " + nextStepName));
-                    }
-                    
-                    // Execute the step
-                    return executeStep(pipeStream, stepConfig)
-                        .flatMap(response -> {
-                            if (!response.getSuccess()) {
-                                logger.error("Step {} failed for stream {}", 
-                                    nextStepName, pipeStream.getStreamId());
-                                return handleStepFailure(pipeStream, stepConfig, response);
-                            }
-                            
-                            // Update PipeStream with results and continue
-                            PipeStream updatedStream = updatePipeStream(pipeStream, stepConfig, response);
-                            
-                            // Recursively process next step
-                            return processMessage(updatedStream);
-                        });
-                });
+            
+            // Check if target step is set for routing
+            if (pipeStream.getTargetStepName() == null || pipeStream.getTargetStepName().isBlank()) {
+                logger.info("No target step specified, pipeline {} completed for stream {}", 
+                    pipeStream.getCurrentPipelineName(), pipeStream.getStreamId());
+                return Mono.empty();
+            }
+            
+            // Use Router to handle the message routing
+            return router.route(pipeStream)
+                .doOnSuccess(v -> logger.debug("Successfully routed message {} to step {}", 
+                    pipeStream.getStreamId(), pipeStream.getTargetStepName()))
+                .doOnError(e -> logger.error("Failed to route message {} to step {}: {}", 
+                    pipeStream.getStreamId(), pipeStream.getTargetStepName(), e.getMessage()));
         })
         .doOnError(error -> logger.error("Error processing stream {}: {}", 
             pipeStream.getStreamId(), error.getMessage(), error))
@@ -190,40 +164,53 @@ public class PipelineEngineImpl implements PipelineEngine {
         }
     }
     
-    private Mono<HealthService> discoverService(String serviceName) {
-        return Mono.fromCallable(() -> {
-            String clusterServiceName = clusterName + "-" + serviceName;
-            
-            // First try to get healthy services
-            List<HealthService> services = consulClient.getHealthServices(
-                clusterServiceName, true, null).getValue();
-            
-            // If no healthy services, get all services (including unhealthy)
-            if (services.isEmpty()) {
+    // Simple record to hold service instance information
+    private record ServiceInstance(String address, int port, String serviceName) {}
+    
+    private Mono<ServiceInstance> discoverService(String serviceName) {
+        String clusterServiceName = clusterName + "-" + serviceName;
+        
+        // First try to get healthy services
+        return businessOperationsService.getHealthyServiceInstances(clusterServiceName)
+            .flatMap(services -> {
+                if (!services.isEmpty()) {
+                    ServiceHealth selected = services.get(0);
+                    ServiceInstance instance = new ServiceInstance(
+                        selected.getService().getAddress(),
+                        selected.getService().getPort(),
+                        serviceName
+                    );
+                    logger.info("Discovered healthy service {} at {}:{}", 
+                        serviceName, instance.address, instance.port);
+                    return Mono.just(instance);
+                }
+                
+                // If no healthy services, get all services (including unhealthy)
                 logger.warn("No healthy instances found for service: {}, checking all instances", clusterServiceName);
-                services = consulClient.getHealthServices(
-                    clusterServiceName, false, null).getValue();
-            }
-            
-            if (services.isEmpty()) {
-                throw new IllegalStateException(
-                    "No instances found for service: " + clusterServiceName);
-            }
-            
-            HealthService selected = services.get(0);
-            logger.info("Discovered service {} at {}:{}", 
-                serviceName, 
-                selected.getService().getAddress(), 
-                selected.getService().getPort());
-            
-            return selected;
-        });
+                return businessOperationsService.getServiceInstances(clusterServiceName)
+                    .flatMap(allServices -> {
+                        if (allServices.isEmpty()) {
+                            return Mono.error(new IllegalStateException(
+                                "No instances found for service: " + clusterServiceName));
+                        }
+                        
+                        CatalogService catalogService = allServices.get(0);
+                        ServiceInstance instance = new ServiceInstance(
+                            catalogService.getAddress(),
+                            catalogService.getServicePort(),
+                            serviceName
+                        );
+                        logger.info("Discovered service {} at {}:{}", 
+                            serviceName, instance.address, instance.port);
+                        return Mono.just(instance);
+                    });
+            });
     }
     
-    private Mono<ProcessResponse> invokeService(HealthService service, String documentId, String content) {
+    private Mono<ProcessResponse> invokeService(ServiceInstance service, String documentId, String content) {
         return Mono.fromCallable(() -> {
-            String address = service.getService().getAddress();
-            int port = service.getService().getPort();
+            String address = service.address;
+            int port = service.port;
             String channelKey = address + ":" + port;
             
             ManagedChannel channel = channelCache.computeIfAbsent(channelKey, k -> 
@@ -242,7 +229,7 @@ public class PipelineEngineImpl implements PipelineEngine {
             // Build service metadata
             ServiceMetadata metadata = ServiceMetadata.newBuilder()
                 .setPipelineName("test-pipeline")
-                .setPipeStepName(service.getService().getService())
+                .setPipeStepName(service.serviceName)
                 .setStreamId("test-stream-" + System.currentTimeMillis())
                 .setCurrentHopNumber(1)
                 .build();
@@ -279,193 +266,14 @@ public class PipelineEngineImpl implements PipelineEngine {
         });
     }
     
-    private Mono<PipelineConfig> getPipelineConfig(String pipelineName) {
-        return Mono.fromCallable(() -> {
-            // Get pipeline config
-            return configManager.getPipelineConfig(pipelineName)
-                .orElseThrow(() -> new IllegalStateException(
-                    "Pipeline configuration not found: " + pipelineName));
-        });
-    }
     
-    private String determineNextStep(PipeStream pipeStream, PipelineConfig config) {
-        // Check if target step is already set in PipeStream
-        if (!pipeStream.getTargetStepName().isEmpty()) {
-            return pipeStream.getTargetStepName();
-        }
-        
-        // If no history, use the first step from config
-        if (pipeStream.getHistoryCount() == 0) {
-            // Get the initial step name from pipeline config
-            return config.pipelineSteps().isEmpty() ? null : 
-                config.pipelineSteps().keySet().iterator().next();
-        }
-        
-        // Get current step from history
-        StepExecutionRecord lastExecution = 
-            pipeStream.getHistory(pipeStream.getHistoryCount() - 1);
-        
-        // Find the current step config and get its output target
-        PipelineStepConfig stepConfig = config.pipelineSteps().get(lastExecution.getStepName());
-        if (stepConfig != null) {
-            // Get default output target
-            var defaultOutput = stepConfig.outputs().get("default");
-            if (defaultOutput != null) {
-                return defaultOutput.targetStepName();
-            }
-        }
-        
-        return null; // No next step
-    }
     
-    private PipelineStepConfig findStepConfig(PipelineConfig config, String stepName) {
-        return config.pipelineSteps().get(stepName);
-    }
     
-    private Mono<ProcessResponse> executeStep(PipeStream pipeStream, PipelineStepConfig stepConfig) {
-        // Use gRPC processor for this step
-        String serviceName = stepConfig.processorInfo().grpcServiceName();
-        if (serviceName == null) {
-            return Mono.error(new IllegalStateException(
-                "No gRPC service name configured for step: " + stepConfig.stepName()));
-        }
-        
-        return discoverService(serviceName)
-            .flatMap(service -> {
-                // Build process request from PipeStream
-                ProcessRequest request = buildProcessRequest(pipeStream, stepConfig);
-                
-                // Execute via gRPC
-                return invokeService(service, request);
-            });
-    }
     
-    private ProcessRequest buildProcessRequest(PipeStream pipeStream, PipelineStepConfig stepConfig) {
-        try {
-            // Build process configuration from step config
-            ProcessConfiguration.Builder configBuilder = ProcessConfiguration.newBuilder();
-            
-            // Add custom JSON config if present
-            if (stepConfig.customConfig() != null && stepConfig.customConfig().jsonConfig() != null) {
-                try {
-                    Struct.Builder structBuilder = Struct.newBuilder();
-                    JsonFormat.parser().merge(
-                        stepConfig.customConfig().jsonConfig().toString(), 
-                        structBuilder);
-                    configBuilder.setCustomJsonConfig(structBuilder.build());
-                } catch (Exception e) {
-                    logger.warn("Failed to parse custom JSON config: {}", e.getMessage());
-                }
-            }
-            
-            // Add config params
-            if (stepConfig.customConfig() != null && stepConfig.customConfig().configParams() != null) {
-                configBuilder.putAllConfigParams(stepConfig.customConfig().configParams());
-            }
-            
-            // Build service metadata
-            ServiceMetadata metadata = ServiceMetadata.newBuilder()
-                .setPipelineName(pipeStream.getCurrentPipelineName())
-                .setPipeStepName(stepConfig.stepName())
-                .setStreamId(pipeStream.getStreamId())
-                .setCurrentHopNumber(pipeStream.getCurrentHopNumber())
-                .addAllHistory(pipeStream.getHistoryList())
-                .putAllContextParams(pipeStream.getContextParamsMap())
-                .build();
-            
-            // Build request
-            return ProcessRequest.newBuilder()
-                .setDocument(pipeStream.getDocument())
-                .setConfig(configBuilder.build())
-                .setMetadata(metadata)
-                .build();
-                
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to build process request", e);
-        }
-    }
     
-    private Mono<ProcessResponse> invokeService(HealthService service, ProcessRequest request) {
-        return Mono.fromCallable(() -> {
-            String address = service.getService().getAddress();
-            int port = service.getService().getPort();
-            String channelKey = address + ":" + port;
-            
-            ManagedChannel channel = channelCache.computeIfAbsent(channelKey, k -> 
-                ManagedChannelBuilder.forAddress(address, port)
-                    .usePlaintext()
-                    .build()
-            );
-            
-            PipeStepProcessorGrpc.PipeStepProcessorBlockingStub stub = 
-                PipeStepProcessorGrpc.newBlockingStub(channel);
-            
-            String stepName = request.getMetadata().getPipeStepName();
-            
-            // Sample and buffer request if enabled
-            if (shouldSample()) {
-                getRequestBuffer(stepName).add(request);
-                getPipeDocBuffer(stepName).add(request.getDocument());
-            }
-            
-            ProcessResponse response = stub.processData(request);
-            
-            // Sample and buffer response if enabled
-            if (shouldSample() && response.getSuccess() && response.hasOutputDoc()) {
-                getResponseBuffer(stepName).add(response);
-                getPipeDocBuffer(stepName).add(response.getOutputDoc());
-            }
-            
-            return response;
-        });
-    }
     
-    private PipeStream updatePipeStream(PipeStream original, PipelineStepConfig stepConfig, ProcessResponse response) {
-        // Build execution record for this step
-        StepExecutionRecord executionRecord = StepExecutionRecord.newBuilder()
-            .setHopNumber(original.getCurrentHopNumber() + 1)
-            .setStepName(stepConfig.stepName())
-            .setStartTime(com.google.protobuf.Timestamp.newBuilder()
-                .setSeconds(System.currentTimeMillis() / 1000)
-                .build())
-            .setEndTime(com.google.protobuf.Timestamp.newBuilder()
-                .setSeconds(System.currentTimeMillis() / 1000)
-                .build())
-            .setStatus(response.getSuccess() ? "SUCCESS" : "FAILURE")
-            .addAllProcessorLogs(response.getProcessorLogsList())
-            .build();
-        
-        // Update PipeStream
-        PipeStream.Builder builder = original.toBuilder()
-            .setCurrentHopNumber(original.getCurrentHopNumber() + 1)
-            .addHistory(executionRecord);
-        
-        // Update document if response has output
-        if (response.hasOutputDoc()) {
-            builder.setDocument(response.getOutputDoc());
-        }
-        
-        // Add any error data if step failed
-        if (!response.getSuccess() && response.hasErrorDetails()) {
-            // Would need to convert error details to ErrorData protobuf
-            logger.warn("Step failure error details not yet fully implemented");
-        }
-        
-        return builder.build();
-    }
     
-    private Mono<Void> handleStepFailure(PipeStream pipeStream, PipelineStepConfig stepConfig, ProcessResponse response) {
-        // For now, just log and stop processing
-        logger.error("Step {} failed for stream {}. Error details: {}", 
-            stepConfig.stepName(), 
-            pipeStream.getStreamId(),
-            response.hasErrorDetails() ? response.getErrorDetails() : "No details");
-            
-        // In a real implementation, could implement retry logic based on stepConfig.maxRetries()
-        // or route to an error handling step
-        
-        return Mono.empty();
-    }
+    
     
     /**
      * Determines if the current request should be sampled based on the configured sample rate.

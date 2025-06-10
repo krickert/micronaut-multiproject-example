@@ -39,14 +39,22 @@ health:
 # Logging configuration for tests
 logger:
   levels:
-    com.krickert.search.engine.core: DEBUG
-    com.krickert.search.config.consul: DEBUG
-    io.micronaut.test: DEBUG
-    io.micronaut.testresources: DEBUG
-    org.testcontainers: INFO
+    com.krickert.search.engine.core: INFO
+    com.krickert.search.config.consul: WARN
+    io.micronaut.test: WARN
+    io.micronaut.testresources: WARN
+    org.testcontainers: WARN
 
 # Mock configurations for testing
 engine:
+  test-mode: true  # Enable test mode to use getServiceInstances instead of getHealthyServiceInstances
+  cluster:
+    name: ${app.config.cluster-name}
+  test-data-buffer:
+    enabled: true
+    capacity: 100
+    precision: 3
+    sample-rate: 1.0
   core:
     # Use mock implementations in test environment when needed
     use-mock-service-discovery: false
@@ -66,10 +74,19 @@ app:
       key-prefix: configs/
     schema-versions:
       key-prefix: schema-versions/
-    watch:
-      seconds: 30
     consul:
       key-prefixes:
         pipeline-clusters: configs/
         schema-versions: schema-versions/
-      watch-seconds: 5
+      watch-seconds: 1  # Use 1 second for fast testing
+
+# Yappy configuration
+yappy:
+  cluster:
+    name: ${app.config.cluster-name}
+  engine:
+    buffer:
+      enabled: false
+      capacity: 100
+      precision: 10
+      sampleRate: 0.1
