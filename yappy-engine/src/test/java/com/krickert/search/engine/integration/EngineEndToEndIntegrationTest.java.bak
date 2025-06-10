@@ -1,0 +1,549 @@
+package com.krickert.search.engine.integration;
+
+import com.google.protobuf.Empty;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
+import com.krickert.search.config.pipeline.model.*;
+import com.krickert.search.engine.grpc.ModuleRegistrationService;
+import com.krickert.search.engine.pipeline.PipelineExecutionService;
+import com.krickert.search.engine.service.EngineOrchestrator;
+import com.krickert.search.model.PipeDoc;
+import com.krickert.search.model.PipeStream;
+import com.krickert.search.sdk.*;
+import com.krickert.yappy.registration.api.*;
+import io.grpc.Server;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.stub.StreamObserver;
+import io.micronaut.context.ApplicationContext;
+import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import jakarta.inject.Inject;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.junit.jupiter.api.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
+
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * End-to-end integration test for the new YAPPY engine architecture.
+ * This test uses the new package structure and simplified gRPC routing.
+ */
+@MicronautTest(
+    environments = {"test", "engine-integration"},
+    propertySources = "classpath:application-engine-integration.yml"
+)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+public class EngineEndToEndIntegrationTest {
+    
+    private static final Logger LOG = LoggerFactory.getLogger(EngineEndToEndIntegrationTest.class);
+    private static final String TEST_TOPIC = "engine-output-topic";
+    private static final String TEST_PIPELINE_ID = "engine-test-pipeline";
+    
+    @Inject
+    ApplicationContext applicationContext;
+    
+    @Inject
+    EngineOrchestrator engineOrchestrator;
+    
+    @Inject
+    ModuleRegistrationService registrationService;
+    
+    @Inject
+    PipelineExecutionService executionService;
+    
+    private Server testModuleServer;
+    private String testModuleServerName;
+    private KafkaConsumer<String, byte[]> kafkaConsumer;
+    private String registeredModuleId;
+    
+    @BeforeAll
+    void setup() throws Exception {
+        // Start the engine orchestrator
+        engineOrchestrator.start().block(Duration.ofSeconds(10));
+        
+        // Start test module gRPC server
+        testModuleServerName = InProcessServerBuilder.generateName();
+        testModuleServer = InProcessServerBuilder
+                .forName(testModuleServerName)
+                .directExecutor()
+                .addService(new SimpleTestModule())
+                .build()
+                .start();
+        
+        // Setup Kafka consumer
+        setupKafkaConsumer();
+    }
+    
+    @AfterAll
+    void tearDown() {
+        if (testModuleServer != null) {
+            testModuleServer.shutdownNow();
+        }
+        if (kafkaConsumer != null) {
+            kafkaConsumer.close();
+        }
+        engineOrchestrator.stop().block(Duration.ofSeconds(5));
+    }
+    
+    @BeforeEach
+    void cleanupBetweenTests() {
+        // Clear any existing data between tests
+        if (registeredModuleId != null) {
+            registrationService.unregisterModule(registeredModuleId).block();
+            registeredModuleId = null;
+        }
+    }
+    
+    @Test
+    @DisplayName("Should register module and execute pipeline successfully")
+    void testBasicPipelineExecution() {
+        // 1. Register the test module
+        LOG.info("Step 1: Registering test module");
+        RegisterModuleRequest request = RegisterModuleRequest.newBuilder()
+                .setImplementationId("simple-test-module")
+                .setInstanceServiceName("test-module-instance")
+                .setHost("in-process")
+                .setPort(0) // In-process doesn't need a port
+                .setHealthCheckType(HealthCheckType.NONE)
+                .putAdditionalTags("server", testModuleServerName)
+                .setInstanceCustomConfigJson("{\"mode\": \"test\"}")
+                .build();
+        
+        StepVerifier.create(registrationService.registerModule(request))
+                .assertNext(response -> {
+                    assertTrue(response.getSuccess());
+                    assertNotNull(response.getRegisteredServiceId());
+                    registeredModuleId = response.getRegisteredServiceId();
+                    LOG.info("Module registered with ID: {}", registeredModuleId);
+                })
+                .verifyComplete();
+        
+        // 2. Create pipeline configuration
+        LOG.info("Step 2: Creating pipeline configuration");
+        PipelineConfig pipeline = createSimplePipeline(registeredModuleId);
+        
+        StepVerifier.create(executionService.createOrUpdatePipeline(TEST_PIPELINE_ID, pipeline))
+                .expectNext(true)
+                .verifyComplete();
+        
+        // Wait for pipeline to be ready
+        StepVerifier.create(executionService.isPipelineReady(TEST_PIPELINE_ID))
+                .expectNext(true)
+                .verifyComplete();
+        
+        // 3. Process a document
+        LOG.info("Step 3: Processing document through pipeline");
+        PipeDoc testDoc = PipeDoc.newBuilder()
+                .setId("test-doc-001")
+                .setTitle("Integration Test Document")
+                .setBody("This is test content")
+                .setDocumentType("test")
+                .build();
+        
+        StepVerifier.create(executionService.processDocument(TEST_PIPELINE_ID, testDoc))
+                .assertNext(result -> {
+                    assertEquals("test-doc-001", result.getId());
+                    assertTrue(result.hasCustomData());
+                    assertEquals("true", 
+                        result.getCustomData().getFieldsOrThrow("processed").getStringValue());
+                    assertEquals("PROCESSED: This is test content", result.getBody());
+                })
+                .verifyComplete();
+        
+        // 4. Verify Kafka output
+        LOG.info("Step 4: Verifying Kafka output");
+        List<PipeDoc> kafkaOutput = consumeFromKafka(1, Duration.ofSeconds(10));
+        assertEquals(1, kafkaOutput.size());
+        
+        PipeDoc outputDoc = kafkaOutput.get(0);
+        assertEquals("test-doc-001", outputDoc.getId());
+        assertEquals("PROCESSED: This is test content", outputDoc.getBody());
+    }
+    
+    @Test
+    @DisplayName("Should handle pipeline with multiple steps")
+    void testMultiStepPipeline() {
+        // Register two modules
+        String module1Id = registerModule("uppercase-module", new UppercaseModule());
+        String module2Id = registerModule("prefix-module", new PrefixModule());
+        
+        // Create pipeline with two steps
+        PipelineConfig pipeline = createTwoStepPipeline(module1Id, module2Id);
+        
+        StepVerifier.create(executionService.createOrUpdatePipeline("multi-step-pipeline", pipeline))
+                .expectNext(true)
+                .verifyComplete();
+        
+        // Process document
+        PipeDoc testDoc = PipeDoc.newBuilder()
+                .setId("multi-step-doc")
+                .setBody("hello world")
+                .build();
+        
+        StepVerifier.create(executionService.processDocument("multi-step-pipeline", testDoc))
+                .assertNext(result -> {
+                    // Should be uppercase then prefixed
+                    assertEquals("PREFIX: HELLO WORLD", result.getBody());
+                })
+                .verifyComplete();
+    }
+    
+    @Test
+    @DisplayName("Should handle concurrent document processing")
+    void testConcurrentProcessing() {
+        // Register module
+        String moduleId = registerModule("concurrent-module", new SimpleTestModule());
+        PipelineConfig pipeline = createSimplePipeline(moduleId);
+        
+        StepVerifier.create(executionService.createOrUpdatePipeline("concurrent-pipeline", pipeline))
+                .expectNext(true)
+                .verifyComplete();
+        
+        // Process multiple documents concurrently
+        List<Mono<PipeDoc>> documentProcessing = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            PipeDoc doc = PipeDoc.newBuilder()
+                    .setId("concurrent-doc-" + i)
+                    .setBody("Content " + i)
+                    .build();
+            
+            documentProcessing.add(executionService.processDocument("concurrent-pipeline", doc));
+        }
+        
+        StepVerifier.create(Mono.when(documentProcessing))
+                .expectComplete()
+                .verify(Duration.ofSeconds(10));
+        
+        // Verify all documents were processed
+        List<PipeDoc> kafkaOutput = consumeFromKafka(10, Duration.ofSeconds(15));
+        assertEquals(10, kafkaOutput.size());
+        
+        Set<String> processedIds = new HashSet<>();
+        for (PipeDoc doc : kafkaOutput) {
+            processedIds.add(doc.getId());
+            assertTrue(doc.getBody().startsWith("PROCESSED: Content"));
+        }
+        assertEquals(10, processedIds.size());
+    }
+    
+    private String registerModule(String name, PipeStepProcessorGrpc.PipeStepProcessorImplBase implementation) {
+        try {
+            // Create in-process server for the module
+            String serverName = InProcessServerBuilder.generateName();
+            Server server = InProcessServerBuilder
+                    .forName(serverName)
+                    .directExecutor()
+                    .addService(implementation)
+                    .build()
+                    .start();
+            
+            // Register with engine
+            RegisterModuleRequest request = RegisterModuleRequest.newBuilder()
+                    .setImplementationId(name)
+                    .setInstanceServiceName(name + "-instance")
+                    .setHost("in-process")
+                    .setPort(0)
+                    .setHealthCheckType(HealthCheckType.NONE)
+                    .putAdditionalTags("server", serverName)
+                    .build();
+            
+            RegisterModuleResponse response = registrationService.registerModule(request).block();
+            assertNotNull(response);
+            assertTrue(response.getSuccess());
+            
+            // Clean up server on shutdown
+            Runtime.getRuntime().addShutdownHook(new Thread(server::shutdownNow));
+            
+            return response.getRegisteredServiceId();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to register module: " + name, e);
+        }
+    }
+    
+    private PipelineConfig createSimplePipeline(String moduleId) {
+        PipelineStepConfig processStep = new PipelineStepConfig(
+                "process",
+                StepType.PIPELINE,
+                "Process document",
+                null,
+                new PipelineStepConfig.JsonConfigOptions(
+                    null,
+                    Map.of("prefix", "PROCESSED: ")
+                ),
+                List.of(),
+                Map.of("output", new PipelineStepConfig.OutputTarget(
+                        "kafka-sink",
+                        PipelineStepConfig.TransportType.DIRECT,
+                        null,
+                        null
+                )),
+                3,
+                1000L,
+                30000L,
+                2.0,
+                5000L,
+                new PipelineStepConfig.ProcessorInfo(moduleId, null)
+        );
+        
+        PipelineStepConfig kafkaSink = new PipelineStepConfig(
+                "kafka-sink",
+                StepType.SINK,
+                "Output to Kafka",
+                null,
+                new PipelineStepConfig.JsonConfigOptions(
+                    null,
+                    Map.of("topic", TEST_TOPIC)
+                ),
+                List.of(),
+                Map.of(),
+                0,
+                1000L,
+                30000L,
+                2.0,
+                5000L,
+                new PipelineStepConfig.ProcessorInfo(null, "kafkaSinkProcessor")
+        );
+        
+        return PipelineConfig.builder()
+                .name(TEST_PIPELINE_ID)
+                .description("Simple test pipeline")
+                .pipelineSteps(Map.of(
+                        "process", processStep,
+                        "kafka-sink", kafkaSink
+                ))
+                .enabled(true)
+                .build();
+    }
+    
+    private PipelineConfig createTwoStepPipeline(String module1Id, String module2Id) {
+        PipelineStepConfig step1 = new PipelineStepConfig(
+                "uppercase",
+                StepType.PIPELINE,
+                "Convert to uppercase",
+                null,
+                null,
+                List.of(),
+                Map.of("next", new PipelineStepConfig.OutputTarget(
+                        "prefix",
+                        PipelineStepConfig.TransportType.DIRECT,
+                        null,
+                        null
+                )),
+                3, 1000L, 30000L, 2.0, 5000L,
+                new PipelineStepConfig.ProcessorInfo(module1Id, null)
+        );
+        
+        PipelineStepConfig step2 = new PipelineStepConfig(
+                "prefix",
+                StepType.PIPELINE,
+                "Add prefix",
+                null,
+                new PipelineStepConfig.JsonConfigOptions(
+                    null,
+                    Map.of("prefix", "PREFIX: ")
+                ),
+                List.of(),
+                Map.of("output", new PipelineStepConfig.OutputTarget(
+                        "kafka-sink",
+                        PipelineStepConfig.TransportType.DIRECT,
+                        null,
+                        null
+                )),
+                3, 1000L, 30000L, 2.0, 5000L,
+                new PipelineStepConfig.ProcessorInfo(module2Id, null)
+        );
+        
+        PipelineStepConfig kafkaSink = new PipelineStepConfig(
+                "kafka-sink",
+                StepType.SINK,
+                "Output to Kafka",
+                null,
+                new PipelineStepConfig.JsonConfigOptions(
+                    null,
+                    Map.of("topic", TEST_TOPIC)
+                ),
+                List.of(),
+                Map.of(),
+                0, 1000L, 30000L, 2.0, 5000L,
+                new PipelineStepConfig.ProcessorInfo(null, "kafkaSinkProcessor")
+        );
+        
+        return PipelineConfig.builder()
+                .name("multi-step-pipeline")
+                .description("Multi-step test pipeline")
+                .pipelineSteps(Map.of(
+                        "uppercase", step1,
+                        "prefix", step2,
+                        "kafka-sink", kafkaSink
+                ))
+                .enabled(true)
+                .build();
+    }
+    
+    private void setupKafkaConsumer() {
+        Properties props = new Properties();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, 
+            applicationContext.getProperty("kafka.bootstrap.servers", String.class)
+                .orElse("localhost:9092"));
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "engine-test-consumer");
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        
+        kafkaConsumer = new KafkaConsumer<>(props);
+        kafkaConsumer.subscribe(List.of(TEST_TOPIC));
+    }
+    
+    private List<PipeDoc> consumeFromKafka(int expectedCount, Duration timeout) {
+        List<PipeDoc> documents = new ArrayList<>();
+        long endTime = System.currentTimeMillis() + timeout.toMillis();
+        
+        while (documents.size() < expectedCount && System.currentTimeMillis() < endTime) {
+            ConsumerRecords<String, byte[]> records = kafkaConsumer.poll(Duration.ofMillis(100));
+            
+            for (ConsumerRecord<String, byte[]> record : records) {
+                try {
+                    PipeDoc doc = PipeDoc.parseFrom(record.value());
+                    documents.add(doc);
+                    LOG.info("Consumed document from Kafka: {}", doc.getId());
+                } catch (Exception e) {
+                    LOG.error("Failed to parse document from Kafka", e);
+                }
+            }
+        }
+        
+        return documents;
+    }
+    
+    // Test module implementations
+    
+    private static class SimpleTestModule extends PipeStepProcessorGrpc.PipeStepProcessorImplBase {
+        @Override
+        public void getServiceRegistration(Empty request, StreamObserver<ServiceRegistrationData> responseObserver) {
+            ServiceRegistrationData registration = ServiceRegistrationData.newBuilder()
+                    .setModuleName("simple-test-module")
+                    .setJsonConfigSchema("{\"type\": \"object\"}")
+                    .build();
+            
+            responseObserver.onNext(registration);
+            responseObserver.onCompleted();
+        }
+        
+        @Override
+        public void processData(ProcessRequest request, StreamObserver<ProcessResponse> responseObserver) {
+            try {
+                PipeDoc inputDoc = request.getDocument();
+                String prefix = "PROCESSED: ";
+                
+                if (request.getConfig().getCustomJsonConfig() != null &&
+                    request.getConfig().getCustomJsonConfig().containsFields("prefix")) {
+                    prefix = request.getConfig().getCustomJsonConfig()
+                            .getFieldsOrThrow("prefix").getStringValue();
+                }
+                
+                PipeDoc.Builder outputDoc = inputDoc.toBuilder();
+                outputDoc.setBody(prefix + inputDoc.getBody());
+                
+                Struct.Builder customData = outputDoc.hasCustomData() ? 
+                        outputDoc.getCustomData().toBuilder() : 
+                        Struct.newBuilder();
+                customData.putFields("processed", 
+                        Value.newBuilder().setStringValue("true").build());
+                outputDoc.setCustomData(customData.build());
+                
+                ProcessResponse response = ProcessResponse.newBuilder()
+                        .setSuccess(true)
+                        .setOutputDoc(outputDoc.build())
+                        .build();
+                
+                responseObserver.onNext(response);
+                responseObserver.onCompleted();
+            } catch (Exception e) {
+                responseObserver.onError(e);
+            }
+        }
+    }
+    
+    private static class UppercaseModule extends PipeStepProcessorGrpc.PipeStepProcessorImplBase {
+        @Override
+        public void getServiceRegistration(Empty request, StreamObserver<ServiceRegistrationData> responseObserver) {
+            ServiceRegistrationData registration = ServiceRegistrationData.newBuilder()
+                    .setModuleName("uppercase-module")
+                    .setJsonConfigSchema("{\"type\": \"object\"}")
+                    .build();
+            
+            responseObserver.onNext(registration);
+            responseObserver.onCompleted();
+        }
+        
+        @Override
+        public void processData(ProcessRequest request, StreamObserver<ProcessResponse> responseObserver) {
+            try {
+                PipeDoc outputDoc = request.getDocument().toBuilder()
+                        .setBody(request.getDocument().getBody().toUpperCase())
+                        .build();
+                
+                ProcessResponse response = ProcessResponse.newBuilder()
+                        .setSuccess(true)
+                        .setOutputDoc(outputDoc)
+                        .build();
+                
+                responseObserver.onNext(response);
+                responseObserver.onCompleted();
+            } catch (Exception e) {
+                responseObserver.onError(e);
+            }
+        }
+    }
+    
+    private static class PrefixModule extends PipeStepProcessorGrpc.PipeStepProcessorImplBase {
+        @Override
+        public void getServiceRegistration(Empty request, StreamObserver<ServiceRegistrationData> responseObserver) {
+            ServiceRegistrationData registration = ServiceRegistrationData.newBuilder()
+                    .setModuleName("prefix-module")
+                    .setJsonConfigSchema("{\"type\": \"object\"}")
+                    .build();
+            
+            responseObserver.onNext(registration);
+            responseObserver.onCompleted();
+        }
+        
+        @Override
+        public void processData(ProcessRequest request, StreamObserver<ProcessResponse> responseObserver) {
+            try {
+                String prefix = "PREFIX: ";
+                if (request.getConfig().getCustomJsonConfig() != null &&
+                    request.getConfig().getCustomJsonConfig().containsFields("prefix")) {
+                    prefix = request.getConfig().getCustomJsonConfig()
+                            .getFieldsOrThrow("prefix").getStringValue();
+                }
+                
+                PipeDoc outputDoc = request.getDocument().toBuilder()
+                        .setBody(prefix + request.getDocument().getBody())
+                        .build();
+                
+                ProcessResponse response = ProcessResponse.newBuilder()
+                        .setSuccess(true)
+                        .setOutputDoc(outputDoc)
+                        .build();
+                
+                responseObserver.onNext(response);
+                responseObserver.onCompleted();
+            } catch (Exception e) {
+                responseObserver.onError(e);
+            }
+        }
+    }
+}

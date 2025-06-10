@@ -1,0 +1,41 @@
+micronaut:
+  test.resources.debug-server: true
+  application:
+    name: test-application
+
+
+
+
+app:
+  config:
+    cluster-name: test-cluster
+    consul:
+      key-prefixes:
+        pipeline-clusters: pipeline-configs/clusters
+        schema-versions: pipeline-configs/schemas/versions
+      watch-seconds: 5
+
+grpc.server:
+  enabled: true
+  port: ${random.port}
+
+# Consul client configuration
+consul:
+  client:
+    enabled: true
+    config:
+      enabled: true
+      format: properties
+      path: config/pipeline
+kafka:
+  enabled: true
+  schema:
+    registry:
+      type: glue
+  producers:
+    default:
+      apicurio:
+        registry:
+          url: ${apicurio.registry.url}
+
+glue.enabled: true

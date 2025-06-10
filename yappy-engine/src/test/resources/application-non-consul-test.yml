@@ -1,0 +1,25 @@
+# Test configuration for non-Consul registration tests
+consul:
+  client:
+    enabled: false
+
+kafka:
+  enabled: false
+
+grpc:
+  server:
+    port: 50055
+
+app:
+  engine:
+    bootstrapper:
+      enabled: false
+    instance-id: test-engine-non-consul
+  kafka:
+    slot-management:
+      enabled: false
+
+# Disable other features that depend on Consul
+micronaut:
+  config-client:
+    enabled: false

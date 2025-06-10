@@ -1,0 +1,39 @@
+# Configuration for the Client application context
+micronaut:
+  application:
+    name: client-test-app-${random.uuid} # Name for the client context
+
+# Configure Consul discovery for clients
+consul:
+  client:
+    enabled: true
+    registration:
+      enabled: false # This context does not register itself as a service
+    discovery:
+      enabled: true # This context needs to discover services
+      shared-instance: true # Use a shared DiscoveryClient instance
+
+# Configure gRPC clients using Consul discovery
+grpc:
+  client:
+    discovery:
+      enabled: true # Explicitly enable gRPC client-side discovery
+    channels:
+      chunker:
+        target: consul://chunker # Discover 'chunker' via Consul
+        use-plaintext: true
+      echo:
+        target: consul://echo   # Discover 'echo' via Consul
+        use-plaintext: true
+
+# Other configurations needed by the client context (e.g., Kafka client config)
+kafka:
+  enabled: true
+  schema:
+    registry:
+      type: apicurio
+  producers:
+    default:
+      apicurio:
+        registry:
+          url: ${apicurio.registry.url} # Use test resources property

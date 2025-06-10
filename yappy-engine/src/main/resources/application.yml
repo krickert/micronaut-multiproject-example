@@ -1,0 +1,107 @@
+# gRPC configuration
+grpc:
+  server:
+    port: ${GRPC_SERVER_PORT:50050}
+    keep-alive-time: 30s
+  client:
+    plaintext: ${GRPC_CLIENT_PLAINTEXT:true}
+    max-retry-attempts: ${GRPC_CLIENT_MAX_RETRY_ATTEMPTS:5}
+
+# Kafka configuration
+kafka:
+  enabled: true
+  producers:
+    pipestream-forwarder: # Matches the id in @KafkaClient
+      # bootstrap.servers: localhost:9092 # Or your Kafka brokers
+      acks: all  # Wait for all in-sync replicas to acknowledge (highest durability)
+      retries: 3 # Number of times the producer will retry sending a message on failure
+      # delivery.timeout.ms: 120000 # Max time to wait for ack (includes retries), default 2 mins
+      # linger.ms: 5 # Batches records for 5ms to improve throughput under load
+      # enable.idempotence: true # Ensures exactly-once semantics per partition (requires acks=all, retries>0, max.in.flight.requests.per.connection<=5)
+      # max.in.flight.requests.per.connection: 5 # If idempotence is enabled
+      # You can add other standard Kafka producer properties here
+      # Example: compression.type: snappy
+
+# Application configuration
+app:
+  kafka:
+    slot-management:
+      enabled: ${KAFKA_SLOT_MANAGEMENT_ENABLED:false}
+      consul:
+        # Consul key prefix for slot management
+        key-prefix: ${KAFKA_SLOT_CONSUL_PREFIX:yappy/kafka/slots}
+        # How often to send heartbeats for acquired slots
+        heartbeat-interval: ${KAFKA_SLOT_HEARTBEAT_INTERVAL:30s}
+        # Time before a slot without heartbeat is considered expired
+        slot-expiration-time: ${KAFKA_SLOT_EXPIRATION_TIME:2m}
+      # Maximum slots per engine instance
+      max-slots-per-engine: ${KAFKA_MAX_SLOTS_PER_ENGINE:100}
+    
+    # Consumer configuration
+    consumer:
+      bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+      max-poll-records: ${KAFKA_CONSUMER_MAX_POLL_RECORDS:500}
+      max-poll-interval: ${KAFKA_CONSUMER_MAX_POLL_INTERVAL:5m}
+      session-timeout: ${KAFKA_CONSUMER_SESSION_TIMEOUT:30s}
+      heartbeat-interval: ${KAFKA_CONSUMER_HEARTBEAT_INTERVAL:3s}
+      request-timeout: ${KAFKA_CONSUMER_REQUEST_TIMEOUT:30s}
+      fetch-min-bytes: ${KAFKA_CONSUMER_FETCH_MIN_BYTES:1}
+      fetch-max-wait: ${KAFKA_CONSUMER_FETCH_MAX_WAIT:500ms}
+      enable-auto-commit: ${KAFKA_CONSUMER_AUTO_COMMIT:false}
+      auto-commit-interval: ${KAFKA_CONSUMER_AUTO_COMMIT_INTERVAL:5s}
+      isolation-level: ${KAFKA_CONSUMER_ISOLATION_LEVEL:read_uncommitted}
+      
+      # Error handling
+      max-retries: ${KAFKA_CONSUMER_MAX_RETRIES:3}
+      retry-backoff: ${KAFKA_CONSUMER_RETRY_BACKOFF:1s}
+      pause-on-error: ${KAFKA_CONSUMER_PAUSE_ON_ERROR:true}
+      error-pause-duration: ${KAFKA_CONSUMER_ERROR_PAUSE_DURATION:30s}
+    
+    # Visualization and metrics
+    visualization:
+      enabled: ${KAFKA_VISUALIZATION_ENABLED:true}
+      max-events: ${KAFKA_VISUALIZATION_MAX_EVENTS:1000}
+    
+    metrics:
+      enabled: ${KAFKA_METRICS_ENABLED:true}
+
+# Metrics configuration
+micronaut:
+  metrics:
+    enabled: true
+    export:
+      prometheus:
+        enabled: true
+        descriptions: true
+        step: PT1M
+  server:
+    port: 8081
+    host: localhost
+  views:
+    enabled: true
+
+# Management endpoints
+endpoints:
+  all:
+    enabled: true
+  metrics:
+    enabled: true
+  prometheus:
+    enabled: true
+    sensitive: false
+
+# Yappy Engine Configuration
+yappy:
+  cluster:
+    name: ${YAPPY_CLUSTER_NAME:default-cluster}
+  engine:
+    bootstrapper:
+      enabled: ${YAPPY_ENGINE_BOOTSTRAPPER_ENABLED:true}  # Old bootstrap - to be deprecated
+    bootstrap:
+      enabled: ${YAPPY_ENGINE_BOOTSTRAP_ENABLED:true}      # New bootstrap
+    seeding:
+      enabled: ${YAPPY_ENGINE_SEEDING_ENABLED:false}       # Enable data seeding for dev/test
+      template: ${YAPPY_ENGINE_SEEDING_TEMPLATE:test}      # Template to use for seeding
+    registration:
+      enhanced: ${YAPPY_ENGINE_REGISTRATION_ENHANCED:true}  # Use enhanced registration with validation
+

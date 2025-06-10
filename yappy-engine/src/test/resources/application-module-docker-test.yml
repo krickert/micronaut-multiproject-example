@@ -1,0 +1,48 @@
+micronaut:
+  application:
+    name: yappy-engine
+  server:
+    port: -1 # Random port for HTTP
+grpc:
+  server:
+    port: ${random.port} # Random port for gRPC
+    keep-alive-time: 30s
+
+consul:
+  client:
+    enabled: true
+    registration:
+      enabled: false # Engine will self-register via code
+    defaultZone: "${CONSUL_HOST:localhost}:${CONSUL_PORT:8500}"
+
+yappy:
+  cluster:
+    name: test-cluster
+  engine:
+    bootstrap:
+      enabled: true
+      initial-config:
+        clusterName: test-cluster
+        pipelineGraphConfig:
+          pipelines: []  # No pipelines initially, modules will register
+        pipelineModuleMap:
+          availableModules:
+            - implementationName: "Tika Parser"
+              implementationId: "tika-parser"
+              stepTypes: ["EXTRACT_TEXT"]
+              transportType: "GRPC"
+              customConfigSchemaReference:
+                schemaSubject: "tika-parser-config"
+                schemaVersion: 1
+            - implementationName: "Text Chunker"
+              implementationId: "chunker"
+              stepTypes: ["CHUNK_TEXT"]
+              transportType: "GRPC"
+              customConfigSchemaReference:
+                schemaSubject: "chunker-config"
+                schemaVersion: 1
+
+# Test resource configuration - handled by test-resources provider
+testcontainers:
+  consul:
+    enabled: true

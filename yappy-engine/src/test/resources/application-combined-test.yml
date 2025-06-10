@@ -1,0 +1,40 @@
+# In /yappy-engine/src/test/resources/application-combined-test.yml
+micronaut:
+  application:
+    name: combined-services-test-runner-${random.uuid}
+  server:
+    port: -1 # The test runner itself usually doesn't need a server
+
+  test:
+    resources:
+      enabled: true
+      additional-applications-this-is-fake:
+        chunker-service-app: # A logical name for this service instance
+          path: ../yappy-modules/chunker # Relative path to the chunker module
+          # Assuming application-test-chunker-grpc-working-standalone.yml is correctly
+          # configured to run chunker and register as "chunker"
+          config-file: application-chunker-server-only.yml
+        echo-service-app:    # A logical name for this service instance
+          path: ../yappy-modules/echo   # Relative path to the echo module
+          # Use the server-only configuration for the echo service
+          config-file: application-echo-server-only.yml # <<< CHANGE THIS LINE
+
+# Client configuration for THIS main test context
+grpc:
+  client:
+    discovery:
+      enabled: true # Enable gRPC client-side discovery
+    channels:
+      chunker:
+        target: chunker # Client in main test discovers "chunker"
+        use-plaintext: true
+      echo:
+        target: echo     # Client in main test discovers "echo"
+        use-plaintext: true
+
+consul:
+  client:
+    registration:
+      enabled: false # The test runner itself does not register as a service
+    discovery:
+      enabled: true

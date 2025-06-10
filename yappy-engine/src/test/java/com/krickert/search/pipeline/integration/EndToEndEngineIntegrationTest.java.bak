@@ -1,0 +1,441 @@
+package com.krickert.search.pipeline.integration;
+
+import com.google.protobuf.Empty;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
+import com.krickert.search.config.pipeline.model.*;
+import com.krickert.search.model.*;
+import com.krickert.search.pipeline.PipelineConfiguration;
+import com.krickert.search.sdk.PipeStepProcessorGrpc;
+import com.krickert.search.sdk.ProcessRequest;
+import com.krickert.search.sdk.ProcessResponse;
+import com.krickert.search.sdk.ServiceRegistrationData;
+import com.krickert.yappy.registration.api.*;
+import io.grpc.ManagedChannel;
+import io.grpc.Server;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.stub.StreamObserver;
+import io.micronaut.context.ApplicationContext;
+import io.micronaut.runtime.server.EmbeddedServer;
+import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import jakarta.inject.Inject;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.junit.jupiter.api.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
+
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * End-to-end integration test for the YAPPY engine.
+ * This test verifies the complete flow from module registration through
+ * pipeline execution to Kafka output.
+ */
+@MicronautTest(
+    environments = {"test", "test-registration"},
+    propertySources = "classpath:application-test-registration.yml"
+)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+public class EndToEndEngineIntegrationTest {
+    
+    private static final Logger LOG = LoggerFactory.getLogger(EndToEndEngineIntegrationTest.class);
+    private static final String TEST_TOPIC = "test-output-topic";
+    private static final String TEST_PIPELINE_ID = "e2e-test-pipeline";
+    
+    @Inject
+    ApplicationContext applicationContext;
+    
+    @Inject
+    EmbeddedServer embeddedServer;
+    
+    @Inject
+    PipelineConfiguration pipelineConfiguration;
+    
+    private Server testModuleServer;
+    private ManagedChannel testModuleChannel;
+    private KafkaConsumer<String, byte[]> kafkaConsumer;
+    private YappyModuleRegistrationGrpc.YappyModuleRegistrationBlockingStub registrationStub;
+    
+    @BeforeAll
+    void setupTestModule() throws Exception {
+        // Start test module gRPC server
+        String serverName = InProcessServerBuilder.generateName();
+        testModuleServer = InProcessServerBuilder
+                .forName(serverName)
+                .directExecutor()
+                .addService(new TestModuleProcessor())
+                .build()
+                .start();
+        
+        testModuleChannel = InProcessChannelBuilder
+                .forName(serverName)
+                .directExecutor()
+                .build();
+        
+        // Create registration stub
+        ManagedChannel registrationChannel = ManagedChannel.class.cast(
+            applicationContext.getBean(ManagedChannel.class, "engine-server")
+        );
+        registrationStub = YappyModuleRegistrationGrpc.newBlockingStub(registrationChannel);
+        
+        // Setup Kafka consumer
+        setupKafkaConsumer();
+    }
+    
+    @AfterAll
+    void tearDown() {
+        if (testModuleChannel != null) {
+            testModuleChannel.shutdownNow();
+        }
+        if (testModuleServer != null) {
+            testModuleServer.shutdownNow();
+        }
+        if (kafkaConsumer != null) {
+            kafkaConsumer.close();
+        }
+    }
+    
+    @Test
+    @DisplayName("Should execute complete pipeline flow from registration to Kafka output")
+    void testCompleteEngineFlow() throws Exception {
+        // 1. Register the test module
+        LOG.info("Step 1: Registering test module");
+        RegisterModuleRequest moduleRequest = RegisterModuleRequest.newBuilder()
+                .setImplementationId("test-processor-v1")
+                .setInstanceServiceName("test-processor")
+                .setHost("localhost")
+                .setPort(embeddedServer.getPort() + 100) // Use a different port
+                .setHealthCheckType(HealthCheckType.GRPC)
+                .setHealthCheckEndpoint("grpc.health.v1.Health/Check")
+                .setInstanceCustomConfigJson("{\"test_mode\": true}")
+                .build();
+        
+        RegisterModuleResponse moduleResponse = registrationStub.registerModule(moduleRequest);
+        assertTrue(moduleResponse.getSuccess());
+        String moduleServiceId = moduleResponse.getRegisteredServiceId();
+        LOG.info("Module registered with ID: {}", moduleServiceId);
+        
+        // 2. Create pipeline configuration
+        LOG.info("Step 2: Creating pipeline configuration");
+        createTestPipeline(moduleServiceId);
+        
+        // Wait for pipeline to be ready
+        Thread.sleep(2000);
+        
+        // 3. Send document through pipeline via gRPC
+        LOG.info("Step 3: Sending document through pipeline");
+        PipeDoc testDoc = PipeDoc.newBuilder()
+                .setId("test-doc-001")
+                .setTitle("End-to-End Test Document")
+                .setBody("This is a test document for end-to-end testing")
+                .setDocumentType("test")
+                .build();
+        
+        PipeStream stream = PipeStream.newBuilder()
+                .setStreamId("test-stream-001")
+                .setDocument(testDoc)
+                .setCurrentPipelineName(TEST_PIPELINE_ID)
+                .setTargetStepName("test-step")
+                .setCurrentHopNumber(0)
+                .build();
+        
+        // Send to engine via connector
+        ConnectorEngineGrpc.ConnectorEngineBlockingStub connectorStub = 
+            ConnectorEngineGrpc.newBlockingStub(
+                applicationContext.getBean(ManagedChannel.class, "engine-server")
+            );
+        
+        PipeStreamResponse response = connectorStub.sendPipeStream(stream);
+        assertTrue(response.getSuccess());
+        LOG.info("Document sent successfully: {}", response.getMessage());
+        
+        // 4. Verify Kafka output
+        LOG.info("Step 4: Verifying Kafka output");
+        List<PipeDoc> outputDocs = consumeFromKafka(TEST_TOPIC, 1, Duration.ofSeconds(10));
+        
+        assertFalse(outputDocs.isEmpty(), "Should have received output in Kafka");
+        PipeDoc outputDoc = outputDocs.get(0);
+        
+        // Verify the document was processed
+        assertEquals("test-doc-001", outputDoc.getId());
+        assertTrue(outputDoc.hasCustomData());
+        assertEquals("true", 
+            outputDoc.getCustomData().getFieldsOrThrow("test_processed").getStringValue());
+        assertEquals("TEST: This is a test document for end-to-end testing", 
+            outputDoc.getBody());
+        
+        LOG.info("End-to-end test completed successfully!");
+    }
+    
+    @Test
+    @DisplayName("Should handle multiple documents in sequence")
+    void testMultipleDocumentProcessing() throws Exception {
+        // Register module if not already done
+        ensureModuleRegistered();
+        
+        // Send multiple documents
+        List<String> docIds = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            String docId = "multi-doc-" + i;
+            docIds.add(docId);
+            
+            PipeDoc doc = PipeDoc.newBuilder()
+                    .setId(docId)
+                    .setTitle("Document " + i)
+                    .setBody("Content for document " + i)
+                    .build();
+            
+            PipeStream stream = PipeStream.newBuilder()
+                    .setStreamId("multi-stream-" + i)
+                    .setDocument(doc)
+                    .setCurrentPipelineName(TEST_PIPELINE_ID)
+                    .setTargetStepName("test-step")
+                    .setCurrentHopNumber(0)
+                    .build();
+            
+            ConnectorEngineGrpc.ConnectorEngineBlockingStub connectorStub = 
+                ConnectorEngineGrpc.newBlockingStub(
+                    applicationContext.getBean(ManagedChannel.class, "engine-server")
+                );
+            
+            PipeStreamResponse response = connectorStub.sendPipeStream(stream);
+            assertTrue(response.getSuccess());
+        }
+        
+        // Verify all documents were processed
+        List<PipeDoc> outputDocs = consumeFromKafka(TEST_TOPIC, 5, Duration.ofSeconds(15));
+        assertEquals(5, outputDocs.size());
+        
+        // Verify each document
+        Set<String> receivedIds = new HashSet<>();
+        for (PipeDoc doc : outputDocs) {
+            receivedIds.add(doc.getId());
+            assertTrue(doc.getBody().startsWith("TEST: Content for document"));
+        }
+        
+        assertEquals(new HashSet<>(docIds), receivedIds);
+    }
+    
+    private void createTestPipeline(String moduleServiceId) {
+        // Create pipeline step configuration
+        PipelineStepConfig testStep = new PipelineStepConfig(
+                "test-step",
+                StepType.PIPELINE,
+                "Test processing step",
+                null,
+                new PipelineStepConfig.JsonConfigOptions(
+                    null,
+                    Map.of("behavior", "prepend", "prefix", "TEST: ")
+                ),
+                List.of(),
+                Map.of("kafka-output", new PipelineStepConfig.OutputTarget(
+                        "kafka-sink",
+                        PipelineStepConfig.TransportType.KAFKA,
+                        null,
+                        new PipelineStepConfig.KafkaTransportConfig(TEST_TOPIC, null)
+                )),
+                3,
+                1000L,
+                30000L,
+                2.0,
+                10000L,
+                new PipelineStepConfig.ProcessorInfo(moduleServiceId, null)
+        );
+        
+        // Create sink step
+        PipelineStepConfig sinkStep = new PipelineStepConfig(
+                "kafka-sink",
+                StepType.SINK,
+                "Kafka output sink",
+                null,
+                new PipelineStepConfig.JsonConfigOptions(
+                    null,
+                    Map.of("topic", TEST_TOPIC)
+                ),
+                List.of(),
+                Map.of(),
+                0,
+                1000L,
+                30000L,
+                2.0,
+                10000L,
+                new PipelineStepConfig.ProcessorInfo(null, "kafkaSink")
+        );
+        
+        // Create pipeline configuration
+        PipelineConfig pipeline = PipelineConfig.builder()
+                .name(TEST_PIPELINE_ID)
+                .description("End-to-end test pipeline")
+                .pipelineSteps(Map.of(
+                        "test-step", testStep,
+                        "kafka-sink", sinkStep
+                ))
+                .metadata(Map.of("test", "true"))
+                .enabled(true)
+                .build();
+        
+        // Save to configuration
+        pipelineConfiguration.updatePipelineConfig(TEST_PIPELINE_ID, pipeline);
+    }
+    
+    private void setupKafkaConsumer() {
+        Properties props = new Properties();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, 
+            applicationContext.getProperty("kafka.bootstrap.servers", String.class).orElse("localhost:9092"));
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "e2e-test-consumer");
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        
+        kafkaConsumer = new KafkaConsumer<>(props);
+        kafkaConsumer.subscribe(List.of(TEST_TOPIC));
+    }
+    
+    private List<PipeDoc> consumeFromKafka(String topic, int expectedCount, Duration timeout) throws Exception {
+        List<PipeDoc> documents = new ArrayList<>();
+        long endTime = System.currentTimeMillis() + timeout.toMillis();
+        
+        while (documents.size() < expectedCount && System.currentTimeMillis() < endTime) {
+            ConsumerRecords<String, byte[]> records = kafkaConsumer.poll(Duration.ofMillis(100));
+            
+            for (ConsumerRecord<String, byte[]> record : records) {
+                if (record.topic().equals(topic)) {
+                    PipeDoc doc = PipeDoc.parseFrom(record.value());
+                    documents.add(doc);
+                    LOG.info("Consumed document from Kafka: {}", doc.getId());
+                }
+            }
+        }
+        
+        return documents;
+    }
+    
+    private String moduleServiceId = null;
+    
+    private void ensureModuleRegistered() {
+        if (moduleServiceId == null) {
+            RegisterModuleRequest moduleRequest = RegisterModuleRequest.newBuilder()
+                    .setImplementationId("test-processor-v1")
+                    .setInstanceServiceName("test-processor")
+                    .setHost("localhost")
+                    .setPort(embeddedServer.getPort() + 100)
+                    .setHealthCheckType(HealthCheckType.GRPC)
+                    .setHealthCheckEndpoint("grpc.health.v1.Health/Check")
+                    .setInstanceCustomConfigJson("{\"test_mode\": true}")
+                    .build();
+            
+            RegisterModuleResponse moduleResponse = registrationStub.registerModule(moduleRequest);
+            moduleServiceId = moduleResponse.getRegisteredServiceId();
+            createTestPipeline(moduleServiceId);
+        }
+    }
+    
+    /**
+     * Test module processor implementation
+     */
+    private static class TestModuleProcessor extends PipeStepProcessorGrpc.PipeStepProcessorImplBase {
+        
+        private static final Logger LOG = LoggerFactory.getLogger(TestModuleProcessor.class);
+        
+        @Override
+        public void getServiceRegistration(Empty request, StreamObserver<ServiceRegistrationData> responseObserver) {
+            String configSchema = """
+                {
+                  "$schema": "http://json-schema.org/draft-07/schema#",
+                  "title": "TestProcessorConfig",
+                  "type": "object",
+                  "properties": {
+                    "behavior": {
+                      "type": "string",
+                      "enum": ["prepend", "append", "uppercase"],
+                      "default": "prepend"
+                    },
+                    "prefix": {
+                      "type": "string",
+                      "default": "TEST: "
+                    }
+                  }
+                }
+                """;
+            
+            ServiceRegistrationData registration = ServiceRegistrationData.newBuilder()
+                    .setModuleName("test-processor")
+                    .setJsonConfigSchema(configSchema)
+                    .build();
+            
+            responseObserver.onNext(registration);
+            responseObserver.onCompleted();
+        }
+        
+        @Override
+        public void processData(ProcessRequest request, StreamObserver<ProcessResponse> responseObserver) {
+            try {
+                PipeDoc inputDoc = request.getDocument();
+                String behavior = "prepend";
+                String prefix = "TEST: ";
+                
+                // Get configuration
+                if (request.getConfig().getCustomJsonConfig() != null) {
+                    Struct config = request.getConfig().getCustomJsonConfig();
+                    if (config.containsFields("behavior")) {
+                        behavior = config.getFieldsOrThrow("behavior").getStringValue();
+                    }
+                    if (config.containsFields("prefix")) {
+                        prefix = config.getFieldsOrThrow("prefix").getStringValue();
+                    }
+                }
+                
+                // Process document
+                PipeDoc.Builder outputDoc = inputDoc.toBuilder();
+                
+                // Add processing metadata
+                Struct.Builder customData = outputDoc.hasCustomData() ? 
+                        outputDoc.getCustomData().toBuilder() : 
+                        Struct.newBuilder();
+                customData.putFields("test_processed", 
+                        Value.newBuilder().setStringValue("true").build());
+                
+                // Apply behavior
+                switch (behavior) {
+                    case "prepend":
+                        outputDoc.setBody(prefix + inputDoc.getBody());
+                        break;
+                    case "append":
+                        outputDoc.setBody(inputDoc.getBody() + prefix);
+                        break;
+                    case "uppercase":
+                        outputDoc.setBody(inputDoc.getBody().toUpperCase());
+                        break;
+                }
+                
+                outputDoc.setCustomData(customData.build());
+                
+                ProcessResponse response = ProcessResponse.newBuilder()
+                        .setSuccess(true)
+                        .setOutputDoc(outputDoc.build())
+                        .addProcessorLogs("Test processor: Applied " + behavior + " behavior")
+                        .build();
+                
+                responseObserver.onNext(response);
+                responseObserver.onCompleted();
+                
+            } catch (Exception e) {
+                LOG.error("Error processing document", e);
+                responseObserver.onError(e);
+            }
+        }
+    }
+}
