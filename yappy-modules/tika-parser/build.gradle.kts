@@ -14,7 +14,7 @@ repositories {
 }
 
 dependencies {
-    // When building from the root project
+    // Apply BOM/platform dependencies
     implementation(platform(project(":bom")))
     annotationProcessor(platform(project(":bom")))
     testImplementation(platform(project(":bom")))
@@ -29,6 +29,7 @@ dependencies {
     runtimeOnly(mn.snakeyaml)
     implementation("io.micronaut.reactor:micronaut-reactor")
     implementation("io.micronaut.reactor:micronaut-reactor-http-client")
+
     implementation(project(":yappy-models:protobuf-models"))
     implementation(mn.grpc.services)
     implementation(mn.grpc.stub)
@@ -96,7 +97,7 @@ tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative"
 docker {
     // Use environment variable or default socket
     url = System.getenv("DOCKER_HOST") ?: "unix:///var/run/docker.sock"
-
+    
     // API version compatibility
     apiVersion = "1.41"
 }
