@@ -149,22 +149,22 @@ public class ChunkerServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessorI
     }
 
     @Override
-    public void getServiceRegistration(Empty request, StreamObserver<ServiceMetadata> responseObserver) {
+    public void getServiceRegistration(Empty request, StreamObserver<ServiceRegistrationData> responseObserver) {
         log.info("Received GetServiceRegistration request");
 
-        ServiceMetadata.Builder metadataBuilder = ServiceMetadata.newBuilder();
+        ServiceRegistrationData.Builder registrationBuilder = ServiceRegistrationData.newBuilder();
 
-        // Set the step name to "chunker" as specified in the issue description
-        metadataBuilder.setPipeStepName("chunker");
+        // Set the module name to "chunker"
+        registrationBuilder.setModuleName("chunker");
 
         // Get the JSON schema from ChunkerOptions
         String jsonSchema = ChunkerOptions.getJsonV7Schema();
 
-        // Add the schema to the context_params map
-        metadataBuilder.putContextParams("json_config_schema", jsonSchema);
+        // Set the JSON config schema
+        registrationBuilder.setJsonConfigSchema(jsonSchema);
 
         // Build and send the response
-        ServiceMetadata response = metadataBuilder.build();
+        ServiceRegistrationData response = registrationBuilder.build();
         responseObserver.onNext(response);
         responseObserver.onCompleted();
 
