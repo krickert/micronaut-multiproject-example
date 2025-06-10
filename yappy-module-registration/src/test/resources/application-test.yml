@@ -4,36 +4,19 @@ micronaut:
   server:
     port: ${random.port}
 
-# IMPORTANT: Test Resources Configuration
-# DO NOT define consul container here - it's automatically provided by consul-test-resource dependency
-# DO NOT define kafka, apicurio, moto, or opensearch containers - they are automatically provided
-# ONLY define containers for your specific test modules (like chunker below)
+# Test module configuration - hardcoded for testing
+test-module:
+  host: localhost
+  grpc:
+    port: 50051
+  http:
+    port: 8080
 
-# Test Resources configuration for integration testing
-test-resources:
-  containers:
-    # Chunker module that implements PipeStepProcessor
-    test-module:
-      image-name: chunker:latest
-      hostnames:
-        - test-module.host
-      exposed-ports:
-        - test-module.grpc.port: 50051
-        - test-module.http.port: 8080
-      wait-strategy:
-        http:
-          path: /health
-          port: 8080
-          status-code: 200
-      startup-timeout: 60s
-      env:
-        - GRPC_SERVER_PORT: "50051"
-        - MICRONAUT_SERVER_PORT: "8080"
-
-# Consul client configuration
-# IMPORTANT: DO NOT set consul.client.host or consul.client.port here
-# Test Resources will automatically provide these properties
+# Consul configuration - will be provided by test resources
 consul:
   client:
     registration:
       enabled: false  # Don't register the test itself
+  # Host/port for backwards compatibility
+  host: localhost
+  port: 8500

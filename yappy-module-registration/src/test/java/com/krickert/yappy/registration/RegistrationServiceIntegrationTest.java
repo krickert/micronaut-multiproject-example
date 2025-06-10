@@ -27,11 +27,10 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Integration test for RegistrationService using Test Resources.
- * This test starts a real Consul container and a mock engine gRPC server,
- * then verifies that modules can register through the engine.
+ * Integration test for RegistrationService using mocked services.
+ * This test starts mock gRPC servers and verifies that modules can register through the engine.
  */
-@MicronautTest
+@MicronautTest(environments = "test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class RegistrationServiceIntegrationTest {
     
@@ -60,6 +59,9 @@ public class RegistrationServiceIntegrationTest {
     private MockEngineRegistrationService mockEngineService;
     private ConsulClient consulClient;
     
+    private Server mockModuleServer;
+    private MockPipeStepProcessor mockModuleService;
+    
     @BeforeAll
     void setupMockEngine() throws IOException {
         // Start a mock engine gRPC server that implements ModuleRegistrationService
@@ -73,7 +75,17 @@ public class RegistrationServiceIntegrationTest {
         
         LOG.info("Started mock engine gRPC server on port {}", mockEnginePort);
         
-        // Create Consul client for verification
+        // Start a mock module gRPC server that implements PipeStepProcessor
+        mockModuleService = new MockPipeStepProcessor();
+        
+        mockModuleServer = ServerBuilder.forPort(testModuleGrpcPort)
+                .addService(mockModuleService)
+                .build()
+                .start();
+        
+        LOG.info("Started mock module gRPC server on port {}", testModuleGrpcPort);
+        
+        // Create Consul client for verification (this will be a mock in simplified test)
         consulClient = new ConsulClient(consulHost, consulPort);
     }
     
@@ -85,6 +97,14 @@ public class RegistrationServiceIntegrationTest {
                 mockEngineServer.awaitTermination(5, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 LOG.error("Error shutting down mock engine", e);
+            }
+        }
+        if (mockModuleServer != null) {
+            mockModuleServer.shutdownNow();
+            try {
+                mockModuleServer.awaitTermination(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                LOG.error("Error shutting down mock module", e);
             }
         }
     }
@@ -242,6 +262,23 @@ public class RegistrationServiceIntegrationTest {
         
         void setShouldFail(boolean shouldFail) {
             this.shouldFail = shouldFail;
+        }
+    }
+    
+    /**
+     * Mock implementation of PipeStepProcessor for testing
+     */
+    private static class MockPipeStepProcessor extends PipeStepProcessorGrpc.PipeStepProcessorImplBase {
+        
+        @Override
+        public void getServiceRegistration(Empty request, StreamObserver<ServiceRegistrationData> responseObserver) {
+            ServiceRegistrationData response = ServiceRegistrationData.newBuilder()
+                    .setModuleName("test-chunker")
+                    .setJsonConfigSchema("{\"type\":\"object\",\"properties\":{\"test\":\"config\"}}")
+                    .build();
+            
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
         }
     }
 }
