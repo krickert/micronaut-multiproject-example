@@ -3,6 +3,7 @@ package com.krickert.search.engine.core.integration;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Run: ./gradlew :yappy-modules:chunker:dockerBuild (etc.) to build module images.
  */
 @MicronautTest(startApplication = false)
+@Disabled("Requires all containers including OpenSearch to be configured")
 public class AllContainersVerificationTest {
     
     private static final Logger LOG = LoggerFactory.getLogger(AllContainersVerificationTest.class);

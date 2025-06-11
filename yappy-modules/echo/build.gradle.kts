@@ -27,18 +27,16 @@ dependencies {
     implementation(mn.grpc.stub)
     implementation(mn.micronaut.http.client.core)
     implementation("io.micronaut.grpc:micronaut-protobuff-support")
-
 }
-
 
 application {
     mainClass = "com.krickert.yappy.modules.echo.EchoApplication"
 }
+
 java {
     sourceCompatibility = JavaVersion.toVersion("21")
     targetCompatibility = JavaVersion.toVersion("21")
 }
-
 
 sourceSets {
     main {
@@ -82,4 +80,3 @@ tasks.named<com.bmuschko.gradle.docker.tasks.image.DockerBuildImage>("dockerBuil
 tasks.withType<Test> {
     useJUnitPlatform()
 }
-

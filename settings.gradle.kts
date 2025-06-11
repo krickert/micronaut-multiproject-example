@@ -47,6 +47,7 @@ include(
     "yappy-test-resources:yappy-embedder-test-resource",
     "yappy-test-resources:yappy-echo-test-resource",
     "yappy-test-resources:yappy-test-module-test-resource",
+    "yappy-test-resources:yappy-engine-test-resource",
 
     // Models
     "yappy-models",
@@ -76,6 +77,11 @@ include(
     // "yappy-modules:s3-connector",
     // "yappy-modules:opensearch-sink",
     // "yappy-modules:yappy-connector-test-server"
+    
+    // Containers
+    "containers:chunker",
+    "containers:echo",
+    "containers:engine",
 
     // Integration tests
     "yappy-integration-test",

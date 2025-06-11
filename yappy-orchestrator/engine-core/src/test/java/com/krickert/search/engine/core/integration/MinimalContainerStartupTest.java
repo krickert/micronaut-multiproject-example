@@ -5,6 +5,7 @@ import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.testresources.client.TestResourcesClient;
 import io.micronaut.testresources.client.TestResourcesClientFactory;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * properties that would cause initialization issues.
  */
 @MicronautTest(propertySources = "application-minimal-test.yml")
+@Disabled("Requires all containers to be configured")
 public class MinimalContainerStartupTest {
     
     private static final Logger LOG = LoggerFactory.getLogger(MinimalContainerStartupTest.class);

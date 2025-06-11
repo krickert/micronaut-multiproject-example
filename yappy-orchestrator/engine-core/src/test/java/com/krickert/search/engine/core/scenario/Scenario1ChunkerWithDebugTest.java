@@ -12,6 +12,7 @@ import jakarta.inject.Inject;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Disabled;
 import org.kiwiproject.consul.model.agent.ImmutableRegistration;
 import org.kiwiproject.consul.model.agent.Registration;
 import org.slf4j.Logger;
@@ -44,6 +45,7 @@ import com.krickert.search.config.consul.service.ConsulKvService;
  * Test-module outputs to Kafka for verification.
  */
 @MicronautTest(environments = "module-test")
+@Disabled("Requires chunker container")
 @KafkaListener(groupId = "chunker-test-listener", 
                offsetReset = io.micronaut.configuration.kafka.annotation.OffsetReset.EARLIEST)
 class Scenario1ChunkerWithDebugTest {

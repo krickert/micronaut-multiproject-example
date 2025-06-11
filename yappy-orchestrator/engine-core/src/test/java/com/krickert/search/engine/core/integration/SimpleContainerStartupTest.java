@@ -3,6 +3,7 @@ package com.krickert.search.engine.core.integration;
 import io.micronaut.testresources.client.TestResourcesClient;
 import io.micronaut.testresources.client.TestResourcesClientFactory;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Disabled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

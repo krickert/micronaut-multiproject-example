@@ -4,6 +4,7 @@ import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.test.support.TestPropertyProvider;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.slf4j.Logger;
@@ -19,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @MicronautTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@Disabled("Requires all module containers including OpenSearch")
 public class AllModulesBootstrapTest implements TestPropertyProvider {
     
     private static final Logger LOG = LoggerFactory.getLogger(AllModulesBootstrapTest.class);

@@ -1,0 +1,8 @@
+micronaut:
+  application:
+    name: engine-container-test
+  test-resources:
+    enabled: true
+    
+# Let test resources provide all container endpoints
+# No hardcoded values to ensure dynamic resolution

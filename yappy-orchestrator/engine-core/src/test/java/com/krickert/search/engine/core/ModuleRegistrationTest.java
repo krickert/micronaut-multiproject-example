@@ -5,6 +5,7 @@ import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
@@ -30,6 +31,7 @@ public class ModuleRegistrationTest {
     Integer engineGrpcPort;
     
     @Test
+    @Disabled("Requires module containers to be running")
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
     void testRegisterAllModules() {
         // Create registration service

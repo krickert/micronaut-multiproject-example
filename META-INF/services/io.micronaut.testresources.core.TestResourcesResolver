@@ -1,1 +1,11 @@
 com.krickert.testcontainers.opensearch.OpenSearchTestResourceProvider
+com.krickert.testcontainers.consul.ConsulTestResourceProvider
+com.krickert.testcontainers.kafka.KafkaTestResourceProvider
+com.krickert.testcontainers.apicurio.ApicurioTestResourceProvider
+com.krickert.testcontainers.moto.MotoTestResourceProvider
+com.krickert.testcontainers.module.ChunkerTestResourceProvider
+com.krickert.testcontainers.module.TikaTestResourceProvider
+com.krickert.testcontainers.module.EmbedderTestResourceProvider
+com.krickert.testcontainers.module.EchoTestResourceProvider
+com.krickert.testcontainers.module.TestModuleTestResourceProvider
+com.krickert.testcontainers.engine.YappyEngineTestResourceProvider

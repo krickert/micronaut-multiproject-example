@@ -117,6 +117,7 @@ dependencies {
     testResourcesImplementation(project(":yappy-test-resources:yappy-embedder-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:yappy-echo-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:yappy-test-module-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:yappy-engine-test-resource"))
 
 }
 
