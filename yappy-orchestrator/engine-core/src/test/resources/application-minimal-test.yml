@@ -1,0 +1,21 @@
+# Minimal configuration for container startup test
+# Disables features that would cause initialization issues
+
+grpc:
+  server:
+    enabled: false
+
+micronaut:
+  http:
+    services:
+      enabled: false
+  server:
+    port: -1  # Disable HTTP server
+  
+# Basic logging
+logger:
+  levels:
+    io.micronaut.test: WARN
+    org.testcontainers: WARN
+    com.krickert.search.engine.core: INFO
+    io.micronaut.testresources: INFO
