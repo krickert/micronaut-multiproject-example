@@ -1,4 +1,4 @@
-package com.krickert.search.engine.core.scenario;
+package com.krickert.search.engine.integration;
 
 import com.krickert.search.config.consul.DynamicConfigurationManager;
 import com.krickert.search.config.consul.service.BusinessOperationsService;
@@ -48,9 +48,9 @@ import java.time.Instant;
 @MicronautTest(environments = "module-test")
 @KafkaListener(groupId = "chunker-test-listener", 
                offsetReset = io.micronaut.configuration.kafka.annotation.OffsetReset.EARLIEST)
-class Scenario1ChunkerWithDebugTest {
+class EngineScenario1Test {
 
-    private static final Logger logger = LoggerFactory.getLogger(Scenario1ChunkerWithDebugTest.class);
+    private static final Logger logger = LoggerFactory.getLogger(EngineScenario1Test.class);
 
     // List to collect messages from test-module via Kafka
     private final List<PipeStream> receivedMessages = new CopyOnWriteArrayList<>();
@@ -269,8 +269,58 @@ class Scenario1ChunkerWithDebugTest {
     }
 
     private void storeChunkerSchema() {
-        // Get the chunker schema from ChunkerOptions
-        String chunkerSchema = com.krickert.yappy.modules.chunker.ChunkerOptions.getJsonV7Schema();
+        // Define chunker schema directly in the test
+        String chunkerSchema = """
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "type": "object",
+              "properties": {
+                "source_field": {
+                  "type": "string",
+                  "default": "body",
+                  "description": "Field to chunk from the document"
+                },
+                "chunk_size": {
+                  "type": "integer",
+                  "default": 512,
+                  "minimum": 1,
+                  "description": "Size of each chunk in characters"
+                },
+                "overlap_size": {
+                  "type": "integer",
+                  "default": 50,
+                  "minimum": 0,
+                  "description": "Overlap between chunks"
+                },
+                "chunk_overlap": {
+                  "type": "integer",
+                  "default": 50,
+                  "minimum": 0,
+                  "description": "Alias for overlap_size"
+                },
+                "chunk_config_id": {
+                  "type": "string",
+                  "description": "Unique identifier for this chunk configuration"
+                },
+                "chunk_id_template": {
+                  "type": "string",
+                  "default": "%s_%s_chunk_%d",
+                  "description": "Template for chunk ID generation"
+                },
+                "result_set_name_template": {
+                  "type": "string", 
+                  "default": "%s_%s_chunks",
+                  "description": "Template for result set name"
+                },
+                "log_prefix": {
+                  "type": "string",
+                  "default": "[CHUNKER] ",
+                  "description": "Prefix for log messages"
+                }
+              },
+              "additionalProperties": false
+            }
+            """;
 
         // Validate the schema using SchemaValidationService  
         logger.info("Validating chunker schema JSON syntax before storing...");

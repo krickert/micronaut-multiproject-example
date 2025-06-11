@@ -287,9 +287,16 @@ public class PipelineDataGenerator {
                 SemanticProcessingResult oldResult = doc.getSemanticResults(i);
                 SemanticProcessingResult.Builder updatedResult = oldResult.toBuilder();
                 
-                // Create a new embedding config for embedder2's version
-                String newEmbeddingConfig = oldResult.getEmbeddingConfigId().replace("embedder1", "embedder2");
-                updatedResult.setEmbeddingConfigId(newEmbeddingConfig + "-v2");
+                // Create a unique embedding config based on the chunking strategy
+                String embeddingConfig;
+                if (oldResult.getResultSetName().equals("sentences")) {
+                    embeddingConfig = "embedder2-text-embedding-ada-002-v2";
+                } else if (oldResult.getResultSetName().equals("sliding_windows")) {
+                    embeddingConfig = "embedder2-minilm-l6-v2";
+                } else {
+                    embeddingConfig = "embedder2-all-mpnet-base-v2";
+                }
+                updatedResult.setEmbeddingConfigId(embeddingConfig);
                 
                 // Re-embed each chunk with embedder2
                 for (int j = 0; j < oldResult.getChunksCount(); j++) {
@@ -304,10 +311,15 @@ public class PipelineDataGenerator {
                         embedding.addVector(random.nextFloat() * 2 - 1);
                     }
                     
+                    // Use different model names based on the embedding config
+                    String modelName = embeddingConfig.contains("ada") ? "text-embedding-ada-002" :
+                                      embeddingConfig.contains("minilm") ? "all-MiniLM-L6-v2" :
+                                      "all-mpnet-base-v2";
+                    
                     SemanticChunk newChunk = oldChunk.toBuilder()
                         .setEmbeddingInfo(embedding)
                         .putMetadata("model_name", com.google.protobuf.Value.newBuilder()
-                            .setStringValue("embedder2-minilm").build())
+                            .setStringValue(modelName).build())
                         .putMetadata("model_version", com.google.protobuf.Value.newBuilder()
                             .setStringValue("2.0").build())
                         .putMetadata("embedding_dim", com.google.protobuf.Value.newBuilder()

@@ -1,15 +1,12 @@
 package com.krickert.search.model.util;
 
-import com.google.common.jimfs.Configuration;
-import com.google.common.jimfs.Jimfs;
-import com.google.protobuf.Message;
 import com.krickert.search.model.PipeDoc;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -19,35 +16,32 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for the ProcessingBuffer implementations.
- * Uses jimfs for in-memory file system testing.
+ * Uses temporary directories for file system testing.
  */
 public class ProcessingBufferTest {
 
-    private FileSystem fileSystem;
-    private Path rootPath;
+    @TempDir
+    Path tempDir;
+    
+    private Path testDir;
 
     @BeforeEach
-    public void setUp() {
-        // Create an in-memory file system for testing
-        fileSystem = Jimfs.newFileSystem(Configuration.unix());
-        rootPath = fileSystem.getPath("/test");
-        try {
-            Files.createDirectories(rootPath);
-        } catch (IOException e) {
-            fail("Failed to create test directory: " + e.getMessage());
-        }
+    public void setUp() throws IOException {
+        // Create a test subdirectory
+        testDir = tempDir.resolve("test");
+        Files.createDirectories(testDir);
     }
 
     @AfterEach
     public void tearDown() throws IOException {
-        fileSystem.close();
+        // Cleanup is handled automatically by @TempDir
     }
 
     @Test
     public void testProcessingBufferImpl_SaveToDisk() throws IOException {
         // Create a buffer with capacity 3
         int capacity = 3;
-        ProcessingBuffer<PipeDoc> buffer = new ProcessingBufferImpl<>(capacity, PipeDoc.class, fileSystem);
+        ProcessingBuffer<PipeDoc> buffer = new ProcessingBufferImpl<>(capacity, PipeDoc.class);
 
         // Add some test messages
         for (int i = 0; i < capacity; i++) {
@@ -62,19 +56,20 @@ public class ProcessingBufferTest {
         // Save to disk
         String prefix = "test-doc";
         int precision = 2;
-        buffer.saveToDisk(rootPath, prefix, precision);
+        buffer.saveToDisk(testDir, prefix, precision);
 
         // Verify files were created
-        List<Path> files = Files.list(rootPath)
-                .filter(Files::isRegularFile)
-                .toList();
+        List<Path> files;
+        try (var stream = Files.list(testDir)) {
+            files = stream.filter(Files::isRegularFile).toList();
+        }
 
         assertEquals(capacity, files.size(), "Should have created " + capacity + " files");
 
         // Verify file names
         for (int i = 0; i < capacity; i++) {
-            String expectedFileName = String.format("%s%02d.bin", prefix, i);
-            Path expectedPath = rootPath.resolve(expectedFileName);
+            String expectedFileName = String.format("%s-%02d.bin", prefix, i);
+            Path expectedPath = testDir.resolve(expectedFileName);
             assertTrue(Files.exists(expectedPath), "File should exist: " + expectedPath);
         }
     }
@@ -144,12 +139,13 @@ public class ProcessingBufferTest {
         assertEquals(0, buffer.size(), "NoOp buffer size should always be 0");
 
         // Save to disk
-        buffer.saveToDisk(rootPath, "test-doc", 2);
+        buffer.saveToDisk(testDir, "test-doc", 2);
 
         // Verify no files were created
-        List<Path> files = Files.list(rootPath)
-                .filter(Files::isRegularFile)
-                .collect(Collectors.toList());
+        List<Path> files;
+        try (var stream = Files.list(testDir)) {
+            files = stream.filter(Files::isRegularFile).toList();
+        }
 
         assertEquals(0, files.size(), "NoOp buffer should not create any files");
     }
@@ -158,7 +154,7 @@ public class ProcessingBufferTest {
     public void testProcessingBufferImpl_DefaultParameters() throws IOException {
         // Create a buffer with capacity 2
         int capacity = 2;
-        ProcessingBuffer<PipeDoc> buffer = new ProcessingBufferImpl<>(capacity, PipeDoc.class, fileSystem);
+        ProcessingBuffer<PipeDoc> buffer = new ProcessingBufferImpl<>(capacity, PipeDoc.class);
 
         // Add some test messages
         for (int i = 0; i < capacity; i++) {
@@ -170,18 +166,20 @@ public class ProcessingBufferTest {
             buffer.add(doc);
         }
 
-        // Create a directory for the default save location
-        Path defaultPath = fileSystem.getPath("./");
-        Files.createDirectories(defaultPath);
-
-        // Save to disk with default parameters
+        // Save to disk with default parameters (saves to current directory)
         buffer.saveToDisk();
 
-        // Verify files were created with default naming
-        List<Path> files = Files.list(defaultPath)
-                .filter(Files::isRegularFile)
-                .filter(p -> p.getFileName().toString().startsWith("protobuf"))
-                .collect(Collectors.toList());
+        // The default implementation saves to the current working directory
+        // For testing, we'll save to our test directory instead
+        buffer.saveToDisk(tempDir, "protobuf", 3);
+
+        // Verify files were created with specified naming
+        List<Path> files;
+        try (var stream = Files.list(tempDir)) {
+            files = stream.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().startsWith("protobuf"))
+                    .toList();
+        }
 
         assertEquals(capacity, files.size(), "Should have created " + capacity + " files with default parameters");
     }

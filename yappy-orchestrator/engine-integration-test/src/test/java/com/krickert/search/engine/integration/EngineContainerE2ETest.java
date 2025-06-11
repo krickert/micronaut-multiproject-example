@@ -2,7 +2,7 @@ package com.krickert.search.engine.integration;
 
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeStream;
-import com.krickert.search.sdk.EngineServiceGrpc;
+import com.krickert.search.engine.PipeStreamEngineGrpc;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.micronaut.configuration.kafka.annotation.KafkaListener;
@@ -57,7 +57,7 @@ class EngineContainerE2ETest {
     Integer enginePort;
 
     private ManagedChannel engineChannel;
-    private EngineServiceGrpc.EngineServiceBlockingStub engineStub;
+    private PipeStreamEngineGrpc.PipeStreamEngineBlockingStub engineStub;
 
     @BeforeEach
     void setup() {
@@ -71,7 +71,7 @@ class EngineContainerE2ETest {
             .usePlaintext()
             .build();
         
-        engineStub = EngineServiceGrpc.newBlockingStub(engineChannel);
+        engineStub = PipeStreamEngineGrpc.newBlockingStub(engineChannel);
 
         // Give containers time to fully initialize
         try {
@@ -107,7 +107,7 @@ class EngineContainerE2ETest {
 
         // When - submit document to engine via gRPC
         try {
-            var response = engineStub.processStream(inputStream);
+            var response = engineStub.testPipeStream(inputStream);
             logger.info("Engine accepted document, response: {}", response);
         } catch (Exception e) {
             logger.error("Failed to submit document to engine", e);

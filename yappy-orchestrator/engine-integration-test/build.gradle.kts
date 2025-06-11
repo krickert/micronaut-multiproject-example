@@ -8,6 +8,7 @@ dependencies {
     implementation(project(":yappy-models:pipeline-config-models"))
     implementation(project(":yappy-models:protobuf-models"))
     implementation(project(":yappy-consul-config"))
+    implementation(project(":yappy-orchestrator:engine-core"))
     testImplementation(project(":yappy-test-resources:yappy-engine-test-resource"))
     testImplementation(project(":yappy-test-resources:yappy-chunker-test-resource"))
     testImplementation(project(":yappy-test-resources:yappy-test-module-test-resource"))
