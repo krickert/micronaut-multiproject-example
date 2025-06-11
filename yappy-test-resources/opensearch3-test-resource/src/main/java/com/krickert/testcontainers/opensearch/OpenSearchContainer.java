@@ -14,6 +14,7 @@ import java.util.regex.Pattern;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.HttpWaitStrategy;
 import org.testcontainers.containers.wait.strategy.WaitStrategy;
+import org.testcontainers.containers.Network;
 import org.testcontainers.utility.Base58;
 import org.testcontainers.utility.DockerImageName;
 
@@ -98,7 +99,8 @@ public class OpenSearchContainer<SELF extends OpenSearchContainer<SELF>> extends
     protected void configure() {
         super.configure();
 
-        withNetworkAliases("opensearch-" + Base58.randomString(6));
+        withNetwork(Network.SHARED);
+        withNetworkAliases("opensearch");
         withEnv("discovery.type", "single-node");
         if (disableSecurity) {
             withEnv("DISABLE_SECURITY_PLUGIN", Boolean.toString(disableSecurity));

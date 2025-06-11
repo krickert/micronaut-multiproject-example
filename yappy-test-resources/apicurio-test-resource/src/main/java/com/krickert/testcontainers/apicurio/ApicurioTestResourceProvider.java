@@ -105,7 +105,9 @@ public class ApicurioTestResourceProvider extends AbstractTestContainersProvider
         // The ApicurioContainer constructor already handles withExposedPorts, withEnv, and wait strategy.
         // The withStartupTimeout was part of the GenericContainer in your previous provider;
         // it's now part of the WaitStrategy within ApicurioContainer.
-        return new ApicurioContainer(imageName);
+        return new ApicurioContainer(imageName)
+                .withNetwork(org.testcontainers.containers.Network.SHARED)
+                .withNetworkAliases("apicurio");
     }
 
     @Override

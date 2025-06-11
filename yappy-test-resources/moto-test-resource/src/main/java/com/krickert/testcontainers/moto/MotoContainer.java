@@ -1,6 +1,7 @@
 package com.krickert.testcontainers.moto;
 
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
@@ -58,6 +59,8 @@ public class MotoContainer extends GenericContainer<MotoContainer> {
         );
 
         withExposedPorts(MOTO_HTTP_PORT);
+        withNetwork(Network.SHARED);
+        withNetworkAliases("localstack"); // Using localstack alias for compatibility
         // Configurations from your MotoTestResourceProvider
         withAccessToHost(true); // Allows container to access host network if needed
         withCommand("-H0.0.0.0"); // Listen on all interfaces within the container
