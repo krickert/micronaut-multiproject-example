@@ -250,11 +250,14 @@ class Scenario1ChunkerWithDebugTest {
     }
     
     private Mono<Void> setupPipelineConfiguration() {
+        // Use Docker bridge IP for container-to-container communication
+        String dockerHostIp = "172.17.0.1";
+        
         // Register chunker service
         Registration chunkerReg = ImmutableRegistration.builder()
                 .id(clusterName + "-chunker-test")
                 .name(clusterName + "-chunker")
-                .address(chunkerHost)
+                .address(dockerHostIp)
                 .port(chunkerPort)
                 .build();
         
@@ -262,7 +265,7 @@ class Scenario1ChunkerWithDebugTest {
         Registration testModuleReg = ImmutableRegistration.builder()
                 .id(clusterName + "-test-module-test")
                 .name(clusterName + "-test-module")
-                .address(testModuleHost)
+                .address(dockerHostIp)
                 .port(testModulePort)
                 .build();
         
