@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Basic test to verify test resources are working
  */
-@MicronautTest
+@MicronautTest(startApplication = false)
 public class BasicTestResourcesTest {
     
     private static final Logger logger = LoggerFactory.getLogger(BasicTestResourcesTest.class);
