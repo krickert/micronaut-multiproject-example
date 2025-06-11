@@ -89,6 +89,7 @@ dependencies {
     testImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     testImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     testImplementation(project(":yappy-test-resources:moto-test-resource"))
+    testImplementation(project(":yappy-test-resources:opensearch3-test-resource"))
     testImplementation(project(":yappy-test-resources:yappy-chunker-test-resource"))
     testResourcesImplementation("org.testcontainers:consul:1.20.6")
     testResourcesImplementation("org.testcontainers:kafka:1.21.0")
@@ -96,6 +97,7 @@ dependencies {
     testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:moto-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:opensearch3-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:yappy-chunker-test-resource"))
 
 }
@@ -119,6 +121,6 @@ micronaut {
     testResources {
         enabled = true
         sharedServer = true
-        clientTimeout = 60
+        clientTimeout = 300  // Increase timeout to 5 minutes for all containers to start
     }
 }
