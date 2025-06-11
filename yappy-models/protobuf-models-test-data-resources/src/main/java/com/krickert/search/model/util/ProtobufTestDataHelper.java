@@ -365,7 +365,7 @@ public class ProtobufTestDataHelper {
      *
      * @param index The index of the PipeDoc object to retrieve (0-98).
      * @return The PipeDoc object at the specified index, or null if not found.
-     * @throws IndexOutOfBoundsException if the index is out of range (index < 0 || index >= 99)
+     * @throws IndexOutOfBoundsException if the index is out of range (index &lt; 0 || index &gt;= 99)
      */
     public static PipeDoc getSamplePipeDocByIndex(int index) {
         if (index < 0 || index >= 99) {
@@ -414,7 +414,7 @@ public class ProtobufTestDataHelper {
      *
      * @param index The index of the PipeStream object to retrieve (0-98).
      * @return The PipeStream object at the specified index, or null if not found.
-     * @throws IndexOutOfBoundsException if the index is out of range (index < 0 || index >= 99)
+     * @throws IndexOutOfBoundsException if the index is out of range (index &lt; 0 || index &gt;= 99)
      */
     public static PipeStream getSamplePipeStreamByIndex(int index) {
         if (index < 0 || index >= 99) {

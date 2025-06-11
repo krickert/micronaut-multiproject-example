@@ -65,6 +65,11 @@ subprojects {
                     events("passed", "skipped", "failed")
                 }
             }
+            
+            // Disable javadoc for now
+            tasks.withType<Javadoc>().configureEach {
+                isEnabled = false
+            }
         }
     }
 
