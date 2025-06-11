@@ -47,12 +47,12 @@ import com.krickert.search.config.consul.service.ConsulKvService;
 @KafkaListener(groupId = "chunker-test-listener", 
                offsetReset = io.micronaut.configuration.kafka.annotation.OffsetReset.EARLIEST)
 class Scenario1ChunkerWithDebugTest {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(Scenario1ChunkerWithDebugTest.class);
-    
+
     // List to collect messages from test-module via Kafka
     private final List<PipeStream> receivedMessages = new CopyOnWriteArrayList<>();
-    
+
     @Topic("test-module-output")
     void receiveFromTestModule(UUID key, PipeStream value) {
         logger.info("Received message from test-module: streamId={}, docId={}, chunks={}", 
@@ -62,72 +62,63 @@ class Scenario1ChunkerWithDebugTest {
                 ? value.getDocument().getSemanticResults(0).getChunksCount() : 0);
         receivedMessages.add(value);
     }
-    
+
     @Inject
     PipelineEngine pipelineEngine;
-    
+
     @Inject
     BusinessOperationsService businessOpsService;
-    
+
     @Inject
     DynamicConfigurationManager configManager;
-    
+
     @Inject
     ConsulSchemaRegistryDelegate schemaRegistryDelegate;
-    
+
     @Inject
     SchemaValidationService schemaValidationService;
-    
+
     @Inject
     ConsulKvService consulKvService;
-    
-    @Property(name = "chunker.host")
-    String chunkerHost;
-    
-    @Property(name = "chunker.grpc.port") 
-    int chunkerPort;
-    
-    @Property(name = "test-module-after-chunker.host")
-    String testModuleHost;
-    
-    @Property(name = "test-module-after-chunker.grpc.port") 
-    int testModulePort;
-    
+
+    // We don't inject test resource properties directly
+    // They are managed by the test resources framework
+
     @Property(name = "app.config.cluster-name")
     String baseClusterName;
-    
+
     private String clusterName;
-    
+
     @BeforeEach
     void setup() {
         // For now, use the base cluster name directly to avoid watching issues
         // TODO: Fix DynamicConfigurationManager to support dynamic cluster names
         clusterName = baseClusterName;
         logger.info("Using cluster name: {}", clusterName);
-        
+
         // Clear any previous messages
         receivedMessages.clear();
-        
+
         // Clean up any stale Consul data from previous test runs
         cleanupStaleConsulData();
-        
+
         // First store the schemas in Consul
         storeTestModuleSchema();
         storeChunkerSchema();
-        
+
         // Setup pipeline configuration with chunker and test-module
         setupPipelineConfiguration()
             .doOnSuccess(v -> logger.info("Pipeline configuration setup completed"))
             .doOnError(e -> logger.error("Failed to setup pipeline configuration", e))
             .block(Duration.ofSeconds(30));
-        
+
         // Give Consul time to propagate the configuration changes
         try {
             Thread.sleep(2000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        
+
         // Wait for configuration to be available - allow more time for Consul to stabilize
         Awaitility.await()
             .atMost(Duration.ofSeconds(20))
@@ -147,14 +138,14 @@ class Scenario1ChunkerWithDebugTest {
                 logger.info("Configuration is now available for testing");
             });
     }
-    
+
     private void cleanupStaleConsulData() {
         try {
             // List all keys under configs/ to see what's there
             var keys = consulKvService.getKeysWithPrefix("configs/").block();
             if (keys != null && !keys.isEmpty()) {
                 logger.info("Found {} keys under configs/: {}", keys.size(), keys);
-                
+
                 // Delete any stale cluster configurations with UUID suffixes
                 for (String key : keys) {
                     if (key.startsWith("configs/module-test-cluster-") && !key.equals("configs/" + clusterName)) {
@@ -163,7 +154,7 @@ class Scenario1ChunkerWithDebugTest {
                     }
                 }
             }
-            
+
             // Also clean up any service registrations from previous test runs
             var services = businessOpsService.listServices().block();
             if (services != null) {
@@ -185,7 +176,7 @@ class Scenario1ChunkerWithDebugTest {
             // Continue with test even if cleanup fails
         }
     }
-    
+
     private void storeTestModuleSchema() {
         // Store test-module schema using ConsulSchemaRegistryDelegate
         String testModuleSchema = """
@@ -216,7 +207,7 @@ class Scenario1ChunkerWithDebugTest {
               "additionalProperties": false
             }
             """;
-        
+
         // First validate the schema using SchemaValidationService
         logger.info("Validating test-module schema JSON syntax before storing...");
         Boolean isValidJson = schemaValidationService.isValidJson(testModuleSchema).block();
@@ -224,17 +215,17 @@ class Scenario1ChunkerWithDebugTest {
             throw new RuntimeException("Test-module schema is not valid JSON");
         }
         logger.info("Test-module schema JSON validation passed");
-        
+
         // Store schema using the proper delegate
         String schemaId = "test-module-schema:1";
         schemaRegistryDelegate.saveSchema(schemaId, testModuleSchema).block();
         logger.info("Stored test-module schema with ID: {}", schemaId);
     }
-    
+
     private void storeChunkerSchema() {
         // Get the chunker schema from ChunkerOptions
         String chunkerSchema = com.krickert.yappy.modules.chunker.ChunkerOptions.getJsonV7Schema();
-        
+
         // Validate the schema using SchemaValidationService  
         logger.info("Validating chunker schema JSON syntax before storing...");
         Boolean isValidJson = schemaValidationService.isValidJson(chunkerSchema).block();
@@ -242,65 +233,69 @@ class Scenario1ChunkerWithDebugTest {
             throw new RuntimeException("Chunker schema is not valid JSON");
         }
         logger.info("Chunker schema JSON validation passed");
-        
+
         // Store schema using the proper delegate
         String schemaId = "chunker-schema:1";
         schemaRegistryDelegate.saveSchema(schemaId, chunkerSchema).block();
         logger.info("Stored chunker schema with ID: {}", schemaId);
     }
-    
+
     private Mono<Void> setupPipelineConfiguration() {
-        // Use Docker bridge IP for container-to-container communication
-        String dockerHostIp = "172.17.0.1";
-        
+        // Use the service names directly as they are defined in the gRPC client configuration
+        // The test resources framework will resolve these to the correct host and port
+
         // Register chunker service
+        // For test environment, use localhost with the mapped ports
         Registration chunkerReg = ImmutableRegistration.builder()
                 .id(clusterName + "-chunker-test")
                 .name(clusterName + "-chunker")
-                .address(dockerHostIp)
-                .port(chunkerPort)
+                .address("localhost")  // Use localhost for test environment
+                .port(50051)  // Use default port from test-resources config
                 .build();
-        
+
         // Register test-module service  
+        // For test environment, use localhost with the mapped ports
         Registration testModuleReg = ImmutableRegistration.builder()
                 .id(clusterName + "-test-module-test")
                 .name(clusterName + "-test-module")
-                .address(dockerHostIp)
-                .port(testModulePort)
+                .address("localhost")  // Use localhost for test environment
+                .port(50052)  // Use default port from test-resources config
                 .build();
-        
+
         return businessOpsService.registerService(chunkerReg)
             .then(businessOpsService.registerService(testModuleReg))
             .then(createAndStorePipelineConfiguration());
     }
-    
+
     private Mono<Void> createAndStorePipelineConfiguration() {
         try {
             // Initialize ObjectMapper for JSON parsing
             ObjectMapper mapper = new ObjectMapper();
-            
+
             // Create ProcessorInfo for chunker (gRPC service)
             var chunkerProcessorInfo = new PipelineStepConfig.ProcessorInfo("chunker", null);
-            
+
             // Create ProcessorInfo for test-module (gRPC service)
             var testModuleProcessorInfo = new PipelineStepConfig.ProcessorInfo("test-module", null);
-            
+
             // Create custom config for chunker to produce multiple chunks
             String chunkerConfigJson = """
                 {
                     "source_field": "body",
                     "chunk_size": 50,
                     "overlap_size": 10,
+                    "chunk_overlap": 10,
                     "chunk_config_id": "test-chunker-config",
+                    "chunk_id_template": "chunk_%d",
                     "result_set_name_template": "%s_%s_chunks",
                     "log_prefix": "[TEST-CHUNKER] "
                 }
                 """;
-            
+
             // Parse chunker JSON string to JsonNode
             var chunkerConfigNode = mapper.readTree(chunkerConfigJson);
             var chunkerConfig = new JsonConfigOptions(chunkerConfigNode, Map.of());
-            
+
             // Create chunker step with custom config and output to test-module
             var chunkerStep = new PipelineStepConfig(
                 "chunker",
@@ -317,7 +312,7 @@ class Scenario1ChunkerWithDebugTest {
                 0, 1000L, 30000L, 2.0, null,
                 chunkerProcessorInfo
             );
-            
+
             // Create custom config for test-module to output to Kafka
             String testModuleConfigJson = """
                 {
@@ -325,11 +320,11 @@ class Scenario1ChunkerWithDebugTest {
                     "kafka_topic": "test-module-output"
                 }
                 """;
-            
+
             // Parse JSON string to JsonNode
             var configNode = mapper.readTree(testModuleConfigJson);
             var testModuleConfig = new JsonConfigOptions(configNode, Map.of());
-        
+
         // Create test-module step with custom config
         var testModuleStep = new PipelineStepConfig(
             "test-module",
@@ -341,7 +336,7 @@ class Scenario1ChunkerWithDebugTest {
             0, 1000L, 30000L, 2.0, null,
             testModuleProcessorInfo
         );
-        
+
         // Create test pipeline with chunker -> test-module
         var pipeline = new PipelineConfig(
             "test-pipeline",
@@ -350,32 +345,32 @@ class Scenario1ChunkerWithDebugTest {
                 "test-module", testModuleStep
             )
         );
-        
+
         // Create pipeline graph
         var pipelineGraph = new PipelineGraphConfig(
             Map.of("test-pipeline", pipeline)
         );
-        
+
         // Create module configurations
         var chunkerModuleConfig = new PipelineModuleConfiguration(
             "chunker",
             "chunker",
             new SchemaReference("chunker-schema", 1)  // Add schema reference for chunker
         );
-        
+
         var testModuleModuleConfig = new PipelineModuleConfiguration(
             "test-module",
             "test-module",
             new SchemaReference("test-module-schema", 1)
         );
-        
+
         var moduleMap = new PipelineModuleMap(
             Map.of(
                 "chunker", chunkerModuleConfig,
                 "test-module", testModuleModuleConfig
             )
         );
-        
+
         // Create cluster config
         var clusterConfig = new PipelineClusterConfig(
             clusterName,
@@ -385,7 +380,7 @@ class Scenario1ChunkerWithDebugTest {
             Set.of(),
             Set.of("chunker", "test-module")
         );
-        
+
             // Store configuration
             return businessOpsService.storeClusterConfiguration(clusterName, clusterConfig)
                 .flatMap(success -> {
@@ -399,7 +394,7 @@ class Scenario1ChunkerWithDebugTest {
             return Mono.error(new RuntimeException("Failed to create pipeline configuration", e));
         }
     }
-    
+
     @Test
     void testScenario1_DocumentToChunkerWithDebugOutput() throws InterruptedException {
         // Given
@@ -413,40 +408,40 @@ class Scenario1ChunkerWithDebugTest {
                         "Each chunk will maintain some overlap with the previous chunk. " +
                         "This helps preserve context across chunk boundaries.")
                 .build();
-                
+
         PipeStream inputStream = PipeStream.newBuilder()
                 .setStreamId(streamId)
                 .setDocument(doc)
                 .setCurrentPipelineName("test-pipeline")
                 .setTargetStepName("chunker")
                 .build();
-        
+
         logger.info("=== Starting test with document: {} ===", doc.getId());
         logger.info("Document body length: {} characters", doc.getBody().length());
-        
+
         // When
         var result = pipelineEngine.processMessage(inputStream)
                 .doOnSubscribe(s -> logger.info("Starting pipeline processing"))
                 .doOnSuccess(v -> logger.info("Pipeline processing completed successfully"))
                 .doOnError(e -> logger.error("Pipeline processing failed", e))
                 .doOnTerminate(() -> logger.info("Pipeline processing terminated"));
-        
+
         // Then - verify it completes without error
         StepVerifier.create(result)
                 .expectComplete()
                 .verify(Duration.ofSeconds(30));
-        
+
         logger.info("=== Pipeline processing completed ===");
-        
+
         // Wait for Kafka messages from test-module
         logger.info("Waiting for messages from test-module via Kafka...");
-        
+
         // Give some time for the message to be processed through the pipeline
         Thread.sleep(2000);
-        
+
         // Wait for Kafka messages from test-module (this test should FAIL if no messages received)
         logger.info("Waiting for Kafka messages from test-module. Current count: {}", receivedMessages.size());
-        
+
         Awaitility.await()
             .atMost(Duration.ofSeconds(10))
             .pollInterval(Duration.ofMillis(500))
@@ -460,33 +455,33 @@ class Scenario1ChunkerWithDebugTest {
                     "4. KAFKA_ENABLED environment variable is not set for test-module");
                 logger.info("SUCCESS: Received {} messages from test-module", receivedMessages.size());
             });
-        
+
         // Verify chunker produced multiple chunks
         logger.info("=== Verifying chunker output ===");
         assertEquals(1, receivedMessages.size(), "Expected exactly one PipeStream message");
-        
+
         PipeStream resultStream = receivedMessages.get(0);
         PipeDoc resultDoc = resultStream.getDocument();
-        
+
         logger.info("Document ID: {}", resultDoc.getId());
         logger.info("Number of semantic results: {}", resultDoc.getSemanticResultsCount());
-        
+
         // The chunker should have added semantic results
         assertTrue(resultDoc.getSemanticResultsCount() > 0, 
             "Expected at least one semantic result from chunker");
-        
+
         // Get the semantic result from chunker
         var semanticResult = resultDoc.getSemanticResults(0);
         int chunkCount = semanticResult.getChunksCount();
-        
+
         logger.info("=== Chunker Results ===");
         logger.info("Result set name: {}", semanticResult.getResultSetName());
         logger.info("Number of chunks created: {}", chunkCount);
-        
+
         // Verify multiple chunks were created
         assertTrue(chunkCount > 1, 
             "Expected chunker to produce multiple chunks, but got: " + chunkCount);
-        
+
         // Log details about each chunk
         for (int i = 0; i < chunkCount; i++) {
             var chunk = semanticResult.getChunks(i);
@@ -498,7 +493,7 @@ class Scenario1ChunkerWithDebugTest {
                 chunk.getEmbeddingInfo().getTextContent()
                     .substring(0, Math.min(50, chunk.getEmbeddingInfo().getTextContent().length())) + "...");
         }
-        
+
         logger.info("=== Test completed successfully! Chunker produced {} chunks ===", chunkCount);
     }
 }

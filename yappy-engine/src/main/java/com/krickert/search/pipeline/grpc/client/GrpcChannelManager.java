@@ -68,6 +68,13 @@ public class GrpcChannelManager implements AutoCloseable { // Implement AutoClos
     private ManagedChannel createChannelOrThrow(String serviceName) {
         log.info("Cache miss. Attempting channel creation for service: '{}'", serviceName);
 
+        // Check if serviceName looks like a URI (host:port)
+        Optional<ManagedChannel> uriChannel = tryParseAsUri(serviceName);
+        if (uriChannel.isPresent()) {
+            log.info("Successfully connected to service '{}' using direct URI format.", serviceName);
+            return uriChannel.get();
+        }
+
         Optional<ManagedChannel> localChannel = tryLocalhostConnection(serviceName);
         if (localChannel.isPresent()) {
             log.info("Successfully connected to local service '{}' via localhost configuration.", serviceName);
@@ -88,6 +95,15 @@ public class GrpcChannelManager implements AutoCloseable { // Implement AutoClos
         String host = instance.getHost();
         int port = instance.getPort();
         log.info("Selected discovered instance for service '{}' at {}:{}", serviceName, host, port);
+
+        // Check if the host:port from Consul looks like a URI (e.g., "localhost:50052")
+        // If so, try to create a direct channel using the URI format
+        String hostPortUri = host + ":" + port;
+        Optional<ManagedChannel> discoveredUriChannel = tryParseAsUri(hostPortUri);
+        if (discoveredUriChannel.isPresent()) {
+            log.info("Successfully connected to service '{}' using discovered URI format: {}", serviceName, hostPortUri);
+            return discoveredUriChannel.get();
+        }
 
         return buildManagedChannel(host, port, serviceName);
     }
@@ -128,6 +144,33 @@ public class GrpcChannelManager implements AutoCloseable { // Implement AutoClos
             }
         }
         return instances; // Will be empty if all retries fail
+    }
+
+    /**
+     * Try to parse the service name as a URI (host:port) and create a ManagedChannel if it's in the correct format.
+     * This is useful for container-to-container communication where Consul returns "localhost" as the service address.
+     */
+    private Optional<ManagedChannel> tryParseAsUri(String serviceName) {
+        // Check if the service name contains a colon, which would indicate a host:port format
+        if (serviceName.contains(":")) {
+            try {
+                String[] parts = serviceName.split(":");
+                if (parts.length == 2) {
+                    String host = parts[0];
+                    int port = Integer.parseInt(parts[1]);
+                    log.info("Service name '{}' appears to be in URI format. Parsing as host='{}', port={}",
+                            serviceName, host, port);
+                    return Optional.of(buildManagedChannel(host, port, serviceName + " (direct URI)"));
+                }
+            } catch (NumberFormatException e) {
+                log.warn("Service name '{}' contains a colon but could not be parsed as host:port: {}",
+                        serviceName, e.getMessage());
+            } catch (Exception e) {
+                log.warn("Unexpected error parsing service name '{}' as URI: {}",
+                        serviceName, e.getMessage(), e);
+            }
+        }
+        return Optional.empty();
     }
 
     private Optional<ManagedChannel> tryLocalhostConnection(String serviceName) {
