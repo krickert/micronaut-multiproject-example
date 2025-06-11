@@ -41,6 +41,12 @@ include(
     "yappy-test-resources:moto-test-resource",
     "yappy-test-resources:apache-kafka-test-resource",
     "yappy-test-resources:opensearch3-test-resource",
+    "yappy-test-resources:yappy-module-base-test-resource",
+    "yappy-test-resources:yappy-chunker-test-resource",
+    "yappy-test-resources:yappy-tika-test-resource",
+    "yappy-test-resources:yappy-embedder-test-resource",
+    "yappy-test-resources:yappy-echo-test-resource",
+    "yappy-test-resources:yappy-test-module-test-resource",
 
     // Models
     "yappy-models",

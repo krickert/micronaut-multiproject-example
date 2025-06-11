@@ -85,16 +85,38 @@ dependencies {
     
     // Project test resources - handle both root project and standalone builds
     // Building from root project
+    
+    // Base infrastructure test resources
     testImplementation(project(":yappy-test-resources:consul-test-resource"))
     testImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     testImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     testImplementation(project(":yappy-test-resources:moto-test-resource"))
+    testImplementation(project(":yappy-test-resources:opensearch3-test-resource"))
+    
+    // Module test resources
+    testImplementation(project(":yappy-test-resources:yappy-chunker-test-resource"))
+    testImplementation(project(":yappy-test-resources:yappy-tika-test-resource"))
+    testImplementation(project(":yappy-test-resources:yappy-embedder-test-resource"))
+    testImplementation(project(":yappy-test-resources:yappy-echo-test-resource"))
+    testImplementation(project(":yappy-test-resources:yappy-test-module-test-resource"))
+    
+    // Test resources implementation dependencies
     testResourcesImplementation("org.testcontainers:consul:1.20.6")
     testResourcesImplementation("org.testcontainers:kafka:1.21.0")
+    
+    // Base infrastructure test resources
     testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:moto-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:opensearch3-test-resource"))
+    
+    // Module test resources
+    testResourcesImplementation(project(":yappy-test-resources:yappy-chunker-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:yappy-tika-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:yappy-embedder-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:yappy-echo-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:yappy-test-module-test-resource"))
 
 }
 
