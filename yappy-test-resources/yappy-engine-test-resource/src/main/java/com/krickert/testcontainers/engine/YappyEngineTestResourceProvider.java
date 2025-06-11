@@ -1,10 +1,10 @@
 package com.krickert.testcontainers.engine;
 
 import io.micronaut.testresources.testcontainers.AbstractTestContainersProvider;
+import io.micronaut.testresources.testcontainers.TestContainers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.Network;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
@@ -44,7 +44,7 @@ public class YappyEngineTestResourceProvider extends AbstractTestContainersProvi
         
         GenericContainer<?> container = new GenericContainer<>(imageName)
                 .withExposedPorts(8080, 50000)
-                .withNetwork(Network.SHARED)
+                .withNetwork(TestContainers.network("test-network"))
                 .withNetworkAliases(ENGINE_NETWORK_ALIAS)
                 .withLogConsumer(new Slf4jLogConsumer(logger))
                 .waitingFor(Wait.forHttp("/health")

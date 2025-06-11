@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.HttpWaitStrategy;
 import org.testcontainers.containers.wait.strategy.WaitStrategy;
-import org.testcontainers.containers.Network;
+import io.micronaut.testresources.testcontainers.TestContainers;
 import org.testcontainers.utility.Base58;
 import org.testcontainers.utility.DockerImageName;
 
@@ -99,7 +99,7 @@ public class OpenSearchContainer<SELF extends OpenSearchContainer<SELF>> extends
     protected void configure() {
         super.configure();
 
-        withNetwork(Network.SHARED);
+        withNetwork(TestContainers.network("test-network"));
         withNetworkAliases("opensearch");
         withEnv("discovery.type", "single-node");
         if (disableSecurity) {

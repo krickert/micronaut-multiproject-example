@@ -1,6 +1,7 @@
 package com.krickert.testcontainers.module;
 
 import io.micronaut.testresources.testcontainers.AbstractTestContainersProvider;
+import io.micronaut.testresources.testcontainers.TestContainers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
@@ -102,8 +103,8 @@ public abstract class AbstractModuleTestResourceProvider extends AbstractTestCon
     protected synchronized Network getSharedNetwork() {
         if (sharedNetwork == null) {
             LOG.info("Creating shared Docker network: {}", SHARED_NETWORK_NAME);
-            sharedNetwork = Network.SHARED;
-            // Note: Using SHARED network for simplicity. In production, might want custom network.
+            sharedNetwork = TestContainers.network("test-network");
+            // Note: Using managed network for proper cross-JVM sharing.
         }
         return sharedNetwork;
     }

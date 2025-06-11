@@ -1,10 +1,10 @@
 package com.krickert.testcontainers.kafka;
 
 import io.micronaut.testresources.testcontainers.AbstractTestContainersProvider;
+import io.micronaut.testresources.testcontainers.TestContainers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.kafka.KafkaContainer;
-import org.testcontainers.containers.Network;
 import org.testcontainers.utility.DockerImageName;
 
 import java.util.*;
@@ -69,7 +69,7 @@ public class KafkaTestResourceProvider extends AbstractTestContainersProvider<Ka
         // Create a new Kafka container with the specified image
         LOG.info("Creating Kafka container with image: {}", imageName);
         return new KafkaContainer(imageName)
-                .withNetwork(Network.SHARED)
+                .withNetwork(TestContainers.network("test-network"))
                 .withNetworkAliases("kafka");
     }
 

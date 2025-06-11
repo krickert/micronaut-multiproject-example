@@ -2,6 +2,7 @@ package com.krickert.testcontainers.apicurio;
 
 import io.apicurio.registry.serde.config.SerdeConfig;
 import io.micronaut.testresources.testcontainers.AbstractTestContainersProvider;
+import io.micronaut.testresources.testcontainers.TestContainers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.utility.DockerImageName;
@@ -106,7 +107,7 @@ public class ApicurioTestResourceProvider extends AbstractTestContainersProvider
         // The withStartupTimeout was part of the GenericContainer in your previous provider;
         // it's now part of the WaitStrategy within ApicurioContainer.
         return new ApicurioContainer(imageName)
-                .withNetwork(org.testcontainers.containers.Network.SHARED)
+                .withNetwork(TestContainers.network("test-network"))
                 .withNetworkAliases("apicurio");
     }
 
