@@ -4,6 +4,7 @@ import io.micronaut.testresources.testcontainers.AbstractTestContainersProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.consul.ConsulContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.utility.DockerImageName;
 
 import java.util.*;
@@ -68,7 +69,9 @@ public class ConsulTestResourceProvider extends AbstractTestContainersProvider<C
 
         LOG.info("Creating Consul container with image: {}", imageName);
         // Create a new Consul container with the specified image
-        ConsulContainer consulContainer = new ConsulContainer(imageName);
+        ConsulContainer consulContainer = new ConsulContainer(imageName)
+                .withNetwork(Network.SHARED)
+                .withNetworkAliases("consul");
         // The ConsulContainer automatically exposes port 8500 and maps it to a random port
         // No need to explicitly call withExposedPorts
 

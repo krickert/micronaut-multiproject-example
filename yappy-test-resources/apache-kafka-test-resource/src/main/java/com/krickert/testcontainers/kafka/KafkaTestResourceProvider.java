@@ -4,6 +4,7 @@ import io.micronaut.testresources.testcontainers.AbstractTestContainersProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.kafka.KafkaContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.utility.DockerImageName;
 
 import java.util.*;
@@ -66,7 +67,10 @@ public class KafkaTestResourceProvider extends AbstractTestContainersProvider<Ka
     @Override
     protected KafkaContainer createContainer(DockerImageName imageName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
         // Create a new Kafka container with the specified image
-        return new KafkaContainer(imageName);
+        LOG.info("Creating Kafka container with image: {}", imageName);
+        return new KafkaContainer(imageName)
+                .withNetwork(Network.SHARED)
+                .withNetworkAliases("kafka");
     }
 
     @Override
