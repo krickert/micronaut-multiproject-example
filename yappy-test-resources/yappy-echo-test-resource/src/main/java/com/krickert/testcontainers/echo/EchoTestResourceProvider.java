@@ -17,7 +17,7 @@ public class EchoTestResourceProvider extends AbstractModuleTestResourceProvider
     
     private static final Logger LOG = LoggerFactory.getLogger(EchoTestResourceProvider.class);
     private static final String MODULE_NAME = "echo";
-    private static final String DEFAULT_IMAGE = "yappy-platform-build/echo:latest";
+    private static final String DEFAULT_IMAGE = "echo:latest";
     
     @Override
     protected String getModuleName() {

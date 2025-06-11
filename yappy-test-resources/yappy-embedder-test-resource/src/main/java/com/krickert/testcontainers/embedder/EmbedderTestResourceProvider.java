@@ -15,7 +15,7 @@ public class EmbedderTestResourceProvider extends AbstractModuleTestResourceProv
     
     private static final Logger LOG = LoggerFactory.getLogger(EmbedderTestResourceProvider.class);
     private static final String MODULE_NAME = "embedder";
-    private static final String DEFAULT_IMAGE = "yappy-platform-build/embedder:latest";
+    private static final String DEFAULT_IMAGE = "embedder:latest";
     
     @Override
     protected String getModuleName() {

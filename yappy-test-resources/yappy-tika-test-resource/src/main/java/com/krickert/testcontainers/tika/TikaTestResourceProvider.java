@@ -17,7 +17,7 @@ public class TikaTestResourceProvider extends AbstractModuleTestResourceProvider
     
     private static final Logger LOG = LoggerFactory.getLogger(TikaTestResourceProvider.class);
     private static final String MODULE_NAME = "tika";
-    private static final String DEFAULT_IMAGE = "yappy-platform-build/tika-parser:latest";
+    private static final String DEFAULT_IMAGE = "tika-parser:latest";
     
     @Override
     protected String getModuleName() {

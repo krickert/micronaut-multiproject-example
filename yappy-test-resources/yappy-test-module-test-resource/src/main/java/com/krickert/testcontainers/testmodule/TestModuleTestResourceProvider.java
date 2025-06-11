@@ -23,7 +23,7 @@ public class TestModuleTestResourceProvider extends AbstractModuleTestResourcePr
     
     private static final Logger LOG = LoggerFactory.getLogger(TestModuleTestResourceProvider.class);
     private static final String MODULE_NAME = "test-module";
-    private static final String DEFAULT_IMAGE = "yappy-platform-build/test-module:latest";
+    private static final String DEFAULT_IMAGE = "test-module:latest";
     private static final int TEST_MODULE_GRPC_PORT = 50062;
     
     @Override
