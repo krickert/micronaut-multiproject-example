@@ -133,10 +133,9 @@ docker {
 
 // Configure the dockerBuild task
 tasks.named<com.bmuschko.gradle.docker.tasks.image.DockerBuildImage>("dockerBuild") {
-    val imageName = project.name.lowercase()
     images.set(listOf(
-        "${imageName}:${project.version}",
-        "${imageName}:latest"
+        "engine:${project.version}",
+        "engine:latest"
     ))
     
     // Ensure module containers are built first

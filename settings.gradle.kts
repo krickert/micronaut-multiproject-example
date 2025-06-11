@@ -65,6 +65,7 @@ include(
     // New orchestrator - clean architecture
     "yappy-orchestrator",
     "yappy-orchestrator:engine-core",
+    "yappy-orchestrator:engine-integration-test",
 
     // Modules - needed for container builds
     "yappy-modules:tika-parser",
@@ -81,7 +82,6 @@ include(
     // Containers
     "containers:chunker",
     "containers:echo",
-    "containers:engine",
 
     // Integration tests
     "yappy-integration-test",

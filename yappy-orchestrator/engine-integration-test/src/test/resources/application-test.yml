@@ -1,0 +1,77 @@
+micronaut:
+  application:
+    name: engine-integration-test
+  server:
+    port: -1
+
+# Test resources will provide these containers
+test-resources:
+  containers:
+    # Engine container that will communicate with other containers
+    engine:
+      image-name: engine:latest
+      hostnames:
+        - engine.host
+      exposed-ports:
+        - engine.grpc.port: 50070
+        - engine.http.port: 8090
+      wait-strategy:
+        log:
+          regex: ".*Engine service started.*"
+      startup-timeout: 120s
+      env:
+        GRPC_SERVER_PORT: "50070"
+        GRPC_SERVER_HOST: "0.0.0.0"
+        MICRONAUT_SERVER_PORT: "8090"
+        MICRONAUT_SERVER_HOST: "0.0.0.0"
+        # Engine needs to know where to find Consul
+        CONSUL_HOST: "consul"
+        CONSUL_PORT: "8500"
+        # Kafka bootstrap servers
+        KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+    
+    # Chunker module
+    chunker:
+      image-name: chunker:latest
+      hostnames:
+        - chunker.host
+      exposed-ports:
+        - chunker.grpc.port: 50051
+      wait-strategy:
+        port:
+          port: 50051
+      startup-timeout: 60s
+      env:
+        GRPC_SERVER_PORT: "50051"
+        GRPC_SERVER_HOST: "0.0.0.0"
+        CONSUL_HOST: "consul"
+        CONSUL_PORT: "8500"
+    
+    # Test module
+    test-module:
+      image-name: test-module:latest
+      hostnames:
+        - test-module.host
+      exposed-ports:
+        - test-module.grpc.port: 50052
+      wait-strategy:
+        log:
+          regex: ".*GRPC started on port.*"
+      startup-timeout: 60s
+      env:
+        GRPC_SERVER_PORT: "50052"
+        GRPC_SERVER_HOST: "0.0.0.0"
+        KAFKA_ENABLED: "true"
+        KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+
+# Logging
+logger:
+  levels:
+    io.micronaut.test: DEBUG
+    com.krickert.search: DEBUG
+    io.micronaut.testresources: DEBUG
+
+# App configuration
+app:
+  config:
+    cluster-name: integration-test-cluster
