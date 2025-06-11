@@ -7,6 +7,7 @@ import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
+import java.util.Optional;
 
 /**
  * Stub implementation for Kafka message forwarding.
@@ -18,14 +19,15 @@ public class KafkaMessageForwarder implements MessageForwarder {
     private static final Logger logger = LoggerFactory.getLogger(KafkaMessageForwarder.class);
     
     @Override
-    public Mono<Void> forward(PipeStream pipeStream, RouteData routeData) {
+    public Mono<Optional<PipeStream>> forward(PipeStream pipeStream, RouteData routeData) {
         // Stub implementation - just log for now
         logger.info("STUB: Would forward message {} to Kafka topic {} for step {}", 
             pipeStream.getStreamId(), 
             routeData.destinationService(),
             routeData.targetStepName());
         
-        return Mono.empty();
+        // Kafka forwarder doesn't return processed streams since it's async
+        return Mono.just(Optional.empty());
     }
     
     @Override

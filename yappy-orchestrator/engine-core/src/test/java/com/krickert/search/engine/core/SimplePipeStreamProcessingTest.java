@@ -99,7 +99,7 @@ public class SimplePipeStreamProcessingTest {
         // Create router with GrpcMessageForwarder in test mode
         grpcForwarder = new GrpcMessageForwarder(businessOpsService, testClusterName, true);
         ConfigurationBasedRoutingStrategy routingStrategy = new ConfigurationBasedRoutingStrategy(businessOpsService, testClusterName);
-        router = new DefaultRouter(List.of(grpcForwarder), routingStrategy);
+        router = new DefaultRouter(List.of(grpcForwarder), routingStrategy, businessOpsService, testClusterName);
         
         // Create pipeline engine
         pipelineEngine = new PipelineEngineImpl(

@@ -20,4 +20,12 @@ echo "Building tika-parser module..."
 echo "Building embedder module..."
 ./gradlew :yappy-modules:embedder:dockerBuild
 
+# Build echo module and Docker image
+echo "Building echo module..."
+./gradlew :yappy-modules:echo:dockerBuild
+
+# Build test-module and Docker image
+echo "Building test-module..."
+./gradlew :yappy-modules:test-module:dockerBuild
+
 echo "Done! You can now run the ModuleIntegrationTest."

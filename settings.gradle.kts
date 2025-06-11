@@ -65,7 +65,8 @@ include(
     "yappy-modules:embedder",
 
     // TODO: Add these back after engine is updated
-    // "yappy-modules:echo",
+    "yappy-modules:echo",
+    "yappy-modules:test-module",
     // "yappy-modules:s3-connector",
     // "yappy-modules:opensearch-sink",
     // "yappy-modules:yappy-connector-test-server"

@@ -38,8 +38,8 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
         this.objectMapper = objectMapper;
         this.vectorizers = vectorizers.stream()
                 .collect(Collectors.toMap(Vectorizer::getModelId, v -> v));
-        log.info("Initialized EmbedderServiceGrpc with {} vectorizers: {}",
-                vectorizers.size(),
+        log.info("Initialized EmbedderServiceGrpc with {} vectorizers: {}", 
+                vectorizers.size(), 
                 vectorizers.stream().map(Vectorizer::getModelId).collect(Collectors.joining(", ")));
     }
 
@@ -82,11 +82,11 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
             }
 
             if (availableModels.isEmpty()) {
-                setErrorResponseAndComplete(responseBuilder,
-                        "No available embedding models found. Requested models: " +
+                setErrorResponseAndComplete(responseBuilder, 
+                        "No available embedding models found. Requested models: " + 
                                 embedderOptions.embeddingModels().stream()
                                         .map(EmbeddingModel::name)
-                                        .collect(Collectors.joining(", ")),
+                                        .collect(Collectors.joining(", ")), 
                         null, responseObserver);
                 return;
             }
@@ -129,7 +129,7 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
 
     /**
      * Processes chunks in the document and adds embeddings to them.
-     *
+     * 
      * @param inputDoc the input document
      * @param outputDocBuilder the output document builder
      * @param options the embedder options
@@ -137,9 +137,9 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
      * @param pipeStepName the pipe step name
      * @return true if chunks were processed, false otherwise
      */
-    private boolean processChunks(PipeDoc inputDoc, PipeDoc.Builder outputDocBuilder,
-                                  EmbedderOptions options, List<EmbeddingModel> availableModels,
-                                  String pipeStepName) {
+    private boolean processChunks(PipeDoc inputDoc, PipeDoc.Builder outputDocBuilder, 
+                                 EmbedderOptions options, List<EmbeddingModel> availableModels,
+                                 String pipeStepName) {
         boolean chunksProcessed = false;
 
         // DO NOT clear existing semantic results - we want to ADD new ones with embeddings
@@ -202,7 +202,7 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
                 outputDocBuilder.addSemanticResults(newResult);
                 chunksProcessed = true;
 
-                log.info("{}Added embeddings to {} chunks using model {} for document ID: {}",
+                log.info("{}Added embeddings to {} chunks using model {} for document ID: {}", 
                         options.logPrefix(), result.getChunksCount(), modelId, inputDoc.getId());
             }
         }
@@ -212,16 +212,16 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
 
     /**
      * Processes document fields and adds embeddings to them.
-     *
+     * 
      * @param inputDoc the input document
      * @param outputDocBuilder the output document builder
      * @param options the embedder options
      * @param availableModels the available embedding models
      * @param pipeStepName the pipe step name
      */
-    private void processDocumentFields(PipeDoc inputDoc, PipeDoc.Builder outputDocBuilder,
-                                       EmbedderOptions options, List<EmbeddingModel> availableModels,
-                                       String pipeStepName) {
+    private void processDocumentFields(PipeDoc inputDoc, PipeDoc.Builder outputDocBuilder, 
+                                      EmbedderOptions options, List<EmbeddingModel> availableModels,
+                                      String pipeStepName) {
         // Process each field
         for (String fieldName : options.documentFields()) {
             String fieldText = null;
@@ -257,7 +257,7 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
                 String embeddingName = fieldName + "_" + modelId.toLowerCase();
                 outputDocBuilder.putNamedEmbeddings(embeddingName, embeddingBuilder.build());
 
-                log.info("{}Added embedding for field {} using model {} for document ID: {}",
+                log.info("{}Added embedding for field {} using model {} for document ID: {}", 
                         options.logPrefix(), fieldName, modelId, inputDoc.getId());
             }
         }
@@ -265,14 +265,14 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
 
     /**
      * Processes custom field mappings and adds embeddings to the document.
-     *
+     * 
      * @param inputDoc the input document
      * @param outputDocBuilder the output document builder
      * @param options the embedder options
      * @param availableModels the available embedding models
      */
-    private void processCustomFieldMappings(PipeDoc inputDoc, PipeDoc.Builder outputDocBuilder,
-                                            EmbedderOptions options, List<EmbeddingModel> availableModels) {
+    private void processCustomFieldMappings(PipeDoc inputDoc, PipeDoc.Builder outputDocBuilder, 
+                                           EmbedderOptions options, List<EmbeddingModel> availableModels) {
         // Process each mapping
         for (EmbedderOptions.FieldMapping mapping : options.customFieldMappings()) {
             String sourceField = mapping.sourceField();
@@ -291,7 +291,7 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
                     try {
                         fieldText = JsonFormat.printer().print(value.getStructValue());
                     } catch (Exception e) {
-                        log.warn("{}Failed to convert struct to string for field {}: {}",
+                        log.warn("{}Failed to convert struct to string for field {}: {}", 
                                 options.logPrefix(), sourceField, e.getMessage());
                     }
                 } else if (value.hasListValue()) {
@@ -325,7 +325,7 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
                     String embeddingName = targetField + "_" + modelId.toLowerCase();
                     outputDocBuilder.putNamedEmbeddings(embeddingName, embeddingBuilder.build());
 
-                    log.info("{}Added embedding for custom field mapping {}:{} using model {} for document ID: {}",
+                    log.info("{}Added embedding for custom field mapping {}:{} using model {} for document ID: {}", 
                             options.logPrefix(), sourceField, targetField, modelId, inputDoc.getId());
                 }
             }
@@ -334,16 +334,16 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
 
     /**
      * Processes keywords and adds embeddings to the document.
-     *
+     * 
      * @param inputDoc the input document
      * @param outputDocBuilder the output document builder
      * @param options the embedder options
      * @param availableModels the available embedding models
      * @param pipeStepName the pipe step name
      */
-    private void processKeywords(PipeDoc inputDoc, PipeDoc.Builder outputDocBuilder,
-                                 EmbedderOptions options, List<EmbeddingModel> availableModels,
-                                 String pipeStepName) {
+    private void processKeywords(PipeDoc inputDoc, PipeDoc.Builder outputDocBuilder, 
+                                EmbedderOptions options, List<EmbeddingModel> availableModels,
+                                String pipeStepName) {
         List<String> keywords = inputDoc.getKeywordsList();
 
         // Skip if no keywords
@@ -382,7 +382,7 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
                     outputDocBuilder.putNamedEmbeddings(embeddingName, embeddingBuilder.build());
                 }
 
-                log.info("{}Added {} keyword {}-gram embeddings using model {} for document ID: {}",
+                log.info("{}Added {} keyword {}-gram embeddings using model {} for document ID: {}", 
                         options.logPrefix(), ngrams.size(), ngramSize, modelId, inputDoc.getId());
             }
         }
@@ -390,7 +390,7 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
 
     /**
      * Generates n-grams from a list of keywords.
-     *
+     * 
      * @param keywords the list of keywords
      * @param n the n-gram size
      * @return the list of n-grams
@@ -417,7 +417,7 @@ public class EmbedderServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessor
 
     /**
      * Sets an error response and completes the response observer.
-     *
+     * 
      * @param responseBuilder the response builder
      * @param errorMessage the error message
      * @param e the exception, or null if none

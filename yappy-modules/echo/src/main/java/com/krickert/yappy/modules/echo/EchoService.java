@@ -74,21 +74,27 @@ public class EchoService extends PipeStepProcessorGrpc.PipeStepProcessorImplBase
     }
 
     @Override
-    public void getServiceRegistration(Empty request, StreamObserver<ServiceMetadata> responseObserver) {
-        LOG.info("Received GetServiceRegistration request");
+    public void getServiceRegistration(Empty request, StreamObserver<ServiceRegistrationData> responseObserver) {
+        // Simple JSON schema for echo service configuration
+        String jsonSchema = """
+            {
+              "type": "object",
+              "properties": {
+                "log_prefix": {
+                  "type": "string",
+                  "description": "Optional prefix to add to log messages"
+                }
+              },
+              "additionalProperties": false
+            }
+            """;
 
-        ServiceMetadata.Builder metadataBuilder = ServiceMetadata.newBuilder();
-
-        // Set the step name to "echo" as specified in the issue description
-        metadataBuilder.setPipeStepName("echo");
-
-        // Echo service doesn't have a custom schema, so we don't add one to the context_params
-
-        // Build and send the response
-        ServiceMetadata response = metadataBuilder.build();
+        ServiceRegistrationData response = ServiceRegistrationData.newBuilder()
+                .setModuleName("echo")
+                .setJsonConfigSchema(jsonSchema)
+                .build();
+        
         responseObserver.onNext(response);
         responseObserver.onCompleted();
-
-        LOG.info("Sent GetServiceRegistration response for echo service");
     }
 }

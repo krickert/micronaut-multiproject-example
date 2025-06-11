@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -46,7 +47,7 @@ public class GrpcMessageForwarder implements MessageForwarder {
     }
     
     @Override
-    public Mono<Void> forward(PipeStream pipeStream, RouteData routeData) {
+    public Mono<Optional<PipeStream>> forward(PipeStream pipeStream, RouteData routeData) {
         String serviceName = routeData.destinationService();
         String clusterServiceName = clusterName + "-" + serviceName;
         
@@ -107,7 +108,7 @@ public class GrpcMessageForwarder implements MessageForwarder {
         }
     }
     
-    private Mono<Void> createChannelAndForward(String address, int port, String clusterServiceName,
+    private Mono<Optional<PipeStream>> createChannelAndForward(String address, int port, String clusterServiceName,
                                                PipeStream pipeStream, RouteData routeData) {
         logger.debug("Using service instance at {}:{} for {}", 
             address, port, clusterServiceName);
@@ -127,7 +128,7 @@ public class GrpcMessageForwarder implements MessageForwarder {
                 clusterServiceName, error.getMessage()));
     }
     
-    private Mono<Void> forwardToService(ManagedChannel channel, PipeStream pipeStream, RouteData routeData) {
+    private Mono<Optional<PipeStream>> forwardToService(ManagedChannel channel, PipeStream pipeStream, RouteData routeData) {
         // First get the configuration for this step
         String pipelineName = routeData.targetPipelineName() != null ? 
             routeData.targetPipelineName() : pipeStream.getCurrentPipelineName();
@@ -191,9 +192,20 @@ public class GrpcMessageForwarder implements MessageForwarder {
                 logger.info("Successfully forwarded message {} to service {}", 
                     pipeStream.getStreamId(), routeData.destinationService());
                 
-                return null;
+                return response;
             }))
-            .then();
+            .map(response -> {
+                // If the response has an output document, create a new PipeStream for the next step
+                if (response.hasOutputDoc()) {
+                    PipeStream nextStream = pipeStream.toBuilder()
+                        .setDocument(response.getOutputDoc())
+                        .setCurrentHopNumber(pipeStream.getCurrentHopNumber() + 1)
+                        .build();
+                    return Optional.of(nextStream);
+                } else {
+                    return Optional.<PipeStream>empty();
+                }
+            });
     }
     
     @Override

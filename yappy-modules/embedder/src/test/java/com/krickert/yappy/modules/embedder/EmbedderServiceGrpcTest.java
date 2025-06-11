@@ -104,7 +104,7 @@ public class EmbedderServiceGrpcTest {
         // The first result is the original without embeddings
         SemanticProcessingResult originalResult = outputDoc.getSemanticResults(0);
         assertEquals("", originalResult.getEmbeddingConfigId(), "Original result should not have embedding config");
-
+        
         // The second result should have embeddings
         SemanticProcessingResult embeddedResult = outputDoc.getSemanticResults(1);
         assertEquals(EmbeddingModel.ALL_MINILM_L6_V2.name(), embeddedResult.getEmbeddingConfigId());

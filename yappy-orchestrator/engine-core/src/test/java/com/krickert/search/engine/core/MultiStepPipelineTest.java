@@ -6,6 +6,7 @@ import com.krickert.search.engine.core.routing.RoutingStrategy;
 import com.krickert.search.engine.core.transport.MessageForwarder;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeStream;
+import com.krickert.search.config.consul.service.BusinessOperationsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -15,6 +16,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -38,6 +40,9 @@ class MultiStepPipelineTest {
     @Mock
     private RoutingStrategy routingStrategy;
     
+    @Mock
+    private BusinessOperationsService businessOpsService;
+    
     private Router router;
     private PipelineEngine pipelineEngine;
     
@@ -48,25 +53,27 @@ class MultiStepPipelineTest {
         // Set up mock forwarders
         when(grpcForwarder.getTransportType()).thenReturn(RouteData.TransportType.GRPC);
         when(grpcForwarder.canHandle(RouteData.TransportType.GRPC)).thenReturn(true);
-        when(grpcForwarder.forward(any(), any())).thenReturn(Mono.empty());
+        when(grpcForwarder.forward(any(), any())).thenReturn(Mono.just(Optional.empty()));
         
         when(kafkaForwarder.getTransportType()).thenReturn(RouteData.TransportType.KAFKA);
         when(kafkaForwarder.canHandle(RouteData.TransportType.KAFKA)).thenReturn(true);
-        when(kafkaForwarder.forward(any(), any())).thenReturn(Mono.empty());
+        when(kafkaForwarder.forward(any(), any())).thenReturn(Mono.just(Optional.empty()));
         
         when(internalForwarder.getTransportType()).thenReturn(RouteData.TransportType.INTERNAL);
         when(internalForwarder.canHandle(RouteData.TransportType.INTERNAL)).thenReturn(true);
-        when(internalForwarder.forward(any(), any())).thenReturn(Mono.empty());
+        when(internalForwarder.forward(any(), any())).thenReturn(Mono.just(Optional.empty()));
         
         // Create router with mock dependencies
         router = new com.krickert.search.engine.core.routing.DefaultRouter(
             List.of(grpcForwarder, kafkaForwarder, internalForwarder),
-            routingStrategy
+            routingStrategy,
+            businessOpsService,
+            "test-cluster"
         );
         
         // Create pipeline engine - we'll mock the services it needs
         pipelineEngine = new PipelineEngineImpl(
-            mock(com.krickert.search.config.consul.service.BusinessOperationsService.class),
+            businessOpsService,
             router,
             "test-cluster",
             false, // No buffering for tests

@@ -4,9 +4,12 @@ import com.krickert.search.engine.core.transport.MessageForwarder;
 import com.krickert.search.model.PipeStream;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import io.micronaut.context.annotation.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Flux;
+import com.krickert.search.config.consul.service.BusinessOperationsService;
 
 import java.util.List;
 import java.util.Map;
@@ -23,9 +26,14 @@ public class DefaultRouter implements Router {
     
     private final Map<RouteData.TransportType, MessageForwarder> forwarders;
     private final RoutingStrategy routingStrategy;
+    private final BusinessOperationsService businessOpsService;
+    private final String clusterName;
     
     @Inject
-    public DefaultRouter(List<MessageForwarder> forwarderList, RoutingStrategy routingStrategy) {
+    public DefaultRouter(List<MessageForwarder> forwarderList, 
+                        RoutingStrategy routingStrategy,
+                        BusinessOperationsService businessOpsService,
+                        @Value("${app.config.cluster-name}") String clusterName) {
         this.forwarders = forwarderList.stream()
                 .collect(Collectors.toMap(
                         MessageForwarder::getTransportType,
@@ -37,6 +45,8 @@ public class DefaultRouter implements Router {
                         }
                 ));
         this.routingStrategy = routingStrategy;
+        this.businessOpsService = businessOpsService;
+        this.clusterName = clusterName;
         
         logger.info("Initialized router with {} forwarders: {}", 
                 forwarders.size(), 
@@ -57,6 +67,23 @@ public class DefaultRouter implements Router {
         }
         
         return forwarder.forward(pipeStream, routeData)
+                .doOnNext(optionalStream -> {
+                    if (optionalStream.isPresent()) {
+                        logger.debug("Received processed stream from {}, continuing pipeline", 
+                            routeData.destinationService());
+                    } else {
+                        logger.debug("No processed stream returned from {}", 
+                            routeData.destinationService());
+                    }
+                })
+                .flatMap(optionalStream -> {
+                    if (optionalStream.isPresent()) {
+                        // We have a processed stream, need to continue the pipeline
+                        // But we need access to pipeline configuration to know outputs
+                        return continueToNextSteps(optionalStream.get(), routeData);
+                    }
+                    return Mono.empty();
+                })
                 .doOnSuccess(v -> logger.debug("Successfully routed message {} to {}", 
                         pipeStream.getStreamId(), 
                         routeData.destinationService()))
@@ -74,5 +101,47 @@ public class DefaultRouter implements Router {
         
         return routingStrategy.determineRoute(pipeStream)
                 .flatMap(routeData -> route(pipeStream, routeData));
+    }
+    
+    private Mono<Void> continueToNextSteps(PipeStream processedStream, RouteData previousRouteData) {
+        // Get the pipeline configuration to find outputs for the current step
+        String pipelineName = processedStream.getCurrentPipelineName();
+        String currentStepName = previousRouteData.targetStepName();
+        
+        logger.debug("Checking for outputs from step {} in pipeline {}", currentStepName, pipelineName);
+        
+        return businessOpsService.getSpecificPipelineConfig(clusterName, pipelineName)
+            .flatMap(configOpt -> {
+                if (configOpt.isEmpty()) {
+                    logger.warn("No pipeline configuration found for {} when looking for outputs", pipelineName);
+                    return Mono.empty();
+                }
+                
+                var pipelineConfig = configOpt.get();
+                var stepConfig = pipelineConfig.pipelineSteps().get(currentStepName);
+                
+                if (stepConfig == null || stepConfig.outputs() == null || stepConfig.outputs().isEmpty()) {
+                    logger.debug("No outputs configured for step {}", currentStepName);
+                    return Mono.empty();
+                }
+                
+                // Route to each configured output
+                return Flux.fromIterable(stepConfig.outputs().entrySet())
+                    .flatMap(entry -> {
+                        var outputTarget = entry.getValue();
+                        String nextStepName = outputTarget.targetStepName();
+                        
+                        logger.info("Routing output from {} to next step {}", currentStepName, nextStepName);
+                        
+                        // Create new PipeStream for the next step
+                        PipeStream nextStream = processedStream.toBuilder()
+                            .setTargetStepName(nextStepName)
+                            .build();
+                        
+                        // Route to the next step
+                        return route(nextStream);
+                    })
+                    .then();
+            });
     }
 }

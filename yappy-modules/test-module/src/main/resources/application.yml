@@ -1,0 +1,38 @@
+micronaut:
+  application:
+    name: test-module
+  server:
+    port: ${MICRONAUT_SERVER_PORT:8080}
+  metrics:
+    enabled: false
+
+grpc:
+  server:
+    port: ${GRPC_SERVER_PORT:50051}
+    health:
+      enabled: true
+  channels:
+    default:
+      plaintext: true
+      max-retry-attempts: 0
+
+# Kafka configuration (optional - only if KAFKA output is used)
+kafka:
+  enabled: ${KAFKA_ENABLED:false}
+  bootstrap:
+    servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  producers:
+    default:
+      retries: 3
+      batch-size: 16384
+      linger-ms: 10
+      buffer-memory: 33554432
+      
+endpoints:
+  health:
+    enabled: true
+    sensitive: false
+    
+jackson:
+  serialization:
+    indent-output: true

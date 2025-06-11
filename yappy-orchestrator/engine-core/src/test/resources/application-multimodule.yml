@@ -68,6 +68,18 @@ test-resources:
         memory: "5g"  # Total container memory limit
         memory-swap: "5g"  # Same as memory to disable swap
 
+    # Echo service for testing and debugging
+    echo:
+      image-name: echo:latest
+      hostnames:
+        - echo.host
+      exposed-ports:
+        - echo.grpc.port: 50051
+      wait-strategy:
+        port:
+          port: 50051
+      startup-timeout: 60s
+
 # Consul configuration (we're using the existing test resources Consul)
 consul:
   client:

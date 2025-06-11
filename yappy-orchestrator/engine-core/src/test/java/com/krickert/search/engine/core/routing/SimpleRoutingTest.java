@@ -3,6 +3,7 @@ package com.krickert.search.engine.core.routing;
 import com.krickert.search.engine.core.transport.MessageForwarder;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeStream;
+import com.krickert.search.config.consul.service.BusinessOperationsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -11,6 +12,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -33,7 +35,11 @@ class SimpleRoutingTest {
     @Mock
     private RoutingStrategy routingStrategy;
     
+    @Mock
+    private BusinessOperationsService businessOpsService;
+    
     private DefaultRouter router;
+    private String testClusterName = "test-cluster";
     
     @BeforeEach
     void setUp() {
@@ -52,7 +58,9 @@ class SimpleRoutingTest {
         // Create router with mock dependencies
         router = new DefaultRouter(
             List.of(grpcForwarder, kafkaForwarder, internalForwarder),
-            routingStrategy
+            routingStrategy,
+            businessOpsService,
+            testClusterName
         );
     }
     
@@ -69,7 +77,7 @@ class SimpleRoutingTest {
         );
         
         when(routingStrategy.determineRoute(pipeStream)).thenReturn(Mono.just(routeData));
-        when(grpcForwarder.forward(pipeStream, routeData)).thenReturn(Mono.empty());
+        when(grpcForwarder.forward(pipeStream, routeData)).thenReturn(Mono.just(Optional.empty()));
         
         // When & Then
         StepVerifier.create(router.route(pipeStream))
@@ -90,7 +98,7 @@ class SimpleRoutingTest {
         );
         
         when(routingStrategy.determineRoute(pipeStream)).thenReturn(Mono.just(routeData));
-        when(kafkaForwarder.forward(pipeStream, routeData)).thenReturn(Mono.empty());
+        when(kafkaForwarder.forward(pipeStream, routeData)).thenReturn(Mono.just(Optional.empty()));
         
         // When & Then
         StepVerifier.create(router.route(pipeStream))
@@ -111,7 +119,7 @@ class SimpleRoutingTest {
         );
         
         when(routingStrategy.determineRoute(pipeStream)).thenReturn(Mono.just(routeData));
-        when(internalForwarder.forward(pipeStream, routeData)).thenReturn(Mono.empty());
+        when(internalForwarder.forward(pipeStream, routeData)).thenReturn(Mono.just(Optional.empty()));
         
         // When & Then
         StepVerifier.create(router.route(pipeStream))
@@ -148,7 +156,9 @@ class SimpleRoutingTest {
         // Create router without GRPC forwarder
         DefaultRouter limitedRouter = new DefaultRouter(
             List.of(kafkaForwarder, internalForwarder),
-            routingStrategy
+            routingStrategy,
+            businessOpsService,
+            testClusterName
         );
         
         when(routingStrategy.determineRoute(pipeStream)).thenReturn(Mono.just(routeData));

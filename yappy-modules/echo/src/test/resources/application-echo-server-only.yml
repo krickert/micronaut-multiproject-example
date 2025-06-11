@@ -1,23 +1,7 @@
-# /yappy-modules/chunker/src/test/resources/application-chunker-server-only.yml
+# Configuration for running echo service standalone
 micronaut:
   application:
-    name: echo # This name will be used for Consul registration if not overridden
+    name: echo-standalone
 grpc:
   server:
     port: ${random.port}
-  services:
-    chunker:
-      enabled: false
-    echo:
-      enabled: true
-consul:
-  client:
-    registration:
-      enabled: true
-      service-id: echo # Explicitly set for clarity
-      name: echo       # Explicitly set for clarity
-      port: ${grpc.server.port}
-      check:
-        enabled: true
-    discovery:
-      enabled: false # This server instance doesn't need to discover for this test

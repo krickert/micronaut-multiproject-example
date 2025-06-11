@@ -26,6 +26,7 @@ import reactor.test.StepVerifier;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -109,10 +110,11 @@ class GrpcMessageForwarderTest {
                 .build());
         
         // When
-        Mono<Void> result = forwarder.forward(pipeStream, routeData);
+        Mono<Optional<PipeStream>> result = forwarder.forward(pipeStream, routeData);
         
         // Then
         StepVerifier.create(result)
+                .expectNextMatches(Optional::isEmpty)
                 .verifyComplete();
         
         // Verify the request was received
@@ -160,10 +162,11 @@ class GrpcMessageForwarderTest {
         testProcessor.setResponse(ProcessResponse.newBuilder().setSuccess(true).build());
         
         // When
-        Mono<Void> result = forwarder.forward(pipeStream, routeData);
+        Mono<Optional<PipeStream>> result = forwarder.forward(pipeStream, routeData);
         
         // Then
         StepVerifier.create(result)
+                .expectNextMatches(Optional::isEmpty)
                 .verifyComplete();
         
         // Verify current pipeline was used
@@ -195,7 +198,7 @@ class GrpcMessageForwarderTest {
                 .thenReturn(Mono.just(Collections.emptyList()));
         
         // When
-        Mono<Void> result = forwarder.forward(pipeStream, routeData);
+        Mono<Optional<PipeStream>> result = forwarder.forward(pipeStream, routeData);
         
         // Then
         StepVerifier.create(result)
@@ -239,7 +242,7 @@ class GrpcMessageForwarderTest {
                 .build());
         
         // When
-        Mono<Void> result = forwarder.forward(pipeStream, routeData);
+        Mono<Optional<PipeStream>> result = forwarder.forward(pipeStream, routeData);
         
         // Then
         StepVerifier.create(result)
@@ -291,9 +294,11 @@ class GrpcMessageForwarderTest {
         
         // When - send two messages
         StepVerifier.create(forwarder.forward(pipeStream1, routeData1))
+                .expectNextMatches(Optional::isEmpty)
                 .verifyComplete();
         
         StepVerifier.create(forwarder.forward(pipeStream2, routeData2))
+                .expectNextMatches(Optional::isEmpty)
                 .verifyComplete();
         
         // Then - verify both requests were received

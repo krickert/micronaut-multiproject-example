@@ -3,6 +3,7 @@ package com.krickert.search.engine.core.routing;
 import com.krickert.search.engine.core.transport.MessageForwarder;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeStream;
+import com.krickert.search.config.consul.service.BusinessOperationsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -12,6 +13,7 @@ import reactor.test.StepVerifier;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,8 +36,12 @@ class DefaultRouterTest {
     @Mock
     private RoutingStrategy routingStrategy;
     
+    @Mock
+    private BusinessOperationsService businessOpsService;
+    
     private DefaultRouter router;
     private AutoCloseable mocks;
+    private String testClusterName = "test-cluster";
     
     @BeforeEach
     void setUp() {
@@ -53,7 +59,7 @@ class DefaultRouterTest {
         
         List<MessageForwarder> forwarders = Arrays.asList(grpcForwarder, kafkaForwarder, internalForwarder);
         
-        router = new DefaultRouter(forwarders, routingStrategy);
+        router = new DefaultRouter(forwarders, routingStrategy, businessOpsService, testClusterName);
     }
     
     @Test
@@ -70,7 +76,7 @@ class DefaultRouterTest {
         );
         
         when(grpcForwarder.forward(eq(pipeStream), eq(routeData)))
-                .thenReturn(Mono.empty());
+                .thenReturn(Mono.just(Optional.empty()));
         
         // When
         Mono<Void> result = router.route(pipeStream, routeData);
@@ -98,7 +104,7 @@ class DefaultRouterTest {
         );
         
         when(kafkaForwarder.forward(eq(pipeStream), eq(routeData)))
-                .thenReturn(Mono.empty());
+                .thenReturn(Mono.just(Optional.empty()));
         
         // When
         Mono<Void> result = router.route(pipeStream, routeData);
@@ -126,7 +132,7 @@ class DefaultRouterTest {
         );
         
         when(internalForwarder.forward(eq(pipeStream), eq(routeData)))
-                .thenReturn(Mono.empty());
+                .thenReturn(Mono.just(Optional.empty()));
         
         // When
         Mono<Void> result = router.route(pipeStream, routeData);
@@ -143,7 +149,7 @@ class DefaultRouterTest {
     @Test
     void testRouteWithNoForwarderAvailable() {
         // Given - router with only gRPC forwarder
-        router = new DefaultRouter(List.of(grpcForwarder), routingStrategy);
+        router = new DefaultRouter(List.of(grpcForwarder), routingStrategy, businessOpsService, testClusterName);
         
         String streamId = UUID.randomUUID().toString();
         PipeStream pipeStream = createTestPipeStream(streamId);
@@ -210,7 +216,7 @@ class DefaultRouterTest {
                 .thenReturn(Mono.just(routeData));
         
         when(grpcForwarder.forward(eq(pipeStream), eq(routeData)))
-                .thenReturn(Mono.empty());
+                .thenReturn(Mono.just(Optional.empty()));
         
         // When
         Mono<Void> result = router.route(pipeStream);
@@ -252,7 +258,7 @@ class DefaultRouterTest {
         List<MessageForwarder> forwarders = Arrays.asList(grpcForwarder, grpcForwarder2);
         
         // When/Then - should use the last one in the list
-        router = new DefaultRouter(forwarders, routingStrategy);
+        router = new DefaultRouter(forwarders, routingStrategy, businessOpsService, testClusterName);
         
         // The constructor should complete without error
         // In a real scenario, you might want to log a warning about duplicate forwarders
@@ -284,7 +290,7 @@ class DefaultRouterTest {
                 case INTERNAL -> internalForwarder;
             };
             
-            when(forwarder.forward(any(), any())).thenReturn(Mono.empty());
+            when(forwarder.forward(any(), any())).thenReturn(Mono.just(Optional.empty()));
             
             StepVerifier.create(router.route(pipeStream, routeData))
                     .verifyComplete();

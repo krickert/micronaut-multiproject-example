@@ -17,12 +17,10 @@ public class FallbackSentenceDetector extends SentenceDetectorME {
         super((SentenceModel) null);
     }
     
-    @Override
     public String[] sentDetect(String s) {
         return newlineDetector.sentDetect(s);
     }
     
-    @Override
     public Span[] sentPosDetect(String s) {
         return newlineDetector.sentPosDetect(s);
     }

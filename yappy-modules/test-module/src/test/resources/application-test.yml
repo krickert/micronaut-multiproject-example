@@ -1,0 +1,15 @@
+micronaut:
+  application:
+    name: test-module-test
+  server:
+    port: ${random.port}
+grpc:
+  server:
+    port: ${random.port}
+  client:
+    plaintext: true
+    max-retry-attempts: 1
+    
+# Disable Kafka for tests unless specifically needed
+kafka:
+  enabled: false

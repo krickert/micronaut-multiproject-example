@@ -52,6 +52,9 @@ dependencies {
     // Module registration for integration tests
     testImplementation(project(":yappy-module-registration"))
     
+    // Chunker module for schema access in tests
+    testImplementation(project(":yappy-modules:chunker"))
+    
     // Test resources support
     testImplementation("io.micronaut.testresources:micronaut-test-resources-client")
     

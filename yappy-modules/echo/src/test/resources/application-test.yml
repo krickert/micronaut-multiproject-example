@@ -1,16 +1,11 @@
 micronaut:
   application:
-    name: echo
+    name: echo-test
+  server:
+    port: ${random.port}
 grpc:
   server:
     port: ${random.port}
   client:
     plaintext: true
-    discovery:
-      enabled: true
-consul:
-  client:
-    registration:
-      enabled: true
-      check:
-        enabled: true
+    max-retry-attempts: 1

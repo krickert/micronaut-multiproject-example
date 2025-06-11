@@ -7,6 +7,7 @@ import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
+import java.util.Optional;
 
 /**
  * Stub implementation for internal message forwarding.
@@ -19,14 +20,15 @@ public class InternalMessageForwarder implements MessageForwarder {
     private static final Logger logger = LoggerFactory.getLogger(InternalMessageForwarder.class);
     
     @Override
-    public Mono<Void> forward(PipeStream pipeStream, RouteData routeData) {
+    public Mono<Optional<PipeStream>> forward(PipeStream pipeStream, RouteData routeData) {
         // Stub implementation - just log for now
         logger.info("STUB: Would forward message {} internally to step {} in pipeline {}", 
             pipeStream.getStreamId(), 
             routeData.targetStepName(),
             routeData.targetPipelineName() != null ? routeData.targetPipelineName() : "current");
         
-        return Mono.empty();
+        // Internal forwarder would return processed stream when implemented
+        return Mono.just(Optional.empty());
     }
     
     @Override

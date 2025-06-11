@@ -3,6 +3,7 @@ package com.krickert.search.engine.core.transport;
 import com.krickert.search.engine.core.routing.RouteData;
 import com.krickert.search.model.PipeStream;
 import reactor.core.publisher.Mono;
+import java.util.Optional;
 
 /**
  * Interface for forwarding PipeStream messages to their next destination.
@@ -15,9 +16,9 @@ public interface MessageForwarder {
      * 
      * @param pipeStream The message to forward
      * @param routeData The routing information
-     * @return Mono<Void> that completes when the message has been sent (not necessarily processed)
+     * @return Mono containing the processed PipeStream (if any) for continuing the pipeline
      */
-    Mono<Void> forward(PipeStream pipeStream, RouteData routeData);
+    Mono<Optional<PipeStream>> forward(PipeStream pipeStream, RouteData routeData);
     
     /**
      * Check if this forwarder can handle the given transport type.

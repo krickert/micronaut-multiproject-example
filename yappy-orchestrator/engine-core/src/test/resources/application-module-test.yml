@@ -55,6 +55,39 @@ test-resources:
         GRPC_SERVER_PORT: "50051"
         GRPC_SERVER_HOST: "0.0.0.0"
         JAVA_OPTS: "-Xmx2g -Xms1g"
+    echo:
+      image-name: echo:latest
+      hostnames:
+        - echo.host
+      exposed-ports:
+        - echo.grpc.port: 50053
+        - echo.http.port: 8082
+      wait-strategy:
+        log:
+          regex: ".*GRPC started on port.*"
+      startup-timeout: 60s
+      env:
+        GRPC_SERVER_PORT: "50053"
+        GRPC_SERVER_HOST: "0.0.0.0"
+        MICRONAUT_SERVER_PORT: "8082"
+        MICRONAUT_SERVER_HOST: "0.0.0.0"
+    test-module-after-chunker:
+      image-name: test-module:latest
+      hostnames:
+        - test-module-after-chunker.host
+      exposed-ports:
+        - test-module-after-chunker.grpc.port: 50052
+        - test-module-after-chunker.http.port: 8081
+      wait-strategy:
+        log:
+          regex: ".*GRPC started on port.*"
+      startup-timeout: 120s
+      env:
+        GRPC_SERVER_PORT: "50052"
+        GRPC_SERVER_HOST: "0.0.0.0"
+        MICRONAUT_SERVER_PORT: "8081"
+        MICRONAUT_SERVER_HOST: "0.0.0.0"
+        KAFKA_ENABLED: "true"
 
 # gRPC client configuration will be injected from test containers
 grpc:
@@ -67,6 +100,12 @@ grpc:
       plaintext: true
     embedder:
       address: "${embedder.host}:${embedder.grpc.port}"
+      plaintext: true
+    echo:
+      address: "${echo.host}:${echo.grpc.port}"
+      plaintext: true
+    test-module:
+      address: "${test-module-after-chunker.host}:${test-module-after-chunker.grpc.port}"
       plaintext: true
 
 # Logging
@@ -106,3 +145,8 @@ app:
         pipeline-clusters: configs/
         schema-versions: schema-versions/
       watch-seconds: 1
+
+# Kafka configuration (provided by test-resources)
+# This enables Kafka for modules that need it
+kafka:
+  enabled: true

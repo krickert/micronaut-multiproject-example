@@ -106,6 +106,59 @@ test-resources:
         - MICRONAUT_SERVER_PORT: "8080"
         - VECTORIZER_DEFAULT_MODEL: "PARAPHRASE_MULTILINGUAL_MINILM_L12_V2"
 
+    echo:
+      image-name: echo:latest
+      hostnames:
+        - echo.host
+      exposed-ports:
+        - echo.grpc.port: 50058
+        - echo.http.port: 8080
+      wait-strategy:
+        http:
+          path: /health
+          port: 8080
+          status-code: 200
+      startup-timeout: 60s
+      env:
+        - GRPC_SERVER_PORT: "50058"
+        - MICRONAUT_SERVER_PORT: "8080"
+
+    # Test module for debugging - outputs after tika parsing
+    test-module-after-tika:
+      image-name: test-module:latest
+      hostnames:
+        - test-module-after-tika.host
+      exposed-ports:
+        - test-module-after-tika.grpc.port: 50059
+        - test-module-after-tika.http.port: 8080
+      wait-strategy:
+        http:
+          path: /health
+          port: 8080
+          status-code: 200
+      startup-timeout: 60s
+      env:
+        - GRPC_SERVER_PORT: "50059"
+        - MICRONAUT_SERVER_PORT: "8080"
+
+    # Test module for debugging - outputs after chunking
+    test-module-after-chunker:
+      image-name: test-module:latest
+      hostnames:
+        - test-module-after-chunker.host
+      exposed-ports:
+        - test-module-after-chunker.grpc.port: 50060
+        - test-module-after-chunker.http.port: 8080
+      wait-strategy:
+        http:
+          path: /health
+          port: 8080
+          status-code: 200
+      startup-timeout: 60s
+      env:
+        - GRPC_SERVER_PORT: "50060"
+        - MICRONAUT_SERVER_PORT: "8080"
+
 # Consul is provided by consul-test-resource automatically
 # Kafka is provided by apache-kafka-test-resource automatically
 

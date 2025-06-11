@@ -1,7 +1,6 @@
 package com.krickert.yappy.modules.chunker;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.protobuf.Empty;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.JsonFormat;
@@ -12,6 +11,7 @@ import com.krickert.search.model.SemanticProcessingResult;
 import com.krickert.search.model.mapper.MappingException;
 import com.krickert.search.sdk.*;
 import io.grpc.stub.StreamObserver;
+import com.google.protobuf.Empty;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.grpc.annotation.GrpcService;
 import jakarta.inject.Inject;
@@ -43,6 +43,19 @@ public class ChunkerServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessorI
         this.metadataExtractor = metadataExtractor;
     }
 
+
+    @Override
+    public void getServiceRegistration(Empty request, StreamObserver<ServiceRegistrationData> responseObserver) {
+        ServiceRegistrationData registration = ServiceRegistrationData.newBuilder()
+                .setModuleName("chunker")
+                .setJsonConfigSchema(ChunkerOptions.getJsonV7Schema())
+                .build();
+        
+        responseObserver.onNext(registration);
+        responseObserver.onCompleted();
+        
+        log.info("Returned service registration for chunker module");
+    }
 
     @Override
     public void processData(ProcessRequest request, StreamObserver<ProcessResponse> responseObserver) {
@@ -146,29 +159,6 @@ public class ChunkerServiceGrpc extends PipeStepProcessorGrpc.PipeStepProcessorI
             log.error(errorMessage, e);
             setErrorResponseAndComplete(responseBuilder, errorMessage, e, responseObserver);
         }
-    }
-
-    @Override
-    public void getServiceRegistration(Empty request, StreamObserver<ServiceRegistrationData> responseObserver) {
-        log.info("Received GetServiceRegistration request");
-
-        ServiceRegistrationData.Builder registrationBuilder = ServiceRegistrationData.newBuilder();
-
-        // Set the module name to "chunker"
-        registrationBuilder.setModuleName("chunker");
-
-        // Get the JSON schema from ChunkerOptions
-        String jsonSchema = ChunkerOptions.getJsonV7Schema();
-
-        // Set the JSON config schema
-        registrationBuilder.setJsonConfigSchema(jsonSchema);
-
-        // Build and send the response
-        ServiceRegistrationData response = registrationBuilder.build();
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
-
-        log.info("Sent GetServiceRegistration response for chunker service");
     }
 
     private void setErrorResponseAndComplete(
