@@ -41,12 +41,11 @@ public class BootstrapAllContainersTest {
     String motoEndpoint;
     
     // Module containers
-    // TODO: Debug chunker container startup timeout
-    // @Property(name = "chunker.grpc.host")
-    // String chunkerHost;
+    @Property(name = "chunker.grpc.host")
+    String chunkerHost;
     
-    // @Property(name = "chunker.grpc.port")
-    // String chunkerPort;
+    @Property(name = "chunker.grpc.port")
+    String chunkerPort;
     
     // TODO: Add more module properties as test resources are created
     // @Property(name = "tika.grpc.host")
@@ -87,10 +86,9 @@ public class BootstrapAllContainersTest {
         LOG.info("✓ Moto (AWS mock) available at {}", motoEndpoint);
         
         // Verify module containers
-        // TODO: Debug chunker container startup timeout
-        // assertNotNull(chunkerHost, "Chunker host should be available");
-        // assertNotNull(chunkerPort, "Chunker port should be available");
-        // LOG.info("✓ Chunker module available at {}:{}", chunkerHost, chunkerPort);
+        assertNotNull(chunkerHost, "Chunker host should be available");
+        assertNotNull(chunkerPort, "Chunker port should be available");
+        LOG.info("✓ Chunker module available at {}:{}", chunkerHost, chunkerPort);
         
         // Log network information for debugging
         LOG.info("\n=== Container Network Information ===");
@@ -101,7 +99,7 @@ public class BootstrapAllContainersTest {
         LOG.info("  - apicurio:8080");
         LOG.info("  - opensearch:9200");
         LOG.info("  - moto:5000");
-        // LOG.info("  - chunker:50051");  // TODO: Debug container startup
+        LOG.info("  - chunker:50051");
         
         // Verify Consul UI is accessible
         LOG.info("\n=== Consul UI Access ===");

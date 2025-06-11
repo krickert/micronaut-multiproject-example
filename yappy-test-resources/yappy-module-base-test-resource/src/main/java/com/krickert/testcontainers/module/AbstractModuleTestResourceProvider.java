@@ -36,7 +36,7 @@ public abstract class AbstractModuleTestResourceProvider extends AbstractTestCon
     protected static final String SHARED_NETWORK_NAME = "yappy-test-network";
     protected static final int GRPC_PORT = 50051;
     protected static final int HTTP_PORT = 8080;
-    protected static final Duration DEFAULT_STARTUP_TIMEOUT = Duration.ofSeconds(60);
+    protected static final Duration DEFAULT_STARTUP_TIMEOUT = Duration.ofSeconds(120);
     
     // Shared network instance
     private static volatile Network sharedNetwork;
@@ -62,9 +62,9 @@ public abstract class AbstractModuleTestResourceProvider extends AbstractTestCon
      * Optional: Override to add module-specific wait strategy
      */
     protected WaitStrategy getWaitStrategy() {
-        // Default to gRPC health check
-        return new GrpcHealthCheckWaitStrategy()
-                .forService("") // Empty string for overall health
+        // Default to waiting for the "Server Running" log message
+        // This works for all Micronaut applications
+        return Wait.forLogMessage(".*Server Running.*", 1)
                 .withStartupTimeout(DEFAULT_STARTUP_TIMEOUT);
     }
     
