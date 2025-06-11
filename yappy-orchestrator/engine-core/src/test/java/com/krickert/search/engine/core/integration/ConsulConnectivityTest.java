@@ -1,16 +1,23 @@
 package com.krickert.search.engine.core.integration;
 
+import com.github.dockerjava.api.DockerClient;
+import com.github.dockerjava.api.command.InspectContainerResponse;
+import com.github.dockerjava.api.model.Container;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import io.micronaut.testresources.client.TestResourcesClient;
 import io.micronaut.testresources.client.TestResourcesClientFactory;
+import io.micronaut.testresources.testcontainers.TestContainers;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -40,9 +47,39 @@ public class ConsulConnectivityTest {
         
         LOG.info("Consul is available at {}:{}", consulHost.get(), consulPort.get());
         
+        // Find the actual network Consul is on
+        DockerClient dockerClient = DockerClientFactory.instance().client();
+        List<Container> containers = dockerClient.listContainersCmd()
+            .withShowAll(false)
+            .exec();
+        
+        String consulNetworkName = null;
+        for (Container container : containers) {
+            if (container.getImage().contains("consul")) {
+                InspectContainerResponse containerInfo = dockerClient.inspectContainerCmd(container.getId()).exec();
+                Map<String, com.github.dockerjava.api.model.ContainerNetwork> networks = 
+                    containerInfo.getNetworkSettings().getNetworks();
+                
+                for (String networkName : networks.keySet()) {
+                    if (!"bridge".equals(networkName) && !"host".equals(networkName)) {
+                        consulNetworkName = networkName;
+                        LOG.info("Found Consul on network: {}", networkName);
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        
+        assertThat(consulNetworkName).as("Consul network should be found").isNotNull();
+        
+        final String networkName = consulNetworkName;
+        
         // Create a simple test container that will try to connect to Consul
-        // Note: We need to get the network details from the running Consul container
         try (GenericContainer<?> testContainer = new GenericContainer<>("alpine:3.18")
+                .withCreateContainerCmdModifier(cmd -> {
+                    cmd.getHostConfig().withNetworkMode(networkName);
+                })
                 .withNetworkAliases("consul-test-client")
                 .withLogConsumer(new Slf4jLogConsumer(LOG))
                 .withCommand("sh", "-c", 
@@ -78,8 +115,12 @@ public class ConsulConnectivityTest {
         Optional<String> consulHost = client.resolve("consul.client.host", Map.of(), Map.of());
         assertThat(consulHost).isPresent();
         
+        // Get the shared test network
+        Network testNetwork = TestContainers.network("test-network");
+        
         // Create a minimal engine container that just tests Consul connectivity
         try (GenericContainer<?> engineTest = new GenericContainer<>("yappy-orchestrator:latest")
+                .withNetwork(testNetwork)
                 .withExposedPorts(8080, 50000)
                 .withNetworkAliases("engine-consul-test")
                 .withLogConsumer(new Slf4jLogConsumer(LOG))

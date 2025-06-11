@@ -38,13 +38,55 @@ public class YappyEngineTestResourceProvider extends AbstractTestContainersProvi
         return ENGINE_IMAGE;
     }
     
+    /**
+     * Get the actual network that test resources is using.
+     * This finds the network that other test resource containers (like Consul) are on.
+     */
+    protected String findTestResourcesNetwork() {
+        try {
+            var dockerClient = org.testcontainers.DockerClientFactory.instance().client();
+            var containers = dockerClient.listContainersCmd()
+                .withShowAll(false)
+                .exec();
+            
+            // Look for known test resource containers (Consul, Kafka, etc.)
+            for (var container : containers) {
+                String image = container.getImage();
+                if (image.contains("consul") || image.contains("kafka") || image.contains("apicurio")) {
+                    var containerInfo = dockerClient.inspectContainerCmd(container.getId()).exec();
+                    var networks = containerInfo.getNetworkSettings().getNetworks();
+                    
+                    for (String networkName : networks.keySet()) {
+                        if (!"bridge".equals(networkName) && !"host".equals(networkName)) {
+                            logger.info("Found test resources network: {}", networkName);
+                            return networkName;
+                        }
+                    }
+                }
+            }
+            
+            // Fallback to creating a new network if we can't find the test resources network
+            logger.warn("Could not find test resources network, creating new network");
+            return TestContainers.network("test-network").getId();
+        } catch (Exception e) {
+            logger.error("Error finding test resources network", e);
+            // Fallback to creating a new network
+            return TestContainers.network("test-network").getId();
+        }
+    }
+    
     @Override
     protected GenericContainer<?> createContainer(DockerImageName imageName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
         logger.info("Creating Yappy Engine container...");
         
+        // Find and use the same network as other test resource containers
+        String networkName = findTestResourcesNetwork();
+        
         GenericContainer<?> container = new GenericContainer<>(imageName)
                 .withExposedPorts(8080, 50000)
-                .withNetwork(TestContainers.network("test-network"))
+                .withCreateContainerCmdModifier(cmd -> {
+                    cmd.getHostConfig().withNetworkMode(networkName);
+                })
                 .withNetworkAliases(ENGINE_NETWORK_ALIAS)
                 .withLogConsumer(new Slf4jLogConsumer(logger))
                 .waitingFor(Wait.forHttp("/health")

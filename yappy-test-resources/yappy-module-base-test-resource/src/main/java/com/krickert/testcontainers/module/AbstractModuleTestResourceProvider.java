@@ -5,7 +5,6 @@ import io.micronaut.testresources.testcontainers.TestContainers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.Network;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.containers.wait.strategy.WaitStrategy;
@@ -30,13 +29,9 @@ public abstract class AbstractModuleTestResourceProvider extends AbstractTestCon
     private static final Logger LOG = LoggerFactory.getLogger(AbstractModuleTestResourceProvider.class);
     
     // Common constants
-    protected static final String SHARED_NETWORK_NAME = "yappy-test-network";
     protected static final int GRPC_PORT = 50051;
     protected static final int HTTP_PORT = 8080;
     protected static final Duration DEFAULT_STARTUP_TIMEOUT = Duration.ofSeconds(120);
-    
-    // Shared network instance
-    private static volatile Network sharedNetwork;
     
     /**
      * Get the module name (e.g., "chunker", "tika-parser", "embedder")
@@ -98,15 +93,40 @@ public abstract class AbstractModuleTestResourceProvider extends AbstractTestCon
     }
     
     /**
-     * Get or create the shared Docker network for all YAPPY containers
+     * Get the actual network that test resources is using.
+     * This finds the network that other test resource containers (like Consul) are on.
      */
-    protected synchronized Network getSharedNetwork() {
-        if (sharedNetwork == null) {
-            LOG.info("Creating shared Docker network: {}", SHARED_NETWORK_NAME);
-            sharedNetwork = TestContainers.network("test-network");
-            // Note: Using managed network for proper cross-JVM sharing.
+    protected String findTestResourcesNetwork() {
+        try {
+            var dockerClient = org.testcontainers.DockerClientFactory.instance().client();
+            var containers = dockerClient.listContainersCmd()
+                .withShowAll(false)
+                .exec();
+            
+            // Look for known test resource containers (Consul, Kafka, etc.)
+            for (var container : containers) {
+                String image = container.getImage();
+                if (image.contains("consul") || image.contains("kafka") || image.contains("apicurio")) {
+                    var containerInfo = dockerClient.inspectContainerCmd(container.getId()).exec();
+                    var networks = containerInfo.getNetworkSettings().getNetworks();
+                    
+                    for (String networkName : networks.keySet()) {
+                        if (!"bridge".equals(networkName) && !"host".equals(networkName)) {
+                            LOG.info("Found test resources network: {}", networkName);
+                            return networkName;
+                        }
+                    }
+                }
+            }
+            
+            // Fallback to creating a new network if we can't find the test resources network
+            LOG.warn("Could not find test resources network, creating new network");
+            return TestContainers.network("test-network").getId();
+        } catch (Exception e) {
+            LOG.error("Error finding test resources network", e);
+            // Fallback to creating a new network
+            return TestContainers.network("test-network").getId();
         }
-        return sharedNetwork;
     }
     
     /**
@@ -123,8 +143,13 @@ public abstract class AbstractModuleTestResourceProvider extends AbstractTestCon
         // Create container
         ModuleContainer container = new ModuleContainer(imageName, getModuleName());
         
+        // Find and use the same network as other test resource containers
+        String networkName = findTestResourcesNetwork();
+        
         // Configure container
-        container.withNetwork(getSharedNetwork())
+        container.withCreateContainerCmdModifier(cmd -> {
+                     cmd.getHostConfig().withNetworkMode(networkName);
+                 })
                  .withNetworkAliases(getModuleName())
                  .withExposedPorts(GRPC_PORT, HTTP_PORT)
                  .withEnv("MICRONAUT_ENVIRONMENTS", "test")
