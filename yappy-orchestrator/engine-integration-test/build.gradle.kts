@@ -9,6 +9,10 @@ dependencies {
     implementation(project(":yappy-models:protobuf-models"))
     implementation(project(":yappy-consul-config"))
     testImplementation(project(":yappy-test-resources:yappy-engine-test-resource"))
+    testImplementation(project(":yappy-test-resources:yappy-chunker-test-resource"))
+    testImplementation(project(":yappy-test-resources:yappy-test-module-test-resource"))
+    testImplementation(project(":yappy-test-resources:consul-test-resource"))
+    testImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     
     // Micronaut dependencies
     implementation("io.micronaut:micronaut-inject")

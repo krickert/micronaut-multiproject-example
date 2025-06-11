@@ -50,7 +50,7 @@ class EngineContainerE2ETest {
     }
 
     // Engine container properties injected by test resources
-    @Property(name = "engine.host")
+    @Property(name = "engine.grpc.host")
     String engineHost;
     
     @Property(name = "engine.grpc.port")

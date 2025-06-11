@@ -15,8 +15,8 @@ import java.util.*;
 public class YappyEngineTestResourceProvider extends AbstractTestContainersProvider<GenericContainer<?>> {
     
     private static final Logger logger = LoggerFactory.getLogger(YappyEngineTestResourceProvider.class);
-    private static final String ENGINE_IMAGE = "yappy-orchestrator:latest";
-    private static final String ENGINE_NETWORK_ALIAS = "yappy-engine";
+    private static final String ENGINE_IMAGE = "engine:latest";
+    private static final String ENGINE_NETWORK_ALIAS = "engine";
     
     @Override
     public List<String> getResolvableProperties(Map<String, Collection<String>> propertyEntries, Map<String, Object> testResourcesConfig) {
@@ -83,19 +83,23 @@ public class YappyEngineTestResourceProvider extends AbstractTestContainersProvi
         String networkName = findTestResourcesNetwork();
         
         GenericContainer<?> container = new GenericContainer<>(imageName)
-                .withExposedPorts(8080, 50000)
+                .withExposedPorts(8090, 50070)
                 .withCreateContainerCmdModifier(cmd -> {
                     cmd.getHostConfig().withNetworkMode(networkName);
                 })
                 .withNetworkAliases(ENGINE_NETWORK_ALIAS)
                 .withLogConsumer(new Slf4jLogConsumer(logger))
                 .waitingFor(Wait.forHttp("/health")
-                        .forPort(8080)
+                        .forPort(8090)
                         .withStartupTimeout(Duration.ofMinutes(3)));
         
         // Set environment variables for infrastructure services
         Map<String, String> envVars = new HashMap<>();
         envVars.put("MICRONAUT_ENVIRONMENTS", "docker,test");
+        envVars.put("GRPC_SERVER_PORT", "50070");
+        envVars.put("GRPC_SERVER_HOST", "0.0.0.0");
+        envVars.put("MICRONAUT_SERVER_PORT", "8090");
+        envVars.put("MICRONAUT_SERVER_HOST", "0.0.0.0");
         envVars.put("CONSUL_CLIENT_HOST", "consul");
         envVars.put("CONSUL_CLIENT_PORT", "8500");
         envVars.put("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092");
@@ -124,9 +128,9 @@ public class YappyEngineTestResourceProvider extends AbstractTestContainersProvi
     protected Optional<String> resolveProperty(String propertyName, GenericContainer<?> container) {
         return switch (propertyName) {
             case "engine.grpc.host" -> Optional.of(container.getHost());
-            case "engine.grpc.port" -> Optional.of(String.valueOf(container.getMappedPort(50000)));
+            case "engine.grpc.port" -> Optional.of(String.valueOf(container.getMappedPort(50070)));
             case "engine.http.host" -> Optional.of(container.getHost());
-            case "engine.http.port" -> Optional.of(String.valueOf(container.getMappedPort(8080)));
+            case "engine.http.port" -> Optional.of(String.valueOf(container.getMappedPort(8090)));
             default -> Optional.empty();
         };
     }
