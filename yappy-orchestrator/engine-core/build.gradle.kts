@@ -89,12 +89,14 @@ dependencies {
     testImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     testImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     testImplementation(project(":yappy-test-resources:moto-test-resource"))
+    testImplementation(project(":yappy-test-resources:yappy-chunker-test-resource"))
     testResourcesImplementation("org.testcontainers:consul:1.20.6")
     testResourcesImplementation("org.testcontainers:kafka:1.21.0")
     testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:moto-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:yappy-chunker-test-resource"))
 
 }
 

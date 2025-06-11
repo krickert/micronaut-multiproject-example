@@ -41,6 +41,10 @@ include(
     "yappy-test-resources:moto-test-resource",
     "yappy-test-resources:apache-kafka-test-resource",
     "yappy-test-resources:opensearch3-test-resource",
+    
+    // Module test resources
+    "yappy-test-resources:yappy-module-base-test-resource",
+    "yappy-test-resources:yappy-chunker-test-resource",
 
     // Models
     "yappy-models",
