@@ -286,7 +286,7 @@ class Scenario1ChunkerWithDebugTest {
                     "overlap_size": 10,
                     "chunk_overlap": 10,
                     "chunk_config_id": "test-chunker-config",
-                    "chunk_id_template": "chunk_%d",
+                    "chunk_id_template": "%s_%s_chunk_%d",
                     "result_set_name_template": "%s_%s_chunks",
                     "log_prefix": "[TEST-CHUNKER] "
                 }
