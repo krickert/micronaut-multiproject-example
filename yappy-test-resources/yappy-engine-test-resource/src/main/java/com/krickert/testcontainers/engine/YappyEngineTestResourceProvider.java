@@ -79,6 +79,14 @@ public class YappyEngineTestResourceProvider extends AbstractTestContainersProvi
     protected GenericContainer<?> createContainer(DockerImageName imageName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
         logger.info("Creating Yappy Engine container...");
         
+        // Wait a moment to ensure other containers are starting
+        try {
+            logger.info("Waiting for infrastructure containers to be ready...");
+            Thread.sleep(5000); // Give Consul, Kafka, etc. time to start
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        
         // Find and use the same network as other test resource containers
         String networkName = findTestResourcesNetwork();
         
@@ -100,12 +108,22 @@ public class YappyEngineTestResourceProvider extends AbstractTestContainersProvi
         envVars.put("GRPC_SERVER_HOST", "0.0.0.0");
         envVars.put("MICRONAUT_SERVER_PORT", "8090");
         envVars.put("MICRONAUT_SERVER_HOST", "0.0.0.0");
+        // Use test resource network aliases that match what other providers use
         envVars.put("CONSUL_CLIENT_HOST", "consul");
         envVars.put("CONSUL_CLIENT_PORT", "8500");
         envVars.put("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092");
+        envVars.put("KAFKA_ENABLED", "true");
         envVars.put("APICURIO_REGISTRY_URL", "http://apicurio:8080");
         envVars.put("OPENSEARCH_URL", "http://opensearch:9200");
         envVars.put("AWS_ENDPOINT", "http://localstack:4566");
+        
+        // Add missing configuration properties that engine requires
+        envVars.put("APP_CONFIG_CONSUL_KEY_PREFIXES_PIPELINE_CLUSTERS", "config/pipeline/clusters/");
+        envVars.put("APP_CONFIG_CONSUL_KEY_PREFIXES_SCHEMA_VERSIONS", "config/pipeline/schemas/");
+        envVars.put("APP_CONFIG_CONSUL_KEY_PREFIXES_WHITELISTS", "config/pipeline/whitelists/");
+        envVars.put("APP_CONFIG_CONSUL_WATCH_SECONDS", "5");
+        envVars.put("APP_CONFIG_CLUSTER_NAME", "test-cluster");
+        envVars.put("YAPPY_CLUSTER_NAME", "test-cluster");
         
         // Module aliases on shared network
         envVars.put("CHUNKER_GRPC_HOST", "yappy-chunker");

@@ -37,6 +37,7 @@ dependencies {
     testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:yappy-engine-test-resource"))
 }
 
 micronaut {
