@@ -2,6 +2,7 @@ package com.krickert.search.engine.core;
 
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Property;
+import io.micronaut.context.env.MapPropertySource;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
