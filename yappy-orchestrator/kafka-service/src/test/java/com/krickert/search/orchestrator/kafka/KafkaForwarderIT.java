@@ -23,9 +23,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -102,18 +99,9 @@ class KafkaForwarderIT {
                 .build();
 
         LOG.info("Sending PipeStream (streamId: {}) to topic: {}", streamId, TEST_TOPIC);
-        try {
-            // Forward the message to Kafka
-            kafkaForwarder.forwardToKafka(testPipeStream, TEST_TOPIC).get(10, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            fail("Kafka send was interrupted", e);
-        } catch (ExecutionException e) {
-            LOG.error("Kafka send ExecutionException: ", e.getCause() != null ? e.getCause() : e);
-            fail("Kafka send failed with an execution exception", e);
-        } catch (TimeoutException e) {
-            fail("Kafka send timed out", e);
-        }
+        // Forward the message to Kafka using Reactor
+        kafkaForwarder.forwardToKafka(testPipeStream, TEST_TOPIC)
+                .block(Duration.ofSeconds(10));
 
         LOG.info("Message sent to Kafka. Waiting to receive it...");
 
@@ -154,18 +142,9 @@ class KafkaForwarderIT {
                 .build();
 
         LOG.info("Sending PipeStream (streamId: {}) to error topic: {}", streamId, TEST_ERROR_TOPIC);
-        try {
-            // Forward the message to the error topic
-            kafkaForwarder.forwardToErrorTopic(testPipeStream, TEST_TOPIC).get(10, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            fail("Kafka send was interrupted", e);
-        } catch (ExecutionException e) {
-            LOG.error("Kafka send ExecutionException: ", e.getCause() != null ? e.getCause() : e);
-            fail("Kafka send failed with an execution exception", e);
-        } catch (TimeoutException e) {
-            fail("Kafka send timed out", e);
-        }
+        // Forward the message to the error topic using Reactor
+        kafkaForwarder.forwardToErrorTopic(testPipeStream, TEST_TOPIC)
+                .block(Duration.ofSeconds(10));
 
         LOG.info("Message sent to error topic. Waiting to receive it...");
 

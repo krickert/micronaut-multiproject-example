@@ -1,18 +1,19 @@
 package com.krickert.search.orchestrator.kafka.listener;
 
-// Import DynamicConfigurationManager if it's still needed for other tests,
-// but it's not used in the corrected constructor for KafkaListenerManager.
-// import com.krickert.search.config.consul.DynamicConfigurationManager;
-
+import com.krickert.search.commons.events.PipeStreamProcessingEvent;
 import com.krickert.search.orchestrator.kafka.admin.KafkaAdminService;
 import com.krickert.search.orchestrator.kafka.admin.OffsetResetParameters;
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.context.event.ApplicationEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -45,6 +46,9 @@ class KafkaListenerManagerTest {
 
     @Mock
     private DynamicKafkaListener mockListener;
+    
+    @Mock
+    private ApplicationEventPublisher<PipeStreamProcessingEvent> mockEventPublisher;
 
     private static final String PIPELINE_NAME = "test-pipeline";
     private static final String STEP_NAME = "test-step";
@@ -60,11 +64,10 @@ class KafkaListenerManagerTest {
                 mockListenerPool,
                 mockStateManager,
                 mockKafkaAdminService,
-                // mockConfigManager, // Removed
-                mockPipeStreamEngine,
+                mockEventPublisher,
                 mockApplicationContext,
                 TEST_SCHEMA_REGISTRY_TYPE,
-                APP_CLUSTER_NAME // Added
+                APP_CLUSTER_NAME
         );
     }
 
@@ -111,18 +114,23 @@ class KafkaListenerManagerTest {
         when(mockListener.getTopic()).thenReturn(TOPIC);
         when(mockListener.getGroupId()).thenReturn(GROUP_ID);
 
-        CompletableFuture<Void> result = listenerManager.pauseConsumer(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID);
+        Mono<Void> result = listenerManager.pauseConsumer(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID);
 
+        StepVerifier.create(result)
+                .verifyComplete();
+                
         verify(mockListener).pause();
         verify(mockStateManager).updateState(eq(LISTENER_ID), any(ConsumerState.class));
-        assertTrue(result.isDone());
-        assertFalse(result.isCompletedExceptionally());
     }
 
     @Test
     void testPauseConsumerNonExistentListener() {
-        CompletableFuture<Void> result = listenerManager.pauseConsumer(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID);
-        assertTrue(result.isCompletedExceptionally());
+        Mono<Void> result = listenerManager.pauseConsumer(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID);
+        
+        StepVerifier.create(result)
+                .expectError(IllegalArgumentException.class)
+                .verify();
+                
         verify(mockListener, never()).pause();
         verify(mockStateManager, never()).updateState(anyString(), any(ConsumerState.class));
     }
@@ -140,18 +148,23 @@ class KafkaListenerManagerTest {
         when(mockListener.getTopic()).thenReturn(TOPIC);
         when(mockListener.getGroupId()).thenReturn(GROUP_ID);
 
-        CompletableFuture<Void> result = listenerManager.resumeConsumer(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID);
+        Mono<Void> result = listenerManager.resumeConsumer(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID);
 
+        StepVerifier.create(result)
+                .verifyComplete();
+                
         verify(mockListener).resume();
         verify(mockStateManager).updateState(eq(LISTENER_ID), any(ConsumerState.class));
-        assertTrue(result.isDone());
-        assertFalse(result.isCompletedExceptionally());
     }
 
     @Test
     void testResumeConsumerNonExistentListener() {
-        CompletableFuture<Void> result = listenerManager.resumeConsumer(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID);
-        assertTrue(result.isCompletedExceptionally());
+        Mono<Void> result = listenerManager.resumeConsumer(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID);
+        
+        StepVerifier.create(result)
+                .expectError(IllegalArgumentException.class)
+                .verify();
+                
         verify(mockListener, never()).resume();
         verify(mockStateManager, never()).updateState(anyString(), any(ConsumerState.class));
     }
@@ -172,22 +185,27 @@ class KafkaListenerManagerTest {
         when(mockKafkaAdminService.resetConsumerGroupOffsetsAsync(anyString(), anyString(), any(OffsetResetParameters.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
-        CompletableFuture<Void> result = listenerManager.resetOffsetToDate(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID, date);
+        Mono<Void> result = listenerManager.resetOffsetToDate(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID, date);
 
+        StepVerifier.create(result)
+                .verifyComplete();
+                
         verify(mockListener).pause();
         ArgumentCaptor<OffsetResetParameters> paramsCaptor = ArgumentCaptor.forClass(OffsetResetParameters.class);
         verify(mockKafkaAdminService).resetConsumerGroupOffsetsAsync(eq(GROUP_ID), eq(TOPIC), paramsCaptor.capture());
         assertEquals(date.toEpochMilli(), paramsCaptor.getValue().getTimestamp());
         verify(mockListener).resume();
-        assertTrue(result.isDone());
-        assertFalse(result.isCompletedExceptionally());
     }
 
     @Test
     void testResetOffsetToDateNonExistentListener() {
         Instant date = Instant.now();
-        CompletableFuture<Void> result = listenerManager.resetOffsetToDate(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID, date);
-        assertTrue(result.isCompletedExceptionally());
+        Mono<Void> result = listenerManager.resetOffsetToDate(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID, date);
+        
+        StepVerifier.create(result)
+                .expectError(IllegalArgumentException.class)
+                .verify();
+                
         verify(mockKafkaAdminService, never()).resetConsumerGroupOffsetsAsync(anyString(), anyString(), any(OffsetResetParameters.class));
     }
 
@@ -206,13 +224,14 @@ class KafkaListenerManagerTest {
         when(mockKafkaAdminService.resetConsumerGroupOffsetsAsync(anyString(), anyString(), any(OffsetResetParameters.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
-        CompletableFuture<Void> result = listenerManager.resetOffsetToEarliest(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID);
+        Mono<Void> result = listenerManager.resetOffsetToEarliest(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID);
 
+        StepVerifier.create(result)
+                .verifyComplete();
+                
         verify(mockListener).pause();
         verify(mockKafkaAdminService).resetConsumerGroupOffsetsAsync(eq(GROUP_ID), eq(TOPIC), any(OffsetResetParameters.class));
         verify(mockListener).resume();
-        assertTrue(result.isDone());
-        assertFalse(result.isCompletedExceptionally());
     }
 
     @Test
@@ -230,13 +249,14 @@ class KafkaListenerManagerTest {
         when(mockKafkaAdminService.resetConsumerGroupOffsetsAsync(anyString(), anyString(), any(OffsetResetParameters.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
-        CompletableFuture<Void> result = listenerManager.resetOffsetToLatest(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID);
+        Mono<Void> result = listenerManager.resetOffsetToLatest(PIPELINE_NAME, STEP_NAME, TOPIC, GROUP_ID);
 
+        StepVerifier.create(result)
+                .verifyComplete();
+                
         verify(mockListener).pause();
         verify(mockKafkaAdminService).resetConsumerGroupOffsetsAsync(eq(GROUP_ID), eq(TOPIC), any(OffsetResetParameters.class));
         verify(mockListener).resume();
-        assertTrue(result.isDone());
-        assertFalse(result.isCompletedExceptionally());
     }
 
     @Test

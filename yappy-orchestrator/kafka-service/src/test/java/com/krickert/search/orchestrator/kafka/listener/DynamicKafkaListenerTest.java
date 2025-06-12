@@ -1,5 +1,7 @@
 package com.krickert.search.orchestrator.kafka.listener;
 
+import com.krickert.search.commons.events.PipeStreamProcessingEvent;
+import io.micronaut.context.event.ApplicationEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,9 +23,8 @@ class DynamicKafkaListenerTest {
     private static final String PIPELINE_NAME = "test-pipeline";
     private static final String STEP_NAME = "test-step";
 
-    //TODO: event type instead
     @Mock
-    private PipeStreamEngine mockPipeStreamEngine;
+    private ApplicationEventPublisher<PipeStreamProcessingEvent> mockEventPublisher;
 
     private DynamicKafkaListener listener;
     private Map<String, Object> consumerConfig;
@@ -52,30 +53,30 @@ class DynamicKafkaListenerTest {
     void testConstructor() {
         // Test that null parameters are rejected
         assertThrows(NullPointerException.class, () -> new DynamicKafkaListener(
-                null, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine
+                null, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher
         ));
 
         assertThrows(NullPointerException.class, () -> new DynamicKafkaListener(
-                LISTENER_ID, null, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine
+                LISTENER_ID, null, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher
         ));
 
         assertThrows(NullPointerException.class, () -> new DynamicKafkaListener(
-                LISTENER_ID, TOPIC, null, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine
+                LISTENER_ID, TOPIC, null, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher
         ));
 
         assertThrows(NullPointerException.class, () -> new DynamicKafkaListener(
-                LISTENER_ID, TOPIC, GROUP_ID, null, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine
+                LISTENER_ID, TOPIC, GROUP_ID, null, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher
         ));
         // The DynamicKafkaListener constructor handles null for originalConsumerPropertiesFromStep by defaulting to emptyMap.
         // So, passing null for that specific argument should not throw an NPE from its own null check.
         // We are testing if OTHER null arguments cause an NPE.
 
         assertThrows(NullPointerException.class, () -> new DynamicKafkaListener(
-                LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, null, STEP_NAME, mockPipeStreamEngine
+                LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, null, STEP_NAME, mockEventPublisher
         ));
 
         assertThrows(NullPointerException.class, () -> new DynamicKafkaListener(
-                LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, null, mockPipeStreamEngine
+                LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, null, mockEventPublisher
         ));
 
         assertThrows(NullPointerException.class, () -> new DynamicKafkaListener(

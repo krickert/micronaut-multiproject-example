@@ -1,6 +1,7 @@
 package com.krickert.search.orchestrator.kafka.listener;
 
-import com.krickert.search.pipeline.engine.PipeStreamEngine;
+import com.krickert.search.commons.events.PipeStreamProcessingEvent;
+import io.micronaut.context.event.ApplicationEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,9 +22,8 @@ class DefaultKafkaListenerPoolTest {
     @Mock
     private DynamicKafkaListenerFactory mockListenerFactory; // Mock the factory
 
-    //TODO: event type instead...
     @Mock
-    private PipeStreamEngine mockPipeStreamEngine;
+    private ApplicationEventPublisher<PipeStreamProcessingEvent> mockEventPublisher;
     @Mock
     private DynamicKafkaListener mockCreatedListener; // A generic mock for listeners returned by the factory
     @Mock
@@ -52,17 +52,17 @@ class DefaultKafkaListenerPoolTest {
     void testCreateListener_createsAndStoresNewListener() {
         when(mockListenerFactory.create(
                 eq(LISTENER_ID), eq(TOPIC), eq(GROUP_ID), eq(consumerConfig),
-                eq(originalProps), eq(PIPELINE_NAME), eq(STEP_NAME), eq(mockPipeStreamEngine)
+                eq(originalProps), eq(PIPELINE_NAME), eq(STEP_NAME), eq(mockEventPublisher)
         )).thenReturn(mockCreatedListener); // Factory returns our mock
 
         DynamicKafkaListener createdListener = listenerPool.createListener(
                 LISTENER_ID, TOPIC, GROUP_ID, consumerConfig,
-                originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+                originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher);
 
         assertSame(mockCreatedListener, createdListener, "Listener returned by pool should be the one from the factory.");
         assertEquals(1, listenerPool.getListenerCount());
         assertSame(mockCreatedListener, listenerPool.getListener(LISTENER_ID), "Created listener should be in the pool.");
-        verify(mockListenerFactory).create(anyString(), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class));
+        verify(mockListenerFactory).create(anyString(), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(ApplicationEventPublisher.class));
     }
 
     @Test
@@ -74,12 +74,12 @@ class DefaultKafkaListenerPoolTest {
         // First call to createListener (simulates pre-existing listener)
         when(mockListenerFactory.create(
                 eq(LISTENER_ID), eq(TOPIC), eq(GROUP_ID), eq(consumerConfig),
-                eq(originalProps), eq(PIPELINE_NAME), eq(STEP_NAME), eq(mockPipeStreamEngine)
+                eq(originalProps), eq(PIPELINE_NAME), eq(STEP_NAME), eq(mockEventPublisher)
         )).thenReturn(mockExistingListener); // Factory returns mockExistingListener first time
 
         listenerPool.createListener( // This puts mockExistingListener into the pool
                 LISTENER_ID, TOPIC, GROUP_ID, consumerConfig,
-                originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+                originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher);
 
         assertEquals(1, listenerPool.getListenerCount());
         assertSame(mockExistingListener, listenerPool.getListener(LISTENER_ID));
@@ -89,29 +89,29 @@ class DefaultKafkaListenerPoolTest {
         newConsumerConfig.put("some.new.prop", "newValue");
         when(mockListenerFactory.create( // Factory will return a *different* mock for the replacement
                 eq(LISTENER_ID), eq(TOPIC), eq(GROUP_ID), eq(newConsumerConfig), // Potentially new config
-                eq(originalProps), eq(PIPELINE_NAME), eq(STEP_NAME), eq(mockPipeStreamEngine)
+                eq(originalProps), eq(PIPELINE_NAME), eq(STEP_NAME), eq(mockEventPublisher)
         )).thenReturn(mockCreatedListener); // mockCreatedListener is the "new" one
 
         // 3. Test: Call createListener again with the same ID
         DynamicKafkaListener newReturnedListener = listenerPool.createListener(
                 LISTENER_ID, TOPIC, GROUP_ID, newConsumerConfig, // Pass new config
                 originalProps,
-                PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+                PIPELINE_NAME, STEP_NAME, mockEventPublisher);
 
         // 4. Verify
         verify(mockExistingListener).shutdown(); // Shutdown called on the first listener
         assertSame(mockCreatedListener, newReturnedListener, "The newly created listener should be returned.");
         assertEquals(1, listenerPool.getListenerCount(), "Pool should still have 1 listener after replacement.");
         assertSame(mockCreatedListener, listenerPool.getListener(LISTENER_ID), "Pool should now contain the new listener.");
-        verify(mockListenerFactory, times(2)).create(anyString(), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class));
+        verify(mockListenerFactory, times(2)).create(anyString(), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(ApplicationEventPublisher.class));
     }
 
     @Test
     void testRemoveListener() {
         // Setup: Add a listener to the pool by calling createListener
-        when(mockListenerFactory.create(anyString(), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+        when(mockListenerFactory.create(anyString(), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(ApplicationEventPublisher.class)))
                 .thenReturn(mockExistingListener);
-        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher);
 
         // Test
         DynamicKafkaListener removedListener = listenerPool.removeListener(LISTENER_ID);
@@ -131,9 +131,9 @@ class DefaultKafkaListenerPoolTest {
 
     @Test
     void testGetListener() {
-        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(ApplicationEventPublisher.class)))
                 .thenReturn(mockExistingListener);
-        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher);
 
         DynamicKafkaListener found = listenerPool.getListener(LISTENER_ID);
         assertSame(mockExistingListener, found);
@@ -149,13 +149,13 @@ class DefaultKafkaListenerPoolTest {
         DynamicKafkaListener listener1 = mock(DynamicKafkaListener.class);
         DynamicKafkaListener listener2 = mock(DynamicKafkaListener.class);
 
-        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(ApplicationEventPublisher.class)))
                 .thenReturn(listener1);
-        when(mockListenerFactory.create(eq(OTHER_LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+        when(mockListenerFactory.create(eq(OTHER_LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(ApplicationEventPublisher.class)))
                 .thenReturn(listener2);
 
-        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
-        listenerPool.createListener(OTHER_LISTENER_ID, "other-topic", GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher);
+        listenerPool.createListener(OTHER_LISTENER_ID, "other-topic", GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher);
 
         Collection<DynamicKafkaListener> allListeners = listenerPool.getAllListeners();
         assertEquals(2, allListeners.size());
@@ -165,9 +165,9 @@ class DefaultKafkaListenerPoolTest {
 
     @Test
     void testGetAllListenersReturnsUnmodifiableCollection() {
-        when(mockListenerFactory.create(anyString(), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+        when(mockListenerFactory.create(anyString(), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(ApplicationEventPublisher.class)))
                 .thenReturn(mockCreatedListener);
-        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher);
 
         Collection<DynamicKafkaListener> result = listenerPool.getAllListeners();
         assertThrows(UnsupportedOperationException.class, () -> result.add(mock(DynamicKafkaListener.class)));
@@ -179,25 +179,25 @@ class DefaultKafkaListenerPoolTest {
         DynamicKafkaListener listener1 = mock(DynamicKafkaListener.class);
         DynamicKafkaListener listener2 = mock(DynamicKafkaListener.class);
 
-        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(ApplicationEventPublisher.class)))
                 .thenReturn(listener1);
-        when(mockListenerFactory.create(eq(OTHER_LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+        when(mockListenerFactory.create(eq(OTHER_LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(ApplicationEventPublisher.class)))
                 .thenReturn(listener2);
 
         assertEquals(0, listenerPool.getListenerCount());
-        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher);
         assertEquals(1, listenerPool.getListenerCount());
-        listenerPool.createListener(OTHER_LISTENER_ID, "other-topic", GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+        listenerPool.createListener(OTHER_LISTENER_ID, "other-topic", GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher);
         assertEquals(2, listenerPool.getListenerCount());
     }
 
     @Test
     void testHasListener() {
-        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(ApplicationEventPublisher.class)))
                 .thenReturn(mockCreatedListener);
 
         assertFalse(listenerPool.hasListener(LISTENER_ID));
-        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher);
         assertTrue(listenerPool.hasListener(LISTENER_ID));
         assertFalse(listenerPool.hasListener("non-existent-listener"));
     }
@@ -207,13 +207,13 @@ class DefaultKafkaListenerPoolTest {
         DynamicKafkaListener listener1 = mock(DynamicKafkaListener.class);
         DynamicKafkaListener listener2 = mock(DynamicKafkaListener.class);
 
-        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(ApplicationEventPublisher.class)))
                 .thenReturn(listener1);
-        when(mockListenerFactory.create(eq(OTHER_LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+        when(mockListenerFactory.create(eq(OTHER_LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(ApplicationEventPublisher.class)))
                 .thenReturn(listener2);
 
-        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
-        listenerPool.createListener(OTHER_LISTENER_ID, "other-topic", GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher);
+        listenerPool.createListener(OTHER_LISTENER_ID, "other-topic", GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher);
 
         listenerPool.shutdownAllListeners();
 
@@ -227,13 +227,13 @@ class DefaultKafkaListenerPoolTest {
         DynamicKafkaListener listener1 = mock(DynamicKafkaListener.class);
         DynamicKafkaListener listener2 = mock(DynamicKafkaListener.class);
 
-        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+        when(mockListenerFactory.create(eq(LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(ApplicationEventPublisher.class)))
                 .thenReturn(listener1);
-        when(mockListenerFactory.create(eq(OTHER_LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(PipeStreamEngine.class)))
+        when(mockListenerFactory.create(eq(OTHER_LISTENER_ID), anyString(), anyString(), anyMap(), anyMap(), anyString(), anyString(), any(ApplicationEventPublisher.class)))
                 .thenReturn(listener2);
 
-        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
-        listenerPool.createListener(OTHER_LISTENER_ID, "other-topic", GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockPipeStreamEngine);
+        listenerPool.createListener(LISTENER_ID, TOPIC, GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher);
+        listenerPool.createListener(OTHER_LISTENER_ID, "other-topic", GROUP_ID, consumerConfig, originalProps, PIPELINE_NAME, STEP_NAME, mockEventPublisher);
 
         doThrow(new RuntimeException("Test exception")).when(listener1).shutdown();
 

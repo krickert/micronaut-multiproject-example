@@ -1,5 +1,6 @@
 package com.krickert.search.orchestrator.kafka.listener; // Or your test package
 
+import com.krickert.search.commons.events.PipeStreamProcessingEvent;
 import com.krickert.search.config.consul.DynamicConfigurationManagerImpl;
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
 import com.krickert.search.config.pipeline.model.*;
@@ -8,6 +9,7 @@ import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Property;
 import io.micronaut.context.annotation.Replaces;
 import io.micronaut.context.annotation.Requires;
+import io.micronaut.context.event.ApplicationEventPublisher;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -64,9 +66,8 @@ class KafkaListenerManagerIntegrationTest {
     @Inject
     DefaultKafkaListenerPool mockListenerPool;
 
-    //TODO: inject the event type instead
     @Inject
-    PipeStreamEngine mockPipeStreamEngine; // KafkaListenerManager needs this
+    ApplicationEventPublisher<PipeStreamProcessingEvent> mockEventPublisher; // KafkaListenerManager needs this
 
     // Mock the DefaultKafkaListenerPool with a @Replaces factory
     @Requires(env = {"test-integration"}) // Only for this test environment
@@ -79,10 +80,9 @@ class KafkaListenerManagerIntegrationTest {
     // Mock PipeStreamEngine for KafkaListenerManager dependency
     @Requires(env = {"test-integration"})
     @Singleton
-    //TODO: inject the event type instead
-    @Replaces(PipeStreamEngine.class) // Or DefaultPipeStreamEngineLogicImpl.class if that's what's normally injected
-    PipeStreamEngine testPipeStreamEngine() {
-        return Mockito.mock(PipeStreamEngine.class);
+    @Replaces(ApplicationEventPublisher.class)
+    ApplicationEventPublisher<PipeStreamProcessingEvent> testEventPublisher() {
+        return Mockito.mock(ApplicationEventPublisher.class);
     }
 
 
@@ -184,8 +184,7 @@ class KafkaListenerManagerIntegrationTest {
                 originalPropsCaptor.capture(),
                 eq(TEST_PIPELINE_NAME),
                 eq(TEST_STEP_NAME),
-                //TODO: needs to be removed
-                any(PipeStreamEngine.class) // or eq(mockPipeStreamEngine)
+                any(ApplicationEventPublisher.class)
         );
 
         // Assertions on captured arguments
