@@ -17,6 +17,7 @@ dependencies {
     implementation(mn.micronaut.context)
     implementation(mn.micronaut.jackson.databind)
     implementation(mn.micronaut.validation)
+    implementation(mn.micronaut.serde.jackson)
     implementation("io.micronaut.reactor:micronaut-reactor")
     implementation("io.projectreactor:reactor-core")
     
@@ -44,6 +45,8 @@ dependencies {
     testImplementation(mn.assertj.core)
     testImplementation(mn.mockito.core)
     testImplementation("io.projectreactor:reactor-test")
+    testImplementation(mn.micronaut.http.client)
+    testImplementation(mn.micronaut.http.server.netty)
     
     // Test resources support
     testImplementation("io.micronaut.testresources:micronaut-test-resources-client")
