@@ -65,6 +65,7 @@ dependencies {
     testResourcesImplementation("org.testcontainers:kafka:1.21.1")
     testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
     // Implementation dependencies - Micrometer
     implementation(mn.micrometer.context.propagation)
     implementation(mn.micronaut.micrometer.core)

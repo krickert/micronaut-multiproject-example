@@ -30,6 +30,19 @@ testcontainers:
   enabled: true
   consul: true
 
+# Enable specific test resource containers
+containers:
+  hashicorp-consul:
+    enabled: true
+  apache-kafka:
+    enabled: true
+  apicurio:
+    enabled: true
+  moto:
+    enabled: true
+  opensearch:
+    enabled: true
+
 # Consul configuration for test environment
 consul:
   client:

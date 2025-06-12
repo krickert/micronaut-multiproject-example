@@ -106,12 +106,12 @@ public class SlotAwareKafkaListenerManager {
                 requestedSlots, listenerKey, topic, groupId);
                 
         return slotManager.acquireSlots(engineInstanceId, topic, groupId, requestedSlots)
-            .map(SlotAssignment::slots)
+            .map(SlotAssignment::assignedSlots)
             .doOnSuccess(slots -> {
                 listenerSlots.put(listenerKey, slots);
                 LOG.info("Acquired {} slots for listener {}: {}", 
                         slots.size(), listenerKey, 
-                        slots.stream().map(KafkaSlot::partition).collect(Collectors.toList()));
+                        slots.stream().map(KafkaSlot::getPartition).collect(Collectors.toList()));
             })
             .doOnError(e -> LOG.error("Failed to acquire slots for listener {}: {}", 
                     listenerKey, e.getMessage()));
@@ -172,7 +172,7 @@ public class SlotAwareKafkaListenerManager {
             .filter(assignment -> running)
             .subscribe(assignment -> {
                 LOG.info("Received slot assignment change for engine {}: {} slots", 
-                        engineInstanceId, assignment.slots().size());
+                        engineInstanceId, assignment.assignedSlots().size());
                 handleSlotReassignment(assignment);
             });
     }
@@ -183,8 +183,8 @@ public class SlotAwareKafkaListenerManager {
      */
     private void handleSlotReassignment(SlotAssignment newAssignment) {
         // Group slots by topic and group
-        Map<String, List<KafkaSlot>> slotsByTopicGroup = newAssignment.slots().stream()
-            .collect(Collectors.groupingBy(slot -> slot.topic() + ":" + slot.groupId()));
+        Map<String, List<KafkaSlot>> slotsByTopicGroup = newAssignment.assignedSlots().stream()
+            .collect(Collectors.groupingBy(slot -> slot.getTopic() + ":" + slot.getGroupId()));
         
         // Compare with current assignments and adjust
         Set<String> currentKeys = listenerSlots.keySet();

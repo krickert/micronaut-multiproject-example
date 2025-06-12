@@ -297,14 +297,23 @@ public class KafkaListenerManager implements ApplicationEventListener<PipelineCl
         LOG.info("Listener (Pool ID: {}): Adding Apicurio consumer properties.", uniquePoolListenerId);
         consumerConfig.putIfAbsent(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer");
 
-        String urlPropKey = "kafka.consumers.default." + SerdeConfig.REGISTRY_URL;
-        applicationContext.getProperty(urlPropKey, String.class).ifPresentOrElse(
-                url -> {
-                    consumerConfig.put(SerdeConfig.REGISTRY_URL, url);
-                    LOG.info("Listener (Pool ID: {}): Added Apicurio property '{}' = '{}'", uniquePoolListenerId, SerdeConfig.REGISTRY_URL, url);
-                },
-                () -> LOG.error("Listener (Pool ID: {}): Apicurio property '{}' not found in application context.", uniquePoolListenerId, urlPropKey)
-        );
+        // Try multiple paths for registry URL
+        String consumerUrlKey = "kafka.consumers.default.apicurio.registry.url";
+        String producerUrlKey = "kafka.producers.default.apicurio.registry.url";
+        String directUrlKey = "apicurio.registry.url";
+        
+        String registryUrl = applicationContext.getProperty(consumerUrlKey, String.class)
+                .or(() -> applicationContext.getProperty(producerUrlKey, String.class))
+                .or(() -> applicationContext.getProperty(directUrlKey, String.class))
+                .orElse(null);
+                
+        if (registryUrl != null) {
+            consumerConfig.put(SerdeConfig.REGISTRY_URL, registryUrl);
+            LOG.info("Listener (Pool ID: {}): Added Apicurio property '{}' = '{}'", uniquePoolListenerId, SerdeConfig.REGISTRY_URL, registryUrl);
+        } else {
+            LOG.error("Listener (Pool ID: {}): Apicurio registry URL not found. Tried: {}, {}, {}", 
+                    uniquePoolListenerId, consumerUrlKey, producerUrlKey, directUrlKey);
+        }
 
         String returnClassPropKey = "kafka.consumers.default." + SerdeConfig.DESERIALIZER_SPECIFIC_VALUE_RETURN_CLASS;
         String returnClass = applicationContext.getProperty(returnClassPropKey, String.class).orElse(PipeStream.class.getName());

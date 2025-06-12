@@ -1,0 +1,66 @@
+# Test Resources Configuration
+# Test Resources automatically provides Consul, Kafka, and Apicurio
+micronaut:
+  application:
+    name: kafka-service-test
+  server:
+    port: -1
+  test-resources:
+    enabled: true
+  scheduling:
+    enabled: false  # Disable scheduled tasks in tests
+
+# Disable gRPC server for kafka-service tests
+grpc:
+  server:
+    enabled: false
+
+# Ensure testcontainers are enabled
+testcontainers:
+  enabled: true
+  consul: true
+
+# Consul configuration for test environment
+consul:
+  client:
+    enabled: true  # Required for ConsulClient bean creation
+    registration:
+      enabled: false  # Not needed for kafka-service tests
+    discovery:
+      enabled: false  # Not needed for kafka-service tests
+  config:
+    enabled: false  # Not loading config from Consul in tests
+
+# Kafka configuration
+kafka:
+  enabled: true
+  schema:
+    registry:
+      type: apicurio
+  consumers:
+    default:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+  producers:
+    default:
+      acks: all
+      retries: 3
+
+# Application configuration
+app:
+  config:
+    cluster-name: test-kafka-cluster-${random.uuid}
+    consul:
+      key-prefixes:
+        pipeline-clusters: pipeline/clusters
+        schema-versions: pipeline/schema-versions
+        whitelists: pipeline/whitelists
+      watch-seconds: 5
+
+# Logging
+logger:
+  levels:
+    com.krickert.search.orchestrator.kafka: DEBUG
+    io.micronaut.test: WARN
+    io.micronaut.testresources: WARN
+    org.testcontainers: WARN
