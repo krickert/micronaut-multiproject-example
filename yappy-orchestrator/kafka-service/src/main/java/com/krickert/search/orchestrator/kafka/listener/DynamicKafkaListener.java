@@ -2,9 +2,11 @@
 package com.krickert.search.orchestrator.kafka.listener;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.krickert.search.commons.events.EventMetadata;
+import com.krickert.search.commons.events.PipeStreamProcessingEvent;
 import com.krickert.search.model.PipeStream;
-import com.krickert.search.pipeline.engine.PipeStreamEngine;
 import io.apicurio.registry.serde.config.SerdeConfig;
+import io.micronaut.context.event.ApplicationEventPublisher;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -44,8 +46,7 @@ public class DynamicKafkaListener {
     private final Map<String, String> originalConsumerProperties; // NEW: Stores properties from KafkaInputDefinition
     private final String pipelineName;
     private final String stepName;
-    //TODO: The pipeStreamEngine should be the event type instead. This event type should go into the consul config code, since it will also need to be used by the engine-core.
-    private final PipeStreamEngine pipeStreamEngine;
+    private final ApplicationEventPublisher<PipeStreamProcessingEvent> eventPublisher;
 
     private KafkaConsumer<UUID, PipeStream> consumer;
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -62,7 +63,7 @@ public class DynamicKafkaListener {
             Map<String, String> originalConsumerPropertiesFromStep, // NEW: Pass original properties
             String pipelineName,
             String stepName,
-            PipeStreamEngine pipeStreamEngine) {
+            ApplicationEventPublisher<PipeStreamProcessingEvent> eventPublisher) {
 
         this.listenerId = Objects.requireNonNull(listenerId, "Listener ID cannot be null");
         this.topic = Objects.requireNonNull(topic, "Topic cannot be null");
@@ -74,7 +75,7 @@ public class DynamicKafkaListener {
                 : new HashMap<>(originalConsumerPropertiesFromStep);
         this.pipelineName = Objects.requireNonNull(pipelineName, "Pipeline name cannot be null");
         this.stepName = Objects.requireNonNull(stepName, "Step name cannot be null");
-        this.pipeStreamEngine = Objects.requireNonNull(pipeStreamEngine, "PipeStreamEngine cannot be null");
+        this.eventPublisher = Objects.requireNonNull(eventPublisher, "Event publisher cannot be null");
 
         // Essential Kafka properties that are not schema-registry specific
         // These should have been added by KafkaListenerManager to finalConsumerConfig
@@ -258,9 +259,18 @@ public class DynamicKafkaListener {
                 .setTargetStepName(stepName)
                 .build();
 
-        pipeStreamEngine.processStream(updatedPipeStream);
+        // Publish event instead of calling engine directly
+        PipeStreamProcessingEvent event = PipeStreamProcessingEvent.fromKafka(
+                updatedPipeStream,
+                record.topic(),
+                record.partition(),
+                record.offset(),
+                groupId
+        );
+        
+        eventPublisher.publishEvent(event);
 
-        log.debug("Listener {}: Forwarded record to PipeStreamEngine. StreamId: {}", listenerId, updatedPipeStream.getStreamId());
+        log.debug("Listener {}: Published PipeStreamProcessingEvent for StreamId: {}", listenerId, updatedPipeStream.getStreamId());
     }
 
     /**

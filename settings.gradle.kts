@@ -32,6 +32,7 @@ include(
     // Core dependencies
     "bom",
     "util",
+    "yappy-commons",
     "yappy-kafka-slot-manager",
 
     // Test resources (needed by consul-config and engine)

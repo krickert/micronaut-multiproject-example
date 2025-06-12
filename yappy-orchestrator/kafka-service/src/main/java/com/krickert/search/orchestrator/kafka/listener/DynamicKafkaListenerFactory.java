@@ -1,6 +1,7 @@
 package com.krickert.search.orchestrator.kafka.listener;
 
-import com.krickert.search.pipeline.engine.PipeStreamEngine;
+import com.krickert.search.commons.events.PipeStreamProcessingEvent;
+import io.micronaut.context.event.ApplicationEventPublisher;
 
 import java.util.Map;
 
@@ -13,8 +14,6 @@ public interface DynamicKafkaListenerFactory {
             Map<String, String> originalConsumerPropertiesFromStep,
             String pipelineName,
             String stepName,
-            //TODO: this will be a common event type
-            //TODO: will also need the slot manager project service!!
-            PipeStreamEngine pipeStreamEngine
+            ApplicationEventPublisher<PipeStreamProcessingEvent> eventPublisher
     );
 }

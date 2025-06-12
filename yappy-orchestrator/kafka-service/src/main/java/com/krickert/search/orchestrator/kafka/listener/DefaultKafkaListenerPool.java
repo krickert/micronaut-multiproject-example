@@ -1,7 +1,8 @@
 package com.krickert.search.orchestrator.kafka.listener;
 
-
+import com.krickert.search.commons.events.PipeStreamProcessingEvent;
 import io.micronaut.context.annotation.Requires;
+import io.micronaut.context.event.ApplicationEventPublisher;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
@@ -35,8 +36,7 @@ public class DefaultKafkaListenerPool implements KafkaListenerPool {
             Map<String, String> originalConsumerPropertiesFromStep,
             String pipelineName,
             String stepName,
-            //TODO: this will be the event instead.
-            PipeStreamEngine pipeStreamEngine) {
+            ApplicationEventPublisher<PipeStreamProcessingEvent> eventPublisher) {
 
         if (listeners.containsKey(listenerId)) {
             log.warn("Listener with ID {} already exists. Shutting down existing before creating new.", listenerId);
@@ -52,7 +52,7 @@ public class DefaultKafkaListenerPool implements KafkaListenerPool {
                 originalConsumerPropertiesFromStep,
                 pipelineName,
                 stepName,
-                pipeStreamEngine
+                eventPublisher
         );
 
         listeners.put(listenerId, listener);

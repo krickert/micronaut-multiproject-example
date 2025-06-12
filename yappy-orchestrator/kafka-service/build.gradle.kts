@@ -28,6 +28,7 @@ dependencies {
     // Project dependencies
     api(project(":yappy-models:protobuf-models"))
     api(project(":yappy-models:pipeline-config-models"))
+    implementation(project(":yappy-commons"))
     
     // Utility dependencies
     implementation(libs.guava)

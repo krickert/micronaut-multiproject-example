@@ -32,6 +32,7 @@ dependencies {
     // Project dependencies
     api(project(":yappy-models:protobuf-models"))
     api(project(":yappy-models:pipeline-config-models"))
+    implementation(project(":yappy-commons"))
     implementation(project(":yappy-consul-config"))
     implementation(project(":yappy-orchestrator:kafka-service"))
     

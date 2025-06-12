@@ -1,7 +1,8 @@
 // File: yappy-engine/src/main/java/com/krickert/search/pipeline/engine/kafka/listener/KafkaListenerPool.java
 package com.krickert.search.orchestrator.kafka.listener;
 
-import com.krickert.search.pipeline.engine.PipeStreamEngine;
+import com.krickert.search.commons.events.PipeStreamProcessingEvent;
+import io.micronaut.context.event.ApplicationEventPublisher;
 
 import java.util.Collection;
 import java.util.Map;
@@ -16,9 +17,7 @@ public interface KafkaListenerPool {
             Map<String, String> originalConsumerPropertiesFromStep,
             String pipelineName,
             String stepName,
-            //TODO: this should be the event type
-            //TODO: will also need the slot manager project service!!
-            PipeStreamEngine pipeStreamEngine
+            ApplicationEventPublisher<PipeStreamProcessingEvent> eventPublisher
     );
 
     DynamicKafkaListener removeListener(String listenerId);

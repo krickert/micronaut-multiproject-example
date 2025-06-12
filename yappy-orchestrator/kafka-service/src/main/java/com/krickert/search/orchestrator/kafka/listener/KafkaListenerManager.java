@@ -1,6 +1,7 @@
 // File: yappy-engine/src/main/java/com/krickert/search/pipeline/engine/kafka/listener/KafkaListenerManager.java
 package com.krickert.search.orchestrator.kafka.listener;
 
+import com.krickert.search.commons.events.PipeStreamProcessingEvent;
 import com.krickert.search.config.pipeline.event.PipelineClusterConfigChangeEvent;
 import com.krickert.search.config.pipeline.model.KafkaInputDefinition;
 import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
@@ -15,6 +16,7 @@ import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.event.ApplicationEventListener;
+import io.micronaut.context.event.ApplicationEventPublisher;
 import io.micronaut.core.annotation.NonNull;
 import io.micronaut.scheduling.annotation.Async;
 import jakarta.inject.Inject;
@@ -38,9 +40,7 @@ public class KafkaListenerManager implements ApplicationEventListener<PipelineCl
     private final DefaultKafkaListenerPool listenerPool;
     private final ConsumerStateManager stateManager;
     private final KafkaAdminService kafkaAdminService;
-    //TODO: this should be the event type
-    //TODO: will also need the slot manager project service!!
-    private final PipeStreamEngine pipeStreamEngine;
+    private final ApplicationEventPublisher<PipeStreamProcessingEvent> eventPublisher;
     private final ApplicationContext applicationContext;
     @Getter
     private final String configuredSchemaRegistryType;
@@ -58,16 +58,14 @@ public class KafkaListenerManager implements ApplicationEventListener<PipelineCl
             DefaultKafkaListenerPool listenerPool,
             ConsumerStateManager stateManager,
             KafkaAdminService kafkaAdminService,
-            //TODO: this should be the event type
-            //TODO: will also need the slot manager project service!!
-            PipeStreamEngine pipeStreamEngine,
+            ApplicationEventPublisher<PipeStreamProcessingEvent> eventPublisher,
             ApplicationContext applicationContext,
             @Value("${kafka.schema.registry.type:none}") String configuredSchemaRegistryType,
             @Value("${app.config.cluster-name}") String appClusterName) {
         this.listenerPool = listenerPool;
         this.stateManager = stateManager;
         this.kafkaAdminService = kafkaAdminService;
-        this.pipeStreamEngine = pipeStreamEngine;
+        this.eventPublisher = eventPublisher;
         this.applicationContext = applicationContext;
         this.configuredSchemaRegistryType = configuredSchemaRegistryType.toLowerCase(Locale.ROOT);
         this.appClusterName = appClusterName;
@@ -242,7 +240,7 @@ public class KafkaListenerManager implements ApplicationEventListener<PipelineCl
                     consumerConfigFromStep, // This is the original properties from the step definition
                     pipelineName,
                     stepName,
-                    pipeStreamEngine);
+                    eventPublisher);
             // ***** END OF CORRECTION *****
 
             activeListenerInstanceMap.put(listenerInstanceKey, listener);

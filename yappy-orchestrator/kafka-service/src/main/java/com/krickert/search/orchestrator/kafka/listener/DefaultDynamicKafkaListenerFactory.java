@@ -1,5 +1,7 @@
 package com.krickert.search.orchestrator.kafka.listener;
 
+import com.krickert.search.commons.events.PipeStreamProcessingEvent;
+import io.micronaut.context.event.ApplicationEventPublisher;
 import jakarta.inject.Singleton;
 
 import java.util.Map;
@@ -15,13 +17,7 @@ public class DefaultDynamicKafkaListenerFactory implements DynamicKafkaListenerF
             Map<String, String> originalConsumerPropertiesFromStep,
             String pipelineName,
             String stepName,
-            /*TODO: this should be an event listener instead.  The piesteam engine will listen
-            for the event and process the pipestream.  We should not inject the PipeStreamEngine
-            furthermore, we would wait to send an ACK for this and only after processing should we sent the ACK
-            Since this is a fire-and-forget, it will be async for the event call, so we can ACK after that because we will
-            use a DLQ concept. */
-            /*TODO: we will also need to integrate the kafka-slot-manager for when we integrate slot management*/
-            PipeStreamEngine pipeStreamEngine) {
+            ApplicationEventPublisher<PipeStreamProcessingEvent> eventPublisher) {
         return new DynamicKafkaListener(
                 listenerId,
                 topic,
@@ -30,7 +26,7 @@ public class DefaultDynamicKafkaListenerFactory implements DynamicKafkaListenerF
                 originalConsumerPropertiesFromStep,
                 pipelineName,
                 stepName,
-                pipeStreamEngine
+                eventPublisher
         );
     }
 }
