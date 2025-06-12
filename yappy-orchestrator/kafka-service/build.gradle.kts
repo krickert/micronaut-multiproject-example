@@ -61,6 +61,9 @@ dependencies {
     testImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     testImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     
+    // Pipeline configuration test utilities
+    testImplementation(project(":yappy-models:pipeline-config-models-test-utils"))
+    
     // Test resources implementation dependencies
     testResourcesImplementation("org.testcontainers:kafka:1.21.1")
     testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))

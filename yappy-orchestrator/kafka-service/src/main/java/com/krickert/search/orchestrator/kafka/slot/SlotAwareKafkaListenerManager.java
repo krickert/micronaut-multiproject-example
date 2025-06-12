@@ -208,7 +208,7 @@ public class SlotAwareKafkaListenerManager {
         
         // Update assignments
         listenerSlots.clear();
-        slotsByTopicGroup.forEach(listenerSlots::put);
+        listenerSlots.putAll(slotsByTopicGroup);
     }
     
     /**
