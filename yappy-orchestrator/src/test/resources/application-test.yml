@@ -1,0 +1,19 @@
+app:
+  config:
+    consul:
+      key-prefixes:
+        pipeline-clusters: "configs"
+        schema-versions: "schema-versions"
+        whitelists: "whitelists"
+      watch-seconds: 5  # Reduced to avoid conflict with network timeout
+    cluster-name: "test-cluster"
+
+yappy:
+  cluster:
+    name: "test-cluster"
+
+# Disable test resources for this simple test
+micronaut:
+  test:
+    resources:
+      enabled: false

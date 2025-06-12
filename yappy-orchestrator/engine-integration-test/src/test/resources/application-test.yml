@@ -6,6 +6,13 @@ micronaut:
 
 # Test resources will automatically provide all containers
 
+# Consul configuration - provided by test resources
+consul:
+  client:
+    host: "${consul.host}"
+    port: "${consul.port}"
+    enabled: true
+
 # gRPC client configuration - will be injected by test resources
 grpc:
   client:

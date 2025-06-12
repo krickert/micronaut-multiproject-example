@@ -1,35 +1,36 @@
 plugins {
-    id("java-library")
+    `java-library`
+    `maven-publish`
+    id("io.micronaut.test-resources") 
+    id("io.micronaut.library")
 }
 
-repositories {
-    mavenLocal()
-    mavenCentral()
+micronaut {
+    version("4.8.2")
+    testResources {
+        enabled.set(true)
+    }
 }
 
 dependencies {
-    implementation(platform(project(":bom")))
-    annotationProcessor(platform(project(":bom")))
+    implementation("io.micronaut.testresources:micronaut-test-resources-testcontainers")
+    implementation("org.testcontainers:testcontainers")
+    implementation("io.grpc:grpc-stub")
+    implementation("io.grpc:grpc-protobuf")
+    implementation("io.grpc:grpc-netty-shaded")
+    implementation("io.grpc:grpc-services:1.62.2")
+    implementation("javax.annotation:javax.annotation-api")
+    implementation("org.slf4j:slf4j-api")
     
-    api("io.micronaut.testresources:micronaut-test-resources-core")
+    // Export these dependencies for modules that use this
     api("io.micronaut.testresources:micronaut-test-resources-testcontainers")
     api("org.testcontainers:testcontainers")
-    
-    // For gRPC health checks
-    api("io.grpc:grpc-stub")
-    api("io.grpc:grpc-protobuf")
-    api("io.grpc:grpc-services")
-    api("javax.annotation:javax.annotation-api")
-    
-    implementation("org.slf4j:slf4j-api")
-    implementation("commons-io:commons-io:2.15.1")
-    
-    testImplementation("org.junit.jupiter:junit-jupiter-api")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
-    testImplementation("io.micronaut.test:micronaut-test-junit5")
-    testRuntimeOnly(mn.logback.classic)
 }
 
-tasks.test {
-    useJUnitPlatform()
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            from(components["java"])
+        }
+    }
 }

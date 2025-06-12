@@ -1,17 +1,7 @@
 micronaut:
-  application:
-    name: tikaParserApplication
+  server:
+    port: ${random.port}  # Random port for tests
+  
 grpc:
   server:
-    port: ${random.port}
-  client:
-    plaintext: true
-    discovery:
-      enabled: true
-  services:
-    tika-parser:
-      enabled: true
-tika:
-  parser:
-    test-data-buffer:
-      enabled: true
+    port: ${random.port}  # Random port for gRPC tests

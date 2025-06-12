@@ -1,10 +1,7 @@
 micronaut:
-  application:
-    name: chunker
+  server:
+    port: ${random.port}  # Random port for tests
+  
 grpc:
   server:
-    port: ${random.port}
-  client:
-    plaintext: true
-    discovery:
-      enabled: true
+    port: ${random.port}  # Random port for gRPC tests

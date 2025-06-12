@@ -1,5 +1,14 @@
 plugins {
     id("java-library")
+    id("io.micronaut.test-resources")
+    id("io.micronaut.library")
+}
+
+micronaut {
+    version("4.8.2")
+    testResources {
+        enabled.set(true)
+    }
 }
 
 repositories {
