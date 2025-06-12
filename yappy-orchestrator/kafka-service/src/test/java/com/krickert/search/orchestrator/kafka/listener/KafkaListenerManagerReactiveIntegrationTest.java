@@ -7,6 +7,8 @@ import com.krickert.search.model.PipeStream;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.orchestrator.kafka.admin.KafkaAdminService;
 import io.apicurio.registry.serde.config.SerdeConfig;
+import io.micronaut.context.ApplicationContext;
+import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.apache.kafka.clients.admin.AdminClient;
@@ -34,13 +36,15 @@ import static org.junit.jupiter.api.Assertions.*;
  * Integration test for KafkaListenerManager focusing on the reactive API
  * and event-driven listener creation/deletion.
  */
-@MicronautTest(rebuildContext = true)
+@MicronautTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@Property(name = "kafka.enabled", value = "true")
+@Property(name = "kafka.schema.registry.type", value = "apicurio")
 class KafkaListenerManagerReactiveIntegrationTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(KafkaListenerManagerReactiveIntegrationTest.class);
     
-    private static final String TEST_CLUSTER_NAME = "reactive-test-cluster";
+    private String TEST_CLUSTER_NAME; // Will be set from the actual cluster name
     private static final String PIPELINE_NAME = "reactiveTestPipeline";
     private static final String STEP_NAME = "kafkaInputStep";
     private static final String TOPIC_NAME = "reactive-test-topic";
@@ -65,10 +69,18 @@ class KafkaListenerManagerReactiveIntegrationTest {
     @Inject
     AdminClient adminClient;
     
+    @Inject
+    ApplicationContext applicationContext;
+    
     private KafkaProducer<UUID, PipeStream> producer;
     
     @BeforeAll
     void setupAll() {
+        // Get the actual cluster name from the applicationContext
+        TEST_CLUSTER_NAME = applicationContext.getProperty("app.config.cluster-name", String.class)
+                .orElseThrow(() -> new IllegalStateException("app.config.cluster-name not configured"));
+        LOG.info("Using cluster name: {}", TEST_CLUSTER_NAME);
+        
         // Create topic
         NewTopic newTopic = new NewTopic(TOPIC_NAME, 1, (short) 1);
         try {
@@ -86,14 +98,16 @@ class KafkaListenerManagerReactiveIntegrationTest {
         
         // Create producer for testing with proper Apicurio configuration
         Properties producerProps = new Properties();
-        producerProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, 
-            System.getProperty("kafka.bootstrap.servers", "localhost:9092"));
+        String bootstrapServers = applicationContext.getProperty("kafka.bootstrap.servers", String.class)
+                .orElseThrow(() -> new IllegalStateException("kafka.bootstrap.servers not configured"));
+        producerProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         producerProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, UUIDSerializer.class.getName());
         producerProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, 
             "io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer");
         
         // Add all necessary Apicurio configuration
-        String apicurioUrl = System.getProperty("apicurio.registry.url", "http://localhost:8081");
+        String apicurioUrl = applicationContext.getProperty("apicurio.registry.url", String.class)
+            .orElse("http://localhost:8081");
         producerProps.put(SerdeConfig.REGISTRY_URL, apicurioUrl);
         producerProps.put(SerdeConfig.AUTO_REGISTER_ARTIFACT, "true");
         producerProps.put(SerdeConfig.ARTIFACT_RESOLVER_STRATEGY, 
