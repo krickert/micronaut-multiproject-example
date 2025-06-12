@@ -2,23 +2,23 @@ micronaut:
   application:
     name: engine-integration-test
   server:
-    port: -1
+    port: ${random.port}
 
 # Test resources will automatically provide all containers
 
 # Consul configuration - provided by test resources
+# DO NOT set consul.client.host and consul.client.port here!
+# Test resources will provide them automatically
 consul:
   client:
-    host: "${consul.host}"
-    port: "${consul.port}"
     enabled: true
 
-# gRPC client configuration - will be injected by test resources
-grpc:
-  client:
-    engine:
-      address: "${engine.grpc.host}:${engine.grpc.port}"
-      plaintext: true
+# gRPC client configuration - will be injected by test resources  
+# grpc:
+#   client:
+#     engine:
+#       address: "${engine.grpc.host}:${engine.grpc.port}"
+#       plaintext: true
 
 # Logging
 logger:
@@ -31,7 +31,18 @@ logger:
 app:
   config:
     cluster-name: integration-test-cluster
+    consul:
+      watch-seconds: 5
+      key-prefixes:
+        pipeline-clusters: config/pipeline/clusters/
+        schema-versions: config/pipeline/schemas/
+        whitelists: config/pipeline/whitelists/
 
 # Kafka configuration (provided by test-resources)
 kafka:
   enabled: true
+
+# Yappy cluster configuration
+yappy:
+  cluster:
+    name: integration-test-cluster

@@ -1,5 +1,6 @@
 package com.krickert.search.engine.integration;
 
+import com.krickert.search.config.consul.DynamicConfigurationManager;
 import com.krickert.search.config.consul.service.ConsulBusinessOperationsService;
 import com.krickert.search.config.pipeline.model.*;
 import com.krickert.search.engine.core.PipelineEngine;
@@ -41,6 +42,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Property(name = "kafka.enabled", value = "true")
 @Property(name = "kafka.schema.registry.type", value = "apicurio")
 @Property(name = "engine.event-driven.enabled", value = "true")
+@Property(name = "kafka.slot-manager.enabled", value = "false")
 class KafkaServiceEngineIntegrationTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(KafkaServiceEngineIntegrationTest.class);
@@ -55,6 +57,9 @@ class KafkaServiceEngineIntegrationTest {
     
     @Inject
     ConsulBusinessOperationsService consulOps;
+    
+    @Inject
+    DynamicConfigurationManager configManager;
     
     @Inject
     PipelineEngine pipelineEngine;
@@ -267,7 +272,7 @@ class KafkaServiceEngineIntegrationTest {
             consulOps.storeClusterConfiguration(testClusterName, config).block();
             
             // Retrieve and verify
-            var retrievedConfig = consulOps.getClusterConfiguration(testClusterName).block();
+            var retrievedConfig = consulOps.getPipelineClusterConfig(testClusterName).block().orElse(null);
             assertNotNull(retrievedConfig, "Should be able to retrieve stored configuration");
             assertEquals(config.clusterName(), retrievedConfig.clusterName(), 
                 "Retrieved configuration should match stored configuration");
@@ -620,7 +625,6 @@ class KafkaServiceEngineIntegrationTest {
     private PipelineClusterConfig buildClusterConfig(String pipelineName, Map<String, PipelineStepConfig> steps) {
         PipelineConfig pipeline = PipelineConfig.builder()
             .name(pipelineName)
-            .description("Integration test pipeline: " + pipelineName)
             .pipelineSteps(steps)
             .build();
             
@@ -634,7 +638,6 @@ class KafkaServiceEngineIntegrationTest {
         
         return PipelineClusterConfig.builder()
             .clusterName(TEST_CLUSTER_NAME)
-            .description("Integration test cluster configuration")
             .pipelineGraphConfig(graphConfig)
             .pipelineModuleMap(moduleMap)
             .defaultPipelineName(pipelineName)
@@ -657,25 +660,21 @@ class KafkaServiceEngineIntegrationTest {
         modules.put("yappy-echo", PipelineModuleConfiguration.builder()
             .implementationName("Echo Test Module")
             .implementationId("yappy-echo")
-            .description("Simple echo module for testing")
             .build());
             
         modules.put("yappy-chunker", PipelineModuleConfiguration.builder()
             .implementationName("Document Chunker")
             .implementationId("yappy-chunker")
-            .description("Splits documents into chunks")
             .build());
             
         modules.put("yappy-tika-parser", PipelineModuleConfiguration.builder()
             .implementationName("Tika Document Parser")
             .implementationId("yappy-tika-parser")
-            .description("Extracts text from documents")
             .build());
             
         modules.put("yappy-embedder", PipelineModuleConfiguration.builder()
             .implementationName("Document Embedder")
             .implementationId("yappy-embedder")
-            .description("Generates vector embeddings")
             .build());
         
         return modules;

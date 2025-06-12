@@ -9,6 +9,7 @@ dependencies {
     implementation(project(":yappy-models:protobuf-models"))
     implementation(project(":yappy-consul-config"))
     implementation(project(":yappy-orchestrator:engine-core"))
+    implementation(project(":yappy-orchestrator:kafka-service"))
     testImplementation(project(":yappy-models:protobuf-models-test-data-resources"))
     testImplementation(project(":yappy-test-resources:yappy-engine-test-resource"))
     testImplementation(project(":yappy-test-resources:yappy-chunker-test-resource"))
@@ -30,6 +31,12 @@ dependencies {
     
     // Logging
     runtimeOnly("ch.qos.logback:logback-classic")
+    
+    // Test resources implementation dependencies
+    testResourcesImplementation("org.testcontainers:kafka:1.21.1")
+    testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
 }
 
 micronaut {
@@ -37,6 +44,11 @@ micronaut {
     processing {
         incremental(true)
         annotations("com.krickert.search.*")
+    }
+    testResources {
+        enabled = true
+        sharedServer = true
+        clientTimeout = 60
     }
 }
 
