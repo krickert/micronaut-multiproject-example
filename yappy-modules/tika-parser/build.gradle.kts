@@ -93,6 +93,11 @@ tasks.named("startScripts") {
     dependsOn("shadowJar")
 }
 
+// Fix the implicit dependency between startShadowScripts and jar
+tasks.named("startShadowScripts") {
+    dependsOn("jar")
+}
+
 // Docker configuration for native image
 tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative") {
     jdkVersion = "21"

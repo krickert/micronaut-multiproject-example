@@ -15,8 +15,11 @@ test-module:
 # Consul configuration - will be provided by test resources
 consul:
   client:
+    enabled: false  # Disable consul client creation for tests
+    host: ${consul.host:localhost}
+    port: ${consul.port:8500}
     registration:
       enabled: false  # Don't register the test itself
   # Host/port for backwards compatibility
-  host: localhost
-  port: 8500
+  host: ${consul.host:localhost}
+  port: ${consul.port:8500}

@@ -22,10 +22,18 @@ micronaut:
     name: engine-core-test
   config-client:
     enabled: false
+  test-resources:
+    enabled: true
+
+# Ensure testcontainers are enabled
+testcontainers:
+  enabled: true
+  consul: true
 
 # Consul configuration for test environment
 consul:
   client:
+    enabled: true  # Explicitly enable consul client
     # IMPORTANT: DO NOT set enabled: false here
     # Test Resources provides consul.client.host and consul.client.port automatically
     registration:

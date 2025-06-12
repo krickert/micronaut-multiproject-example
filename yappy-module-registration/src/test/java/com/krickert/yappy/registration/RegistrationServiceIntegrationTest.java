@@ -1,8 +1,5 @@
 package com.krickert.yappy.registration;
 
-import com.ecwid.consul.v1.ConsulClient;
-import com.ecwid.consul.v1.health.HealthServicesRequest;
-import com.ecwid.consul.v1.health.model.HealthService;
 import com.google.protobuf.Empty;
 import com.krickert.search.sdk.PipeStepProcessorGrpc;
 import com.krickert.search.sdk.ServiceRegistrationData;
@@ -48,16 +45,9 @@ public class RegistrationServiceIntegrationTest {
     @Property(name = "test-module.grpc.port")
     Integer testModuleGrpcPort;
     
-    @Property(name = "consul.host")
-    String consulHost;
-    
-    @Property(name = "consul.port")
-    Integer consulPort;
-    
     private Server mockEngineServer;
     private int mockEnginePort;
     private MockEngineRegistrationService mockEngineService;
-    private ConsulClient consulClient;
     
     private Server mockModuleServer;
     private MockPipeStepProcessor mockModuleService;
@@ -84,9 +74,6 @@ public class RegistrationServiceIntegrationTest {
                 .start();
         
         LOG.info("Started mock module gRPC server on port {}", testModuleGrpcPort);
-        
-        // Create Consul client for verification (this will be a mock in simplified test)
-        consulClient = new ConsulClient(consulHost, consulPort);
     }
     
     @AfterAll

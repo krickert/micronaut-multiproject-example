@@ -1,6 +1,7 @@
 package com.krickert.search.engine.core;
 
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Basic test to verify test resources are working
  */
 @MicronautTest(startApplication = false)
+@Property(name = "micronaut.test-resources.enabled", value = "true")
 public class BasicTestResourcesTest {
     
     private static final Logger logger = LoggerFactory.getLogger(BasicTestResourcesTest.class);

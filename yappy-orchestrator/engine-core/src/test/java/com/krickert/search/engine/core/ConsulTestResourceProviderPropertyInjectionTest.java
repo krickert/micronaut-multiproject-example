@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * for Consul is active.
  */
 @MicronautTest(startApplication = false, environments = {"test"}) // We don't need the full app, just property resolution
-@Property(name = "micronaut.test.resources.enabled", value = "true")
+@Property(name = "micronaut.test-resources.enabled", value = "true")
 class ConsulTestResourceProviderPropertyInjectionTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConsulTestResourceProviderPropertyInjectionTest.class);
@@ -30,28 +30,11 @@ class ConsulTestResourceProviderPropertyInjectionTest {
     @Inject
     Environment environment;
 
-    // You can also try to inject specific properties if you want to test their direct injection
-    // For example, if these are used by some bean:
-    @Property(name = ConsulTestResourceProvider.PROPERTY_CONSUL_CLIENT_HOST)
-    String consulClientHost;
-
-    @Property(name = ConsulTestResourceProvider.PROPERTY_CONSUL_CLIENT_PORT)
-    String consulClientPort;
-
-    @Property(name = ConsulTestResourceProvider.PROPERTY_CONSUL_CLIENT_DEFAULT_ZONE)
-    String consulDefaultZone;
-
-    // Add more for discovery and registration if needed for your test scope
-    @Property(name = ConsulTestResourceProvider.PROPERTY_CONSUL_DISCOVERY_HOST)
-    String consulDiscoveryHost;
-
-    @Property(name = ConsulTestResourceProvider.PROPERTY_CONSUL_DISCOVERY_PORT)
-    String consulDiscoveryPort;
-
 
     @Test
     @DisplayName("Should inject Consul client host resolved by TestResources")
     void testConsulClientHostInjected() {
+        String consulClientHost = environment.getProperty(ConsulTestResourceProvider.PROPERTY_CONSUL_CLIENT_HOST, String.class).orElse(null);
         assertNotNull(consulClientHost, "Consul client host should be injected");
         assertFalse(consulClientHost.isBlank(), "Consul client host should not be blank");
         LOG.info("Injected consul.client.host: {}", consulClientHost);
@@ -62,6 +45,7 @@ class ConsulTestResourceProviderPropertyInjectionTest {
     @Test
     @DisplayName("Should inject Consul client port resolved by TestResources")
     void testConsulClientPortInjected() {
+        String consulClientPort = environment.getProperty(ConsulTestResourceProvider.PROPERTY_CONSUL_CLIENT_PORT, String.class).orElse(null);
         assertNotNull(consulClientPort, "Consul client port should be injected");
         assertFalse(consulClientPort.isBlank(), "Consul client port should not be blank");
         try {
@@ -75,6 +59,9 @@ class ConsulTestResourceProviderPropertyInjectionTest {
     @Test
     @DisplayName("Should inject Consul client default-zone resolved by TestResources")
     void testConsulDefaultZoneInjected() {
+        String consulDefaultZone = environment.getProperty(ConsulTestResourceProvider.PROPERTY_CONSUL_CLIENT_DEFAULT_ZONE, String.class).orElse(null);
+        String consulClientHost = environment.getProperty(ConsulTestResourceProvider.PROPERTY_CONSUL_CLIENT_HOST, String.class).orElse(null);
+        String consulClientPort = environment.getProperty(ConsulTestResourceProvider.PROPERTY_CONSUL_CLIENT_PORT, String.class).orElse(null);
         assertNotNull(consulDefaultZone, "Consul default zone should be injected");
         assertFalse(consulDefaultZone.isBlank(), "Consul default zone should not be blank");
         assertTrue(consulDefaultZone.contains(consulClientHost), "Default zone should contain host");
@@ -85,6 +72,8 @@ class ConsulTestResourceProviderPropertyInjectionTest {
     @Test
     @DisplayName("Should inject Consul discovery host resolved by TestResources")
     void testConsulDiscoveryHostInjected() {
+        String consulDiscoveryHost = environment.getProperty(ConsulTestResourceProvider.PROPERTY_CONSUL_DISCOVERY_HOST, String.class).orElse(null);
+        String consulClientHost = environment.getProperty(ConsulTestResourceProvider.PROPERTY_CONSUL_CLIENT_HOST, String.class).orElse(null);
         assertNotNull(consulDiscoveryHost, "Consul discovery host should be injected");
         assertEquals(consulClientHost, consulDiscoveryHost, "Discovery host should match client host");
         LOG.info("Injected consul.client.discovery.host: {}", consulDiscoveryHost);
@@ -93,6 +82,8 @@ class ConsulTestResourceProviderPropertyInjectionTest {
     @Test
     @DisplayName("Should inject Consul discovery port resolved by TestResources")
     void testConsulDiscoveryPortInjected() {
+        String consulDiscoveryPort = environment.getProperty(ConsulTestResourceProvider.PROPERTY_CONSUL_DISCOVERY_PORT, String.class).orElse(null);
+        String consulClientPort = environment.getProperty(ConsulTestResourceProvider.PROPERTY_CONSUL_CLIENT_PORT, String.class).orElse(null);
         assertNotNull(consulDiscoveryPort, "Consul discovery port should be injected");
         assertEquals(consulClientPort, consulDiscoveryPort, "Discovery port should match client port");
         LOG.info("Injected consul.client.discovery.port: {}", consulDiscoveryPort);

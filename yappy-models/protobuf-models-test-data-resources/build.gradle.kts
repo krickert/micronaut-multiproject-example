@@ -79,6 +79,16 @@ tasks.named<Jar>("sourcesJar") {
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 
+// Configure test task to pass system properties
+tasks.test {
+    useJUnitPlatform()
+    
+    // Pass all system properties starting with "yappy." to tests
+    systemProperties = System.getProperties().filterKeys { 
+        it.toString().startsWith("yappy.")
+    }.mapKeys { it.key.toString() }
+}
+
 // Publishing configuration
 publishing {
     publications {
