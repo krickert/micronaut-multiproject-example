@@ -45,23 +45,37 @@ public class ConfigurationBasedRoutingStrategy implements RoutingStrategy {
     public Mono<RouteData> determineRoute(PipeStream pipeStream) {
         String pipelineName = pipeStream.getCurrentPipelineName();
         String targetStepName = pipeStream.getTargetStepName();
+        String streamId = pipeStream.getStreamId();
         
         if (targetStepName == null || targetStepName.isBlank()) {
-            return Mono.error(new IllegalArgumentException(
-                    "No target step specified in PipeStream"));
+            // TODO: Improve error handling - consider returning completed Mono for empty target steps
+            // instead of error, as this might be a valid end-of-pipeline condition
+            String errorMsg = String.format("No target step specified in PipeStream (streamId=%s, pipeline=%s)", 
+                    streamId, pipelineName);
+            logger.warn(errorMsg);
+            return Mono.error(new IllegalArgumentException(errorMsg));
         }
         
-        logger.debug("Determining route for pipeline: {}, step: {}", 
-                pipelineName, targetStepName);
+        logger.debug("Determining route for pipeline: {}, step: {}, streamId: {}", 
+                pipelineName, targetStepName, streamId);
         
         // Get pipeline configuration
         return businessOpsService.getSpecificPipelineConfig(clusterName, pipelineName)
                 .flatMap(optionalConfig -> {
                     if (optionalConfig.isEmpty()) {
-                        return Mono.error(new IllegalStateException(
-                                "Pipeline configuration not found: " + pipelineName));
+                        // TODO: Add timeout handling for Consul configuration retrieval
+                        // TODO: Consider caching pipeline configurations to avoid repeated Consul lookups
+                        String errorMsg = String.format("Pipeline configuration not found (cluster=%s, pipeline=%s, streamId=%s)", 
+                                clusterName, pipelineName, streamId);
+                        logger.error(errorMsg);
+                        return Mono.error(new IllegalStateException(errorMsg));
                     }
                     return determineRouteFromConfig(pipeStream, optionalConfig.get(), targetStepName);
+                })
+                .doOnError(error -> {
+                    // TODO: Add comprehensive error categorization for better debugging
+                    logger.error("Failed to determine route for streamId={}, pipeline={}, step={}: {}", 
+                            streamId, pipelineName, targetStepName, error.getMessage());
                 });
     }
     
@@ -70,8 +84,13 @@ public class ConfigurationBasedRoutingStrategy implements RoutingStrategy {
                                                      String targetStepName) {
         Map<String, PipelineStepConfig> steps = config.pipelineSteps();
         if (steps == null || !steps.containsKey(targetStepName)) {
-            return Mono.error(new IllegalArgumentException(
-                    "Step not found in pipeline configuration: " + targetStepName));
+            // TODO: Add step name suggestions for typos (e.g., "Did you mean: step1, step2?")
+            // TODO: Consider graceful degradation instead of hard failure for non-critical steps
+            String availableSteps = steps != null ? String.join(", ", steps.keySet()) : "none";
+            String errorMsg = String.format("Step '%s' not found in pipeline '%s' (streamId=%s). Available steps: [%s]", 
+                    targetStepName, config.name(), pipeStream.getStreamId(), availableSteps);
+            logger.error(errorMsg);
+            return Mono.error(new IllegalArgumentException(errorMsg));
         }
         
         PipelineStepConfig stepConfig = steps.get(targetStepName);

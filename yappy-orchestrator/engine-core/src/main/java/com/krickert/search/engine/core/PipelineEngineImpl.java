@@ -26,6 +26,7 @@ import reactor.core.publisher.Mono;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -86,9 +87,10 @@ public class PipelineEngineImpl implements PipelineEngine {
     @Override
     public Mono<Void> processMessage(PipeStream pipeStream) {
         return Mono.defer(() -> {
-            logger.info("Processing PipeStream: streamId={}, pipeline={}, hop={}", 
+            logger.info("Processing PipeStream: streamId={}, pipeline={}, targetStep={}, hop={}", 
                 pipeStream.getStreamId(), 
                 pipeStream.getCurrentPipelineName(),
+                pipeStream.getTargetStepName(),
                 pipeStream.getCurrentHopNumber());
             
             // Check if target step is set for routing
@@ -99,11 +101,19 @@ public class PipelineEngineImpl implements PipelineEngine {
             }
             
             // Use Router to handle the message routing
+            // TODO: Add configurable timeout for routing operations to prevent hanging
+            // TODO: Add circuit breaker pattern for routing failures
             return router.route(pipeStream)
+                .timeout(Duration.ofSeconds(30)) // Prevent hanging on route operations
                 .doOnSuccess(v -> logger.debug("Successfully routed message {} to step {}", 
                     pipeStream.getStreamId(), pipeStream.getTargetStepName()))
-                .doOnError(e -> logger.error("Failed to route message {} to step {}: {}", 
-                    pipeStream.getStreamId(), pipeStream.getTargetStepName(), e.getMessage()));
+                .doOnError(e -> {
+                    // TODO: Add error categorization (timeout, config not found, step not found, etc.)
+                    String errorMsg = String.format("Failed to route message %s to step %s in pipeline %s: %s", 
+                            pipeStream.getStreamId(), pipeStream.getTargetStepName(), 
+                            pipeStream.getCurrentPipelineName(), e.getMessage());
+                    logger.error(errorMsg, e);
+                });
         })
         .doOnError(error -> logger.error("Error processing stream {}: {}", 
             pipeStream.getStreamId(), error.getMessage(), error))

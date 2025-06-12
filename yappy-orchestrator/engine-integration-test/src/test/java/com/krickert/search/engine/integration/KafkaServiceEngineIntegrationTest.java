@@ -211,11 +211,12 @@ class KafkaServiceEngineIntegrationTest {
             .setTargetStepName("non-existent-step")
             .build();
         
-        // Should complete without throwing (graceful error handling)
+        // Should return an error for non-existent step (improved error handling)
         StepVerifier.create(pipelineEngine.processMessage(invalidMessage))
-            .verifyComplete();
+            .expectError(IllegalStateException.class)
+            .verify();
             
-        LOG.info("✅ Pipeline gracefully handled message with invalid target step");
+        LOG.info("✅ Pipeline properly rejected message with invalid target step");
         
         // 2. Test processing message with no target step (pipeline completion)
         PipeStream completedMessage = createTestPipeStream().toBuilder()
