@@ -25,6 +25,9 @@ public class ConsulClientFactory {
     // Default values for connection pool, good for clarity and consistency
     private static final int DEFAULT_MAX_IDLE_CONNECTIONS = 5;
     private static final long DEFAULT_KEEP_ALIVE_MINUTES = 5L;
+    
+    // Keep a reference to the created Consul client for cleanup
+    private Consul consulClient;
 
     @Bean
     @Singleton // Explicitly mark the Consul client as a Singleton
@@ -42,11 +45,13 @@ public class ConsulClientFactory {
         // Create a configurable ConnectionPool
         ConnectionPool consulConnectionPool = new ConnectionPool(maxIdleConnections, keepAliveMinutes, TimeUnit.MINUTES);
 
-        return Consul.builder()
+        consulClient = Consul.builder()
                 .withHostAndPort(HostAndPort.fromParts(host, port))
                 .withConnectionPool(consulConnectionPool)
                 .withClientConfiguration(clientConfig) // Use the ClientConfig bean
                 .build();
+        
+        return consulClient;
     }
 
     /**
@@ -95,14 +100,19 @@ public class ConsulClientFactory {
      * Properly close the Consul client when the application context shuts down.
      * This ensures that all resources (like connection pools and executor services
      * managed by the kiwiproject.consul.Consul client) are released gracefully.
-     *
-     * @param consulClient the Consul client to close
      */
     @PreDestroy
-    public void closeConsulClient(Consul consulClient) {
+    public void closeConsulClient() {
         if (consulClient != null && !consulClient.isDestroyed()) {
-            LOG.info("Closing Consul client and releasing resources for host: {}", consulClient.agentClient().getAgent().getConfig().getDatacenter());
             try {
+                // Try to get datacenter for logging, but don't fail if it throws
+                String datacenter = "unknown";
+                try {
+                    datacenter = consulClient.agentClient().getAgent().getConfig().getDatacenter();
+                } catch (Exception e) {
+                    // Ignore - during test shutdown, agent might not be available
+                }
+                LOG.info("Closing Consul client and releasing resources for host: {}", datacenter);
                 consulClient.destroy();
                 LOG.debug("Consul client successfully closed.");
             } catch (Exception e) {
@@ -113,7 +123,7 @@ public class ConsulClientFactory {
         } else if (consulClient != null && consulClient.isDestroyed()) {
             LOG.debug("Consul client was already destroyed.");
         } else {
-            LOG.warn("Consul client was null in @PreDestroy, cannot close.");
+            LOG.debug("Consul client was null in @PreDestroy, nothing to close.");
         }
     }
 }
