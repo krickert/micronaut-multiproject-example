@@ -3,6 +3,9 @@ package com.krickert.search.engine.core.transport.kafka;
 import com.krickert.search.engine.core.routing.RouteData;
 import com.krickert.search.engine.core.transport.MessageForwarder;
 import com.krickert.search.model.PipeStream;
+import com.krickert.search.orchestrator.kafka.producer.KafkaForwarder;
+import io.micronaut.context.annotation.Requires;
+import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,24 +13,38 @@ import reactor.core.publisher.Mono;
 import java.util.Optional;
 
 /**
- * Stub implementation for Kafka message forwarding.
- * TODO: Implement actual Kafka integration when ready.
+ * Kafka message forwarder that integrates with the yappy-orchestrator kafka-service.
+ * This implementation uses the KafkaForwarder from the kafka-service module to
+ * send PipeStream messages to Kafka topics.
  */
 @Singleton
+@Requires(property = "kafka.enabled", value = "true")
 public class KafkaMessageForwarder implements MessageForwarder {
     
     private static final Logger logger = LoggerFactory.getLogger(KafkaMessageForwarder.class);
     
+    private final KafkaForwarder kafkaForwarder;
+    
+    @Inject
+    public KafkaMessageForwarder(KafkaForwarder kafkaForwarder) {
+        this.kafkaForwarder = kafkaForwarder;
+        logger.info("KafkaMessageForwarder initialized with kafka-service integration");
+    }
+    
     @Override
     public Mono<Optional<PipeStream>> forward(PipeStream pipeStream, RouteData routeData) {
-        // Stub implementation - just log for now
-        logger.info("STUB: Would forward message {} to Kafka topic {} for step {}", 
+        logger.debug("Forwarding message {} to Kafka topic {} for step {}", 
             pipeStream.getStreamId(), 
             routeData.destinationService(),
             routeData.targetStepName());
         
-        // Kafka forwarder doesn't return processed streams since it's async
-        return Mono.just(Optional.empty());
+        // Use the kafka-service KafkaForwarder to send the message
+        return kafkaForwarder.forwardToKafka(pipeStream, routeData.destinationService())
+            .doOnSuccess(v -> logger.debug("Successfully forwarded message {} to topic {}", 
+                pipeStream.getStreamId(), routeData.destinationService()))
+            .doOnError(e -> logger.error("Failed to forward message {} to topic {}: {}", 
+                pipeStream.getStreamId(), routeData.destinationService(), e.getMessage(), e))
+            .then(Mono.just(Optional.empty())); // Kafka is async, no immediate response
     }
     
     @Override

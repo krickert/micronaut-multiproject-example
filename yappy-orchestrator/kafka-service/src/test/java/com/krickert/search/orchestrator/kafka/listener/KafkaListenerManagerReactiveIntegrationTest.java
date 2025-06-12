@@ -313,10 +313,103 @@ class KafkaListenerManagerReactiveIntegrationTest {
     }
     
     @Test
-    @Disabled("TODO: Implement when pipeline model is clarified")
     void testMultipleListenersFromConfiguration() {
-        // TODO: This test needs to be implemented once we understand the correct
-        // pipeline configuration model structure
+        LOG.info("Testing multiple listeners creation from configuration");
+        
+        // Create additional topics for multiple listeners
+        String topic2 = "reactive-test-topic-2";
+        String topic3 = "reactive-test-topic-3";
+        
+        List<NewTopic> additionalTopics = List.of(
+            new NewTopic(topic2, 1, (short) 1),
+            new NewTopic(topic3, 1, (short) 1)
+        );
+        
+        try {
+            adminClient.createTopics(additionalTopics).all().get();
+            LOG.info("Created additional topics: {}, {}", topic2, topic3);
+        } catch (ExecutionException e) {
+            if (e.getCause().getMessage().contains("already exists")) {
+                LOG.info("Additional topics already exist");
+            } else {
+                throw new RuntimeException("Failed to create additional topics", e);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create additional topics", e);
+        }
+        
+        // Create configuration with multiple Kafka input steps
+        PipelineClusterConfig config = createMultiListenerConfig(topic2, topic3);
+        
+        // Store configuration
+        consulOps.storeClusterConfiguration(TEST_CLUSTER_NAME, config).block();
+        LOG.info("Stored multi-listener configuration in Consul");
+        
+        // Wait for all listeners to be created via configuration events
+        await().atMost(Duration.ofSeconds(15))
+            .pollInterval(Duration.ofMillis(500))
+            .untilAsserted(() -> {
+                int expectedListeners = 3; // Original topic + 2 additional topics
+                assertEquals(expectedListeners, listenerPool.getListenerCount(), 
+                    "Should have " + expectedListeners + " listeners created from configuration");
+                
+                // Verify all listeners are for the correct topics
+                Collection<DynamicKafkaListener> listeners = listenerPool.getAllListeners();
+                Set<String> actualTopics = new HashSet<>();
+                for (DynamicKafkaListener listener : listeners) {
+                    actualTopics.add(listener.getTopic());
+                }
+                
+                Set<String> expectedTopics = Set.of(TOPIC_NAME, topic2, topic3);
+                assertEquals(expectedTopics, actualTopics, 
+                    "Listeners should be created for all configured topics");
+                
+                LOG.info("✅ Successfully created {} listeners for topics: {}", 
+                    listeners.size(), actualTopics);
+            });
+        
+        // Verify listener statuses
+        Map<String, ConsumerStatus> statuses = kafkaListenerManager.getConsumerStatuses();
+        assertEquals(3, statuses.size(), "Should have status for all 3 listeners");
+        
+        for (ConsumerStatus status : statuses.values()) {
+            assertFalse(status.paused(), "All listeners should be active initially");
+            assertTrue(status.topic().equals(TOPIC_NAME) || status.topic().equals(topic2) || status.topic().equals(topic3),
+                "Status should be for one of our test topics");
+        }
+        
+        // Test updating configuration (remove one listener)
+        PipelineClusterConfig updatedConfig = createUpdatedMultiListenerConfig(topic2);
+        consulOps.storeClusterConfiguration(TEST_CLUSTER_NAME, updatedConfig).block();
+        LOG.info("Updated configuration to remove one listener");
+        
+        // Wait for listener count to decrease
+        await().atMost(Duration.ofSeconds(10))
+            .pollInterval(Duration.ofMillis(500))
+            .untilAsserted(() -> {
+                assertEquals(2, listenerPool.getListenerCount(), 
+                    "Should have 2 listeners after removing one from configuration");
+                
+                Collection<DynamicKafkaListener> listeners = listenerPool.getAllListeners();
+                Set<String> actualTopics = new HashSet<>();
+                for (DynamicKafkaListener listener : listeners) {
+                    actualTopics.add(listener.getTopic());
+                }
+                
+                Set<String> expectedTopics = Set.of(TOPIC_NAME, topic2);
+                assertEquals(expectedTopics, actualTopics, 
+                    "Should have listeners for original topic and topic2 only");
+                
+                LOG.info("✅ Successfully updated listeners to: {}", actualTopics);
+            });
+        
+        // Clean up additional topics
+        try {
+            adminClient.deleteTopics(List.of(topic2, topic3)).all().get();
+            LOG.info("Cleaned up additional topics");
+        } catch (Exception e) {
+            LOG.warn("Failed to clean up additional topics: {}", e.getMessage());
+        }
     }
     
     @Test
@@ -401,6 +494,199 @@ class KafkaListenerManagerReactiveIntegrationTest {
             .pipelineModuleMap(pipelineModuleMap)
             .defaultPipelineName(PIPELINE_NAME)
             .allowedKafkaTopics(Set.of(TOPIC_NAME))
+            .allowedGrpcServices(Set.of("kafka-listener-service"))
+            .build();
+    }
+    
+    private PipelineClusterConfig createMultiListenerConfig(String topic2, String topic3) {
+        // Create processor info for the steps
+        PipelineStepConfig.ProcessorInfo processorInfo = PipelineStepConfig.ProcessorInfo.builder()
+            .grpcServiceName("kafka-listener-service")
+            .build();
+        
+        // Create multiple Kafka input steps
+        Map<String, PipelineStepConfig> pipelineSteps = new HashMap<>();
+        
+        // Step 1: Original topic
+        List<KafkaInputDefinition> kafkaInputs1 = List.of(
+            KafkaInputDefinition.builder()
+                .listenTopics(List.of(TOPIC_NAME))
+                .consumerGroupId(GROUP_ID)
+                .kafkaConsumerProperties(Map.of(
+                    "auto.offset.reset", "earliest",
+                    "max.poll.records", "100"))
+                .build()
+        );
+        
+        PipelineStepConfig step1 = PipelineStepConfig.builder()
+            .stepName(STEP_NAME)
+            .stepType(StepType.INITIAL_PIPELINE)
+            .description("First Kafka input step")
+            .kafkaInputs(kafkaInputs1)
+            .processorInfo(processorInfo)
+            .build();
+        pipelineSteps.put(step1.stepName(), step1);
+        
+        // Step 2: Second topic
+        List<KafkaInputDefinition> kafkaInputs2 = List.of(
+            KafkaInputDefinition.builder()
+                .listenTopics(List.of(topic2))
+                .consumerGroupId(GROUP_ID + "-2")
+                .kafkaConsumerProperties(Map.of(
+                    "auto.offset.reset", "earliest",
+                    "max.poll.records", "50"))
+                .build()
+        );
+        
+        PipelineStepConfig step2 = PipelineStepConfig.builder()
+            .stepName(STEP_NAME + "-2")
+            .stepType(StepType.INITIAL_PIPELINE)
+            .description("Second Kafka input step")
+            .kafkaInputs(kafkaInputs2)
+            .processorInfo(processorInfo)
+            .build();
+        pipelineSteps.put(step2.stepName(), step2);
+        
+        // Step 3: Third topic
+        List<KafkaInputDefinition> kafkaInputs3 = List.of(
+            KafkaInputDefinition.builder()
+                .listenTopics(List.of(topic3))
+                .consumerGroupId(GROUP_ID + "-3")
+                .kafkaConsumerProperties(Map.of(
+                    "auto.offset.reset", "latest",
+                    "max.poll.records", "200"))
+                .build()
+        );
+        
+        PipelineStepConfig step3 = PipelineStepConfig.builder()
+            .stepName(STEP_NAME + "-3")
+            .stepType(StepType.INITIAL_PIPELINE)
+            .description("Third Kafka input step")
+            .kafkaInputs(kafkaInputs3)
+            .processorInfo(processorInfo)
+            .build();
+        pipelineSteps.put(step3.stepName(), step3);
+        
+        // Create pipeline with all steps
+        PipelineConfig pipeline = PipelineConfig.builder()
+            .name(PIPELINE_NAME)
+            .pipelineSteps(pipelineSteps)
+            .build();
+        
+        // Create pipeline graph
+        Map<String, PipelineConfig> pipelines = new HashMap<>();
+        pipelines.put(pipeline.name(), pipeline);
+        
+        PipelineGraphConfig pipelineGraphConfig = PipelineGraphConfig.builder()
+            .pipelines(pipelines)
+            .build();
+        
+        // Create module configuration
+        PipelineModuleConfiguration moduleConfig = PipelineModuleConfiguration.builder()
+            .implementationName("Kafka Listener Service")
+            .implementationId("kafka-listener-service")
+            .build();
+        
+        Map<String, PipelineModuleConfiguration> availableModules = new HashMap<>();
+        availableModules.put(moduleConfig.implementationId(), moduleConfig);
+        
+        PipelineModuleMap pipelineModuleMap = PipelineModuleMap.builder()
+            .availableModules(availableModules)
+            .build();
+        
+        // Create the cluster config with all allowed topics
+        return PipelineClusterConfig.builder()
+            .clusterName(TEST_CLUSTER_NAME)
+            .pipelineGraphConfig(pipelineGraphConfig)
+            .pipelineModuleMap(pipelineModuleMap)
+            .defaultPipelineName(PIPELINE_NAME)
+            .allowedKafkaTopics(Set.of(TOPIC_NAME, topic2, topic3))
+            .allowedGrpcServices(Set.of("kafka-listener-service"))
+            .build();
+    }
+    
+    private PipelineClusterConfig createUpdatedMultiListenerConfig(String topic2) {
+        // Create configuration with only 2 listeners (remove topic3)
+        PipelineStepConfig.ProcessorInfo processorInfo = PipelineStepConfig.ProcessorInfo.builder()
+            .grpcServiceName("kafka-listener-service")
+            .build();
+        
+        Map<String, PipelineStepConfig> pipelineSteps = new HashMap<>();
+        
+        // Step 1: Original topic
+        List<KafkaInputDefinition> kafkaInputs1 = List.of(
+            KafkaInputDefinition.builder()
+                .listenTopics(List.of(TOPIC_NAME))
+                .consumerGroupId(GROUP_ID)
+                .kafkaConsumerProperties(Map.of(
+                    "auto.offset.reset", "earliest",
+                    "max.poll.records", "100"))
+                .build()
+        );
+        
+        PipelineStepConfig step1 = PipelineStepConfig.builder()
+            .stepName(STEP_NAME)
+            .stepType(StepType.INITIAL_PIPELINE)
+            .description("First Kafka input step")
+            .kafkaInputs(kafkaInputs1)
+            .processorInfo(processorInfo)
+            .build();
+        pipelineSteps.put(step1.stepName(), step1);
+        
+        // Step 2: Second topic only
+        List<KafkaInputDefinition> kafkaInputs2 = List.of(
+            KafkaInputDefinition.builder()
+                .listenTopics(List.of(topic2))
+                .consumerGroupId(GROUP_ID + "-2")
+                .kafkaConsumerProperties(Map.of(
+                    "auto.offset.reset", "earliest",
+                    "max.poll.records", "50"))
+                .build()
+        );
+        
+        PipelineStepConfig step2 = PipelineStepConfig.builder()
+            .stepName(STEP_NAME + "-2")
+            .stepType(StepType.INITIAL_PIPELINE)
+            .description("Second Kafka input step")
+            .kafkaInputs(kafkaInputs2)
+            .processorInfo(processorInfo)
+            .build();
+        pipelineSteps.put(step2.stepName(), step2);
+        
+        // Create pipeline with only 2 steps
+        PipelineConfig pipeline = PipelineConfig.builder()
+            .name(PIPELINE_NAME)
+            .pipelineSteps(pipelineSteps)
+            .build();
+        
+        // Create pipeline graph
+        Map<String, PipelineConfig> pipelines = new HashMap<>();
+        pipelines.put(pipeline.name(), pipeline);
+        
+        PipelineGraphConfig pipelineGraphConfig = PipelineGraphConfig.builder()
+            .pipelines(pipelines)
+            .build();
+        
+        // Create module configuration
+        PipelineModuleConfiguration moduleConfig = PipelineModuleConfiguration.builder()
+            .implementationName("Kafka Listener Service")
+            .implementationId("kafka-listener-service")
+            .build();
+        
+        Map<String, PipelineModuleConfiguration> availableModules = new HashMap<>();
+        availableModules.put(moduleConfig.implementationId(), moduleConfig);
+        
+        PipelineModuleMap pipelineModuleMap = PipelineModuleMap.builder()
+            .availableModules(availableModules)
+            .build();
+        
+        // Create the cluster config with only 2 allowed topics
+        return PipelineClusterConfig.builder()
+            .clusterName(TEST_CLUSTER_NAME)
+            .pipelineGraphConfig(pipelineGraphConfig)
+            .pipelineModuleMap(pipelineModuleMap)
+            .defaultPipelineName(PIPELINE_NAME)
+            .allowedKafkaTopics(Set.of(TOPIC_NAME, topic2))
             .allowedGrpcServices(Set.of("kafka-listener-service"))
             .build();
     }
