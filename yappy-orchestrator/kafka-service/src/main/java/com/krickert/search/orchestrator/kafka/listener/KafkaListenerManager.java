@@ -324,13 +324,86 @@ public class KafkaListenerManager implements ApplicationEventListener<PipelineCl
     }
 
     private void addGlueConsumerProperties(Map<String, Object> consumerConfig, String uniquePoolListenerId) {
-        LOG.warn("Listener (Pool ID: {}): Placeholder for addGlueConsumerProperties. AWS Glue Schema Registry consumer configuration not yet implemented.", uniquePoolListenerId);
-        // TODO: Implement Glue properties fetching from ApplicationContext and adding to consumerConfig
-        // Example:
-        // consumerConfig.putIfAbsent(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "software.amazon.awssdk.services.glue.schemaRegistry.serde.GlueSchemaRegistryKafkaDeserializer");
-        // String region = applicationContext.getProperty("aws.region", String.class).orElse("us-east-1");
-        // consumerConfig.put(software.amazon.awssdk.services.glue.schema.registry.configs.AWSSchemaRegistryConstants.AWS_REGION, region);
-        // ... other Glue specific properties
+        LOG.info("Listener (Pool ID: {}): Configuring AWS Glue Schema Registry properties.", uniquePoolListenerId);
+        
+        // Set the Glue deserializer
+        consumerConfig.putIfAbsent(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, 
+                "com.amazonaws.services.schemaregistry.deserializers.GlueSchemaRegistryKafkaDeserializer");
+        
+        // AWS Region configuration
+        String regionPropKey = "kafka.consumers.default.aws.region";
+        String region = applicationContext.getProperty(regionPropKey, String.class)
+                .orElse(applicationContext.getProperty("aws.region", String.class)
+                .orElse("us-east-1"));
+        consumerConfig.put("region", region);
+        consumerConfig.put("aws.region", region); // Some versions use this key
+        LOG.info("Listener (Pool ID: {}): Using AWS region: {}", uniquePoolListenerId, region);
+        
+        // Registry name (optional)
+        String registryNamePropKey = "kafka.consumers.default.registry.name";
+        applicationContext.getProperty(registryNamePropKey, String.class)
+                .or(() -> applicationContext.getProperty("aws.glue.registry.name", String.class))
+                .ifPresent(registryName -> {
+                    consumerConfig.put("registry.name", registryName);
+                    LOG.info("Listener (Pool ID: {}): Using Glue registry name: {}", uniquePoolListenerId, registryName);
+                });
+        
+        // Schema name (optional)
+        String schemaNamePropKey = "kafka.consumers.default.schema.name";
+        applicationContext.getProperty(schemaNamePropKey, String.class)
+                .or(() -> applicationContext.getProperty("aws.glue.schema.name", String.class))
+                .ifPresent(schemaName -> {
+                    consumerConfig.put("schema.name", schemaName);
+                    LOG.info("Listener (Pool ID: {}): Using Glue schema name: {}", uniquePoolListenerId, schemaName);
+                });
+        
+        // Avro record type (if using Avro)
+        String avroRecordTypePropKey = "kafka.consumers.default.avroRecordType";
+        applicationContext.getProperty(avroRecordTypePropKey, String.class)
+                .ifPresent(avroType -> {
+                    consumerConfig.put("avroRecordType", avroType);
+                    LOG.info("Listener (Pool ID: {}): Using Avro record type: {}", uniquePoolListenerId, avroType);
+                });
+        
+        // Secondary deserializer (for when schema is not found)
+        String secondaryDeserializerPropKey = "kafka.consumers.default.secondary.deserializer";
+        String secondaryDeserializer = applicationContext.getProperty(secondaryDeserializerPropKey, String.class)
+                .orElse("io.micronaut.protobuf.serialize.ProtobufDeserializer");
+        consumerConfig.put("secondary.deserializer", secondaryDeserializer);
+        LOG.info("Listener (Pool ID: {}): Using secondary deserializer: {}", uniquePoolListenerId, secondaryDeserializer);
+        
+        // Compatibility setting
+        String compatibilityPropKey = "kafka.consumers.default.compatibility.setting";
+        applicationContext.getProperty(compatibilityPropKey, String.class)
+                .ifPresent(compatibility -> {
+                    consumerConfig.put("compatibility.setting", compatibility);
+                    LOG.info("Listener (Pool ID: {}): Using compatibility setting: {}", uniquePoolListenerId, compatibility);
+                });
+        
+        // Compression type (optional)
+        String compressionPropKey = "kafka.consumers.default.compression.type";
+        applicationContext.getProperty(compressionPropKey, String.class)
+                .ifPresent(compression -> {
+                    consumerConfig.put("compression.type", compression);
+                    LOG.info("Listener (Pool ID: {}): Using compression type: {}", uniquePoolListenerId, compression);
+                });
+        
+        // Cache settings
+        String cacheSizePropKey = "kafka.consumers.default.cache.size";
+        applicationContext.getProperty(cacheSizePropKey, Integer.class)
+                .ifPresent(cacheSize -> {
+                    consumerConfig.put("cache.size", cacheSize);
+                    LOG.info("Listener (Pool ID: {}): Using cache size: {}", uniquePoolListenerId, cacheSize);
+                });
+        
+        String cacheTimeToLivePropKey = "kafka.consumers.default.cache.time-to-live.millis";
+        applicationContext.getProperty(cacheTimeToLivePropKey, Long.class)
+                .ifPresent(ttl -> {
+                    consumerConfig.put("cache.time-to-live.millis", ttl);
+                    LOG.info("Listener (Pool ID: {}): Using cache TTL: {} ms", uniquePoolListenerId, ttl);
+                });
+        
+        LOG.debug("Listener (Pool ID: {}): Completed Glue Schema Registry configuration", uniquePoolListenerId);
     }
 
     public Mono<Void> pauseConsumer(String pipelineName, String stepName, String topic, String groupId) {
