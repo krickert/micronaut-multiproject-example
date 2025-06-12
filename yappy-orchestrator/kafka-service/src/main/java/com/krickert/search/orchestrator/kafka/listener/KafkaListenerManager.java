@@ -28,9 +28,9 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import reactor.core.publisher.Mono;
 
 @Singleton
 @Requires(property = "kafka.enabled", value = "true")
@@ -333,99 +333,109 @@ public class KafkaListenerManager implements ApplicationEventListener<PipelineCl
         // ... other Glue specific properties
     }
 
-    public CompletableFuture<Void> pauseConsumer(String pipelineName, String stepName, String topic, String groupId) {
-        String listenerKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
-        DynamicKafkaListener listener = activeListenerInstanceMap.get(listenerKey);
+    public Mono<Void> pauseConsumer(String pipelineName, String stepName, String topic, String groupId) {
+        return Mono.<Void>defer(() -> {
+            String listenerKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
+            DynamicKafkaListener listener = activeListenerInstanceMap.get(listenerKey);
 
-        if (listener == null) {
-            String errorMsg = String.format("No listener found for key: %s (pipeline: %s, step: %s, topic: %s, group: %s)",
-                    listenerKey, pipelineName, stepName, topic, groupId);
-            LOG.warn(errorMsg);
-            return CompletableFuture.failedFuture(new IllegalArgumentException(errorMsg));
-        }
+            if (listener == null) {
+                String errorMsg = String.format("No listener found for key: %s (pipeline: %s, step: %s, topic: %s, group: %s)",
+                        listenerKey, pipelineName, stepName, topic, groupId);
+                LOG.warn(errorMsg);
+                return Mono.<Void>error(new IllegalArgumentException(errorMsg));
+            }
 
-        CompletableFuture<Void> result = new CompletableFuture<>();
-        try {
-            listener.pause();
-            stateManager.updateState(listener.getListenerId(), new ConsumerState(
-                    listener.getListenerId(), listener.getTopic(), listener.getGroupId(),
-                    true, Instant.now(), Collections.emptyMap()));
-            result.complete(null);
-            LOG.info("Paused Kafka consumer. Key: '{}', Pool ID: '{}'", listenerKey, listener.getListenerId());
-        } catch (Exception e) {
-            LOG.error("Failed to pause Kafka consumer. Key: '{}', Pool ID: '{}'. Error: {}",
-                    listenerKey, listener.getListenerId(), e.getMessage(), e);
-            result.completeExceptionally(e);
-        }
-        return result;
+            return Mono.<Void>fromRunnable(() -> {
+                listener.pause();
+                stateManager.updateState(listener.getListenerId(), new ConsumerState(
+                        listener.getListenerId(), listener.getTopic(), listener.getGroupId(),
+                        true, Instant.now(), Collections.emptyMap()));
+                LOG.info("Paused Kafka consumer. Key: '{}', Pool ID: '{}'", listenerKey, listener.getListenerId());
+            })
+            .onErrorResume(e -> {
+                LOG.error("Failed to pause Kafka consumer. Key: '{}', Pool ID: '{}'. Error: {}",
+                        listenerKey, listener.getListenerId(), e.getMessage(), e);
+                return Mono.error(e);
+            });
+        });
     }
 
-    public CompletableFuture<Void> resumeConsumer(String pipelineName, String stepName, String topic, String groupId) {
-        String listenerKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
-        DynamicKafkaListener listener = activeListenerInstanceMap.get(listenerKey);
+    public Mono<Void> resumeConsumer(String pipelineName, String stepName, String topic, String groupId) {
+        return Mono.<Void>defer(() -> {
+            String listenerKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
+            DynamicKafkaListener listener = activeListenerInstanceMap.get(listenerKey);
 
-        if (listener == null) {
-            String errorMsg = String.format("No listener found for key: %s to resume.", listenerKey);
-            LOG.warn(errorMsg);
-            return CompletableFuture.failedFuture(new IllegalArgumentException(errorMsg));
-        }
-        CompletableFuture<Void> result = new CompletableFuture<>();
-        try {
-            listener.resume();
-            stateManager.updateState(listener.getListenerId(), new ConsumerState(
-                    listener.getListenerId(), listener.getTopic(), listener.getGroupId(),
-                    false, Instant.now(), Collections.emptyMap()));
-            result.complete(null);
-            LOG.info("Resumed Kafka consumer. Key: '{}', Pool ID: '{}'", listenerKey, listener.getListenerId());
-        } catch (Exception e) {
-            LOG.error("Failed to resume Kafka consumer. Key: '{}', Pool ID: '{}'. Error: {}",
-                    listenerKey, listener.getListenerId(), e.getMessage(), e);
-            result.completeExceptionally(e);
-        }
-        return result;
+            if (listener == null) {
+                String errorMsg = String.format("No listener found for key: %s to resume.", listenerKey);
+                LOG.warn(errorMsg);
+                return Mono.<Void>error(new IllegalArgumentException(errorMsg));
+            }
+
+            return Mono.<Void>fromRunnable(() -> {
+                listener.resume();
+                stateManager.updateState(listener.getListenerId(), new ConsumerState(
+                        listener.getListenerId(), listener.getTopic(), listener.getGroupId(),
+                        false, Instant.now(), Collections.emptyMap()));
+                LOG.info("Resumed Kafka consumer. Key: '{}', Pool ID: '{}'", listenerKey, listener.getListenerId());
+            })
+            .onErrorResume(e -> {
+                LOG.error("Failed to resume Kafka consumer. Key: '{}', Pool ID: '{}'. Error: {}",
+                        listenerKey, listener.getListenerId(), e.getMessage(), e);
+                return Mono.error(e);
+            });
+        });
     }
 
-    public CompletableFuture<Void> resetOffsetToDate(String pipelineName, String stepName, String topic, String groupId, Instant date) {
-        String listenerKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
-        DynamicKafkaListener listener = activeListenerInstanceMap.get(listenerKey);
-        if (listener == null) {
-            return CompletableFuture.failedFuture(new IllegalArgumentException("No listener for key: " + listenerKey));
-        }
-        OffsetResetParameters params = OffsetResetParameters.builder(OffsetResetStrategy.TO_TIMESTAMP)
-                .timestamp(date.toEpochMilli())
-                .build();
-        LOG.info("Resetting Kafka consumer offset to date {} for key: '{}', Pool ID: '{}'",
-                date, listenerKey, listener.getListenerId());
+    public Mono<Void> resetOffsetToDate(String pipelineName, String stepName, String topic, String groupId, Instant date) {
+        return Mono.defer(() -> {
+            String listenerKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
+            DynamicKafkaListener listener = activeListenerInstanceMap.get(listenerKey);
+            if (listener == null) {
+                return Mono.error(new IllegalArgumentException("No listener for key: " + listenerKey));
+            }
+            OffsetResetParameters params = OffsetResetParameters.builder(OffsetResetStrategy.TO_TIMESTAMP)
+                    .timestamp(date.toEpochMilli())
+                    .build();
+            LOG.info("Resetting Kafka consumer offset to date {} for key: '{}', Pool ID: '{}'",
+                    date, listenerKey, listener.getListenerId());
 
-        return pauseConsumer(pipelineName, stepName, topic, groupId)
-                .thenCompose(v -> kafkaAdminService.resetConsumerGroupOffsetsAsync(listener.getGroupId(), listener.getTopic(), params))
-                .thenCompose(v -> resumeConsumer(pipelineName, stepName, topic, groupId));
+            return pauseConsumer(pipelineName, stepName, topic, groupId)
+                    .then(Mono.fromFuture(() -> kafkaAdminService.resetConsumerGroupOffsetsAsync(
+                            listener.getGroupId(), listener.getTopic(), params)))
+                    .then(resumeConsumer(pipelineName, stepName, topic, groupId));
+        });
     }
 
-    public CompletableFuture<Void> resetOffsetToEarliest(String pipelineName, String stepName, String topic, String groupId) {
-        String listenerKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
-        DynamicKafkaListener listener = activeListenerInstanceMap.get(listenerKey);
-        if (listener == null) {
-            return CompletableFuture.failedFuture(new IllegalArgumentException("No listener for key: " + listenerKey));
-        }
-        OffsetResetParameters params = OffsetResetParameters.builder(OffsetResetStrategy.EARLIEST).build();
-        LOG.info("Resetting offset to earliest for key: '{}', Pool ID: '{}'", listenerKey, listener.getListenerId());
-        return pauseConsumer(pipelineName, stepName, topic, groupId)
-                .thenCompose(v -> kafkaAdminService.resetConsumerGroupOffsetsAsync(listener.getGroupId(), listener.getTopic(), params))
-                .thenCompose(v -> resumeConsumer(pipelineName, stepName, topic, groupId));
+    public Mono<Void> resetOffsetToEarliest(String pipelineName, String stepName, String topic, String groupId) {
+        return Mono.defer(() -> {
+            String listenerKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
+            DynamicKafkaListener listener = activeListenerInstanceMap.get(listenerKey);
+            if (listener == null) {
+                return Mono.error(new IllegalArgumentException("No listener for key: " + listenerKey));
+            }
+            OffsetResetParameters params = OffsetResetParameters.builder(OffsetResetStrategy.EARLIEST).build();
+            LOG.info("Resetting offset to earliest for key: '{}', Pool ID: '{}'", listenerKey, listener.getListenerId());
+            return pauseConsumer(pipelineName, stepName, topic, groupId)
+                    .then(Mono.fromFuture(() -> kafkaAdminService.resetConsumerGroupOffsetsAsync(
+                            listener.getGroupId(), listener.getTopic(), params)))
+                    .then(resumeConsumer(pipelineName, stepName, topic, groupId));
+        });
     }
 
-    public CompletableFuture<Void> resetOffsetToLatest(String pipelineName, String stepName, String topic, String groupId) {
-        String listenerKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
-        DynamicKafkaListener listener = activeListenerInstanceMap.get(listenerKey);
-        if (listener == null) {
-            return CompletableFuture.failedFuture(new IllegalArgumentException("No listener for key: " + listenerKey));
-        }
-        OffsetResetParameters params = OffsetResetParameters.builder(OffsetResetStrategy.LATEST).build();
-        LOG.info("Resetting offset to latest for key: '{}', Pool ID: '{}'", listenerKey, listener.getListenerId());
-        return pauseConsumer(pipelineName, stepName, topic, groupId)
-                .thenCompose(v -> kafkaAdminService.resetConsumerGroupOffsetsAsync(listener.getGroupId(), listener.getTopic(), params))
-                .thenCompose(v -> resumeConsumer(pipelineName, stepName, topic, groupId));
+    public Mono<Void> resetOffsetToLatest(String pipelineName, String stepName, String topic, String groupId) {
+        return Mono.defer(() -> {
+            String listenerKey = generateListenerInstanceKey(pipelineName, stepName, topic, groupId);
+            DynamicKafkaListener listener = activeListenerInstanceMap.get(listenerKey);
+            if (listener == null) {
+                return Mono.error(new IllegalArgumentException("No listener for key: " + listenerKey));
+            }
+            OffsetResetParameters params = OffsetResetParameters.builder(OffsetResetStrategy.LATEST).build();
+            LOG.info("Resetting offset to latest for key: '{}', Pool ID: '{}'", listenerKey, listener.getListenerId());
+            return pauseConsumer(pipelineName, stepName, topic, groupId)
+                    .then(Mono.fromFuture(() -> kafkaAdminService.resetConsumerGroupOffsetsAsync(
+                            listener.getGroupId(), listener.getTopic(), params)))
+                    .then(resumeConsumer(pipelineName, stepName, topic, groupId));
+        });
     }
 
     public Map<String, ConsumerStatus> getConsumerStatuses() {
