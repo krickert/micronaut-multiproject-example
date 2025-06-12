@@ -29,6 +29,10 @@ dependencies {
     
     implementation("org.slf4j:slf4j-api")
     
+    // Jackson for JSON processing (needed by test resources client)
+    implementation("com.fasterxml.jackson.core:jackson-databind")
+    implementation("io.micronaut.serde:micronaut-serde-jackson")
+    
     testImplementation("org.junit.jupiter:junit-jupiter-api")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
     testImplementation("io.micronaut.test:micronaut-test-junit5")

@@ -26,6 +26,9 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.krickert.search.model.util.TestDataGenerationConfig;
+import com.krickert.search.model.util.DeterministicIdGenerator;
+
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -37,16 +40,28 @@ public class TikaDocumentProcessorTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(TikaDocumentProcessorTest.class);
     private static final String TEST_DOCUMENTS_DIR = "test-documents";
-    private static final String OUTPUT_DIR = "../../yappy-models/protobuf-models-test-data-resources/src/main/resources/test-data/sample-documents";
-    private static final String PIPE_DOC_OUTPUT_DIR = OUTPUT_DIR + "/pipe-docs";
-    private static final String PIPE_STREAM_OUTPUT_DIR = OUTPUT_DIR + "/pipe-streams";
+    private static final String RESOURCES_DIR = "../../yappy-models/protobuf-models-test-data-resources/src/main/resources/test-data/sample-documents";
+    private static final String PIPE_DOC_SUBDIR = "/pipe-docs";
+    private static final String PIPE_STREAM_SUBDIR = "/pipe-streams";
 
     @Test
     @DisplayName("Process all documents in test-documents directory and save output as protobuf binaries")
     void processAllDocumentsAndSaveOutput() throws IOException {
-        // Create output directories if they don't exist
-        Path pipeDocOutputPath = Paths.get(PIPE_DOC_OUTPUT_DIR);
-        Path pipeStreamOutputPath = Paths.get(PIPE_STREAM_OUTPUT_DIR);
+        // Check if regeneration is enabled
+        if (!TestDataGenerationConfig.isRegenerationEnabled()) {
+            LOG.info("Test data regeneration is disabled. Set -D{}=true to enable.", 
+                    TestDataGenerationConfig.REGENERATE_PROPERTY);
+            return;
+        }
+        
+        // Determine output directory based on configuration
+        String baseOutputDir = TestDataGenerationConfig.getOutputDirectory();
+        if (baseOutputDir.equals(TestDataGenerationConfig.DEFAULT_OUTPUT_DIR)) {
+            baseOutputDir = baseOutputDir + "/yappy-test-data";
+        }
+        
+        Path pipeDocOutputPath = Paths.get(baseOutputDir + PIPE_DOC_SUBDIR);
+        Path pipeStreamOutputPath = Paths.get(baseOutputDir + PIPE_STREAM_SUBDIR);
 
         // Clean output directories if they exist
         if (Files.exists(pipeDocOutputPath)) {
@@ -111,8 +126,9 @@ public class TikaDocumentProcessorTest {
                 ParsedDocument parsedDoc = reply.getDoc();
                 assertNotNull(parsedDoc, "Parsed document should not be null");
 
-                // Create PipeDoc
-                String docId = "doc-" + UUID.randomUUID().toString().substring(0, 8);
+                // Create PipeDoc with deterministic ID
+                String docId = "doc-" + DeterministicIdGenerator.generateId(
+                        "doc", pipeDocs.size(), parsedDoc.getBody());
                 PipeDoc pipeDoc = PipeDoc.newBuilder()
                         .setId(docId)
                         .setTitle(parsedDoc.getTitle())
@@ -125,8 +141,9 @@ public class TikaDocumentProcessorTest {
 
                 pipeDocs.add(pipeDoc);
 
-                // Create PipeStream
-                String streamId = "stream-" + UUID.randomUUID().toString().substring(0, 8);
+                // Create PipeStream with deterministic ID
+                String streamId = "stream-" + DeterministicIdGenerator.generateId(
+                        "stream", pipeStreams.size(), docId);
                 PipeStream pipeStream = PipeStream.newBuilder()
                         .setStreamId(streamId)
                         .setDocument(pipeDoc)
@@ -178,6 +195,15 @@ public class TikaDocumentProcessorTest {
         assertTrue(Files.list(pipeStreamOutputPath).count() > 0, "No PipeStream files were created");
 
         LOG.info("Successfully processed all documents and saved output as protobuf binaries");
+        
+        // If not writing to resources directory, provide instructions
+        if (!baseOutputDir.contains("src/main/resources")) {
+            LOG.info("\n=== IMPORTANT ===");
+            LOG.info("Test data was written to temporary directory: {}", baseOutputDir);
+            LOG.info("To update the resources, copy files from there to: {}", RESOURCES_DIR);
+            LOG.info("Or run with -D{}={} to write directly to resources", 
+                    TestDataGenerationConfig.OUTPUT_DIR_PROPERTY, RESOURCES_DIR);
+        }
     }
 
     /**

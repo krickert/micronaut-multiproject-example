@@ -2,6 +2,8 @@ package com.krickert.yappy.modules.chunker;
 
 import com.krickert.search.model.*;
 import com.krickert.search.model.util.ProtobufTestDataHelper;
+import com.krickert.search.model.util.TestDataGenerationConfig;
+import com.krickert.search.model.util.DeterministicIdGenerator;
 import com.google.protobuf.Value;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -24,6 +26,13 @@ public class ChunkerDataSimulatorTest {
 
     @Test
     void simulateChunkerProcessing() throws IOException {
+        // Check if regeneration is enabled
+        if (!TestDataGenerationConfig.isRegenerationEnabled()) {
+            System.out.println("Test data regeneration is disabled. Set -D" + 
+                    TestDataGenerationConfig.REGENERATE_PROPERTY + "=true to enable.");
+            return;
+        }
+        
         // Load Tika output documents (we have 2 from the test data)
         List<PipeDoc> tikaDocs = new ArrayList<>();
         
@@ -62,7 +71,7 @@ public class ChunkerDataSimulatorTest {
                 
                 // Create semantic processing result
                 SemanticProcessingResult.Builder resultBuilder = SemanticProcessingResult.newBuilder()
-                    .setResultId(UUID.randomUUID().toString())
+                    .setResultId(DeterministicIdGenerator.generateId("result", 0, body))
                     .setSourceFieldName("body")
                     .setChunkConfigId("sentence-splitter-v1")
                     .setResultSetName("body_sentences");
@@ -88,7 +97,7 @@ public class ChunkerDataSimulatorTest {
                 List<SemanticChunk> titleChunks = simulateChunking(title, "title-chunks");
                 
                 SemanticProcessingResult titleResult = SemanticProcessingResult.newBuilder()
-                    .setResultId(UUID.randomUUID().toString())
+                    .setResultId(DeterministicIdGenerator.generateId("result", 1, title))
                     .setSourceFieldName("title")
                     .setChunkConfigId("title-processor-v1")
                     .setResultSetName("title_processed")
@@ -103,8 +112,13 @@ public class ChunkerDataSimulatorTest {
             chunkerOutputDocs.add(chunkedDoc);
         }
         
-        // Save chunker output documents directly to test resources
-        Path chunkerDir = Path.of("../../yappy-models/protobuf-models-test-data-resources/src/main/resources/test-data/chunker-pipe-docs");
+        // Determine output directory based on configuration
+        String baseOutputDir = TestDataGenerationConfig.getOutputDirectory();
+        if (baseOutputDir.equals(TestDataGenerationConfig.DEFAULT_OUTPUT_DIR)) {
+            baseOutputDir = baseOutputDir + "/yappy-test-data";
+        }
+        
+        Path chunkerDir = Path.of(baseOutputDir + "/chunker-pipe-docs");
         chunkerDir.toFile().mkdirs();
         
         System.out.println("\nSaving chunker output to: " + chunkerDir);
@@ -131,7 +145,14 @@ public class ChunkerDataSimulatorTest {
             }
         }
         
-        System.out.println("\nNOTE: Copy files from " + chunkerDir + " to test resources");
+        // If not writing to resources directory, provide instructions
+        if (!baseOutputDir.contains("src/main/resources")) {
+            System.out.println("\n=== IMPORTANT ===");
+            System.out.println("Test data was written to temporary directory: " + baseOutputDir);
+            System.out.println("To update the resources, copy files to: ../../yappy-models/protobuf-models-test-data-resources/src/main/resources/test-data/chunker-pipe-docs");
+            System.out.println("Or run with -D" + TestDataGenerationConfig.OUTPUT_DIR_PROPERTY + 
+                    "=../../yappy-models/protobuf-models-test-data-resources/src/main/resources/test-data to write directly to resources");
+        }
     }
     
     /**
@@ -155,7 +176,7 @@ public class ChunkerDataSimulatorTest {
             
             // Create semantic chunk
             SemanticChunk chunk = SemanticChunk.newBuilder()
-                .setChunkId(UUID.randomUUID().toString())
+                .setChunkId(DeterministicIdGenerator.generateId("chunk", i, sentence))
                 .setChunkNumber(i)
                 .setEmbeddingInfo(embeddingInfo)
                 .putMetadata("sentence_index", Value.newBuilder()
@@ -173,7 +194,7 @@ public class ChunkerDataSimulatorTest {
                 .build();
             
             SemanticChunk chunk = SemanticChunk.newBuilder()
-                .setChunkId(UUID.randomUUID().toString())
+                .setChunkId(DeterministicIdGenerator.generateId("chunk", 0, text))
                 .setChunkNumber(0)
                 .setEmbeddingInfo(embeddingInfo)
                 .build();

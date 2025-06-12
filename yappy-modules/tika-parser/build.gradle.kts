@@ -88,6 +88,11 @@ tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
     archiveClassifier.set("")
 }
 
+// Fix the implicit dependency between startScripts and shadowJar
+tasks.named("startScripts") {
+    dependsOn("shadowJar")
+}
+
 // Docker configuration for native image
 tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative") {
     jdkVersion = "21"
