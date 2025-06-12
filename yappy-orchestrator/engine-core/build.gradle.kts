@@ -33,6 +33,7 @@ dependencies {
     api(project(":yappy-models:protobuf-models"))
     api(project(":yappy-models:pipeline-config-models"))
     implementation(project(":yappy-consul-config"))
+    implementation(project(":yappy-orchestrator:kafka-service"))
     
     // Utility dependencies
     implementation(libs.guava)
@@ -70,9 +71,7 @@ dependencies {
     // Test runtime dependencies
     testRuntimeOnly(libs.logback.classic)
     
-    // Kafka support for tests
-    testImplementation(mn.micronaut.kafka)
-    testImplementation("org.apache.kafka:kafka-clients")
+    // Kafka support for tests - provided by kafka-service dependency
     
     // gRPC support for module integration tests
     testImplementation("io.micronaut.grpc:micronaut-grpc-client-runtime")

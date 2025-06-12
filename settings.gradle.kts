@@ -64,6 +64,7 @@ include(
     
     // New orchestrator - clean architecture
     "yappy-orchestrator",
+    "yappy-orchestrator:kafka-service",
     "yappy-orchestrator:engine-core",
     "yappy-orchestrator:engine-integration-test",
 
