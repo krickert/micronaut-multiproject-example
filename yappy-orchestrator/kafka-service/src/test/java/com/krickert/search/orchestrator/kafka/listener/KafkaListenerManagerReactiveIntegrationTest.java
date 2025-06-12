@@ -189,11 +189,15 @@ class KafkaListenerManagerReactiveIntegrationTest {
         StepVerifier.create(pauseResult)
             .verifyComplete();
             
-        // Verify consumer state is paused
-        Map<String, ConsumerStatus> statuses = kafkaListenerManager.getConsumerStatuses();
-        assertEquals(1, statuses.size());
-        ConsumerStatus status = statuses.values().iterator().next();
-        assertTrue(status.paused(), "Consumer should be paused");
+        // Wait for pause to actually take effect (polling loop needs time to process the pause request)
+        await().atMost(Duration.ofSeconds(5))
+            .pollInterval(Duration.ofMillis(100))
+            .untilAsserted(() -> {
+                Map<String, ConsumerStatus> statuses = kafkaListenerManager.getConsumerStatuses();
+                assertEquals(1, statuses.size());
+                ConsumerStatus status = statuses.values().iterator().next();
+                assertTrue(status.paused(), "Consumer should be paused");
+            });
         
         // Test resume
         Mono<Void> resumeResult = kafkaListenerManager.resumeConsumer(PIPELINE_NAME, STEP_NAME, TOPIC_NAME, GROUP_ID);
@@ -201,10 +205,14 @@ class KafkaListenerManagerReactiveIntegrationTest {
         StepVerifier.create(resumeResult)
             .verifyComplete();
             
-        // Verify consumer state is resumed
-        statuses = kafkaListenerManager.getConsumerStatuses();
-        status = statuses.values().iterator().next();
-        assertFalse(status.paused(), "Consumer should be resumed");
+        // Wait for resume to actually take effect
+        await().atMost(Duration.ofSeconds(5))
+            .pollInterval(Duration.ofMillis(100))
+            .untilAsserted(() -> {
+                Map<String, ConsumerStatus> statuses = kafkaListenerManager.getConsumerStatuses();
+                ConsumerStatus status = statuses.values().iterator().next();
+                assertFalse(status.paused(), "Consumer should be resumed");
+            });
     }
     
     @Test
