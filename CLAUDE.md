@@ -29,9 +29,14 @@ The engine handles ALL Consul interactions because:
 YAPPY Engine is a distributed data processing pipeline orchestration system designed as a **pure orchestration layer**. It coordinates data flow through configurable pipelines of simple gRPC microservices (modules) without containing any business logic itself.
 
 ### Current Status
-- **Branch**: `commons-event-driven-architecture` - Implementing event-driven refactoring
-- **Phase**: Engine rewrite Phase 2 (Clean Up Codebase) - Almost complete
-- **Priority**: Stabilize environment → End-to-end testing → Engine rewrite → Kafka service refactoring
+- **Branch**: `commons-event-driven-architecture` - Event-driven architecture implemented
+- **Recent Changes**: 
+  - Renamed `yappy-orchestrator` → `yappy-engine`
+  - Renamed `kafka-service` → `engine-kafka`
+  - Integrated `yappy-kafka-slot-manager` → `engine-kafka-slot-manager`
+  - Created `engine-grpc` module for event-driven gRPC processing
+- **Phase**: Engine modularization complete, integration testing stabilization in progress
+- **Priority**: Fix integration tests → End-to-end pipeline → Production readiness
 
 ### Key Architecture Principles
 
@@ -96,12 +101,13 @@ YAPPY Engine is a distributed data processing pipeline orchestration system desi
 
 ```
 yappy/
-├── yappy-orchestrator/          # Core engine (being modularized)
+├── yappy-engine/               # Core engine (being modularized)
 │   ├── engine-core/            # Interfaces, models, utilities
 │   ├── engine-bootstrap/       # Startup services
 │   ├── engine-registration/    # Module registration
 │   ├── engine-health/          # Health monitoring
 │   ├── engine-kafka/           # Kafka integration
+│   ├── engine-kafka-slot-manager/ # Partition management
 │   ├── engine-pipeline/        # Pipeline execution
 │   ├── engine-grpc/            # gRPC services
 │   └── engine-config/          # Consul configuration
@@ -114,9 +120,8 @@ yappy/
 │   ├── embedder/              # Embeddings (WORKING)
 │   ├── echo/                  # Test module (WORKING)
 │   └── test-module/           # Test module (WORKING)
-├── yappy-commons/              # [TO CREATE] Shared event types
+├── yappy-commons/              # Shared event types
 ├── yappy-consul-config/        # Dynamic configuration
-├── yappy-kafka-slot-manager/   # Partition management
 ├── yappy-module-registration/  # CLI for registration
 └── REQUIREMENTS/               # Comprehensive docs
 ```
@@ -126,18 +131,19 @@ yappy/
 ### Integration Testing Issue
 Found a fundamental flaw in integration testing approach - currently stabilizing this before proceeding.
 
-### Event-Driven Architecture Migration
-- Creating `yappy-commons` module for shared event types
-- Replacing `PipeStreamEngine` with Micronaut events
+### Event-Driven Architecture (COMPLETED)
+- `yappy-commons` module contains shared event types (`PipeStreamProcessingEvent`)
+- Both `engine-kafka` and `engine-grpc` publish events to `engine-core`
+- `PipeStreamProcessingEventListener` in `engine-core` handles all events
 - Events for **same-process messaging only** (not between engine steps)
 - gRPC remains for inter-service communication (scalable via Consul)
 
-### Kafka Service Refactoring
-Almost complete. Key changes:
-1. Replace `PipeStreamEngine` with event publishing
-2. Convert `CompletableFuture` → Project Reactor (`Mono`/`Flux`)
-3. Integrate with slot manager service
-4. Implement AWS Glue properties support
+### Recent Achievements
+1. All engine-core tests passing (84 tests)
+2. Test resources properly configured with demand-driven properties
+3. AWS Glue/Moto integration working
+4. Test data generation made configurable (no duplicates)
+5. Transport-agnostic processing via events
 
 ## How YAPPY Works
 
@@ -183,7 +189,13 @@ gradle dockerBuild
 gradle test
 
 # Run specific module tests
-gradle :yappy-orchestrator:engine-core:test
+gradle :yappy-engine:engine-core:test
+
+# Build without tests (useful for quick compilation checks)
+gradlew :yappy-engine:build -x test
+
+# Run all tests for a module
+gradlew :yappy-engine:engine-kafka:test
 ```
 
 ## Integration Testing Deep Dive
@@ -262,6 +274,7 @@ Every module MUST:
 - `/ENGINE-REWRITE-PROJECT-PLAN.md` - Current development roadmap
 - `/kafka-service-implementation-plan.md` - Kafka service TODOs
 - `/kafka-service-refactoring-analysis.md` - Architecture refinements
+- `/commons-module-architecture-plan.md` - Event-driven architecture design
 
 ### Requirements
 - `/REQUIREMENTS/01-overview-and-principles.md` - Core architecture
@@ -286,11 +299,11 @@ Every module MUST:
 
 ## Current Priorities (In Order)
 
-1. Stabilize integration testing environment
-2. Get end-to-end pipeline working for confidence
-3. Complete engine rewrite per project plan
-4. Finish Kafka service refactoring
-5. Implement first production pipeline
+1. Fix remaining integration test issues (especially timing/port conflicts)
+2. Get end-to-end pipeline working (Tika → Chunker → Embeddings)
+3. Re-enable disabled tests after stabilization
+4. Implement OpenSearch sink module
+5. Production readiness (multi-tenancy, monitoring, deployment)
 
 ## Code Style
 
@@ -334,6 +347,127 @@ That's it. No Consul. No Kafka. No configuration files. Just gRPC.
 4. **Graceful Shutdown**: Handle SIGTERM properly
 5. **Clear Errors**: Return descriptive error messages
 
+## Test Resources Architecture
+
+### Micronaut Test Resources
+YAPPY uses Micronaut Test Resources for **ALL** integration testing. Key points:
+- **Demand-driven**: Resources only start when properties are requested via `@Property` annotations
+- **Client-server model**: Test resources run in a separate process, accessible to all tests
+- **Shared containers**: Containers are reused across tests for performance
+
+### Available Test Resources
+Located in `/yappy-test-resources/`:
+- `consul-test-resource` - Consul container with pre-configured data
+- `apicurio-test-resource` - Schema registry for Kafka
+- `moto-test-resource` - AWS services mocking (S3, Glue, etc.)
+- `apache-kafka-test-resource` - Kafka broker with KRaft mode
+- `opensearch3-test-resource` - OpenSearch for sink testing
+- `yappy-module-base-test-resource` - Base for module test resources
+- `yappy-chunker-test-resource` - Chunker module container
+- `yappy-tika-test-resource` - Tika parser module container
+- `yappy-embedder-test-resource` - Embeddings module container
+- `yappy-echo-test-resource` - Echo test module container
+- `yappy-test-module-test-resource` - Test module container
+- `yappy-engine-test-resource` - Engine container for integration tests
+
+### Test Resource Usage Pattern
+```java
+@MicronautTest
+class MyIntegrationTest {
+    @Property(name = "consul.client.host")
+    String consulHost;  // This triggers consul-test-resource to start
+    
+    @Property(name = "aws.glue.endpoint") 
+    String glueEndpoint;  // This triggers moto-test-resource to start
+    
+    // NEVER create containers manually - always use test resources!
+}
+```
+
+## Helpful Source Files & Utilities
+
+### KiwiProject Consul Client
+Located in `/yappy-consul-config/src/main/java/org/kiwiproject/`:
+- Full Consul client implementation (forked for Java 21 compatibility)
+- Handles KV store, service registration, health checks
+- Used throughout YAPPY for Consul interactions
+
+### Test Data Management
+- `TestDataGenerationConfig` - Controls test data generation behavior
+- `TestDataCleanupUtility` - Removes duplicate test files
+- `ProtobufTestDataHelper` - Loads protobuf test data from resources
+- Test data location: `/yappy-models/protobuf-models-test-data-resources/`
+
+### Key Configuration Files
+- `test-resources.properties` - Configures test resource providers
+- `application-test.yml` - Test-specific Micronaut configuration
+- `CLAUDE.md` - This file! Keep it updated for future sessions
+
+### Integration Test Helpers
+- `ConsulTestHelper` - Utilities for Consul KV operations in tests
+- `KafkaTestUtils` - Kafka topic creation and message verification
+- `AwaitilityUtils` - Standard timeouts and retry configurations
+
+## Common Development Tasks
+
+### Starting Fresh Test Environment
+```bash
+# Kill all test resources
+./gradlew stopTestResourcesService
+
+# Start fresh (will auto-start when tests run)
+./gradlew test
+```
+
+### Debugging Test Resources
+```bash
+# Check if test resources are running
+ps aux | grep test-resources
+
+# View test resources logs
+tail -f build/test-resources/test-resources-service.log
+```
+
+### Running Specific Tests
+```bash
+# Run a single test class
+./gradlew :yappy-engine:engine-core:test --tests ModuleConsulConnectivityTest
+
+# Run with debug output
+./gradlew :yappy-engine:engine-core:test --debug
+```
+
+## Known Issues & Solutions
+
+### Test Resource Timing Issues
+**Problem**: Tests fail with "Connection refused" or "Host not found"
+**Solution**: Add `@Property` annotations to trigger resource startup:
+```java
+@Property(name = "consul.client.host") String consulHost;
+@Property(name = "consul.client.port") int consulPort;
+```
+
+### ShadowJar Too Large
+**Problem**: "archive contains more than 65535 entries"
+**Solution**: Enable zip64 in build.gradle.kts:
+```kotlin
+tasks.named<ShadowJar>("shadowJar") {
+    isZip64 = true
+}
+```
+
+### Test Data Duplication
+**Problem**: Test runs create duplicate protobuf test files
+**Solution**: Set system property: `-Dyappy.test.data.regenerate=false`
+
+### AWS Glue Schema Registry
+**Problem**: Tests need AWS Glue but shouldn't use real AWS
+**Solution**: Moto test resource provides mock endpoints automatically via `@Property(name = "aws.glue.endpoint")`
+
+### Consul KV Cleanup
+**Problem**: Tests fail due to stale Consul data
+**Solution**: Use `ConsulTestHelper.cleanupConsulKV()` in `@BeforeEach`
+
 ## When Working on This Project
 
 1. Check `ENGINE-REWRITE-PROJECT-PLAN.md` for current phase
@@ -343,3 +477,32 @@ That's it. No Consul. No Kafka. No configuration files. Just gRPC.
 5. Events are for same-process only, gRPC for inter-service
 6. Document inline as you code
 7. **Remember**: Modules know NOTHING about YAPPY internals
+8. **Always use test resources** - never create containers manually
+9. Use `@Property` annotations to trigger test resource startup
+10. Check test resource logs when debugging integration test failures
+
+## Quick Reference
+
+### Project Modules
+- `yappy-engine/` - Core orchestration engine
+  - `engine-core/` - Core logic and event processing
+  - `engine-kafka/` - Kafka transport layer
+  - `engine-grpc/` - gRPC transport layer
+  - `engine-kafka-slot-manager/` - Partition management
+- `yappy-commons/` - Shared event definitions
+- `yappy-models/` - Protobuf and pipeline configs
+- `yappy-modules/` - Processing modules (tika, chunker, embedder)
+- `yappy-test-resources/` - Test infrastructure
+
+### Key Classes
+- `PipeStreamProcessingEvent` - Central event for engine processing
+- `PipeStreamProcessingEventListener` - Handles all processing events
+- `PipeStreamEngine` - Core processing logic
+- `ConsulConfigurationService` - Pipeline configuration management
+- `KafkaListenerManager` - Dynamic Kafka consumer management
+
+### Important Patterns
+1. **Event Publishing**: Transport layers (Kafka/gRPC) → Events → Core processing
+2. **Test Resources**: `@Property` annotations → Test resource startup → Container provisioning
+3. **Module Communication**: Engine → gRPC → Module → Response → Next module
+4. **Configuration**: Consul KV → Pipeline configs → Routing decisions

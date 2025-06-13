@@ -12,7 +12,7 @@ Based on your experience with previous rewrites, modularizing the engine will:
 ## Proposed Module Structure
 
 ```
-yappy-orchestrator/
+yappy-engine/
 ├── engine-core/              # Core abstractions and interfaces
 ├── engine-grpc/              # gRPC services and communication
 ├── engine-kafka/             # Kafka integration and slot management

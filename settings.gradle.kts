@@ -33,7 +33,6 @@ include(
     "bom",
     "util",
     "yappy-commons",
-    "yappy-kafka-slot-manager",
 
     // Test resources (needed by consul-config and engine)
     "yappy-test-resources",
@@ -61,14 +60,12 @@ include(
     "yappy-consul-config",
 
     // Engine (no longer depends on modules)
-    // "yappy-engine", // DISABLED - replaced by yappy-orchestrator
-    
-    // New orchestrator - clean architecture
-    "yappy-orchestrator",
-    "yappy-orchestrator:kafka-service",
-    "yappy-orchestrator:engine-core",
-    "yappy-orchestrator:engine-grpc",
-    "yappy-orchestrator:engine-integration-test",
+    "yappy-engine",
+    "yappy-engine:engine-kafka",
+    "yappy-engine:engine-core",
+    "yappy-engine:engine-grpc",
+    "yappy-engine:engine-kafka-slot-manager",
+    "yappy-engine:engine-integration-test",
 
     // Modules - needed for container builds
     "yappy-modules:tika-parser",

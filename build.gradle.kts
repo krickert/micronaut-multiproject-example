@@ -98,7 +98,7 @@ tasks.register("dockerBuildAll") {
     )
     
     // Then build orchestrator
-    finalizedBy(":yappy-orchestrator:dockerBuild")
+    finalizedBy(":yappy-engine:dockerBuild")
 }
 
 // Task to just build module containers
@@ -126,7 +126,7 @@ tasks.register<Exec>("dockerCleanAll") {
                    embedder:latest embedder:1.0.0-SNAPSHOT \
                    echo:latest echo:1.0.0-SNAPSHOT \
                    test-module:latest test-module:1.0.0-SNAPSHOT \
-                   yappy-orchestrator:latest yappy-orchestrator:1.0.0-SNAPSHOT \
+                   yappy-engine:latest yappy-engine:1.0.0-SNAPSHOT \
         2>/dev/null || true
     """.trimIndent())
 }
@@ -201,7 +201,7 @@ tasks.register("fixConsulConfig") {
         println("🔧 Fixing Consul configuration...")
         
         // Update test-resources.properties with proper consul config
-        val testResourcesFile = file("yappy-orchestrator/engine-core/src/test/resources/test-resources.properties")
+        val testResourcesFile = file("yappy-engine/engine-core/src/test/resources/test-resources.properties")
         if (testResourcesFile.exists()) {
             val content = testResourcesFile.readText()
             if (!content.contains("consul.client.host")) {

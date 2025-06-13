@@ -30,7 +30,7 @@ java.lang.RuntimeException: java.io.IOException: Connection reset by peer
 3. **Module Dependencies**: Complex projects have internal dependencies that increase the build context size:
    - `please-work` (simple project): ~299MB Docker image, 1KB project_libs
    - `chunker` (multi-module): ~317MB Docker image, 1.2MB+ project_libs
-   - `yappy-orchestrator`: ~465MB Docker image, multiple project dependencies
+   - `yappy-engine`: ~465MB Docker image, multiple project dependencies
 
 ## The Solution
 
@@ -81,7 +81,7 @@ tasks.named<com.bmuschko.gradle.docker.tasks.image.DockerBuildImage>("dockerBuil
 For the orchestrator that depends on module containers:
 
 ```kotlin
-// In yappy-orchestrator/build.gradle.kts
+// In yappy-engine/build.gradle.kts
 tasks.named<com.bmuschko.gradle.docker.tasks.image.DockerBuildImage>("dockerBuild") {
     // ... image configuration ...
     
@@ -110,7 +110,7 @@ tasks.register("dockerBuildAll") {
     )
     
     // Then build orchestrator
-    finalizedBy(":yappy-orchestrator:dockerBuild")
+    finalizedBy(":yappy-engine:dockerBuild")
 }
 
 // Task to just build module containers
@@ -132,7 +132,7 @@ tasks.register<Exec>("dockerCleanAll") {
     commandLine("bash", "-c", """
         docker rmi chunkerapplication:latest chunkerapplication:1.0.0-SNAPSHOT \
                    tika-parser:latest tika-parser:1.0.0-SNAPSHOT \
-                   yappy-orchestrator:latest yappy-orchestrator:1.0.0-SNAPSHOT \
+                   yappy-engine:latest yappy-engine:1.0.0-SNAPSHOT \
         2>/dev/null || true
     """.trimIndent())
 }
@@ -236,7 +236,7 @@ If you still get connection reset errors:
 The plugin creates images based on the project name:
 - `chunker` → `chunker:1.0.0-SNAPSHOT`
 - `tika-parser` → `tika-parser:1.0.0-SNAPSHOT`
-- `yappy-orchestrator` → `yappy-orchestrator:1.0.0-SNAPSHOT`
+- `yappy-engine` → `yappy-engine:1.0.0-SNAPSHOT`
 
 Note: Some modules may use different naming (e.g., `chunkerapplication` vs `chunker`) depending on the project configuration.
 
