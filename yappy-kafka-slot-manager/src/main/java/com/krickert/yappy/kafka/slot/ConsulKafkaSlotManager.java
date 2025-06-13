@@ -49,19 +49,20 @@ public class ConsulKafkaSlotManager implements KafkaSlotManager {
     private final String engineInstanceId;
     private final long heartbeatTimeoutSeconds;
     private final Map<String, SlotAssignment> watchedAssignments = new ConcurrentHashMap<>();
-    
+
     public ConsulKafkaSlotManager(
             Consul consul,
             ObjectMapper objectMapper,
             AdminClient kafkaAdmin,
-            @Value("${app.kafka.slot.engine-instance-id:#{T(java.util.UUID).randomUUID().toString()}}") String engineInstanceId,
+            @Value("${app.kafka.slot.engine-instance-id:}") Optional<String> engineInstanceId,
             @Value("${app.kafka.slot.heartbeat-timeout-seconds:30}") long heartbeatTimeoutSeconds) {
         this.consul = consul;
         this.objectMapper = objectMapper;
         this.kafkaAdmin = kafkaAdmin;
-        this.engineInstanceId = engineInstanceId;
+        this.engineInstanceId = engineInstanceId.filter(s -> !s.isBlank()).orElseGet(() -> UUID.randomUUID().toString());
         this.heartbeatTimeoutSeconds = heartbeatTimeoutSeconds;
     }
+
     
     @PostConstruct
     void init() {

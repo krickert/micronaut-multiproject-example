@@ -258,8 +258,8 @@ class EngineScenario1Test {
         );
 
         try {
-            // Store schema at the expected location: schema-versions/{subject}/{version}
-            String schemaKey = "schema-versions/test-module-schema/1";
+            // Store schema at the expected location: config/pipeline/schemas/{subject}/{version}
+            String schemaKey = "config/pipeline/schemas/test-module-schema/1";
             String schemaJson = objectMapper.writeValueAsString(schemaData);
             consulKvService.putValue(schemaKey, schemaJson).block();
             logger.info("Stored test-module schema at key: {}", schemaKey);
@@ -343,8 +343,8 @@ class EngineScenario1Test {
         );
 
         try {
-            // Store schema at the expected location: schema-versions/{subject}/{version}
-            String schemaKey = "schema-versions/chunker-schema/1";
+            // Store schema at the expected location: config/pipeline/schemas/{subject}/{version}
+            String schemaKey = "config/pipeline/schemas/chunker-schema/1";
             String schemaJson = objectMapper.writeValueAsString(schemaData);
             consulKvService.putValue(schemaKey, schemaJson).block();
             logger.info("Stored chunker schema at key: {}", schemaKey);
@@ -354,33 +354,25 @@ class EngineScenario1Test {
     }
 
     private Mono<Void> setupPipelineConfiguration() {
-        // For container-to-container communication, we need to use the container network aliases
-        // and internal ports, not the host-mapped ports
-        String chunkerNetworkAlias = "chunker";  // Network alias from test resources
-        int chunkerInternalPort = 50051;         // Internal container port
-        
-        String testModuleNetworkAlias = "test-module";  // Network alias from test resources  
-        int testModuleInternalPort = 50052;             // Internal container port
-        
-        logger.info("Registering services for container communication - chunker at {}:{}, test-module at {}:{}", 
-            chunkerNetworkAlias, chunkerInternalPort, testModuleNetworkAlias, testModuleInternalPort);
-        logger.info("(External access would be at {}:{} and {}:{})", 
+        // Since the engine is running on the host (not in a container), it needs to connect
+        // to services via localhost and the mapped ports, not Docker network aliases
+        logger.info("Registering services for host-based engine - chunker at {}:{}, test-module at {}:{}", 
             chunkerHost, chunkerPort, testModuleHost, testModulePort);
 
-        // Register chunker service with container network alias and internal port
+        // Register chunker service with localhost address for host-based engine
         Registration chunkerReg = ImmutableRegistration.builder()
                 .id(clusterName + "-chunker-test")
                 .name(clusterName + "-chunker")
-                .address(chunkerNetworkAlias)  // Use container network alias
-                .port(chunkerInternalPort)     // Use internal container port
+                .address(chunkerHost)  // Use localhost for host-based engine
+                .port(chunkerPort)     // Use mapped port for host-based engine
                 .build();
 
-        // Register test-module service with container network alias and internal port
+        // Register test-module service with localhost address for host-based engine
         Registration testModuleReg = ImmutableRegistration.builder()
                 .id(clusterName + "-test-module-test")
                 .name(clusterName + "-test-module")
-                .address(testModuleNetworkAlias)  // Use container network alias
-                .port(testModuleInternalPort)     // Use internal container port
+                .address(testModuleHost)  // Use localhost for host-based engine
+                .port(testModulePort)     // Use mapped port for host-based engine
                 .build();
 
         return businessOpsService.registerService(chunkerReg)

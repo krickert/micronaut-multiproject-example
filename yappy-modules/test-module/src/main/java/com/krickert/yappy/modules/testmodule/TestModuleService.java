@@ -4,25 +4,32 @@ import com.google.protobuf.Empty;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.krickert.search.model.PipeDoc;
+import com.krickert.search.model.PipeStream;
 import com.krickert.search.sdk.*;
 import io.grpc.stub.StreamObserver;
-import io.micronaut.configuration.kafka.annotation.KafkaClient;
-import io.micronaut.configuration.kafka.annotation.KafkaKey;
-import io.micronaut.configuration.kafka.annotation.Topic;
 import io.micronaut.context.annotation.Requires;
+import io.micronaut.context.annotation.Property;
 import io.micronaut.grpc.annotation.GrpcService;
-import io.micronaut.core.annotation.Nullable;
-import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.UUIDSerializer;
+import io.apicurio.registry.serde.config.SerdeConfig;
+import io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.PreDestroy;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Singleton
@@ -33,9 +40,16 @@ public class TestModuleService extends PipeStepProcessorGrpc.PipeStepProcessorIm
     private static final Logger LOG = LoggerFactory.getLogger(TestModuleService.class);
     private final AtomicLong outputCounter = new AtomicLong(0);
     
-    @Inject
-    @Nullable
-    private TestModuleKafkaProducer kafkaProducer;
+    @Property(name = "kafka.enabled", defaultValue = "false")
+    private boolean kafkaEnabled;
+    
+    @Property(name = "kafka.bootstrap.servers", defaultValue = "kafka:9092")
+    private String kafkaBootstrapServers;
+    
+    @Property(name = "apicurio.registry.url", defaultValue = "http://localhost:8080/apis/registry/v3")
+    private String apicurioRegistryUrl;
+    
+    private Producer<UUID, PipeStream> kafkaProducer;
     
     @Override
     public void processData(ProcessRequest request, StreamObserver<ProcessResponse> responseObserver) {
@@ -190,13 +204,37 @@ public class TestModuleService extends PipeStepProcessorGrpc.PipeStepProcessorIm
     }
     
     private void outputToKafka(PipeDoc document, String topic, String streamId) {
+        if (!kafkaEnabled) {
+            throw new RuntimeException("Kafka is not enabled. Set KAFKA_ENABLED=true to use Kafka output.");
+        }
+        
         if (kafkaProducer == null) {
-            throw new RuntimeException("Kafka producer not available. Ensure Kafka is configured.");
+            initializeKafkaProducer();
         }
         
         String effectiveTopic = (topic != null && !topic.isEmpty()) ? topic : "test-module-output";
-        kafkaProducer.send(effectiveTopic, document.getId(), document);
-        LOG.info("Sent document {} to Kafka topic: {}", document.getId(), effectiveTopic);
+        
+        // Create PipeStream from the document
+        PipeStream pipeStream = PipeStream.newBuilder()
+                .setStreamId(streamId)
+                .setDocument(document)
+                .setCurrentPipelineName("test-module-output")
+                .setTargetStepName("output")
+                .setCurrentHopNumber(1)
+                .build();
+        
+        // Generate UUID for key
+        UUID key = UUID.randomUUID();
+        
+        ProducerRecord<UUID, PipeStream> record = new ProducerRecord<>(effectiveTopic, key, pipeStream);
+        
+        try {
+            kafkaProducer.send(record).get(); // Synchronous send for testing
+            LOG.info("Sent document {} as PipeStream with key {} to Kafka topic: {}", document.getId(), key, effectiveTopic);
+        } catch (Exception e) {
+            LOG.error("Failed to send message to Kafka", e);
+            throw new RuntimeException("Failed to send message to Kafka", e);
+        }
     }
     
     private String outputToFile(PipeDoc document, String outputPath, String streamId) throws IOException {
@@ -230,10 +268,38 @@ public class TestModuleService extends PipeStepProcessorGrpc.PipeStepProcessorIm
         String target = "";
         String filePrefix = "pipedoc";
     }
-}
-
-@KafkaClient
-@Requires(property = "kafka.enabled", value = "true")
-interface TestModuleKafkaProducer {
-    void send(@Topic String topic, @KafkaKey String key, PipeDoc document);
+    
+    private synchronized void initializeKafkaProducer() {
+        if (kafkaProducer != null) {
+            return;
+        }
+        
+        Properties props = new Properties();
+        
+        // Configure kafka settings
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaBootstrapServers);
+        props.put(ProducerConfig.CLIENT_ID_CONFIG, "test-module-producer");
+        props.put(ProducerConfig.ACKS_CONFIG, "all");
+        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, UUIDSerializer.class.getName());
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ProtobufKafkaSerializer.class.getName());
+        
+        // Configure Apicurio Registry
+        props.put(SerdeConfig.REGISTRY_URL, apicurioRegistryUrl);
+        props.put(SerdeConfig.AUTO_REGISTER_ARTIFACT, Boolean.TRUE);
+        props.put(SerdeConfig.ARTIFACT_RESOLVER_STRATEGY, "io.apicurio.registry.serde.strategy.TopicIdStrategy");
+        props.put(SerdeConfig.EXPLICIT_ARTIFACT_GROUP_ID, "test-capture");
+        
+        LOG.info("Initializing Kafka producer with bootstrap servers: {} and Apicurio Registry: {}", 
+                kafkaBootstrapServers, apicurioRegistryUrl);
+        
+        kafkaProducer = new KafkaProducer<>(props);
+    }
+    
+    @PreDestroy
+    public void cleanup() {
+        if (kafkaProducer != null) {
+            LOG.info("Closing Kafka producer");
+            kafkaProducer.close();
+        }
+    }
 }

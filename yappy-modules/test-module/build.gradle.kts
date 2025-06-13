@@ -27,12 +27,13 @@ dependencies {
     implementation(mn.grpc.stub)
     implementation(mn.micronaut.http.client.core)
     implementation("io.micronaut.grpc:micronaut-protobuff-support")
-    
-    // Kafka support
-    implementation("io.micronaut.kafka:micronaut-kafka")
-    
-    // For file I/O
-    implementation("commons-io:commons-io:2.11.0")
+
+    // Kafka vanilla client (latest version)
+    implementation("org.apache.kafka:kafka-clients:4.0.0")
+
+    // Apicurio registry for Kafka Protobuf serialization
+    implementation("io.apicurio:apicurio-registry-protobuf-serde-kafka:3.0.9")
+    implementation("commons-io:commons-io:2.19.0")
 }
 
 application {

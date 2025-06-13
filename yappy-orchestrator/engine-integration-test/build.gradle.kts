@@ -79,11 +79,4 @@ tasks.test {
     
     // Set system properties for test containers
     systemProperty("testcontainers.reuse.enable", "false")
-    
-    // Ensure Docker images are built before running integration tests
-    dependsOn(
-        ":yappy-orchestrator:dockerBuild",
-        ":containers:chunker:dockerBuild",
-        ":yappy-modules:test-module:dockerBuild"
-    )
 }

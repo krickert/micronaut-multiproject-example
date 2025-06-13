@@ -46,3 +46,8 @@ kafka:
 yappy:
   cluster:
     name: integration-test-cluster
+
+# Engine configuration
+engine:
+  cluster:
+    name: integration-test-cluster

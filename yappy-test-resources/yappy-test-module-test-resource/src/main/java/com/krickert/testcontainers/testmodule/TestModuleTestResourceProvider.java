@@ -53,7 +53,17 @@ public class TestModuleTestResourceProvider extends AbstractModuleTestResourcePr
         // Disable test resources client inside the container
         env.put("MICRONAUT_TEST_RESOURCES_ENABLED", "false");
         
+        // Set Kafka producer configuration for protobuf serialization
+        // Using environment variables that Micronaut will convert to properties
+        env.put("KAFKA_PRODUCERS_TEST-MODULE-PRODUCER_KEY-SERIALIZER", "org.apache.kafka.common.serialization.UUIDSerializer");
+        env.put("KAFKA_PRODUCERS_TEST-MODULE-PRODUCER_VALUE-SERIALIZER", "io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer");
+        env.put("KAFKA_PRODUCERS_TEST-MODULE-PRODUCER_APICURIO_REGISTRY_URL", "http://apicurio:8080/apis/registry/v3");
+        env.put("KAFKA_PRODUCERS_TEST-MODULE-PRODUCER_APICURIO_REGISTRY_AUTO-REGISTER-ARTIFACT", "true");
+        env.put("KAFKA_PRODUCERS_TEST-MODULE-PRODUCER_APICURIO_REGISTRY_ARTIFACT-RESOLVER-STRATEGY", "io.apicurio.registry.serde.strategy.TopicIdStrategy");
+        env.put("KAFKA_PRODUCERS_TEST-MODULE-PRODUCER_APICURIO_REGISTRY_EXPLICIT-ARTIFACT-GROUP-ID", "test-capture");
+        
         LOG.info("Test module configured with Kafka: kafka:9092 and Apicurio: http://apicurio:8080/apis/registry/v3");
+        LOG.info("Test module Kafka producer configured with Protobuf serialization");
         
         return env;
     }

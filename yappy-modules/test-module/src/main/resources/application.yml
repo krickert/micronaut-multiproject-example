@@ -21,12 +21,11 @@ kafka:
   enabled: ${KAFKA_ENABLED:false}
   bootstrap:
     servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-  producers:
-    default:
-      retries: 3
-      batch-size: 16384
-      linger-ms: 10
-      buffer-memory: 33554432
+
+# Apicurio Schema Registry configuration
+apicurio:
+  registry:
+    url: ${APICURIO_REGISTRY_URL:http://localhost:8080/apis/registry/v3}
       
 endpoints:
   health:
