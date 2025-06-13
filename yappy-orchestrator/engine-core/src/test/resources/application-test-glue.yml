@@ -1,0 +1,60 @@
+micronaut:
+  application:
+    name: engine-core-test-glue
+  server:
+    port: ${random.port}
+  config-client:
+    enabled: false
+  test-resources:
+    enabled: true
+    shared-server: true
+
+# Enable specific test containers
+testcontainers:
+  enabled: true
+  moto: true
+  consul: true
+
+# Ensure containers are enabled
+containers:
+  moto:
+    enabled: true
+  hashicorp-consul:
+    enabled: true
+  apache-kafka:
+    enabled: true
+
+# Kafka configuration
+kafka:
+  enabled: true
+  schema:
+    registry:
+      type: glue
+
+# AWS/Glue configuration - Moto test resource will provide these
+aws:
+  region: us-east-1
+
+# Enable glue
+glue:
+  enabled: true
+
+# Consul configuration for test
+consul:
+  client:
+    registration:
+      enabled: false
+    discovery:
+      enabled: true
+  config:
+    enabled: true
+    format: YAML
+
+# Logging for debugging
+logger:
+  levels:
+    com.krickert.search.engine.core: DEBUG
+    io.micronaut.test: INFO
+    io.micronaut.testresources: INFO
+    com.krickert.testcontainers.moto: DEBUG
+    org.testcontainers: INFO

@@ -50,6 +50,16 @@ health:
   enabled: true
   sensitive: false
 
+# Enable test containers
+testcontainers:
+  enabled: true
+  moto: true
+
+# Ensure containers are enabled
+containers:
+  moto-server:
+    enabled: true
+
 # Logging configuration for tests
 logger:
   levels:

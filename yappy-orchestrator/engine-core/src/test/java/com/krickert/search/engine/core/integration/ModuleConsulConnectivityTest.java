@@ -5,15 +5,12 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.health.v1.HealthCheckRequest;
 import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.health.v1.HealthGrpc;
+import io.micronaut.context.annotation.Property;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
-import io.micronaut.testresources.client.TestResourcesClient;
-import io.micronaut.testresources.client.TestResourcesClientFactory;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,36 +23,37 @@ public class ModuleConsulConnectivityTest {
     
     private static final Logger LOG = LoggerFactory.getLogger(ModuleConsulConnectivityTest.class);
     
+    @Property(name = "consul.client.host")
+    String consulHost;
+    
+    @Property(name = "consul.client.port")
+    Integer consulPort;
+    
+    @Property(name = "chunker.grpc.host")
+    String chunkerHost;
+    
+    @Property(name = "chunker.grpc.port")
+    Integer chunkerPort;
+    
     @Test
     void testChunkerCanConnectToConsul() {
-        // Get test resources client
-        TestResourcesClient client = TestResourcesClientFactory.fromSystemProperties()
-            .orElseGet(() -> TestResourcesClientFactory.findByConvention()
-                .orElseThrow(() -> new RuntimeException("Could not find test resources client configuration")));
-        
         // Verify Consul is available
-        Optional<String> consulHost = client.resolve("consul.client.host", Map.of(), Map.of());
-        Optional<String> consulPort = client.resolve("consul.client.port", Map.of(), Map.of());
+        assertThat(consulHost).as("Consul host should be resolved").isNotNull();
+        assertThat(consulPort).as("Consul port should be resolved").isNotNull();
         
-        assertThat(consulHost).as("Consul host should be resolved").isPresent();
-        assertThat(consulPort).as("Consul port should be resolved").isPresent();
-        
-        LOG.info("Consul is available at {}:{}", consulHost.get(), consulPort.get());
+        LOG.info("Consul is available at {}:{}", consulHost, consulPort);
         
         // Verify chunker is available
-        Optional<String> chunkerHost = client.resolve("chunker.grpc.host", Map.of(), Map.of());
-        Optional<String> chunkerPort = client.resolve("chunker.grpc.port", Map.of(), Map.of());
+        assertThat(chunkerHost).as("Chunker host should be resolved").isNotNull();
+        assertThat(chunkerPort).as("Chunker port should be resolved").isNotNull();
         
-        assertThat(chunkerHost).as("Chunker host should be resolved").isPresent();
-        assertThat(chunkerPort).as("Chunker port should be resolved").isPresent();
-        
-        LOG.info("Chunker is available at {}:{}", chunkerHost.get(), chunkerPort.get());
+        LOG.info("Chunker is available at {}:{}", chunkerHost, chunkerPort);
         
         // Test gRPC health check
         LOG.info("Testing chunker gRPC health check...");
         
         ManagedChannel channel = ManagedChannelBuilder
-            .forAddress(chunkerHost.get(), Integer.parseInt(chunkerPort.get()))
+            .forAddress(chunkerHost, chunkerPort)
             .usePlaintext()
             .build();
         
