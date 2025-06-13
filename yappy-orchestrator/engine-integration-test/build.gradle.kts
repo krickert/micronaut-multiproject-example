@@ -37,7 +37,14 @@ dependencies {
     testResourcesImplementation(project(":yappy-test-resources:apache-kafka-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:apicurio-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:moto-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:opensearch3-test-resource"))
     testResourcesImplementation(project(":yappy-test-resources:yappy-engine-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:yappy-chunker-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:yappy-test-module-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:yappy-tika-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:yappy-embedder-test-resource"))
+    testResourcesImplementation(project(":yappy-test-resources:yappy-echo-test-resource"))
 }
 
 micronaut {
@@ -51,6 +58,10 @@ micronaut {
         sharedServer = true
         clientTimeout = 60
     }
+}
+
+configurations.all {
+    exclude(group = "io.micronaut.testresources", module = "micronaut-test-resources-kafka")
 }
 
 graalvmNative {

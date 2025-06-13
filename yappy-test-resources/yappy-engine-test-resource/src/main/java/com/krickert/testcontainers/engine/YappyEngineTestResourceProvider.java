@@ -108,12 +108,22 @@ public class YappyEngineTestResourceProvider extends AbstractTestContainersProvi
         envVars.put("GRPC_SERVER_HOST", "0.0.0.0");
         envVars.put("MICRONAUT_SERVER_PORT", "8090");
         envVars.put("MICRONAUT_SERVER_HOST", "0.0.0.0");
+        // CRITICAL: Disable test resources client inside the container
+        envVars.put("MICRONAUT_TEST_RESOURCES_ENABLED", "false");
         // Use test resource network aliases that match what other providers use
         envVars.put("CONSUL_CLIENT_HOST", "consul");
         envVars.put("CONSUL_CLIENT_PORT", "8500");
+        // Kafka configuration - use container network aliases
         envVars.put("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092");
+        envVars.put("KAFKA_BROKERS", "kafka:9092");
+        envVars.put("KAFKA_PRODUCERS_DEFAULT_BOOTSTRAP_SERVERS", "kafka:9092");
+        envVars.put("KAFKA_CONSUMERS_DEFAULT_BOOTSTRAP_SERVERS", "kafka:9092");
+        envVars.put("KAFKA_BOOTSTRAP_SERVERS_CONFIG", "kafka:9092");
         envVars.put("KAFKA_ENABLED", "true");
+        // Apicurio Registry configuration
         envVars.put("APICURIO_REGISTRY_URL", "http://apicurio:8080");
+        envVars.put("KAFKA_PRODUCERS_DEFAULT_APICURIO_REGISTRY_URL", "http://apicurio:8080/apis/registry/v3");
+        envVars.put("KAFKA_CONSUMERS_DEFAULT_APICURIO_REGISTRY_URL", "http://apicurio:8080/apis/registry/v3");
         envVars.put("OPENSEARCH_URL", "http://opensearch:9200");
         envVars.put("AWS_ENDPOINT", "http://localstack:4566");
         
@@ -156,5 +166,24 @@ public class YappyEngineTestResourceProvider extends AbstractTestContainersProvi
     @Override
     protected boolean shouldAnswer(String propertyName, Map<String, Object> requestedProperties, Map<String, Object> testResourcesConfig) {
         return propertyName.startsWith("engine.");
+    }
+    
+    @Override
+    public List<String> getRequiredProperties(String expression) {
+        // The engine container depends on these services being available
+        // By declaring these as required properties, the test resources framework
+        // will ensure these containers are started BEFORE attempting to create
+        // the engine container. This prevents connection failures during startup.
+        if (expression.startsWith("engine.")) {
+            logger.info("Engine property {} requested - declaring required dependencies", expression);
+            return Arrays.asList(
+                "consul.client.host",        // Consul must be running first
+                "consul.client.port",    
+                "kafka.bootstrap.servers",   // Kafka must be running first
+                "apicurio.registry.url",     // Apicurio registry must be running
+                "aws.endpoint"               // Moto/LocalStack must be running
+            );
+        }
+        return Collections.emptyList();
     }
 }

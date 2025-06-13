@@ -43,28 +43,17 @@ public class TestModuleTestResourceProvider extends AbstractModuleTestResourcePr
         // Enable Kafka in the test module
         env.put("KAFKA_ENABLED", "true");
         
-        // Look for Kafka bootstrap servers in test resources config
-        Object kafkaBootstrapServers = testResourcesConfig.get(KafkaTestResourceProvider.PROPERTY_KAFKA_BOOTSTRAP_SERVERS);
-        if (kafkaBootstrapServers != null) {
-            LOG.info("Setting KAFKA_BOOTSTRAP_SERVERS to: {}", kafkaBootstrapServers);
-            env.put("KAFKA_BOOTSTRAP_SERVERS", kafkaBootstrapServers.toString());
-        } else {
-            LOG.warn("Kafka bootstrap servers not found in test resources config. " +
-                    "Test module will use default value from application.yml");
-        }
-        
-        // Look for Apicurio registry URL in test resources config
-        Object apicurioUrl = testResourcesConfig.get("apicurio.registry.url");
-        if (apicurioUrl != null) {
-            LOG.info("Setting APICURIO_REGISTRY_URL to: {}", apicurioUrl);
-            env.put("APICURIO_REGISTRY_URL", apicurioUrl.toString());
-        } else {
-            LOG.warn("Apicurio registry URL not found in test resources config. " +
-                    "Schema registry integration may not work properly.");
-        }
+        // Use Docker network aliases for services
+        env.put("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092");
+        env.put("APICURIO_REGISTRY_URL", "http://apicurio:8080/apis/registry/v3");
         
         // Set the specific gRPC port for this module
         env.put("GRPC_SERVER_PORT", String.valueOf(TEST_MODULE_GRPC_PORT));
+        
+        // Disable test resources client inside the container
+        env.put("MICRONAUT_TEST_RESOURCES_ENABLED", "false");
+        
+        LOG.info("Test module configured with Kafka: kafka:9092 and Apicurio: http://apicurio:8080/apis/registry/v3");
         
         return env;
     }
@@ -121,6 +110,19 @@ public class TestModuleTestResourceProvider extends AbstractModuleTestResourcePr
         
         // For all other properties, use parent implementation
         return super.resolveProperty(propertyName, container);
+    }
+    
+    @Override
+    public List<String> getRequiredProperties(String expression) {
+        // Test module depends on Kafka and Apicurio
+        if (expression.startsWith(getModuleName() + ".")) {
+            LOG.info("Test module property {} requested - declaring required dependencies", expression);
+            return Arrays.asList(
+                "kafka.bootstrap.servers",   // Kafka must be running first
+                "apicurio.registry.url"      // Apicurio registry must be running
+            );
+        }
+        return Collections.emptyList();
     }
     
 }

@@ -100,4 +100,20 @@ public class KafkaTestResourceProvider extends AbstractTestContainersProvider<Ka
         // Answer if the property is one we can resolve
         return propertyName != null && RESOLVABLE_PROPERTIES_LIST.contains(propertyName);
     }
+    
+    @Override
+    public List<String> getRequiredProperties(String expression) {
+        // Kafka often works with Apicurio Registry for schema management
+        // and AWS services (via Moto) for various integrations.
+        // By declaring these as required properties, we ensure they start
+        // before Kafka, preventing connection issues during testing.
+        if (RESOLVABLE_PROPERTIES_LIST.contains(expression)) {
+            LOG.info("Kafka property {} requested - declaring optional dependencies", expression);
+            return Arrays.asList(
+                "apicurio.registry.url",     // Schema registry (if used)
+                "aws.endpoint"               // AWS services (if used)
+            );
+        }
+        return Collections.emptyList();
+    }
 }

@@ -84,16 +84,16 @@ class EngineScenario1Test {
     ObjectMapper objectMapper;
 
     // Inject test resource properties for service registration
-    @Property(name = "chunker.host")
+    @Property(name = "chunker.grpc.host")
     String chunkerHost;
     
     @Property(name = "chunker.grpc.port")
     Integer chunkerPort;
     
-    @Property(name = "test-module-after-chunker.host")
+    @Property(name = "test-module.grpc.host")
     String testModuleHost;
     
-    @Property(name = "test-module-after-chunker.grpc.port")
+    @Property(name = "test-module.grpc.port")
     Integer testModulePort;
 
     @Property(name = "app.config.cluster-name")
