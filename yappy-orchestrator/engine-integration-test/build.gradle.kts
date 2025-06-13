@@ -5,11 +5,13 @@ plugins {
 
 dependencies {
     // Yappy dependencies
+    implementation(project(":yappy-commons"))
     implementation(project(":yappy-models:pipeline-config-models"))
     implementation(project(":yappy-models:protobuf-models"))
     implementation(project(":yappy-consul-config"))
     implementation(project(":yappy-orchestrator:engine-core"))
     implementation(project(":yappy-orchestrator:kafka-service"))
+    implementation(project(":yappy-orchestrator:engine-grpc"))
     testImplementation(project(":yappy-models:protobuf-models-test-data-resources"))
     testImplementation(project(":yappy-test-resources:yappy-engine-test-resource"))
     testImplementation(project(":yappy-test-resources:yappy-chunker-test-resource"))
@@ -26,6 +28,7 @@ dependencies {
     // Testing dependencies
     testImplementation("io.micronaut.test:micronaut-test-junit5")
     testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.assertj:assertj-core")
     testImplementation("org.awaitility:awaitility")
     testImplementation("io.projectreactor:reactor-test")
     

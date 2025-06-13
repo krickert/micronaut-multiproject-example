@@ -1,10 +1,40 @@
 micronaut:
   application:
     name: engine-grpc
-  
+  server:
+    port: 8091  # HTTP port for management endpoints
+    
 grpc:
   server:
-    enabled: true
-    port: ${grpc.server.port:50051}
-    keep-alive-time: 3h
-    max-inbound-message-size: 10485760  # 10MB
+    port: 50070
+    max-inbound-message-size: 104857600  # 100MB
+    max-concurrent-calls: 100
+    
+  channels:
+    # For future outbound gRPC calls to modules
+    chunker:
+      address: ${CHUNKER_GRPC_HOST:localhost}:${CHUNKER_GRPC_PORT:50051}
+      plaintext: true
+      max-retry-attempts: 3
+    
+    tika:
+      address: ${TIKA_GRPC_HOST:localhost}:${TIKA_GRPC_PORT:50052}
+      plaintext: true
+      max-retry-attempts: 3
+      
+    embedder:
+      address: ${EMBEDDER_GRPC_HOST:localhost}:${EMBEDDER_GRPC_PORT:50053}
+      plaintext: true
+      max-retry-attempts: 3
+
+# Engine gRPC configuration
+engine:
+  grpc:
+    event-driven-enabled: true
+    
+# Logging
+logger:
+  levels:
+    com.krickert.search.engine.grpc: DEBUG
+    io.grpc: INFO
+    io.micronaut.grpc: INFO

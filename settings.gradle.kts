@@ -67,6 +67,7 @@ include(
     "yappy-orchestrator",
     "yappy-orchestrator:kafka-service",
     "yappy-orchestrator:engine-core",
+    "yappy-orchestrator:engine-grpc",
     "yappy-orchestrator:engine-integration-test",
 
     // Modules - needed for container builds
