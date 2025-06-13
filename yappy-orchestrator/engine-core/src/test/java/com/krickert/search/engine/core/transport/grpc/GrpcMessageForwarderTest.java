@@ -1,6 +1,7 @@
 package com.krickert.search.engine.core.transport.grpc;
 
 import com.krickert.search.config.consul.service.BusinessOperationsService;
+import com.krickert.search.engine.core.TestClusterHelper;
 import com.krickert.search.engine.core.routing.RouteData;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeStream;
@@ -8,62 +9,55 @@ import com.krickert.search.sdk.*;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.stub.StreamObserver;
-import io.micronaut.context.annotation.Bean;
-import io.micronaut.context.annotation.Factory;
-import io.micronaut.context.annotation.Primary;
 import io.micronaut.context.annotation.Property;
-import io.micronaut.context.annotation.Replaces;
-import io.micronaut.test.annotation.MockBean;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.kiwiproject.consul.model.health.ServiceHealth;
-import org.kiwiproject.consul.model.health.ImmutableServiceHealth;
-import org.kiwiproject.consul.model.health.Service;
-import org.kiwiproject.consul.model.health.ImmutableService;
-import org.kiwiproject.consul.model.health.Node;
-import org.kiwiproject.consul.model.health.ImmutableNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.io.IOException;
 import java.net.ServerSocket;
-import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 /**
  * Test for GrpcMessageForwarder using Micronaut's testing framework.
  * Demonstrates proper integration testing with gRPC services.
  */
 @MicronautTest
-@Property(name = "app.config.cluster-name", value = "test-cluster")
 @Property(name = "grpc.channels.default.plaintext", value = "true")
 @Property(name = "grpc.channels.default.negotiationType", value = "plaintext")
+@Property(name = "engine.test-mode", value = "true") // Enable test mode to use getServiceInstances instead of getHealthyServiceInstances
 class GrpcMessageForwarderTest {
+    
+    private static final Logger logger = LoggerFactory.getLogger(GrpcMessageForwarderTest.class);
 
     @Inject
     private BusinessOperationsService businessOpsService;
     
     @Inject
-    private GrpcMessageForwarder forwarder;
+    private TestClusterHelper testClusterHelper;
     
     private Server testServer;
     private TestPipeStepProcessor testProcessor;
     private int grpcPort;
+    private String testClusterName;
     
     @BeforeEach
     void setUp() throws IOException {
+        // Create unique test cluster
+        testClusterName = testClusterHelper.createTestCluster("grpc-forwarder-test");
+        logger.info("Created test cluster: {}", testClusterName);
+        
         // Find available port
         try (ServerSocket socket = new ServerSocket(0)) {
             grpcPort = socket.getLocalPort();
@@ -75,6 +69,7 @@ class GrpcMessageForwarderTest {
                 .addService(testProcessor)
                 .build()
                 .start();
+        logger.info("Started test gRPC server on port {}", grpcPort);
     }
     
     @AfterEach
@@ -83,15 +78,32 @@ class GrpcMessageForwarderTest {
             testServer.shutdown();
             testServer.awaitTermination(5, TimeUnit.SECONDS);
         }
-        forwarder.shutdown();
+        
+        // Clean up test cluster
+        if (testClusterName != null) {
+            testClusterHelper.cleanupTestCluster(testClusterName)
+                    .block(java.time.Duration.ofSeconds(5));
+        }
     }
     
     @Test
     void testForwardSuccess() {
         // Given
         String serviceName = "chunker-service";
-        String clusterServiceName = "test-cluster-" + serviceName;
+        String serviceId = UUID.randomUUID().toString();
         String streamId = UUID.randomUUID().toString();
+        
+        // Register the test service in Consul
+        testClusterHelper.registerServiceInCluster(
+                testClusterName,
+                serviceName,
+                serviceId,
+                "localhost",
+                grpcPort
+        ).block(java.time.Duration.ofSeconds(5));
+        
+        // Wait a bit for registration to propagate
+        try { Thread.sleep(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         
         PipeStream pipeStream = PipeStream.newBuilder()
                 .setStreamId(streamId)
@@ -112,22 +124,19 @@ class GrpcMessageForwarderTest {
                 streamId
         );
         
-        // Mock service discovery
-        ServiceHealth serviceHealth = createMockServiceHealth(
-                "localhost", 
-                grpcPort
-        );
-        
-        when(businessOpsService.getHealthyServiceInstances(clusterServiceName))
-                .thenReturn(Mono.just(List.of(serviceHealth)));
-        
         // Set expected response
         testProcessor.setResponse(ProcessResponse.newBuilder()
                 .setSuccess(true)
                 .build());
         
-        // When
-        Mono<Optional<PipeStream>> result = forwarder.forward(pipeStream, routeData);
+        // When - Update forwarder to use our test cluster
+        GrpcMessageForwarder testForwarder = new GrpcMessageForwarder(
+                businessOpsService,
+                testClusterName,
+                true // test mode
+        );
+        
+        Mono<Optional<PipeStream>> result = testForwarder.forward(pipeStream, routeData);
         
         // Then
         StepVerifier.create(result)
@@ -141,12 +150,29 @@ class GrpcMessageForwarderTest {
         assertThat(receivedRequest.getMetadata().getPipelineName()).isEqualTo("target-pipeline");
         assertThat(receivedRequest.getMetadata().getPipeStepName()).isEqualTo("chunker");
         assertThat(receivedRequest.getMetadata().getStreamId()).isEqualTo(streamId);
+        
+        testForwarder.shutdown();
     }
     
     @Test
     void testForwardWithNullTargetPipeline() {
         // Given - RouteData with null target pipeline (use current pipeline)
+        String serviceName = "chunker-service";
+        String serviceId = UUID.randomUUID().toString();
         String streamId = UUID.randomUUID().toString();
+        
+        // Register the test service
+        testClusterHelper.registerServiceInCluster(
+                testClusterName,
+                serviceName,
+                serviceId,
+                "localhost",
+                grpcPort
+        ).block(java.time.Duration.ofSeconds(5));
+        
+        // Wait for registration
+        try { Thread.sleep(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        
         PipeStream pipeStream = PipeStream.newBuilder()
                 .setStreamId(streamId)
                 .setDocument(PipeDoc.newBuilder()
@@ -160,24 +186,21 @@ class GrpcMessageForwarderTest {
         RouteData routeData = new RouteData(
                 null, // null target pipeline
                 "chunker",
-                "chunker-service",
+                serviceName,
                 RouteData.TransportType.GRPC,
                 streamId
         );
         
-        // Mock service discovery
-        ServiceHealth serviceHealth = createMockServiceHealth(
-                "localhost", 
-                grpcPort
-        );
-        
-        when(businessOpsService.getHealthyServiceInstances("test-cluster-chunker-service"))
-                .thenReturn(Mono.just(List.of(serviceHealth)));
-        
         testProcessor.setResponse(ProcessResponse.newBuilder().setSuccess(true).build());
         
         // When
-        Mono<Optional<PipeStream>> result = forwarder.forward(pipeStream, routeData);
+        GrpcMessageForwarder testForwarder = new GrpcMessageForwarder(
+                businessOpsService,
+                testClusterName,
+                true
+        );
+        
+        Mono<Optional<PipeStream>> result = testForwarder.forward(pipeStream, routeData);
         
         // Then
         StepVerifier.create(result)
@@ -188,11 +211,13 @@ class GrpcMessageForwarderTest {
         ProcessRequest receivedRequest = testProcessor.getLastRequest();
         assertThat(receivedRequest).isNotNull();
         assertThat(receivedRequest.getDocument().getTitle()).isEqualTo("Test Document");
+        
+        testForwarder.shutdown();
     }
     
     @Test
     void testForwardServiceNotFound() {
-        // Given
+        // Given - no service registered
         String streamId = UUID.randomUUID().toString();
         PipeStream pipeStream = PipeStream.newBuilder()
                 .setStreamId(streamId)
@@ -209,25 +234,44 @@ class GrpcMessageForwarderTest {
                 streamId
         );
         
-        // Mock service discovery returning empty list
-        when(businessOpsService.getHealthyServiceInstances("test-cluster-missing-service"))
-                .thenReturn(Mono.just(Collections.emptyList()));
+        // When - no service is registered, should fail
+        GrpcMessageForwarder testForwarder = new GrpcMessageForwarder(
+                businessOpsService,
+                testClusterName,
+                true
+        );
         
-        // When
-        Mono<Optional<PipeStream>> result = forwarder.forward(pipeStream, routeData);
+        Mono<Optional<PipeStream>> result = testForwarder.forward(pipeStream, routeData);
         
         // Then
         StepVerifier.create(result)
                 .expectErrorMatches(e -> 
                     e instanceof IllegalStateException &&
-                    e.getMessage().contains("No healthy instances found"))
+                    e.getMessage().contains("No registered instances found"))
                 .verify();
+        
+        testForwarder.shutdown();
     }
     
     @Test
     void testForwardServiceFailure() {
         // Given
+        String serviceName = "failing-service";
+        String serviceId = UUID.randomUUID().toString();
         String streamId = UUID.randomUUID().toString();
+        
+        // Register the test service
+        testClusterHelper.registerServiceInCluster(
+                testClusterName,
+                serviceName,
+                serviceId,
+                "localhost",
+                grpcPort
+        ).block(java.time.Duration.ofSeconds(5));
+        
+        // Wait for registration
+        try { Thread.sleep(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        
         PipeStream pipeStream = PipeStream.newBuilder()
                 .setStreamId(streamId)
                 .setDocument(PipeDoc.newBuilder().setId("doc-fail").build())
@@ -238,19 +282,10 @@ class GrpcMessageForwarderTest {
         RouteData routeData = new RouteData(
                 "pipeline",
                 "step",
-                "failing-service",
+                serviceName,
                 RouteData.TransportType.GRPC,
                 streamId
         );
-        
-        // Mock service discovery
-        ServiceHealth serviceHealth = createMockServiceHealth(
-                "localhost", 
-                grpcPort
-        );
-        
-        when(businessOpsService.getHealthyServiceInstances("test-cluster-failing-service"))
-                .thenReturn(Mono.just(List.of(serviceHealth)));
         
         // Set failure response  
         testProcessor.setResponse(ProcessResponse.newBuilder()
@@ -258,7 +293,13 @@ class GrpcMessageForwarderTest {
                 .build());
         
         // When
-        Mono<Optional<PipeStream>> result = forwarder.forward(pipeStream, routeData);
+        GrpcMessageForwarder testForwarder = new GrpcMessageForwarder(
+                businessOpsService,
+                testClusterName,
+                true
+        );
+        
+        Mono<Optional<PipeStream>> result = testForwarder.forward(pipeStream, routeData);
         
         // Then
         StepVerifier.create(result)
@@ -266,26 +307,53 @@ class GrpcMessageForwarderTest {
                     e instanceof RuntimeException &&
                     e.getMessage().contains("failed to process message"))
                 .verify();
+        
+        testForwarder.shutdown();
     }
     
     @Test
     void testCanHandle() {
+        GrpcMessageForwarder forwarder = new GrpcMessageForwarder(
+                businessOpsService,
+                testClusterName,
+                true
+        );
         assertThat(forwarder.canHandle(RouteData.TransportType.GRPC)).isTrue();
         assertThat(forwarder.canHandle(RouteData.TransportType.KAFKA)).isFalse();
         assertThat(forwarder.canHandle(RouteData.TransportType.INTERNAL)).isFalse();
+        forwarder.shutdown();
     }
     
     @Test
     void testGetTransportType() {
+        GrpcMessageForwarder forwarder = new GrpcMessageForwarder(
+                businessOpsService,
+                testClusterName,
+                true
+        );
         assertThat(forwarder.getTransportType()).isEqualTo(RouteData.TransportType.GRPC);
+        forwarder.shutdown();
     }
     
     @Test
     void testChannelReuse() {
         // Given - two requests to the same service
         String serviceName = "chunker-service";
+        String serviceId = UUID.randomUUID().toString();
         String streamId1 = UUID.randomUUID().toString();
         String streamId2 = UUID.randomUUID().toString();
+        
+        // Register the test service
+        testClusterHelper.registerServiceInCluster(
+                testClusterName,
+                serviceName,
+                serviceId,
+                "localhost",
+                grpcPort
+        ).block(java.time.Duration.ofSeconds(5));
+        
+        // Wait for registration
+        try { Thread.sleep(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         
         PipeStream pipeStream1 = createTestPipeStream(streamId1);
         PipeStream pipeStream2 = createTestPipeStream(streamId2);
@@ -297,47 +365,27 @@ class GrpcMessageForwarderTest {
                 "pipeline", "step", serviceName, RouteData.TransportType.GRPC, streamId2
         );
         
-        // Mock service discovery
-        ServiceHealth serviceHealth = createMockServiceHealth(
-                "localhost", 
-                grpcPort
-        );
-        
-        when(businessOpsService.getHealthyServiceInstances("test-cluster-" + serviceName))
-                .thenReturn(Mono.just(List.of(serviceHealth)));
-        
         testProcessor.setResponse(ProcessResponse.newBuilder().setSuccess(true).build());
         
-        // When - send two messages
-        StepVerifier.create(forwarder.forward(pipeStream1, routeData1))
+        // When - send two messages using same forwarder
+        GrpcMessageForwarder testForwarder = new GrpcMessageForwarder(
+                businessOpsService,
+                testClusterName,
+                true
+        );
+        
+        StepVerifier.create(testForwarder.forward(pipeStream1, routeData1))
                 .expectNextMatches(Optional::isEmpty)
                 .verifyComplete();
         
-        StepVerifier.create(forwarder.forward(pipeStream2, routeData2))
+        StepVerifier.create(testForwarder.forward(pipeStream2, routeData2))
                 .expectNextMatches(Optional::isEmpty)
                 .verifyComplete();
         
         // Then - verify both requests were received
         assertThat(testProcessor.getRequestCount()).isEqualTo(2);
-    }
-    
-    private ServiceHealth createMockServiceHealth(String address, int port) {
-        Service service = ImmutableService.builder()
-                .id("test-service")
-                .service("test-service")
-                .address(address)
-                .port(port)
-                .build();
         
-        Node node = ImmutableNode.builder()
-                .node("test-node")
-                .address(address)
-                .build();
-        
-        return ImmutableServiceHealth.builder()
-                .node(node)
-                .service(service)
-                .build();
+        testForwarder.shutdown();
     }
     
     private PipeStream createTestPipeStream(String streamId) {
@@ -378,28 +426,6 @@ class GrpcMessageForwarderTest {
         
         public int getRequestCount() {
             return requestCount;
-        }
-    }
-    
-    /**
-     * Mock bean for BusinessOperationsService used in tests
-     */
-    @MockBean(BusinessOperationsService.class)
-    BusinessOperationsService businessOperationsService() {
-        return mock(BusinessOperationsService.class);
-    }
-    
-    /**
-     * Test configuration factory for GrpcMessageForwarder
-     */
-    @Factory
-    static class TestConfiguration {
-        
-        @Bean
-        @Singleton
-        @Primary
-        GrpcMessageForwarder grpcMessageForwarder(BusinessOperationsService businessOpsService) {
-            return new GrpcMessageForwarder(businessOpsService, "test-cluster", false);
         }
     }
 }
