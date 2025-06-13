@@ -56,7 +56,7 @@ micronaut {
     testResources {
         enabled = true
         sharedServer = true
-        clientTimeout = 60
+        clientTimeout = 300  // 5 minutes - engine needs time to wait for dependencies
     }
 }
 

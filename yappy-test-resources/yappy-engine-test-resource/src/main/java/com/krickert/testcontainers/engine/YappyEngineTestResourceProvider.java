@@ -99,7 +99,7 @@ public class YappyEngineTestResourceProvider extends AbstractTestContainersProvi
                 .withLogConsumer(new Slf4jLogConsumer(logger))
                 .waitingFor(Wait.forHttp("/health")
                         .forPort(8090)
-                        .withStartupTimeout(Duration.ofMinutes(3)));
+                        .withStartupTimeout(Duration.ofMinutes(5)));  // Increased timeout for dependencies
         
         // Set environment variables for infrastructure services
         Map<String, String> envVars = new HashMap<>();
@@ -132,20 +132,21 @@ public class YappyEngineTestResourceProvider extends AbstractTestContainersProvi
         envVars.put("APP_CONFIG_CONSUL_KEY_PREFIXES_SCHEMA_VERSIONS", "config/pipeline/schemas/");
         envVars.put("APP_CONFIG_CONSUL_KEY_PREFIXES_WHITELISTS", "config/pipeline/whitelists/");
         envVars.put("APP_CONFIG_CONSUL_WATCH_SECONDS", "5");
-        envVars.put("APP_CONFIG_CLUSTER_NAME", "test-cluster");
-        envVars.put("YAPPY_CLUSTER_NAME", "test-cluster");
+        envVars.put("APP_CONFIG_CLUSTER_NAME", "integration-test-cluster");
+        envVars.put("YAPPY_CLUSTER_NAME", "integration-test-cluster");
+        envVars.put("ENGINE_CLUSTER_NAME", "integration-test-cluster");
         
-        // Module aliases on shared network
-        envVars.put("CHUNKER_GRPC_HOST", "yappy-chunker");
+        // Module aliases on shared network - matching the actual aliases from module providers
+        envVars.put("CHUNKER_GRPC_HOST", "chunker");
         envVars.put("CHUNKER_GRPC_PORT", "50051");
-        envVars.put("TIKA_GRPC_HOST", "yappy-tika");
+        envVars.put("TIKA_GRPC_HOST", "tika");
         envVars.put("TIKA_GRPC_PORT", "50051");
-        envVars.put("EMBEDDER_GRPC_HOST", "yappy-embedder");
+        envVars.put("EMBEDDER_GRPC_HOST", "embedder");
         envVars.put("EMBEDDER_GRPC_PORT", "50051");
-        envVars.put("ECHO_GRPC_HOST", "yappy-echo");
+        envVars.put("ECHO_GRPC_HOST", "echo");
         envVars.put("ECHO_GRPC_PORT", "50051");
-        envVars.put("TEST_MODULE_GRPC_HOST", "yappy-test-module");
-        envVars.put("TEST_MODULE_GRPC_PORT", "50051");
+        envVars.put("TEST_MODULE_GRPC_HOST", "test-module");
+        envVars.put("TEST_MODULE_GRPC_PORT", "50062");  // test-module uses port 50062
         
         container.withEnv(envVars);
         

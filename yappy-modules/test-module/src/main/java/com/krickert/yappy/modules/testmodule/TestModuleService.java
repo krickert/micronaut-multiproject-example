@@ -43,8 +43,8 @@ public class TestModuleService extends PipeStepProcessorGrpc.PipeStepProcessorIm
     @Property(name = "kafka.enabled", defaultValue = "false")
     private boolean kafkaEnabled;
     
-    @Property(name = "kafka.bootstrap.servers", defaultValue = "kafka:9092")
-    private String kafkaBootstrapServers;
+    //@Property(name = "kafka.bootstrap.servers", defaultValue = "kafka:9092")
+    private String kafkaBootstrapServers = "kafka:9092";
     
     @Property(name = "apicurio.registry.url", defaultValue = "http://localhost:8080/apis/registry/v3")
     private String apicurioRegistryUrl;

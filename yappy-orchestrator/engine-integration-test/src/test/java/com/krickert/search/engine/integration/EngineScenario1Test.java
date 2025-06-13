@@ -3,7 +3,9 @@ package com.krickert.search.engine.integration;
 import com.krickert.search.config.consul.DynamicConfigurationManager;
 import com.krickert.search.config.consul.service.BusinessOperationsService;
 import com.krickert.search.config.pipeline.model.*;
-import com.krickert.search.engine.core.PipelineEngine;
+import com.krickert.search.engine.PipeStreamEngineGrpc;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import com.krickert.search.model.PipeDoc;
 import com.krickert.search.model.PipeStream;
 import io.micronaut.context.annotation.Property;
@@ -45,7 +47,7 @@ import java.time.Instant;
  * Uses test-resources with the module-test environment.
  * Test-module outputs to Kafka for verification.
  */
-@MicronautTest(environments = "module-test")
+@MicronautTest
 @KafkaListener(groupId = "chunker-test-listener", 
                offsetReset = io.micronaut.configuration.kafka.annotation.OffsetReset.EARLIEST)
 class EngineScenario1Test {
@@ -66,9 +68,6 @@ class EngineScenario1Test {
     }
 
     @Inject
-    PipelineEngine pipelineEngine;
-
-    @Inject
     BusinessOperationsService businessOpsService;
 
     @Inject
@@ -83,7 +82,14 @@ class EngineScenario1Test {
     @Inject
     ObjectMapper objectMapper;
 
-    // Inject test resource properties for service registration
+    // Engine container properties injected by test resources
+    @Property(name = "engine.grpc.host")
+    String engineHost;
+    
+    @Property(name = "engine.grpc.port")
+    Integer enginePort;
+
+    // Module container properties for registration
     @Property(name = "chunker.grpc.host")
     String chunkerHost;
     
@@ -96,16 +102,20 @@ class EngineScenario1Test {
     @Property(name = "test-module.grpc.port")
     Integer testModulePort;
 
-    @Property(name = "app.config.cluster-name")
-    String baseClusterName;
+    // Internal port numbers for Docker network communication
+    private static final int CHUNKER_INTERNAL_PORT = 50051;
+    private static final int TEST_MODULE_INTERNAL_PORT = 50062;
+    
+    // Use the engine container's cluster name
+    private static final String CLUSTER_NAME = "test-cluster";
 
-    private String clusterName;
+    private String clusterName = CLUSTER_NAME;
+    
+    private ManagedChannel engineChannel;
+    private PipeStreamEngineGrpc.PipeStreamEngineBlockingStub engineStub;
 
     @BeforeEach
     void setup() {
-        // For now, use the base cluster name directly to avoid watching issues
-        // TODO: Fix DynamicConfigurationManager to support dynamic cluster names
-        clusterName = baseClusterName;
         logger.info("Using cluster name: {}", clusterName);
         
         // Log the injected test resource properties
@@ -115,6 +125,15 @@ class EngineScenario1Test {
 
         // Clear any previous messages
         receivedMessages.clear();
+        
+        // Create gRPC channel to engine container
+        logger.info("Connecting to engine at {}:{}", engineHost, enginePort);
+        engineChannel = ManagedChannelBuilder
+            .forAddress(engineHost, enginePort)
+            .usePlaintext()
+            .build();
+        
+        engineStub = PipeStreamEngineGrpc.newBlockingStub(engineChannel);
 
         // Clean up any stale Consul data from previous test runs
         cleanupStaleConsulData();
@@ -354,25 +373,25 @@ class EngineScenario1Test {
     }
 
     private Mono<Void> setupPipelineConfiguration() {
-        // Since the engine is running on the host (not in a container), it needs to connect
-        // to services via localhost and the mapped ports, not Docker network aliases
-        logger.info("Registering services for host-based engine - chunker at {}:{}, test-module at {}:{}", 
-            chunkerHost, chunkerPort, testModuleHost, testModulePort);
+        // Register services with Docker network aliases for containerized engine
+        // The engine container will connect to modules using Docker network aliases
+        logger.info("Registering services for containerized engine - chunker at chunker:{}, test-module at test-module:{}", 
+            CHUNKER_INTERNAL_PORT, TEST_MODULE_INTERNAL_PORT);
 
-        // Register chunker service with localhost address for host-based engine
+        // Register chunker service with Docker network alias
         Registration chunkerReg = ImmutableRegistration.builder()
                 .id(clusterName + "-chunker-test")
                 .name(clusterName + "-chunker")
-                .address(chunkerHost)  // Use localhost for host-based engine
-                .port(chunkerPort)     // Use mapped port for host-based engine
+                .address("chunker")  // Docker network alias
+                .port(CHUNKER_INTERNAL_PORT)  // Internal container port
                 .build();
 
-        // Register test-module service with localhost address for host-based engine
+        // Register test-module service with Docker network alias  
         Registration testModuleReg = ImmutableRegistration.builder()
                 .id(clusterName + "-test-module-test")
                 .name(clusterName + "-test-module")
-                .address(testModuleHost)  // Use localhost for host-based engine
-                .port(testModulePort)     // Use mapped port for host-based engine
+                .address("test-module")  // Docker network alias
+                .port(TEST_MODULE_INTERNAL_PORT)  // Internal container port
                 .build();
 
         return businessOpsService.registerService(chunkerReg)
@@ -532,17 +551,15 @@ class EngineScenario1Test {
         logger.info("=== Starting test with document: {} ===", doc.getId());
         logger.info("Document body length: {} characters", doc.getBody().length());
 
-        // When
-        var result = pipelineEngine.processMessage(inputStream)
-                .doOnSubscribe(s -> logger.info("Starting pipeline processing"))
-                .doOnSuccess(v -> logger.info("Pipeline processing completed successfully"))
-                .doOnError(e -> logger.error("Pipeline processing failed", e))
-                .doOnTerminate(() -> logger.info("Pipeline processing terminated"));
-
-        // Then - verify it completes without error
-        StepVerifier.create(result)
-                .expectComplete()
-                .verify(Duration.ofSeconds(30));
+        // When - send to engine via gRPC
+        logger.info("Sending document to engine via gRPC");
+        try {
+            engineStub.processPipeAsync(inputStream);
+            logger.info("Document sent successfully to engine");
+        } catch (Exception e) {
+            logger.error("Failed to send document to engine", e);
+            throw e;
+        }
 
         logger.info("=== Pipeline processing completed ===");
 
@@ -608,5 +625,22 @@ class EngineScenario1Test {
         }
 
         logger.info("=== Test completed successfully! Chunker produced {} chunks ===", chunkCount);
+    }
+    
+    @org.junit.jupiter.api.AfterEach
+    void cleanup() {
+        if (engineChannel != null && !engineChannel.isShutdown()) {
+            logger.info("Shutting down gRPC channel");
+            engineChannel.shutdown();
+            try {
+                // Wait for channel to terminate
+                if (!engineChannel.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    engineChannel.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                engineChannel.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 }
