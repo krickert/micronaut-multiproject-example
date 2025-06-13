@@ -1,6 +1,8 @@
 micronaut:
   application:
     name: engine-core-glue-test
+  server:
+    port: ${random.port}
   config-client:
     enabled: false
 
@@ -38,6 +40,10 @@ kafka:
 aws:
   region: us-east-1
   # Moto test resource will inject the endpoint
+
+# Enable glue
+glue:
+  enabled: true
 
 # Health check configuration for tests
 health:

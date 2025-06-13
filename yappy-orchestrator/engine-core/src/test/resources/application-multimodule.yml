@@ -1,6 +1,8 @@
 micronaut:
   application:
     name: engine-core-test
+  server:
+    port: ${random.port}
   test:
     resources:
       server:

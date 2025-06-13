@@ -4,9 +4,11 @@ micronaut:
   application:
     name: kafka-service-test
   server:
-    port: -1
+    port: ${random.port}
   test-resources:
     enabled: true
+    shared-server:
+      enabled: true
   scheduling:
     enabled: false  # Disable scheduled tasks in tests
 
@@ -18,12 +20,21 @@ grpc:
 # Ensure testcontainers are enabled
 testcontainers:
   enabled: true
-  consul: true
+
+# Enable test resource containers
+containers:
+  hashicorp-consul:
+    enabled: true
+  apache-kafka:
+    enabled: true
+  apicurio:
+    enabled: true
 
 # Consul configuration for test environment
 consul:
   client:
     enabled: true  # Required for ConsulClient bean creation
+    # DO NOT set host/port here - they are provided by test resources
     registration:
       enabled: false  # Not needed for kafka-service tests
     discovery:

@@ -87,9 +87,9 @@ dependencies {
     api(libs.amazon.connection.client)
 
     testImplementation(mn.mockito.junit.jupiter)
-    //TODO: bring this as a sister project in kafka-service
-    implementation(project(":yappy-kafka-slot-manager"))
-    testImplementation(project(":yappy-consul-config"))
+    //TODO: bring slot manager as a sister project in kafka-service later
+    // implementation(project(":yappy-kafka-slot-manager")) // Removed temporarily to fix tests
+    implementation(project(":yappy-consul-config"))
 
 
 

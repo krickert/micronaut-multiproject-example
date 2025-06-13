@@ -20,6 +20,8 @@
 micronaut:
   application:
     name: engine-core-test
+  server:
+    port: ${random.port}
   config-client:
     enabled: false
   test-resources:
@@ -29,6 +31,7 @@ micronaut:
 testcontainers:
   enabled: true
   consul: true
+  moto: true
 
 # Enable specific test resource containers
 containers:
