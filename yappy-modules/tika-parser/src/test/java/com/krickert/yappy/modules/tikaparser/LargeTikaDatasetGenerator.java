@@ -1,6 +1,7 @@
 package com.krickert.yappy.modules.tikaparser;
 
 import com.krickert.search.model.PipeDoc;
+import com.krickert.search.model.util.TestDataGenerationConfig;
 import com.google.protobuf.Timestamp;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +29,13 @@ public class LargeTikaDatasetGenerator {
 
     @Test
     void generateLargeTikaDataset() throws IOException {
+        // Check if test data regeneration is enabled
+        if (!TestDataGenerationConfig.isRegenerationEnabled()) {
+            System.out.println("Test data regeneration is disabled. " +
+                "Use -Dyappy.test.data.regenerate=true to enable.");
+            return;
+        }
+        
         List<PipeDoc> tikaDocs = new ArrayList<>();
         
         // Create various types of documents
@@ -45,7 +54,16 @@ public class LargeTikaDatasetGenerator {
         for (int i = 0; i < 100; i++) {
             String docType = documentTypes[i % documentTypes.length];
             String topic = topics[i % topics.length];
-            String docId = String.format("doc-%03d-%s", i, UUID.randomUUID().toString().substring(0, 8));
+            
+            // Use deterministic ID if configured, otherwise random UUID
+            String docIdSuffix;
+            if (TestDataGenerationConfig.isDeterministicMode()) {
+                // Use a deterministic suffix based on the index
+                docIdSuffix = String.format("%08x", i);
+            } else {
+                docIdSuffix = UUID.randomUUID().toString().substring(0, 8);
+            }
+            String docId = String.format("doc-%03d-%s", i, docIdSuffix);
             
             PipeDoc.Builder docBuilder = PipeDoc.newBuilder()
                 .setId(docId)
@@ -100,16 +118,23 @@ public class LargeTikaDatasetGenerator {
             tikaDocs.add(doc);
         }
         
-        // Save to test resources
-        Path tikaDir = Path.of("../../yappy-models/protobuf-models-test-data-resources/src/main/resources/test-data/tika-pipe-docs-large");
-        tikaDir.toFile().mkdirs();
+        // Determine output directory based on configuration
+        Path outputDir;
+        String outputDirProperty = TestDataGenerationConfig.getOutputDirectory();
+        if (outputDirProperty.equals(TestDataGenerationConfig.DEFAULT_OUTPUT_DIR)) {
+            // Use temp directory if not specified
+            outputDir = tempDir.resolve("tika-pipe-docs-large");
+        } else {
+            outputDir = Paths.get(outputDirProperty, "tika-pipe-docs-large");
+        }
+        outputDir.toFile().mkdirs();
         
-        System.out.println("Saving " + tikaDocs.size() + " Tika documents to: " + tikaDir);
+        System.out.println("Saving " + tikaDocs.size() + " Tika documents to: " + outputDir);
         
         for (int i = 0; i < tikaDocs.size(); i++) {
             PipeDoc doc = tikaDocs.get(i);
             String filename = String.format("tika_doc_%03d_%s.bin", i, doc.getId());
-            Path docFile = tikaDir.resolve(filename);
+            Path docFile = outputDir.resolve(filename);
             
             try (FileOutputStream fos = new FileOutputStream(docFile.toFile())) {
                 doc.writeTo(fos);
@@ -122,6 +147,8 @@ public class LargeTikaDatasetGenerator {
         
         System.out.println("\n=== Tika Dataset Generation Summary ===");
         System.out.println("Total documents generated: " + tikaDocs.size());
+        System.out.println("Output directory: " + outputDir.toAbsolutePath());
+        System.out.println("Deterministic mode: " + TestDataGenerationConfig.isDeterministicMode());
         System.out.println("Document types: " + String.join(", ", documentTypes));
         System.out.println("Topics covered: " + String.join(", ", topics));
         
@@ -131,6 +158,11 @@ public class LargeTikaDatasetGenerator {
             .sum();
         System.out.println("Total body content size: " + totalBodySize + " characters");
         System.out.println("Average body size: " + (totalBodySize / tikaDocs.size()) + " characters");
+        
+        System.out.println("\nTo regenerate this data in the future, run with:");
+        System.out.println("  -Dyappy.test.data.regenerate=true");
+        System.out.println("To save to a specific directory, add:");
+        System.out.println("  -Dyappy.test.data.output.dir=/path/to/output");
         
         assertEquals(100, tikaDocs.size(), "Should have generated 100 documents");
     }
