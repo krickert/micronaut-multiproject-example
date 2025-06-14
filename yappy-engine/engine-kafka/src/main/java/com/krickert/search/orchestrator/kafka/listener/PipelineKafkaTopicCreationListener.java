@@ -95,9 +95,13 @@ public class PipelineKafkaTopicCreationListener implements ApplicationEventListe
                 }
                 
                 // Also check if the step uses Kafka transport (publishes to Kafka)
-                if (step.kafkaPublishTopics() != null && !step.kafkaPublishTopics().isEmpty()) {
-                    String topicKey = generateTopicKey(pipeline.name(), step.stepName());
-                    requiredTopics.add(topicKey);
+                if (step.outputs() != null && !step.outputs().isEmpty()) {
+                    boolean hasKafkaOutput = step.outputs().values().stream()
+                        .anyMatch(output -> output.transportType() == TransportType.KAFKA);
+                    if (hasKafkaOutput) {
+                        String topicKey = generateTopicKey(pipeline.name(), step.stepName());
+                        requiredTopics.add(topicKey);
+                    }
                 }
             }
         }

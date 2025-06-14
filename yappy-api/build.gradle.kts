@@ -19,11 +19,15 @@ dependencies {
     annotationProcessor("io.micronaut.security:micronaut-security-annotations")
     annotationProcessor("io.micronaut.serde:micronaut-serde-processor")
     annotationProcessor("io.micronaut.validation:micronaut-validation-processor")
+    annotationProcessor(mn.lombok)
     
     // Use the existing yappy-consul-config project
     implementation(project(":yappy-consul-config"))
     implementation(project(":yappy-models:pipeline-config-models"))
     implementation(project(":yappy-commons"))
+    
+    // Add engine-kafka for Kafka VCR functionality
+    implementation(project(":yappy-engine:engine-kafka"))
     
     implementation("io.micrometer:context-propagation")
     implementation("io.micronaut:micronaut-http-client")
@@ -46,6 +50,7 @@ dependencies {
     implementation("io.micronaut.validation:micronaut-validation")
     implementation("jakarta.validation:jakarta.validation-api")
     compileOnly("io.micronaut.openapi:micronaut-openapi-annotations")
+    compileOnly(mn.lombok)
     runtimeOnly("ch.qos.logback:logback-classic")
     runtimeOnly("org.yaml:snakeyaml")
     developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-management")

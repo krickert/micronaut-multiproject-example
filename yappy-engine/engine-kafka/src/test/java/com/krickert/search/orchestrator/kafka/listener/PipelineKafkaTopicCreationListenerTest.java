@@ -56,7 +56,9 @@ class PipelineKafkaTopicCreationListenerTest {
 
         PipelineStepConfig step = PipelineStepConfig.builder()
                 .stepName("test-step")
-                .processingModuleName("test-module")
+                .stepType(StepType.PIPELINE)
+                .description("Test step with Kafka input")
+                .processorInfo(new PipelineStepConfig.ProcessorInfo("test-module", null))
                 .kafkaInputs(List.of(kafkaInput))
                 .build();
 
@@ -89,16 +91,31 @@ class PipelineKafkaTopicCreationListenerTest {
 
     @Test
     void testTopicsCreatedForPipelineWithKafkaPublish() throws InterruptedException {
-        // Create a pipeline configuration with Kafka publish topics
-        KafkaPublishTopic publishTopic = KafkaPublishTopic.builder()
-                .topic("output-topic")
-                .build();
+        // Create a pipeline configuration with Kafka transport outputs
+        KafkaTransportConfig kafkaTransport = new KafkaTransportConfig("output-topic", Map.of());
+        
+        PipelineStepConfig.OutputTarget kafkaOutput = new PipelineStepConfig.OutputTarget(
+                "next-step", 
+                TransportType.KAFKA, 
+                null, // no gRPC transport
+                kafkaTransport
+        );
 
-        PipelineStepConfig step = PipelineStepConfig.builder()
-                .stepName("publish-step")
-                .processingModuleName("test-module")
-                .kafkaPublishTopics(List.of(publishTopic))
-                .build();
+        PipelineStepConfig.ProcessorInfo processorInfo = new PipelineStepConfig.ProcessorInfo(
+                "test-module", null
+        );
+
+        PipelineStepConfig step = new PipelineStepConfig(
+                "publish-step",
+                StepType.PIPELINE,
+                "Test step with Kafka output",
+                null, // no schema
+                null, // no custom config
+                List.of(), // no Kafka inputs  
+                Map.of("kafka-output", kafkaOutput), // Kafka outputs
+                0, 1000L, 30000L, 2.0, null, // retry config
+                processorInfo
+        );
 
         PipelineConfig pipeline = PipelineConfig.builder()
                 .name("publish-pipeline")
@@ -136,7 +153,9 @@ class PipelineKafkaTopicCreationListenerTest {
 
         PipelineStepConfig step = PipelineStepConfig.builder()
                 .stepName("cached-step")
-                .processingModuleName("test-module")
+                .stepType(StepType.PIPELINE)
+                .description("Test cached step with Kafka input")
+                .processorInfo(new PipelineStepConfig.ProcessorInfo("test-module", null))
                 .kafkaInputs(List.of(kafkaInput))
                 .build();
 
@@ -176,7 +195,9 @@ class PipelineKafkaTopicCreationListenerTest {
 
         PipelineStepConfig step1 = PipelineStepConfig.builder()
                 .stepName("step-1")
-                .processingModuleName("module-1")
+                .stepType(StepType.PIPELINE)
+                .description("Test step 1 with Kafka input")
+                .processorInfo(new PipelineStepConfig.ProcessorInfo("module-1", null))
                 .kafkaInputs(List.of(kafkaInput1))
                 .build();
 
@@ -186,7 +207,9 @@ class PipelineKafkaTopicCreationListenerTest {
 
         PipelineStepConfig step2 = PipelineStepConfig.builder()
                 .stepName("step-2")
-                .processingModuleName("module-2")
+                .stepType(StepType.PIPELINE)
+                .description("Test step 2 with Kafka input")
+                .processorInfo(new PipelineStepConfig.ProcessorInfo("module-2", null))
                 .kafkaInputs(List.of(kafkaInput2))
                 .build();
 
@@ -276,7 +299,9 @@ class PipelineKafkaTopicCreationListenerTest {
 
         PipelineStepConfig step = PipelineStepConfig.builder()
                 .stepName("failing-step")
-                .processingModuleName("test-module")
+                .stepType(StepType.PIPELINE)
+                .description("Test failing step with Kafka input")
+                .processorInfo(new PipelineStepConfig.ProcessorInfo("test-module", null))
                 .kafkaInputs(List.of(kafkaInput))
                 .build();
 
