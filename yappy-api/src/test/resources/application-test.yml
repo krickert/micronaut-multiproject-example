@@ -10,6 +10,10 @@ micronaut:
   server:
     cors:
       enabled: true
+  config-client:
+    enabled: false
+  discovery:
+    enabled: false
 
 app:
   config:
@@ -21,4 +25,8 @@ app:
 
 consul:
   client:
-    enabled: true
+    enabled: false
+  config:
+    enabled: false
+  discovery:
+    enabled: false

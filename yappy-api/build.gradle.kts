@@ -19,7 +19,7 @@ dependencies {
     annotationProcessor("io.micronaut.security:micronaut-security-annotations")
     annotationProcessor("io.micronaut.serde:micronaut-serde-processor")
     annotationProcessor("io.micronaut.validation:micronaut-validation-processor")
-    annotationProcessor(mn.lombok)
+    annotationProcessor("org.projectlombok:lombok:1.18.34")
     
     // Use the existing yappy-consul-config project
     implementation(project(":yappy-consul-config"))
@@ -50,7 +50,7 @@ dependencies {
     implementation("io.micronaut.validation:micronaut-validation")
     implementation("jakarta.validation:jakarta.validation-api")
     compileOnly("io.micronaut.openapi:micronaut-openapi-annotations")
-    compileOnly(mn.lombok)
+    compileOnly("org.projectlombok:lombok:1.18.34")
     runtimeOnly("ch.qos.logback:logback-classic")
     runtimeOnly("org.yaml:snakeyaml")
     developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-management")
