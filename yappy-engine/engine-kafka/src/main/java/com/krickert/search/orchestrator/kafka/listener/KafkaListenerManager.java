@@ -52,6 +52,11 @@ public class KafkaListenerManager implements ApplicationEventListener<PipelineCl
      * Value: The DynamicKafkaListener instance itself.
      */
     private final Map<String, DynamicKafkaListener> activeListenerInstanceMap = new ConcurrentHashMap<>();
+    
+    /**
+     * Current cluster configuration
+     */
+    private volatile PipelineClusterConfig currentClusterConfig;
 
     @Inject
     public KafkaListenerManager(
@@ -95,6 +100,7 @@ public class KafkaListenerManager implements ApplicationEventListener<PipelineCl
             LOG.warn("Cluster configuration for '{}' was deleted. Shutting down all active listeners for this cluster.", this.appClusterName);
             new HashSet<>(activeListenerInstanceMap.keySet()).forEach(this::removeListenerInstance);
             activeListenerInstanceMap.clear();
+            currentClusterConfig = null;
             LOG.info("All Kafka listeners for cluster '{}' have been shut down and removed due to config deletion.", this.appClusterName);
             return;
         }
@@ -103,6 +109,9 @@ public class KafkaListenerManager implements ApplicationEventListener<PipelineCl
             LOG.error("Received non-deletion event for cluster '{}' but newClusterConfig is null. This is unexpected. No listeners will be changed.", this.appClusterName);
             return;
         }
+        
+        // Store the current configuration
+        this.currentClusterConfig = newClusterConfig;
 
         if (!this.appClusterName.equals(newClusterConfig.clusterName())) {
             LOG.warn("SynchronizeListeners called with config for cluster '{}', but this manager is for '{}'. Ignoring.",
@@ -481,10 +490,26 @@ public class KafkaListenerManager implements ApplicationEventListener<PipelineCl
             LOG.info("Resetting Kafka consumer offset to date {} for key: '{}', Pool ID: '{}'",
                     date, listenerKey, listener.getListenerId());
 
-            return pauseConsumer(pipelineName, stepName, topic, groupId)
+            // Store current config to recreate listener after reset
+            final PipelineClusterConfig currentConfig = getCurrentClusterConfig();
+            final String listenerId = listener.getListenerId();
+            
+            // Shutdown listener completely to allow offset reset
+            return Mono.fromRunnable(() -> {
+                        LOG.info("Shutting down listener {} to reset offsets", listenerId);
+                        removeListenerInstance(listenerKey);
+                    })
+                    // Wait for consumer to fully shutdown
+                    .delayElement(java.time.Duration.ofSeconds(2))
                     .then(Mono.fromFuture(() -> kafkaAdminService.resetConsumerGroupOffsetsAsync(
-                            listener.getGroupId(), listener.getTopic(), params)))
-                    .then(resumeConsumer(pipelineName, stepName, topic, groupId));
+                            groupId, topic, params)))
+                    // Recreate the listener with the same configuration
+                    .then(Mono.fromRunnable(() -> {
+                        if (currentConfig != null) {
+                            LOG.info("Recreating listener {} after offset reset", listenerId);
+                            synchronizeListeners(currentConfig, false);
+                        }
+                    }));
         });
     }
 
@@ -497,10 +522,27 @@ public class KafkaListenerManager implements ApplicationEventListener<PipelineCl
             }
             OffsetResetParameters params = OffsetResetParameters.builder(OffsetResetStrategy.EARLIEST).build();
             LOG.info("Resetting offset to earliest for key: '{}', Pool ID: '{}'", listenerKey, listener.getListenerId());
-            return pauseConsumer(pipelineName, stepName, topic, groupId)
+            
+            // Store current config to recreate listener after reset
+            final PipelineClusterConfig currentConfig = getCurrentClusterConfig();
+            final String listenerId = listener.getListenerId();
+            
+            // Shutdown listener completely to allow offset reset
+            return Mono.fromRunnable(() -> {
+                        LOG.info("Shutting down listener {} to reset offsets", listenerId);
+                        removeListenerInstance(listenerKey);
+                    })
+                    // Wait for consumer to fully shutdown
+                    .delayElement(java.time.Duration.ofSeconds(2))
                     .then(Mono.fromFuture(() -> kafkaAdminService.resetConsumerGroupOffsetsAsync(
-                            listener.getGroupId(), listener.getTopic(), params)))
-                    .then(resumeConsumer(pipelineName, stepName, topic, groupId));
+                            groupId, topic, params)))
+                    // Recreate the listener with the same configuration
+                    .then(Mono.fromRunnable(() -> {
+                        if (currentConfig != null) {
+                            LOG.info("Recreating listener {} after offset reset", listenerId);
+                            synchronizeListeners(currentConfig, false);
+                        }
+                    }));
         });
     }
 
@@ -513,10 +555,27 @@ public class KafkaListenerManager implements ApplicationEventListener<PipelineCl
             }
             OffsetResetParameters params = OffsetResetParameters.builder(OffsetResetStrategy.LATEST).build();
             LOG.info("Resetting offset to latest for key: '{}', Pool ID: '{}'", listenerKey, listener.getListenerId());
-            return pauseConsumer(pipelineName, stepName, topic, groupId)
+            
+            // Store current config to recreate listener after reset
+            final PipelineClusterConfig currentConfig = getCurrentClusterConfig();
+            final String listenerId = listener.getListenerId();
+            
+            // Shutdown listener completely to allow offset reset
+            return Mono.fromRunnable(() -> {
+                        LOG.info("Shutting down listener {} to reset offsets", listenerId);
+                        removeListenerInstance(listenerKey);
+                    })
+                    // Wait for consumer to fully shutdown
+                    .delayElement(java.time.Duration.ofSeconds(2))
                     .then(Mono.fromFuture(() -> kafkaAdminService.resetConsumerGroupOffsetsAsync(
-                            listener.getGroupId(), listener.getTopic(), params)))
-                    .then(resumeConsumer(pipelineName, stepName, topic, groupId));
+                            groupId, topic, params)))
+                    // Recreate the listener with the same configuration
+                    .then(Mono.fromRunnable(() -> {
+                        if (currentConfig != null) {
+                            LOG.info("Recreating listener {} after offset reset", listenerId);
+                            synchronizeListeners(currentConfig, false);
+                        }
+                    }));
         });
     }
 
@@ -544,5 +603,9 @@ public class KafkaListenerManager implements ApplicationEventListener<PipelineCl
 
     private String generateListenerInstanceKey(String pipelineName, String stepName, String topic, String groupId) {
         return String.format("%s:%s:%s:%s", pipelineName, stepName, topic, groupId);
+    }
+    
+    private PipelineClusterConfig getCurrentClusterConfig() {
+        return currentClusterConfig;
     }
 }
