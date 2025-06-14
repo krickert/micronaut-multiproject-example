@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import io.micronaut.serde.annotation.Serdeable;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -19,7 +18,6 @@ import java.util.Objects;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @Builder
-@Serdeable
 @Schema(description = "Pipeline step configuration")
 public record PipelineStepConfig(
         @JsonProperty("stepName") @NotBlank String stepName,
@@ -177,7 +175,6 @@ public record PipelineStepConfig(
     // Ensuring the JsonConfigOptions inner record is what we expect:
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @Builder
-    @Serdeable
     @Schema(description = "JSON configuration options")
     public record JsonConfigOptions(
             @JsonProperty("jsonConfig") JsonNode jsonConfig, // This should be JsonNode
@@ -205,7 +202,6 @@ public record PipelineStepConfig(
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @Builder
-    @Serdeable
     @Schema(description = "Output target configuration")
     public record OutputTarget(
             @JsonProperty("targetStepName") @NotBlank String targetStepName,
@@ -244,7 +240,6 @@ public record PipelineStepConfig(
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @Builder
-    @Serdeable
     @Schema(description = "Processor information")
     public record ProcessorInfo(
             @JsonProperty("grpcServiceName") String grpcServiceName,

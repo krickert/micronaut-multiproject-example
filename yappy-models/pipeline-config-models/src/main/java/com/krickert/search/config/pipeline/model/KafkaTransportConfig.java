@@ -4,7 +4,6 @@ package com.krickert.search.config.pipeline.model;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import io.micronaut.serde.annotation.Serdeable;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
@@ -13,7 +12,6 @@ import java.util.Map;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @Builder
-@Serdeable
 @Schema(description = "Kafka transport configuration")
 public record KafkaTransportConfig(
         // For an OutputTarget, 'topic' is the primary field.

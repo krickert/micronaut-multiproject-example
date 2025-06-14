@@ -1,13 +1,23 @@
 package com.krickert.search.pipeline.api;
 
+import com.krickert.search.config.pipeline.model.*;
 import io.micronaut.core.annotation.NonNull;
 import io.micronaut.context.ApplicationContextBuilder;
 import io.micronaut.context.ApplicationContextConfigurer;
 import io.micronaut.context.annotation.ContextConfigurer;
 import io.micronaut.runtime.Micronaut;
+import io.micronaut.serde.annotation.SerdeImport;
 import io.swagger.v3.oas.annotations.*;
 import io.swagger.v3.oas.annotations.info.*;
 
+@SerdeImport(PipelineConfig.class)
+@SerdeImport(PipelineStepConfig.class)
+@SerdeImport(StepType.class)
+@SerdeImport(TransportType.class)
+@SerdeImport(KafkaInputDefinition.class)
+@SerdeImport(KafkaTransportConfig.class)
+@SerdeImport(GrpcTransportConfig.class)
+@SerdeImport(PipelineClusterConfig.class)
 @OpenAPIDefinition(
     info = @Info(
             title = "YAPPY Pipeline API",

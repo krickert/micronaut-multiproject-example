@@ -3,6 +3,7 @@ package com.krickert.search.pipeline.api.controller;
 import com.krickert.search.config.pipeline.model.PipelineConfig;
 import com.krickert.search.pipeline.api.dto.*;
 import com.krickert.search.pipeline.api.service.TestUtilityService;
+import io.micronaut.core.type.Argument;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpStatus;
 import io.micronaut.http.client.HttpClient;
@@ -121,7 +122,7 @@ class TestUtilityControllerTest {
         // When
         var response = client.toBlocking().exchange(
                 HttpRequest.POST("/data/documents", request),
-                List.class
+                Argument.listOf(TestDocument.class)
         );
 
         // Then

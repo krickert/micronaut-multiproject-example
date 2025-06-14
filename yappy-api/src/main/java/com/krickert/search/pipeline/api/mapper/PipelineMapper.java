@@ -49,7 +49,14 @@ public class PipelineMapper {
         // Map each step definition to a PipelineStepConfig with proper connections
         for (var stepDef : request.steps()) {
             StepType stepType = determineStepType(stepDef.id(), stepConnections, hasIncomingConnections);
-            ProcessorInfo processorInfo = new ProcessorInfo(stepDef.module(), null); // Use gRPC service name
+            
+            // For SINK steps, make them internal processors to satisfy validation
+            ProcessorInfo processorInfo;
+            if (stepType == StepType.SINK) {
+                processorInfo = new ProcessorInfo(null, stepDef.module()); // Use as internal processor
+            } else {
+                processorInfo = new ProcessorInfo(stepDef.module(), null); // Use gRPC service name
+            }
             
             // Create output targets for this step
             Map<String, OutputTarget> outputs = createOutputTargets(stepDef.next());
@@ -89,8 +96,11 @@ public class PipelineMapper {
             return StepType.INITIAL_PIPELINE; // Entry point
         } else if (hasInputs && !hasOutputs) {
             return StepType.SINK; // Terminal step
+        } else if (!hasInputs && !hasOutputs) {
+            // Single-step pipeline: treat as initial pipeline (entry point)
+            return StepType.INITIAL_PIPELINE;
         } else {
-            return StepType.PIPELINE; // Standard step
+            return StepType.PIPELINE; // Standard step (has both inputs and outputs)
         }
     }
     

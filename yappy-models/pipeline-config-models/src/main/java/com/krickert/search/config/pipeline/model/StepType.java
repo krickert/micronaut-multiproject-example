@@ -1,14 +1,12 @@
 package com.krickert.search.config.pipeline.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import io.micronaut.serde.annotation.Serdeable;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Defines the type of a pipeline step, which affects its validation rules and behavior.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@Serdeable
 @Schema(description = "Type of pipeline step", enumAsRef = true)
 public enum StepType {
     /**
