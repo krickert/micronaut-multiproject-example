@@ -56,11 +56,19 @@ kafka:
     default:
       acks: all
       retries: 3
+  topics:
+    config:
+      partitions: 5
+      replication-factor: 1
+      retention-ms: 604800000  # 7 days
+      max-message-bytes: 8388608  # 8MB
+      compression-type: snappy
+      compact-enabled: true
 
 # Application configuration
 app:
   config:
-    cluster-name: test-kafka-cluster-${random.uuid}
+    cluster-name: test-cluster
     consul:
       key-prefixes:
         pipeline-clusters: pipeline/clusters

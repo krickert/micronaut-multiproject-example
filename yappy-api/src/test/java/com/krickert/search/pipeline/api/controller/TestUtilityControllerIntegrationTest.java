@@ -20,9 +20,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @MicronautTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-@Property(name = "consul.client.host", value = "localhost") // Trigger consul test resource
-@Property(name = "consul.client.port", value = "8500")
+@Property(name = "consul.client.host") // Trigger consul test resource
+@Property(name = "consul.client.port")
 class TestUtilityControllerIntegrationTest {
+    
+    @Property(name = "consul.client.host")
+    String consulHost;
+    
+    @Property(name = "consul.client.port")
+    Integer consulPort;
 
     @Inject
     @Client("/api/v1/test-utils")
@@ -117,7 +123,7 @@ class TestUtilityControllerIntegrationTest {
     @Test
     void testCheckHealth() {
         // When - check Consul health
-        HttpRequest<Object> httpRequest = HttpRequest.GET("/health/consul?host=localhost&port=8500");
+        HttpRequest<Object> httpRequest = HttpRequest.GET("/health/consul?host=" + consulHost + "&port=" + consulPort);
         HttpResponse<HealthCheckResponse> response = client.toBlocking().exchange(httpRequest, HealthCheckResponse.class);
 
         // Then

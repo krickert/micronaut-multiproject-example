@@ -2,7 +2,7 @@ plugins {
     id("io.micronaut.application") version "4.5.3"
     id("com.gradleup.shadow") version "8.3.6"
     id("io.micronaut.test-resources") version "4.5.3"
-    id("io.micronaut.aot") version "4.5.3"
+    // id("io.micronaut.aot") version "4.5.3" // Disabled due to build issues
 }
 
 version = "0.1"
@@ -55,8 +55,8 @@ dependencies {
     runtimeOnly("org.yaml:snakeyaml")
     developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-management")
     developmentOnly("io.micronaut.controlpanel:micronaut-control-panel-ui")
-    aotPlugins(platform("io.micronaut.platform:micronaut-platform:4.8.3"))
-    aotPlugins("io.micronaut.security:micronaut-security-aot")
+    // aotPlugins(platform("io.micronaut.platform:micronaut-platform:4.8.3")) // Disabled with AOT
+    // aotPlugins("io.micronaut.security:micronaut-security-aot") // Disabled with AOT
     
     // Test dependencies
     testImplementation("io.micronaut.test:micronaut-test-junit5")
@@ -90,24 +90,21 @@ micronaut {
         incremental(true)
         annotations("yappy.api.*")
     }
-    aot {
-        // Please review carefully the optimizations enabled below
-        // Check https://micronaut-projects.github.io/micronaut-aot/latest/guide/ for more details
-        optimizeServiceLoading = false
-        convertYamlToJava = false
-        precomputeOperations = true
-        cacheEnvironment = true
-        optimizeClassLoading = true
-        deduceEnvironment = true
-        optimizeNetty = true
-        replaceLogbackXml = true
-        configurationProperties.put("micronaut.security.jwks.enabled","false")
+    testResources {
+        sharedServer = true
     }
+    // Disable AOT for now to avoid build issues
+    // aot {
+    // }
 }
 
 
 tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative") {
     jdkVersion = "21"
+}
+
+tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
+    isZip64 = true
 }
 
 

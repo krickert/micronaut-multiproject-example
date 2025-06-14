@@ -1,0 +1,5 @@
+micronaut:
+  test-resources:
+    enabled: true
+  config-client:
+    enabled: false

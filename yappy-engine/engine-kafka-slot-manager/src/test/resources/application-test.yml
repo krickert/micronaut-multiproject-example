@@ -9,7 +9,7 @@ micronaut:
 consul:
   client:
     enabled: true
-    defaultZone: "${CONSUL_HOST:localhost}:${CONSUL_PORT:8500}"
+    defaultZone: "${CONSUL_HOST}:${CONSUL_PORT}"
     registration:
       enabled: false # We don't need service registration for tests
     config:

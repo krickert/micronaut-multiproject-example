@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @MicronautTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @Property(name = "consul.client.host", value = "localhost") // Trigger consul test resource
-@Property(name = "consul.client.port", value = "8500")
+@Property(name = "consul.client.port")
 class ModuleControllerIntegrationTest {
 
     @Inject

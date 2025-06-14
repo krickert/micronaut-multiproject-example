@@ -76,6 +76,7 @@ dependencies {
     implementation(mn.javax.annotation.api)
     implementation(mn.micronaut.context)
     testResourcesImplementation(mn.testcontainers.consul)
+    testResourcesImplementation(project(":yappy-test-resources:consul-test-resource"))
     // Apply BOM/platform dependencies
     implementation(platform(project(":bom")))
     annotationProcessor(platform(project(":bom")))

@@ -3,25 +3,35 @@ package com.krickert.search.orchestrator.kafka.listener;
 import com.krickert.search.config.pipeline.event.PipelineClusterConfigChangeEvent;
 import com.krickert.search.config.pipeline.model.*;
 import com.krickert.search.orchestrator.kafka.admin.PipelineKafkaTopicService;
+import io.micronaut.context.annotation.Property;
 import io.micronaut.context.event.ApplicationEventPublisher;
-import io.micronaut.test.annotation.MockBean;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.*;
 
-@MicronautTest
+@MicronautTest(environments = {"test"})
 class PipelineKafkaTopicCreationListenerTest {
+
+    // Trigger test resource startup
+    @Property(name = "kafka.bootstrap.servers")
+    String kafkaBootstrapServers;
+
+    @Property(name = "consul.client.host")
+    String consulHost;
+
+    @Property(name = "consul.client.port")
+    int consulPort;
+
+    @Property(name = "app.config.cluster-name")
+    String clusterName = "test-cluster";
 
     @Inject
     ApplicationEventPublisher<PipelineClusterConfigChangeEvent> eventPublisher;
@@ -29,25 +39,16 @@ class PipelineKafkaTopicCreationListenerTest {
     @Inject
     PipelineKafkaTopicCreationListener listener;
 
-    @MockBean(PipelineKafkaTopicService.class)
-    PipelineKafkaTopicService mockTopicService() {
-        return mock(PipelineKafkaTopicService.class);
-    }
-
     @Inject
     PipelineKafkaTopicService topicService;
 
     @BeforeEach
     void setUp() {
-        reset(topicService);
         listener.clearCreatedTopicsCache();
-        // Mock successful topic creation by default
-        when(topicService.createAllTopicsAsync(anyString(), anyString()))
-                .thenReturn(CompletableFuture.completedFuture(null));
     }
 
     @Test
-    void testTopicsCreatedForPipelineWithKafkaInputs() throws InterruptedException {
+    void testTopicsCreatedForPipelineWithKafkaInputs() {
         // Create a pipeline configuration with Kafka inputs
         KafkaInputDefinition kafkaInput = KafkaInputDefinition.builder()
                 .listenTopics(List.of("input-topic"))
@@ -81,16 +82,24 @@ class PipelineKafkaTopicCreationListenerTest {
         // Publish the event
         eventPublisher.publishEvent(event);
 
-        // Wait for async processing
-        Thread.sleep(500);
-
-        // Verify that createAllTopicsAsync was called for the pipeline step
-        verify(topicService, times(1)).createAllTopicsAsync("test-pipeline", "test-step");
-        assertEquals(1, listener.getCreatedTopicsCount());
+        // Wait for async processing and verify topics were created
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> {
+                    assertEquals(1, listener.getCreatedTopicsCount());
+                    
+                    // Verify actual Kafka topics exist
+                    List<String> topics = topicService.listTopicsForStep("test-pipeline", "test-step");
+                    assertFalse(topics.isEmpty(), "Topics should have been created for the pipeline step");
+                    
+                    // Verify expected topic names (only INPUT and DEAD_LETTER are created)
+                    assertTrue(topics.contains("pipeline.test-pipeline.step.test-step.input"));
+                    assertTrue(topics.contains("pipeline.test-pipeline.step.test-step.dead-letter"));
+                });
     }
 
     @Test
-    void testTopicsCreatedForPipelineWithKafkaPublish() throws InterruptedException {
+    void testTopicsCreatedForPipelineWithKafkaPublish() {
         // Create a pipeline configuration with Kafka transport outputs
         KafkaTransportConfig kafkaTransport = new KafkaTransportConfig("output-topic", Map.of());
         
@@ -136,16 +145,24 @@ class PipelineKafkaTopicCreationListenerTest {
         // Publish the event
         eventPublisher.publishEvent(event);
 
-        // Wait for async processing
-        Thread.sleep(500);
-
-        // Verify that createAllTopicsAsync was called for the pipeline step
-        verify(topicService, times(1)).createAllTopicsAsync("publish-pipeline", "publish-step");
-        assertEquals(1, listener.getCreatedTopicsCount());
+        // Wait for async processing and verify topics were created
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> {
+                    assertEquals(1, listener.getCreatedTopicsCount());
+                    
+                    // Verify actual Kafka topics exist
+                    List<String> topics = topicService.listTopicsForStep("publish-pipeline", "publish-step");
+                    assertFalse(topics.isEmpty(), "Topics should have been created for the pipeline step");
+                    
+                    // Verify expected topic names (only INPUT and DEAD_LETTER are created)
+                    assertTrue(topics.contains("pipeline.publish-pipeline.step.publish-step.input"));
+                    assertTrue(topics.contains("pipeline.publish-pipeline.step.publish-step.dead-letter"));
+                });
     }
 
     @Test
-    void testNoDuplicateTopicCreation() throws InterruptedException {
+    void testNoDuplicateTopicCreation() {
         // Create a simple pipeline configuration
         KafkaInputDefinition kafkaInput = KafkaInputDefinition.builder()
                 .listenTopics(List.of("input-topic"))
@@ -177,17 +194,24 @@ class PipelineKafkaTopicCreationListenerTest {
 
         // Publish the event twice
         eventPublisher.publishEvent(event);
-        Thread.sleep(500);
         eventPublisher.publishEvent(event);
-        Thread.sleep(500);
 
-        // Verify that createAllTopicsAsync was called only once despite two events
-        verify(topicService, times(1)).createAllTopicsAsync("cached-pipeline", "cached-step");
-        assertEquals(1, listener.getCreatedTopicsCount());
+        // Wait for async processing and verify topics were created only once
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> {
+                    // Should only have one topic key in cache despite two events
+                    assertEquals(1, listener.getCreatedTopicsCount());
+                    
+                    // Verify actual Kafka topics exist
+                    List<String> topics = topicService.listTopicsForStep("cached-pipeline", "cached-step");
+                    assertFalse(topics.isEmpty(), "Topics should have been created for the pipeline step");
+                    assertEquals(2, topics.size(), "Should have 2 topic types (input, dead-letter)");
+                });
     }
 
     @Test
-    void testMultiplePipelineSteps() throws InterruptedException {
+    void testMultiplePipelineSteps() {
         // Create a pipeline with multiple steps
         KafkaInputDefinition kafkaInput1 = KafkaInputDefinition.builder()
                 .listenTopics(List.of("input-topic-1"))
@@ -232,25 +256,28 @@ class PipelineKafkaTopicCreationListenerTest {
         // Publish the event
         eventPublisher.publishEvent(event);
 
-        // Wait for async processing
-        Thread.sleep(500);
-
-        // Verify that createAllTopicsAsync was called for both steps
-        ArgumentCaptor<String> pipelineCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<String> stepCaptor = ArgumentCaptor.forClass(String.class);
-        verify(topicService, times(2)).createAllTopicsAsync(pipelineCaptor.capture(), stepCaptor.capture());
-
-        List<String> capturedPipelines = pipelineCaptor.getAllValues();
-        List<String> capturedSteps = stepCaptor.getAllValues();
-
-        assertTrue(capturedPipelines.contains("multi-step-pipeline"));
-        assertTrue(capturedSteps.contains("step-1"));
-        assertTrue(capturedSteps.contains("step-2"));
-        assertEquals(2, listener.getCreatedTopicsCount());
+        // Wait for async processing and verify topics were created for both steps
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> {
+                    assertEquals(2, listener.getCreatedTopicsCount());
+                    
+                    // Verify actual Kafka topics exist for step-1
+                    List<String> step1Topics = topicService.listTopicsForStep("multi-step-pipeline", "step-1");
+                    assertFalse(step1Topics.isEmpty(), "Topics should have been created for step-1");
+                    assertTrue(step1Topics.contains("pipeline.multi-step-pipeline.step.step-1.input"));
+                    assertTrue(step1Topics.contains("pipeline.multi-step-pipeline.step.step-1.dead-letter"));
+                    
+                    // Verify actual Kafka topics exist for step-2
+                    List<String> step2Topics = topicService.listTopicsForStep("multi-step-pipeline", "step-2");
+                    assertFalse(step2Topics.isEmpty(), "Topics should have been created for step-2");
+                    assertTrue(step2Topics.contains("pipeline.multi-step-pipeline.step.step-2.input"));
+                    assertTrue(step2Topics.contains("pipeline.multi-step-pipeline.step.step-2.dead-letter"));
+                });
     }
 
     @Test
-    void testIgnoresDifferentCluster() throws InterruptedException {
+    void testIgnoresDifferentCluster() {
         // Create a pipeline configuration for a different cluster
         PipelineClusterConfig clusterConfig = PipelineClusterConfig.builder()
                 .clusterName("different-cluster")
@@ -261,57 +288,39 @@ class PipelineKafkaTopicCreationListenerTest {
         // Publish the event
         eventPublisher.publishEvent(event);
 
-        // Wait for async processing
-        Thread.sleep(500);
+        // Wait a bit to ensure processing would have happened if it was going to
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
 
         // Verify that no topics were created
-        verify(topicService, never()).createAllTopicsAsync(anyString(), anyString());
         assertEquals(0, listener.getCreatedTopicsCount());
     }
 
     @Test
-    void testHandlesDeletionEvent() throws InterruptedException {
-        // First create some topics
-        testTopicsCreatedForPipelineWithKafkaInputs();
-        assertEquals(1, listener.getCreatedTopicsCount());
-
-        // Now send a deletion event
-        PipelineClusterConfigChangeEvent deletionEvent = new PipelineClusterConfigChangeEvent("test-cluster", null, true);
-        eventPublisher.publishEvent(deletionEvent);
-
-        // Wait for async processing
-        Thread.sleep(500);
-
-        // Verify cache was cleared
-        assertEquals(0, listener.getCreatedTopicsCount());
-    }
-
-    @Test
-    void testHandlesTopicCreationFailure() throws InterruptedException {
-        // Mock topic creation failure
-        when(topicService.createAllTopicsAsync(anyString(), anyString()))
-                .thenReturn(CompletableFuture.failedFuture(new RuntimeException("Topic creation failed")));
-
-        // Create a pipeline configuration
+    void testHandlesDeletionEvent() {
+        // First create some topics by sending a regular config event
         KafkaInputDefinition kafkaInput = KafkaInputDefinition.builder()
-                .listenTopics(List.of("input-topic"))
+                .listenTopics(List.of("deletion-test-topic"))
                 .build();
 
         PipelineStepConfig step = PipelineStepConfig.builder()
-                .stepName("failing-step")
+                .stepName("deletion-test-step")
                 .stepType(StepType.PIPELINE)
-                .description("Test failing step with Kafka input")
+                .description("Test step for deletion")
                 .processorInfo(new PipelineStepConfig.ProcessorInfo("test-module", null))
                 .kafkaInputs(List.of(kafkaInput))
                 .build();
 
         PipelineConfig pipeline = PipelineConfig.builder()
-                .name("failing-pipeline")
-                .pipelineSteps(Map.of("failing-step", step))
+                .name("deletion-test-pipeline")
+                .pipelineSteps(Map.of("deletion-test-step", step))
                 .build();
 
         PipelineGraphConfig graphConfig = PipelineGraphConfig.builder()
-                .pipelines(Map.of("failing-pipeline", pipeline))
+                .pipelines(Map.of("deletion-test-pipeline", pipeline))
                 .build();
 
         PipelineClusterConfig clusterConfig = PipelineClusterConfig.builder()
@@ -320,15 +329,31 @@ class PipelineKafkaTopicCreationListenerTest {
                 .build();
 
         PipelineClusterConfigChangeEvent event = new PipelineClusterConfigChangeEvent("test-cluster", clusterConfig);
-
-        // Publish the event
+        
+        // Create the topics first
         eventPublisher.publishEvent(event);
+        
+        // Wait for topics to be created
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> {
+                    assertEquals(1, listener.getCreatedTopicsCount());
+                });
 
-        // Wait for async processing
-        Thread.sleep(500);
+        // Now send a deletion event
+        PipelineClusterConfigChangeEvent deletionEvent = new PipelineClusterConfigChangeEvent("test-cluster", null, true);
+        eventPublisher.publishEvent(deletionEvent);
 
-        // Verify that createAllTopicsAsync was called but cache wasn't updated due to failure
-        verify(topicService, times(1)).createAllTopicsAsync("failing-pipeline", "failing-step");
-        assertEquals(0, listener.getCreatedTopicsCount());
+        // Wait for async processing and verify cache was cleared
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> {
+                    assertEquals(0, listener.getCreatedTopicsCount());
+                });
     }
+
+    // Note: testHandlesTopicCreationFailure removed - it required mocking failures which goes against
+    // our integration testing principle. Real failure testing would require complex scenarios like
+    // shutting down Kafka mid-test, which is beyond the scope of this specific test.
+    // Failure handling is better tested at the KafkaAdminService level with controlled conditions.
 }

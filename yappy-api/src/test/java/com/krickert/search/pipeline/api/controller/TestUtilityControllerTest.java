@@ -169,7 +169,7 @@ class TestUtilityControllerTest {
                 List.of(
                         new EnvironmentStatus.ServiceStatus(
                                 "consul", "infrastructure", "running",
-                                "1.16.0", "http://localhost:8500", true
+                                "1.16.0", "http://consul:8500", true
                         )
                 ),
                 List.of(),
