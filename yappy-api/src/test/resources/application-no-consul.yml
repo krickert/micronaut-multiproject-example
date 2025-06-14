@@ -1,0 +1,24 @@
+micronaut:
+  application:
+    name: yappy-api
+  config-client:
+    enabled: false
+  discovery:
+    enabled: false
+
+consul:
+  client:
+    enabled: false
+  config:
+    enabled: false
+  discovery:
+    enabled: false
+
+# Mock consul config values that would normally come from Consul
+app:
+  config:
+    consul:
+      key-prefixes:
+        pipeline-clusters: "clusters"
+        schema-versions: "schema-versions"
+        whitelists: "whitelists"

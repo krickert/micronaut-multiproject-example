@@ -66,6 +66,9 @@ dependencies {
     testImplementation("org.mockito:mockito-core")
     testImplementation("io.projectreactor:reactor-test")
     testImplementation("io.rest-assured:rest-assured")
+    
+    // Test resources for Consul
+    testImplementation(project(":yappy-test-resources:consul-test-resource"))
 }
 
 

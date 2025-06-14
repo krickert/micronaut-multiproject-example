@@ -2,4 +2,4 @@ micronaut:
   application:
     name: yappy-api
   config-client:
-    enabled: true
+    enabled: false

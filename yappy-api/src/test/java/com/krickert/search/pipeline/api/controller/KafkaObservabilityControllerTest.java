@@ -5,6 +5,7 @@ import com.krickert.search.orchestrator.kafka.admin.KafkaTopicStatusService;
 import com.krickert.search.orchestrator.kafka.admin.model.KafkaTopicStatus;
 import com.krickert.search.pipeline.api.dto.kafka.KafkaHealthResponse;
 import com.krickert.search.pipeline.api.dto.kafka.KafkaTopicStatusResponse;
+import io.micronaut.context.annotation.Property;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
 import io.micronaut.test.annotation.MockBean;
@@ -22,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
-@MicronautTest
+@MicronautTest(environments = "no-consul")
 class KafkaObservabilityControllerTest {
 
     @Inject
