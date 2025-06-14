@@ -71,4 +71,30 @@ public interface PipelineService {
      * Get the full cluster configuration.
      */
     Mono<PipelineClusterConfig> getClusterConfig(String cluster);
+    
+    // ========================================
+    // Pipeline Step Management
+    // ========================================
+    
+    /**
+     * Get details of a specific step in a pipeline.
+     */
+    Mono<PipelineStepView> getPipelineStep(String cluster, String pipelineId, String stepId);
+    
+    /**
+     * Add a new step to an existing pipeline.
+     * This will automatically create associated Kafka topics.
+     */
+    Mono<PipelineStepView> addPipelineStep(String cluster, String pipelineId, AddPipelineStepRequest request);
+    
+    /**
+     * Update an existing step in a pipeline.
+     */
+    Mono<PipelineStepView> updatePipelineStep(String cluster, String pipelineId, String stepId, UpdatePipelineStepRequest request);
+    
+    /**
+     * Remove a step from a pipeline.
+     * This will not delete associated Kafka topics.
+     */
+    Mono<Void> removePipelineStep(String cluster, String pipelineId, String stepId);
 }

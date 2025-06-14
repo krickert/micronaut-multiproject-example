@@ -23,6 +23,7 @@ dependencies {
     // Use the existing yappy-consul-config project
     implementation(project(":yappy-consul-config"))
     implementation(project(":yappy-models:pipeline-config-models"))
+    implementation(project(":yappy-commons"))
     
     implementation("io.micrometer:context-propagation")
     implementation("io.micronaut:micronaut-http-client")

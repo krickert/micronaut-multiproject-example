@@ -1,5 +1,6 @@
 package com.krickert.search.pipeline.api.mapper;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.krickert.search.config.pipeline.model.*;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig.ProcessorInfo;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig.OutputTarget;
@@ -18,6 +19,15 @@ import java.util.stream.Collectors;
  */
 @Singleton
 public class PipelineMapper {
+    
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(PipelineMapper.class);
+    
+    private final ObjectMapper objectMapper;
+    
+    public PipelineMapper(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+        LOG.debug("PipelineMapper initialized with ObjectMapper");
+    }
     
     /**
      * Convert a CreatePipelineRequest to PipelineConfig.
@@ -66,7 +76,7 @@ public class PipelineMapper {
                     stepType,
                     "Test Description for " + stepDef.id(), // description
                     null, // customConfigSchemaId
-                    null, // customConfig - simplified for MVP
+                    mapToJsonConfigOptions(stepDef.config()), // Convert config to JsonConfigOptions
                     Collections.emptyList(), // kafkaInputs - simplified for MVP
                     outputs,
                     0, // maxRetries
@@ -181,15 +191,111 @@ public class PipelineMapper {
                     String moduleId = stepConfig.processorInfo().grpcServiceName() != null 
                             ? stepConfig.processorInfo().grpcServiceName() 
                             : stepConfig.processorInfo().internalProcessorBeanName();
+                    
+                    // Extract config from JsonConfigOptions
+                    LOG.info("mapStepsToView: Processing step {} with customConfig: {}", entry.getKey(), stepConfig.customConfig());
+                    Map<String, Object> configMap = extractConfigMap(stepConfig.customConfig());
+                    LOG.info("mapStepsToView: Step {} config map: {}", entry.getKey(), configMap);
+                    
+                    // Extract next steps from outputs
+                    List<String> nextSteps = stepConfig.outputs() != null 
+                            ? stepConfig.outputs().values().stream()
+                                    .map(OutputTarget::targetStepName)
+                                    .filter(name -> name != null)
+                                    .distinct()
+                                    .toList()
+                            : List.of();
+                    
                     return new PipelineView.PipelineStepView(
                             entry.getKey(),
                             moduleId,
-                            Map.of(), // Empty config for MVP
-                            List.of(), // Empty next steps for MVP
+                            configMap,
+                            nextSteps,
                             "direct", // Default transport
                             null // No kafka topic for direct transport
                     );
                 })
                 .toList();
+    }
+    
+    /**
+     * Extract config map from JsonConfigOptions.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> extractConfigMap(PipelineStepConfig.JsonConfigOptions configOptions) {
+        if (configOptions == null) {
+            LOG.debug("extractConfigMap: configOptions is null");
+            return null; // Return null instead of empty map to avoid serialization issues
+        }
+        
+        Map<String, Object> result = new LinkedHashMap<>();
+        
+        // First add configParams if present
+        if (configOptions.configParams() != null && !configOptions.configParams().isEmpty()) {
+            LOG.debug("extractConfigMap: adding configParams: {}", configOptions.configParams());
+            result.putAll(configOptions.configParams());
+        }
+        
+        // Then add jsonConfig if present (this may override configParams)
+        if (configOptions.jsonConfig() != null && !configOptions.jsonConfig().isEmpty()) {
+            try {
+                Map<String, Object> jsonMap = objectMapper.convertValue(configOptions.jsonConfig(), Map.class);
+                if (jsonMap != null && !jsonMap.isEmpty()) {
+                    LOG.debug("extractConfigMap: adding jsonConfig: {}", jsonMap);
+                    result.putAll(jsonMap);
+                }
+            } catch (Exception e) {
+                LOG.error("extractConfigMap: failed to convert jsonConfig", e);
+            }
+        }
+        
+        // Return null if no config found to avoid empty map serialization issues
+        if (result.isEmpty()) {
+            LOG.debug("extractConfigMap: returning null for empty config");
+            return null;
+        }
+        
+        LOG.debug("extractConfigMap: returning result: {}", result);
+        return result;
+    }
+    
+    /**
+     * Convert a config map to JsonConfigOptions.
+     * Uses configParams for simple string values, jsonConfig for complex objects.
+     */
+    private PipelineStepConfig.JsonConfigOptions mapToJsonConfigOptions(Map<String, Object> config) {
+        if (config == null || config.isEmpty()) {
+            // When no config provided, return empty JSON
+            return new PipelineStepConfig.JsonConfigOptions(
+                    objectMapper.createObjectNode(), Map.of()
+            );
+        }
+        
+        // Check if all values are strings - if so, we could use configParams instead
+        boolean allStrings = config.values().stream().allMatch(v -> v instanceof String);
+        
+        if (allStrings) {
+            // Simple case: all values are strings, so we can use configParams
+            Map<String, String> stringParams = config.entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            entry -> entry.getValue().toString(),
+                            (oldValue, newValue) -> oldValue,
+                            LinkedHashMap::new
+                    ));
+            LOG.info("mapToJsonConfigOptions: Using configParams for simple config: {}", stringParams);
+            return new PipelineStepConfig.JsonConfigOptions(
+                    objectMapper.createObjectNode(), stringParams
+            );
+        } else {
+            // Complex case: use jsonConfig for nested objects, arrays, etc.
+            try {
+                var jsonNode = objectMapper.valueToTree(config);
+                LOG.info("mapToJsonConfigOptions: Using jsonConfig for complex config: {}", jsonNode);
+                return new PipelineStepConfig.JsonConfigOptions(jsonNode, Map.of());
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Failed to convert config to JSON", e);
+            }
+        }
     }
 }

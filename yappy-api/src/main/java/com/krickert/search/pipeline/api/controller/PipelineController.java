@@ -156,4 +156,61 @@ public class PipelineController {
         return pipelineService.getClusterConfig(cluster)
                 .switchIfEmpty(Mono.error(new io.micronaut.http.exceptions.HttpStatusException(HttpStatus.NOT_FOUND, "Cluster not found")));
     }
+    
+    // ========================================
+    // Pipeline Step Management
+    // ========================================
+    
+    @Get("/{id}/steps/{stepId}")
+    @Operation(summary = "Get step details", description = "Get details of a specific step in a pipeline")
+    @ApiResponse(responseCode = "200", description = "Step retrieved successfully")
+    @ApiResponse(responseCode = "404", description = "Pipeline or step not found")
+    public Mono<PipelineStepView> getPipelineStep(
+            @PathVariable @NotBlank String id,
+            @PathVariable @NotBlank String stepId,
+            @QueryValue(defaultValue = "default") String cluster) {
+        return pipelineService.getPipelineStep(cluster, id, stepId);
+    }
+    
+    @Post("/{id}/steps")
+    @Status(HttpStatus.CREATED)
+    @Operation(summary = "Add step to pipeline", 
+              description = "Add a new processing step to an existing pipeline. This will automatically create associated Kafka topics.")
+    @ApiResponse(responseCode = "201", description = "Step added successfully")
+    @ApiResponse(responseCode = "400", description = "Invalid step configuration")
+    @ApiResponse(responseCode = "404", description = "Pipeline not found")
+    @ApiResponse(responseCode = "409", description = "Step ID already exists in pipeline")
+    public Mono<PipelineStepView> addPipelineStep(
+            @PathVariable @NotBlank String id,
+            @Body @Valid AddPipelineStepRequest request,
+            @QueryValue(defaultValue = "default") String cluster) {
+        return pipelineService.addPipelineStep(cluster, id, request);
+    }
+    
+    @Put("/{id}/steps/{stepId}")
+    @Operation(summary = "Update pipeline step", description = "Update an existing step in a pipeline")
+    @ApiResponse(responseCode = "200", description = "Step updated successfully")
+    @ApiResponse(responseCode = "400", description = "Invalid step configuration")
+    @ApiResponse(responseCode = "404", description = "Pipeline or step not found")
+    public Mono<PipelineStepView> updatePipelineStep(
+            @PathVariable @NotBlank String id,
+            @PathVariable @NotBlank String stepId,
+            @Body @Valid UpdatePipelineStepRequest request,
+            @QueryValue(defaultValue = "default") String cluster) {
+        return pipelineService.updatePipelineStep(cluster, id, stepId, request);
+    }
+    
+    @Delete("/{id}/steps/{stepId}")
+    @Status(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Remove step from pipeline", 
+              description = "Remove a step from a pipeline. This will not delete associated Kafka topics.")
+    @ApiResponse(responseCode = "204", description = "Step removed successfully")
+    @ApiResponse(responseCode = "404", description = "Pipeline or step not found")
+    @ApiResponse(responseCode = "400", description = "Cannot remove step that has dependencies")
+    public Mono<Void> removePipelineStep(
+            @PathVariable @NotBlank String id,
+            @PathVariable @NotBlank String stepId,
+            @QueryValue(defaultValue = "default") String cluster) {
+        return pipelineService.removePipelineStep(cluster, id, stepId);
+    }
 }
