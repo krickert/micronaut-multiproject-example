@@ -1,18 +1,15 @@
 package com.krickert.search.pipeline.api.mapper;
 
-import com.krickert.search.config.pipeline.model.PipelineConfig;
-import com.krickert.search.config.pipeline.model.PipelineStepConfig;
+import com.krickert.search.config.pipeline.model.*;
 import com.krickert.search.config.pipeline.model.PipelineStepConfig.ProcessorInfo;
-import com.krickert.search.config.pipeline.model.StepType;
+import com.krickert.search.config.pipeline.model.PipelineStepConfig.OutputTarget;
 import com.krickert.search.pipeline.api.dto.CreatePipelineRequest;
 import com.krickert.search.pipeline.api.dto.PipelineView;
 import com.krickert.search.pipeline.api.dto.PipelineSummary;
 import jakarta.inject.Singleton;
 
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -32,22 +29,45 @@ public class PipelineMapper {
     
     /**
      * Convert a CreatePipelineRequest to PipelineConfig.
-     * This is a simplified mapping - the real PipelineStepConfig is much more complex.
+     * Creates proper pipeline step connections based on the 'next' field in step definitions.
      */
     public PipelineConfig toPipelineConfig(CreatePipelineRequest request) {
-        // For MVP, we'll create a simple PipelineConfig with basic step mapping
         Map<String, PipelineStepConfig> steps = new HashMap<>();
         
-        // Map each step definition to a PipelineStepConfig
+        // First, create basic step configurations
+        Map<String, List<String>> stepConnections = new HashMap<>();
         for (var stepDef : request.steps()) {
-            // Create a minimal PipelineStepConfig for each step
+            stepConnections.put(stepDef.id(), stepDef.next() != null ? stepDef.next() : List.of());
+        }
+        
+        // Determine step types based on connections
+        Set<String> hasIncomingConnections = new HashSet<>();
+        for (var connections : stepConnections.values()) {
+            hasIncomingConnections.addAll(connections);
+        }
+        
+        // Map each step definition to a PipelineStepConfig with proper connections
+        for (var stepDef : request.steps()) {
+            StepType stepType = determineStepType(stepDef.id(), stepConnections, hasIncomingConnections);
             ProcessorInfo processorInfo = new ProcessorInfo(stepDef.module(), null); // Use gRPC service name
+            
+            // Create output targets for this step
+            Map<String, OutputTarget> outputs = createOutputTargets(stepDef.next());
+            
             var stepConfig = new PipelineStepConfig(
                     stepDef.id(),
-                    StepType.PIPELINE, // Default to PIPELINE for MVP
-                    processorInfo,
-                    null, // No custom config for MVP
-                    null  // No custom config schema for MVP
+                    stepType,
+                    "Test Description for " + stepDef.id(), // description
+                    null, // customConfigSchemaId
+                    null, // customConfig - simplified for MVP
+                    Collections.emptyList(), // kafkaInputs - simplified for MVP
+                    outputs,
+                    0, // maxRetries
+                    1000L, // retryBackoffMs
+                    30000L, // maxRetryBackoffMs
+                    2.0, // retryBackoffMultiplier
+                    null, // stepTimeoutMs
+                    processorInfo
             );
             steps.put(stepDef.id(), stepConfig);
         }
@@ -56,6 +76,49 @@ public class PipelineMapper {
                 .name(request.id())
                 .pipelineSteps(steps)
                 .build();
+    }
+    
+    /**
+     * Determine the step type based on its position in the flow.
+     */
+    private StepType determineStepType(String stepId, Map<String, List<String>> stepConnections, Set<String> hasIncomingConnections) {
+        boolean hasInputs = hasIncomingConnections.contains(stepId);
+        boolean hasOutputs = !stepConnections.get(stepId).isEmpty();
+        
+        if (!hasInputs && hasOutputs) {
+            return StepType.INITIAL_PIPELINE; // Entry point
+        } else if (hasInputs && !hasOutputs) {
+            return StepType.SINK; // Terminal step
+        } else {
+            return StepType.PIPELINE; // Standard step
+        }
+    }
+    
+    /**
+     * Create output targets for a step based on its 'next' steps.
+     * For MVP, using gRPC transport only.
+     */
+    private Map<String, OutputTarget> createOutputTargets(List<String> nextSteps) {
+        if (nextSteps == null || nextSteps.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        
+        Map<String, OutputTarget> outputs = new HashMap<>();
+        for (int i = 0; i < nextSteps.size(); i++) {
+            String targetStep = nextSteps.get(i);
+            String outputKey = "output" + (i + 1); // output1, output2, etc.
+            
+            GrpcTransportConfig grpcConfig = new GrpcTransportConfig(targetStep, Collections.emptyMap());
+            OutputTarget outputTarget = new OutputTarget(
+                    targetStep,
+                    TransportType.GRPC,
+                    grpcConfig,
+                    null // No Kafka transport for MVP
+            );
+            outputs.put(outputKey, outputTarget);
+        }
+        
+        return outputs;
     }
     
     /**

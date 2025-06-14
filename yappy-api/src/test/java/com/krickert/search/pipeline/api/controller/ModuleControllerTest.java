@@ -2,6 +2,7 @@ package com.krickert.search.pipeline.api.controller;
 
 import com.krickert.search.pipeline.api.dto.*;
 import com.krickert.search.pipeline.api.service.ModuleService;
+import io.micronaut.core.type.Argument;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpStatus;
 import io.micronaut.http.client.HttpClient;
@@ -43,7 +44,7 @@ class ModuleControllerTest {
         // When
         var response = client.toBlocking().exchange(
                 HttpRequest.GET("/"),
-                List.class
+                Argument.listOf(ModuleInfo.class)
         );
 
         // Then
@@ -261,7 +262,7 @@ class ModuleControllerTest {
         // When
         var response = client.toBlocking().exchange(
                 HttpRequest.GET("/templates"),
-                List.class
+                Argument.listOf(ModuleTemplate.class)
         );
 
         // Then
@@ -289,14 +290,18 @@ class ModuleControllerTest {
                 Map.of()
         );
 
-        // When/Then
-        var response = client.toBlocking().exchange(
-                HttpRequest.POST("/register", invalidRequest),
-                String.class
+        // When/Then - expect validation error
+        var exception = assertThrows(
+                io.micronaut.http.client.exceptions.HttpClientResponseException.class,
+                () -> client.toBlocking().exchange(
+                        HttpRequest.POST("/register", invalidRequest),
+                        String.class
+                )
         );
         
         // Should get a 400 Bad Request due to validation
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatus());
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+        assertTrue(exception.getMessage().contains("Service ID must be lowercase letters, numbers, and hyphens only"));
     }
 
     @MockBean(ModuleService.class)
