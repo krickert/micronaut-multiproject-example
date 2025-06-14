@@ -26,6 +26,14 @@ public class PipelineMapper {
      * Convert a CreatePipelineRequest to PipelineConfig.
      * This is a simplified mapping - the real PipelineStepConfig is much more complex.
      */
+    public PipelineConfig fromRequest(CreatePipelineRequest request) {
+        return toPipelineConfig(request);
+    }
+    
+    /**
+     * Convert a CreatePipelineRequest to PipelineConfig.
+     * This is a simplified mapping - the real PipelineStepConfig is much more complex.
+     */
     public PipelineConfig toPipelineConfig(CreatePipelineRequest request) {
         // For MVP, we'll create a simple PipelineConfig with basic step mapping
         Map<String, PipelineStepConfig> steps = new HashMap<>();
@@ -33,10 +41,13 @@ public class PipelineMapper {
         // Map each step definition to a PipelineStepConfig
         for (var stepDef : request.steps()) {
             // Create a minimal PipelineStepConfig for each step
+            ProcessorInfo processorInfo = new ProcessorInfo(stepDef.module(), null); // Use gRPC service name
             var stepConfig = new PipelineStepConfig(
                     stepDef.id(),
                     StepType.PIPELINE, // Default to PIPELINE for MVP
-                    new ProcessorInfo(stepDef.module(), null) // Use gRPC service name
+                    processorInfo,
+                    null, // No custom config for MVP
+                    null  // No custom config schema for MVP
             );
             steps.put(stepDef.id(), stepConfig);
         }
@@ -45,6 +56,13 @@ public class PipelineMapper {
                 .name(request.id())
                 .pipelineSteps(steps)
                 .build();
+    }
+    
+    /**
+     * Convert PipelineConfig to PipelineView.
+     */
+    public PipelineView toView(String pipelineId, PipelineConfig config, String cluster) {
+        return toPipelineView(config, cluster, Map.of());
     }
     
     /**

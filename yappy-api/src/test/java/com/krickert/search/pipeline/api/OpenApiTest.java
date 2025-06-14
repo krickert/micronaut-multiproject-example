@@ -21,15 +21,15 @@ class OpenApiTest {
     void testRedirectionToOpenApiExplorer(@Client("/") HttpClient httpClient) {
         BlockingHttpClient client = httpClient.toBlocking();
         HttpResponse<?> response = assertDoesNotThrow(() -> client.exchange("/"));
-        assertEquals(HttpStatus.SEE_OTHER, response.getStatus());
+        assertEquals(HttpStatus.MOVED_PERMANENTLY, response.getStatus());
         assertNotNull(response.getHeaders().get(HttpHeaders.LOCATION));
-        assertEquals("/swagger-ui/index.html", response.getHeaders().get(HttpHeaders.LOCATION));
+        assertEquals("/openapi-explorer/index.html", response.getHeaders().get(HttpHeaders.LOCATION));
     }
 
     @Test
     void testOpenApiSpecificationIsAccessible(@Client("/") HttpClient httpClient) {
         BlockingHttpClient client = httpClient.toBlocking();
-        String yml = assertDoesNotThrow(() -> client.retrieve("/swagger/yappy-api-0.1.yml"));
+        String yml = assertDoesNotThrow(() -> client.retrieve("/swagger/yappy-pipeline-api-1.0.0-SNAPSHOT.yml"));
         
         // Verify basic OpenAPI structure
         assertTrue(yml.contains("openapi:"));
@@ -50,7 +50,7 @@ class OpenApiTest {
     @Test
     void testPipelineEndpointsInOpenApi(@Client("/") HttpClient httpClient) {
         BlockingHttpClient client = httpClient.toBlocking();
-        String yml = assertDoesNotThrow(() -> client.retrieve("/swagger/yappy-api-0.1.yml"));
+        String yml = assertDoesNotThrow(() -> client.retrieve("/swagger/yappy-pipeline-api-1.0.0-SNAPSHOT.yml"));
         
         // Verify pipeline operations
         assertTrue(yml.contains("operationId: listPipelines"));
@@ -66,7 +66,7 @@ class OpenApiTest {
     @Test
     void testModuleEndpointsInOpenApi(@Client("/") HttpClient httpClient) {
         BlockingHttpClient client = httpClient.toBlocking();
-        String yml = assertDoesNotThrow(() -> client.retrieve("/swagger/yappy-api-0.1.yml"));
+        String yml = assertDoesNotThrow(() -> client.retrieve("/swagger/yappy-pipeline-api-1.0.0-SNAPSHOT.yml"));
         
         // Verify module operations
         assertTrue(yml.contains("operationId: listModules"));
@@ -81,20 +81,20 @@ class OpenApiTest {
     @Test
     void testResponseCodesDocumented(@Client("/") HttpClient httpClient) {
         BlockingHttpClient client = httpClient.toBlocking();
-        String yml = assertDoesNotThrow(() -> client.retrieve("/swagger/yappy-api-0.1.yml"));
+        String yml = assertDoesNotThrow(() -> client.retrieve("/swagger/yappy-pipeline-api-1.0.0-SNAPSHOT.yml"));
         
         // Verify HTTP response codes are documented
-        assertTrue(yml.contains("'200':"));
-        assertTrue(yml.contains("'201':"));
-        assertTrue(yml.contains("'204':"));
-        assertTrue(yml.contains("'400':"));
-        assertTrue(yml.contains("'409':"));
+        assertTrue(yml.contains("\"200\":"));
+        assertTrue(yml.contains("\"201\":"));
+        assertTrue(yml.contains("\"204\":"));
+        assertTrue(yml.contains("\"400\":"));
+        assertTrue(yml.contains("\"409\":"));
     }
 
     @Test
     void testSchemasDocumented(@Client("/") HttpClient httpClient) {
         BlockingHttpClient client = httpClient.toBlocking();
-        String yml = assertDoesNotThrow(() -> client.retrieve("/swagger/yappy-api-0.1.yml"));
+        String yml = assertDoesNotThrow(() -> client.retrieve("/swagger/yappy-pipeline-api-1.0.0-SNAPSHOT.yml"));
         
         // Verify schemas are present
         assertTrue(yml.contains("CreatePipelineRequest"));
@@ -109,7 +109,7 @@ class OpenApiTest {
     @Test
     void testValidationConstraintsInOpenApi(@Client("/") HttpClient httpClient) {
         BlockingHttpClient client = httpClient.toBlocking();
-        String yml = assertDoesNotThrow(() -> client.retrieve("/swagger/yappy-api-0.1.yml"));
+        String yml = assertDoesNotThrow(() -> client.retrieve("/swagger/yappy-pipeline-api-1.0.0-SNAPSHOT.yml"));
         
         // Verify validation patterns are documented
         assertTrue(yml.contains("pattern:"));

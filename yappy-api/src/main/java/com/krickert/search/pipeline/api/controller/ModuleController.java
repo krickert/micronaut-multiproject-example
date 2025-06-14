@@ -31,6 +31,7 @@ public class ModuleController {
 
     @Get
     @Operation(summary = "List modules", description = "Get all registered modules")
+    @ApiResponse(responseCode = "200", description = "Modules retrieved successfully")
     public Flux<ModuleInfo> listModules(
             @QueryValue(defaultValue = "default") String cluster) {
         return moduleService.listModules(cluster);
@@ -38,6 +39,8 @@ public class ModuleController {
 
     @Get("/{serviceId}")
     @Operation(summary = "Get module details", description = "Get information about a specific module")
+    @ApiResponse(responseCode = "200", description = "Module retrieved successfully")
+    @ApiResponse(responseCode = "404", description = "Module not found")
     public Mono<ModuleInfo> getModule(
             @PathVariable @NotBlank String serviceId,
             @QueryValue(defaultValue = "default") String cluster) {
@@ -58,6 +61,9 @@ public class ModuleController {
 
     @Put("/{serviceId}")
     @Operation(summary = "Update module", description = "Update module registration")
+    @ApiResponse(responseCode = "200", description = "Module updated successfully")
+    @ApiResponse(responseCode = "400", description = "Invalid module configuration")
+    @ApiResponse(responseCode = "404", description = "Module not found")
     public Mono<ModuleInfo> updateModule(
             @PathVariable @NotBlank String serviceId,
             @Body @Valid ModuleUpdateRequest request,
@@ -68,6 +74,8 @@ public class ModuleController {
     @Delete("/{serviceId}")
     @Status(HttpStatus.NO_CONTENT)
     @Operation(summary = "Deregister module", description = "Remove a module from the cluster")
+    @ApiResponse(responseCode = "204", description = "Module deregistered successfully")
+    @ApiResponse(responseCode = "404", description = "Module not found")
     public Mono<Void> deregisterModule(
             @PathVariable @NotBlank String serviceId,
             @QueryValue(defaultValue = "default") String cluster) {
@@ -76,6 +84,8 @@ public class ModuleController {
 
     @Get("/{serviceId}/health")
     @Operation(summary = "Check module health", description = "Get current health status of a module")
+    @ApiResponse(responseCode = "200", description = "Health status retrieved successfully")
+    @ApiResponse(responseCode = "404", description = "Module not found")
     public Mono<ModuleHealthStatus> checkModuleHealth(
             @PathVariable @NotBlank String serviceId,
             @QueryValue(defaultValue = "default") String cluster) {
@@ -84,6 +94,9 @@ public class ModuleController {
 
     @Post("/{serviceId}/test")
     @Operation(summary = "Test module", description = "Send test data to a module")
+    @ApiResponse(responseCode = "200", description = "Module test completed")
+    @ApiResponse(responseCode = "400", description = "Invalid test request")
+    @ApiResponse(responseCode = "404", description = "Module not found")
     public Mono<ModuleTestResponse> testModule(
             @PathVariable @NotBlank String serviceId,
             @Body @Valid ModuleTestRequest request,
@@ -93,6 +106,7 @@ public class ModuleController {
 
     @Get("/templates")
     @Operation(summary = "Get module templates", description = "Get available module configuration templates")
+    @ApiResponse(responseCode = "200", description = "Templates retrieved successfully")
     public Flux<ModuleTemplate> getModuleTemplates() {
         return moduleService.getTemplates();
     }

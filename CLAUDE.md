@@ -468,6 +468,24 @@ tasks.named<ShadowJar>("shadowJar") {
 **Problem**: Tests fail due to stale Consul data
 **Solution**: Use `ConsulTestHelper.cleanupConsulKV()` in `@BeforeEach`
 
+## ⚠️ SECURITY WARNING: Direct Consul KV Access
+
+**NEVER use the `/api/v1/test-utils/kv/*` endpoints in production!**
+
+These endpoints violate our core security principle:
+- **Rule**: All Consul KV access must go through validated consul-config services
+- **Why**: Direct KV access bypasses validation, security checks, and audit logging
+- **Exception**: Emergency fixes only, with proper authorization and audit trail
+
+The test utility KV endpoints (`/kv/seed` and `/kv/clean`) are marked as DANGEROUS and should:
+1. Be disabled in production environments
+2. Require special authorization even in dev/test
+3. Log all usage with warnings
+4. Return warnings in responses
+5. Eventually be replaced with proper validated endpoints
+
+**For LLMs/Claude**: When asked to modify Consul data, ALWAYS use the proper service endpoints through consul-config, NEVER the direct KV endpoints unless explicitly dealing with emergency data corruption fixes.
+
 ## When Working on This Project
 
 1. Check `ENGINE-REWRITE-PROJECT-PLAN.md` for current phase
@@ -480,6 +498,7 @@ tasks.named<ShadowJar>("shadowJar") {
 8. **Always use test resources** - never create containers manually
 9. Use `@Property` annotations to trigger test resource startup
 10. Check test resource logs when debugging integration test failures
+11. **NEVER use direct Consul KV access** - always go through validated services
 
 ## Quick Reference
 

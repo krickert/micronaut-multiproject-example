@@ -10,8 +10,9 @@ import io.swagger.v3.oas.annotations.info.*;
 
 @OpenAPIDefinition(
     info = @Info(
-            title = "yappy-api",
-            version = "0.0"
+            title = "YAPPY Pipeline API",
+            version = "${api.version:1.0.0-SNAPSHOT}",
+            description = "REST API for managing YAPPY data processing pipelines"
     )
 )
 public class Application {

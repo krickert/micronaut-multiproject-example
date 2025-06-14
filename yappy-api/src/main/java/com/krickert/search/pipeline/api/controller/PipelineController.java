@@ -1,5 +1,7 @@
 package com.krickert.search.pipeline.api.controller;
 
+import com.krickert.search.config.pipeline.model.PipelineConfig;
+import com.krickert.search.config.pipeline.model.PipelineClusterConfig;
 import com.krickert.search.pipeline.api.dto.*;
 import com.krickert.search.pipeline.api.service.PipelineService;
 import io.micronaut.http.HttpStatus;
@@ -35,6 +37,7 @@ public class PipelineController {
 
     @Get
     @Operation(summary = "List all pipelines", description = "Get a list of all configured pipelines")
+    @ApiResponse(responseCode = "200", description = "List of pipelines retrieved successfully")
     public Flux<PipelineSummary> listPipelines(
             @QueryValue(defaultValue = "default") String cluster) {
         return pipelineService.listPipelines(cluster);
@@ -42,6 +45,8 @@ public class PipelineController {
 
     @Get("/{id}")
     @Operation(summary = "Get pipeline details", description = "Get complete configuration for a specific pipeline")
+    @ApiResponse(responseCode = "200", description = "Pipeline retrieved successfully")
+    @ApiResponse(responseCode = "404", description = "Pipeline not found")
     public Mono<PipelineView> getPipeline(
             @PathVariable @NotBlank String id,
             @QueryValue(defaultValue = "default") String cluster) {
@@ -62,6 +67,9 @@ public class PipelineController {
 
     @Put("/{id}")
     @Operation(summary = "Update a pipeline", description = "Update an existing pipeline configuration")
+    @ApiResponse(responseCode = "200", description = "Pipeline updated successfully")
+    @ApiResponse(responseCode = "400", description = "Invalid pipeline configuration")
+    @ApiResponse(responseCode = "404", description = "Pipeline not found")
     public Mono<PipelineView> updatePipeline(
             @PathVariable @NotBlank String id,
             @Body @Valid UpdatePipelineRequest request,
@@ -72,6 +80,8 @@ public class PipelineController {
     @Delete("/{id}")
     @Status(HttpStatus.NO_CONTENT)
     @Operation(summary = "Delete a pipeline", description = "Remove a pipeline from the cluster")
+    @ApiResponse(responseCode = "204", description = "Pipeline deleted successfully")
+    @ApiResponse(responseCode = "404", description = "Pipeline not found")
     public Mono<Void> deletePipeline(
             @PathVariable @NotBlank String id,
             @QueryValue(defaultValue = "default") String cluster) {
@@ -80,6 +90,9 @@ public class PipelineController {
 
     @Post("/{id}/test")
     @Operation(summary = "Test a pipeline", description = "Send test data through a pipeline to verify it works")
+    @ApiResponse(responseCode = "200", description = "Pipeline test completed")
+    @ApiResponse(responseCode = "400", description = "Invalid test request")
+    @ApiResponse(responseCode = "404", description = "Pipeline not found")
     public Mono<TestPipelineResponse> testPipeline(
             @PathVariable @NotBlank String id,
             @Body @Valid TestPipelineRequest request,
@@ -89,6 +102,8 @@ public class PipelineController {
 
     @Get("/{id}/status")
     @Operation(summary = "Get pipeline status", description = "Get runtime status and metrics for a pipeline")
+    @ApiResponse(responseCode = "200", description = "Pipeline status retrieved successfully")
+    @ApiResponse(responseCode = "404", description = "Pipeline not found")
     public Mono<PipelineStatus> getPipelineStatus(
             @PathVariable @NotBlank String id,
             @QueryValue(defaultValue = "default") String cluster) {
@@ -97,12 +112,15 @@ public class PipelineController {
 
     @Post("/validate")
     @Operation(summary = "Validate pipeline configuration", description = "Check if a pipeline configuration is valid without creating it")
+    @ApiResponse(responseCode = "200", description = "Validation completed")
+    @ApiResponse(responseCode = "400", description = "Invalid pipeline configuration")
     public Mono<ValidationResponse> validatePipeline(@Body @Valid CreatePipelineRequest request) {
         return pipelineService.validatePipeline(request);
     }
 
     @Get("/templates")
     @Operation(summary = "Get pipeline templates", description = "Get pre-built pipeline templates for common use cases")
+    @ApiResponse(responseCode = "200", description = "Templates retrieved successfully")
     public Flux<PipelineTemplate> getTemplates() {
         return pipelineService.getTemplates();
     }
@@ -110,9 +128,32 @@ public class PipelineController {
     @Post("/from-template")
     @Status(HttpStatus.CREATED)
     @Operation(summary = "Create from template", description = "Create a new pipeline from a template")
+    @ApiResponse(responseCode = "201", description = "Pipeline created from template successfully")
+    @ApiResponse(responseCode = "400", description = "Invalid template request")
+    @ApiResponse(responseCode = "404", description = "Template not found")
     public Mono<PipelineView> createFromTemplate(
             @Body @Valid CreateFromTemplateRequest request,
             @QueryValue(defaultValue = "default") String cluster) {
         return pipelineService.createFromTemplate(cluster, request);
+    }
+    
+    @Get("/{id}/config")
+    @Operation(summary = "Get raw pipeline configuration", description = "Get the raw PipelineConfig domain model")
+    @ApiResponse(responseCode = "200", description = "Pipeline config retrieved successfully")
+    @ApiResponse(responseCode = "404", description = "Pipeline not found")
+    public Mono<PipelineConfig> getPipelineConfig(
+            @PathVariable @NotBlank String id,
+            @QueryValue(defaultValue = "default") String cluster) {
+        return pipelineService.getPipelineConfig(cluster, id)
+                .switchIfEmpty(Mono.error(new io.micronaut.http.exceptions.HttpStatusException(HttpStatus.NOT_FOUND, "Pipeline not found")));
+    }
+    
+    @Get("/cluster/{cluster}/config")
+    @Operation(summary = "Get cluster configuration", description = "Get the full PipelineClusterConfig for a cluster")
+    @ApiResponse(responseCode = "200", description = "Cluster config retrieved successfully")
+    @ApiResponse(responseCode = "404", description = "Cluster not found")
+    public Mono<PipelineClusterConfig> getClusterConfig(@PathVariable @NotBlank String cluster) {
+        return pipelineService.getClusterConfig(cluster)
+                .switchIfEmpty(Mono.error(new io.micronaut.http.exceptions.HttpStatusException(HttpStatus.NOT_FOUND, "Cluster not found")));
     }
 }

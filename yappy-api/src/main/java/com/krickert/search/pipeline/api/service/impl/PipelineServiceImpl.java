@@ -181,4 +181,17 @@ public class PipelineServiceImpl implements PipelineService {
                     return createPipeline(cluster, createRequest);
                 });
     }
+    
+    @Override
+    public Mono<PipelineConfig> getPipelineConfig(String cluster, String pipelineId) {
+        return consulService.getSpecificPipelineConfig(cluster, pipelineId)
+                .flatMap(opt -> opt.map(Mono::just).orElse(Mono.empty()));
+    }
+    
+    @Override
+    public Mono<com.krickert.search.config.pipeline.model.PipelineClusterConfig> getClusterConfig(String cluster) {
+        // TODO: Implement when ConsulBusinessOperationsService exposes cluster config retrieval
+        // For now, return empty to indicate not implemented
+        return Mono.empty();
+    }
 }

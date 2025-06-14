@@ -37,6 +37,10 @@ dependencies {
     implementation(mn.jackson.databind)
 // https://mvnrepository.com/artifact/jakarta.validation/jakarta.validation-api
     implementation("jakarta.validation:jakarta.validation-api:3.1.1")
+    
+    // Micronaut serialization support (versions from BOM)
+    compileOnly("io.micronaut.serde:micronaut-serde-api:2.14.1")
+    compileOnly("io.swagger.core.v3:swagger-annotations:2.2.30")
     // https://mvnrepository.com/artifact/com.networknt/json-schema-validator
     testImplementation("com.networknt:json-schema-validator:1.5.6")
     runtimeOnly(mn.logback.classic)

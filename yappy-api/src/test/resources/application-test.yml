@@ -10,3 +10,15 @@ micronaut:
   server:
     cors:
       enabled: true
+
+app:
+  config:
+    consul:
+      key-prefixes:
+        pipeline-clusters: "clusters"
+        schema-versions: "schema-versions"
+        whitelists: "whitelists"
+
+consul:
+  client:
+    enabled: true

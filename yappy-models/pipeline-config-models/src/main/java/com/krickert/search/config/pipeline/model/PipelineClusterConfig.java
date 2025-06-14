@@ -3,6 +3,8 @@ package com.krickert.search.config.pipeline.model; // Or your actual package
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.micronaut.serde.annotation.Serdeable;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
 import java.util.Collections;
@@ -11,6 +13,8 @@ import java.util.Set;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @Builder(toBuilder = true)
+@Serdeable
+@Schema(description = "Pipeline cluster configuration")
 public record PipelineClusterConfig(
         @JsonProperty("clusterName") String clusterName,
         @JsonProperty("pipelineGraphConfig") PipelineGraphConfig pipelineGraphConfig,
