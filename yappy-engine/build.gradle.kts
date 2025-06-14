@@ -118,6 +118,14 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 
+// Configure run task to support debug mode
+tasks.named<JavaExec>("run") {
+    if (System.getProperty("debug") != null || System.getenv("DEBUG_MODE") == "true") {
+        jvmArgs("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5000")
+        println("Debug mode enabled on port 5000")
+    }
+}
+
 tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative") {
     jdkVersion = "21"
 }

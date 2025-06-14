@@ -12,7 +12,7 @@ dependencyResolutionManagement {
     }
     versionCatalogs {
         create("mn") {
-            from("io.micronaut.platform:micronaut-platform:4.8.2")
+            from("io.micronaut.platform:micronaut-platform:4.8.3")
         }
     }
 }
@@ -87,5 +87,8 @@ include(
     "yappy-integration-test",
     
     // Module Registration (renamed from yappy-registration-cli)
-    "yappy-module-registration"
+    "yappy-module-registration",
+    
+    // Client API
+    "yappy-api"
 )

@@ -45,6 +45,13 @@ dependencies {
     annotationProcessor(libs.bundles.micronaut.annotation.processors)
     annotationProcessor(mn.lombok)
     compileOnly(mn.lombok)
+    
+    // OpenAPI and validation support
+    annotationProcessor("io.micronaut.openapi:micronaut-openapi")
+    compileOnly("io.micronaut.openapi:micronaut-openapi-annotations")
+    implementation("io.micronaut.validation:micronaut-validation")
+    implementation("jakarta.validation:jakarta.validation-api")
+    
     testResourcesImplementation(project(":yappy-test-resources"))
 
     testImplementation(project(":yappy-test-resources"))

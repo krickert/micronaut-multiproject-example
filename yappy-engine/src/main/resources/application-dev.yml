@@ -1,8 +1,110 @@
-endpoints:
-  all:
-    enabled: true
-    sensitive: false
-  health:
-    details-visible: ANONYMOUS
-  loggers:
-    write-sensitive: false
+micronaut:
+  application:
+    name: yappy-engine
+  server:
+    port: 8091
+    host: 0.0.0.0
+  
+grpc:
+  server:
+    port: 50070
+    host: 0.0.0.0
+
+# Consul configuration
+consul:
+  client:
+    host: ${CONSUL_CLIENT_HOST:localhost}
+    port: ${CONSUL_CLIENT_PORT:8500}
+    registration:
+      enabled: false  # Don't self-register in dev mode
+    
+# Kafka configuration    
+kafka:
+  enabled: ${KAFKA_ENABLED:true}
+  bootstrap:
+    servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  brokers: ${KAFKA_BROKERS:localhost:9092}
+  producers:
+    default:
+      bootstrap:
+        servers: ${KAFKA_PRODUCERS_DEFAULT_BOOTSTRAP_SERVERS:localhost:9092}
+      apicurio:
+        registry:
+          url: ${KAFKA_PRODUCERS_DEFAULT_APICURIO_REGISTRY_URL:http://localhost:8080/apis/registry/v3}
+          auto-register: true
+          artifact-resolver-strategy: io.apicurio.registry.serde.strategy.TopicIdStrategy
+          artifact:
+            group-id: default
+      key:
+        serializer: org.apache.kafka.common.serialization.UUIDSerializer
+      value:
+        serializer: io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer
+  consumers:
+    default:
+      bootstrap:
+        servers: ${KAFKA_CONSUMERS_DEFAULT_BOOTSTRAP_SERVERS:localhost:9092}
+      apicurio:
+        registry:
+          url: ${KAFKA_CONSUMERS_DEFAULT_APICURIO_REGISTRY_URL:http://localhost:8080/apis/registry/v3}
+          artifact-resolver-strategy: io.apicurio.registry.serde.strategy.TopicIdStrategy
+          artifact:
+            group-id: default
+          deserializer:
+            value:
+              return-class: com.krickert.search.model.PipeStream
+      key:
+        deserializer: org.apache.kafka.common.serialization.UUIDDeserializer
+      value:
+        deserializer: io.apicurio.registry.serde.protobuf.ProtobufKafkaDeserializer
+  request:
+    timeout:
+      ms: 30000
+  default:
+    api:
+      timeout:
+        ms: 30000
+
+# Apicurio Registry
+apicurio:
+  registry:
+    url: ${APICURIO_REGISTRY_URL:http://localhost:8080/apis/registry/v3}
+
+# AWS configuration (optional)
+aws:
+  endpoint: ${AWS_ENDPOINT:http://localhost:4566}
+  region: ${AWS_REGION:us-east-1}
+  s3:
+    enabled: ${AWS_S3_ENABLED:true}
+  glue:
+    enabled: ${AWS_GLUE_ENABLED:true}
+
+# Application configuration
+app:
+  config:
+    consul:
+      key:
+        prefixes:
+          pipeline:
+            clusters: config/pipeline/clusters/
+          schema:
+            versions: config/pipeline/schemas/
+          whitelists: config/pipeline/whitelists/
+      watch:
+        seconds: 5
+    cluster:
+      name: ${APP_CONFIG_CLUSTER_NAME:dev-cluster}
+
+# Engine cluster name
+yappy:
+  cluster:
+    name: ${YAPPY_CLUSTER_NAME:dev-cluster}
+engine:
+  cluster:
+    name: ${ENGINE_CLUSTER_NAME:dev-cluster}
+
+# Logging
+logger:
+  levels:
+    com.krickert.search: DEBUG
+    io.micronaut.grpc: INFO
+    io.grpc: INFO

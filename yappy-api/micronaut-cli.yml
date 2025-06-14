@@ -1,0 +1,6 @@
+applicationType: default
+defaultPackage: yappy.api
+testFramework: junit
+sourceLanguage: java
+buildTool: gradle_kotlin
+features: [app-name, config-consul, consul, control-panel, discovery-client, discovery-consul, gradle, graphql, http-client, java, java-application, jmx, junit, logback, management, micrometer, micrometer-annotation, micrometer-jmx, micrometer-observation, micrometer-observation-http, micrometer-prometheus, micronaut-aot, micronaut-build, micronaut-http-validation, mongo-reactive, netty-server, openapi, openapi-explorer, problem-json, reactor, reactor-http-client, readme, security-annotations, security-jwt, serialization-jackson, shade, static-resources, test-resources, validation, websocket, yaml, yaml-build]

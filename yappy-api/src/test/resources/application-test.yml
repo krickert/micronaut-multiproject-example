@@ -1,0 +1,12 @@
+micronaut:
+  application:
+    name: yappy-api
+  security:
+    enabled: false  # Disable security for tests
+    intercept-url-map:
+      - pattern: /**
+        access: 
+          - isAnonymous()
+  server:
+    cors:
+      enabled: true
