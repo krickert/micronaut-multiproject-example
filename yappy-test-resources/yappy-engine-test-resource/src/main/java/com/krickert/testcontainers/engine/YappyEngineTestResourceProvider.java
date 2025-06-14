@@ -125,7 +125,7 @@ public class YappyEngineTestResourceProvider extends AbstractTestContainersProvi
         envVars.put("KAFKA_PRODUCERS_DEFAULT_APICURIO_REGISTRY_URL", "http://apicurio:8080/apis/registry/v3");
         envVars.put("KAFKA_CONSUMERS_DEFAULT_APICURIO_REGISTRY_URL", "http://apicurio:8080/apis/registry/v3");
         envVars.put("OPENSEARCH_URL", "http://opensearch:9200");
-        envVars.put("AWS_ENDPOINT", "http://localstack:4566");
+        // envVars.put("AWS_ENDPOINT", "http://localstack:4566"); // Commented out - Moto not required for basic tests
         
         // Add missing configuration properties that engine requires
         envVars.put("APP_CONFIG_CONSUL_KEY_PREFIXES_PIPELINE_CLUSTERS", "config/pipeline/clusters/");
@@ -181,8 +181,7 @@ public class YappyEngineTestResourceProvider extends AbstractTestContainersProvi
                 "consul.client.host",        // Consul must be running first
                 "consul.client.port",    
                 "kafka.bootstrap.servers",   // Kafka must be running first
-                "apicurio.registry.url",     // Apicurio registry must be running
-                "aws.endpoint"               // Moto/LocalStack must be running
+                "apicurio.registry.url"      // Apicurio registry must be running
             );
         }
         return Collections.emptyList();

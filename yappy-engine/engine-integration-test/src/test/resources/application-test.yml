@@ -14,11 +14,11 @@ consul:
     enabled: true
 
 # gRPC client configuration - will be injected by test resources  
-# grpc:
-#   client:
-#     engine:
-#       address: "${engine.grpc.host}:${engine.grpc.port}"
-#       plaintext: true
+grpc:
+  client:
+    engine:
+      address: "${engine.grpc.host}:${engine.grpc.port}"
+      plaintext: true
 
 # Logging
 logger:

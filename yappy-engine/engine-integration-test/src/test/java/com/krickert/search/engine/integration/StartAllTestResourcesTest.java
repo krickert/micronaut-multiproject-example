@@ -70,7 +70,7 @@ public class StartAllTestResourcesTest {
         
         LOG.info("✅ Engine: {}:{}", engineHost, enginePort);
         // Engine might fail to start due to missing dependencies, so we just log it
-        if (!"NOT_SET".equals(engineHost)) {
+        if (!"NOT_SET".equals(engineHost) && !"0".equals(enginePort)) {
             LOG.info("   Engine container started successfully");
         } else {
             LOG.warn("   Engine container failed to start - may need to check logs");
